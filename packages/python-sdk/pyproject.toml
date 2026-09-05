@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-memory-sdk"
+version = "0.1.0"
+description = "Transport-neutral Python client SDK for agent-memory"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = ["agent-memory>=0.1,<0.2", "mcp>=2,<3"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_memory_sdk"]
+

@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-memory-postgres"
+version = "0.1.0"
+description = "PostgreSQL and pgvector provider for agent-memory"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = [
+  "agent-memory>=0.1,<0.2",
+  "psycopg[binary,pool]>=3.2,<4",
+]
+
+[project.entry-points."agent_memory.providers"]
+postgres = "agent_memory_postgres:build_postgres_kernel"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_memory_postgres"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"migrations" = "agent_memory_postgres/migrations"

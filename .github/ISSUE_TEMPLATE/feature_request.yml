@@ -1,0 +1,30 @@
+name: Feature request
+description: Propose a focused capability or provider
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the Agent use case and why the current plugin boundary is insufficient.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed capability
+    validations:
+      required: true
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Compatibility constraints
+      options:
+        - label: The zero-dependency core remains usable.
+          required: true
+        - label: The capability can be disabled or removed as a plugin.
+          required: true
+        - label: Scope isolation and deletion behavior are defined.
+          required: true
+

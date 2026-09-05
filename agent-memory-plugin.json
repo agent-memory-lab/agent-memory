@@ -1,0 +1,44 @@
+{
+  "name": "agent-memory",
+  "version": "0.1.0",
+  "protocol_version": "0.1",
+  "schema_version": 1,
+  "entrypoint": "agent_memory:build_local_kernel",
+  "easy_entrypoint": "agent_memory:AgentMemory.local",
+  "runtime_defaults": {
+    "external_services": 0,
+    "resident_vector_index": false,
+    "global_cache": false,
+    "max_recall_items": 8,
+    "max_context_tokens": 1200,
+    "lazy_plugins": true
+  },
+  "integrations": {
+    "mcp_stdio": "agent-memory-mcp",
+    "mcp_streamable_http": "agent-memory-mcp",
+    "python_sdk": "agent-memory-sdk",
+    "langgraph": "agent-memory-langgraph",
+    "postgres": "agent-memory-postgres",
+    "controlled_evolution": "agent-memory-evolution"
+  },
+  "capabilities": {
+    "current_state": true,
+    "semantic_memory": true,
+    "episodic_memory": true,
+    "procedural_memory": true,
+    "supersession": true,
+    "archive": true,
+    "legal_erase": true,
+    "decision_lineage": true,
+    "outcome_feedback": true,
+    "self_edit_proposals": true,
+    "mcp_tools": true,
+    "agent_lifecycle_adapter": true,
+    "background_consolidation": false,
+    "graph_memory": false,
+    "latent_memory": false,
+    "learned_policy": false,
+    "policy_joint_training": false,
+    "test_time_learning": false
+  }
+}

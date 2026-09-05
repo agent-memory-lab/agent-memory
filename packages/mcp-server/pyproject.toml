@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-memory-mcp"
+version = "0.1.0"
+description = "MCP v2 stdio and Streamable HTTP server for agent-memory"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = ["agent-memory>=0.1,<0.2", "mcp>=2,<3"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9"]
+
+[project.scripts]
+agent-memory-mcp = "agent_memory_mcp.cli:main"
+
+[project.entry-points."agent_memory.integrations"]
+mcp-v2 = "agent_memory_mcp:create_server"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_memory_mcp"]
