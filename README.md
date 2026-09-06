@@ -1,227 +1,472 @@
 # Agent Memory
 
-`agent-memory` is a standalone, framework-neutral memory plugin for AI agents. It is
-designed to be published as its own GitHub repository and does not depend on an agent
-framework, web framework, vector database, graph database, Redis, or external LLM.
+A lightweight, pluggable, evidence-backed memory layer for AI agents.
 
-## Phase 1 status
+Agent Memory turns raw agent activity into bounded, traceable context for the next decision. It separates current facts, historical episodes, reusable procedures, and experimental self-evolution so that an agent can remember without turning its prompt, process, or storage into an unbounded black box.
 
-Implemented:
+> Status: **v0.1 MVP**. The local SQLite path, plugin contract, MCP adapter, Python SDK, LangGraph adapter, and controlled evolution primitives are implemented. The project is not yet recommended for production use.
 
-- Stable protocol and schema versions
-- Immutable events, claims, state deltas, episodes, procedures, provenance, decisions,
-  outcomes, and reward signals
-- Atomic Unit of Work for event ingestion, idempotency, claim updates, and supersession
-- Scope isolation across tenant, namespace, user, agent, workspace, and session
-- State-first retrieval with semantic, episodic, and procedural channels
-- SQLite provider with no external service dependency
-- Archive and legal erase as separate operations
-- Provider manifest and capability negotiation
-- Extension ports for extraction, embedding, reranking, graph, and controlled evolution
-- Evidence-backed `MemoryProposal` updates with optimistic version checks
-- Transport-neutral MCP tool contracts with trusted request-derived scope
-- Generic `before_model`, `after_tool`, `after_model`, and `session_end` lifecycle hooks
-- Decision, outcome, and reward lineage for later offline evolution
-- Official MCP v2 stdio and Streamable HTTP server package
-- Embedded/stdio/HTTP Python client SDK with one operation surface
-- LangGraph node adapter with trusted config-derived scope
-- Controlled Procedure evolution with offline, shadow, canary, approval, and rollback gates
-- Zero-config bounded runtime and lazy Python entry-point plugin discovery
+## Why Agent Memory
 
-Deliberately disabled in the trusted default kernel:
+Most agent memory implementations begin and end with vector search:
 
-- Learned write policies
-- Latent memory
-- Policy/RL joint training
-- Test-time learning
-- Automatic promotion of generated procedures or policies
+~~~text
+conversation -> chunks -> embeddings -> top-k context
+~~~
 
-These features must remain optional providers and pass offline evaluation, shadow,
-canary, promotion, and rollback gates before production activation.
+That is useful for semantic recall, but it does not answer several operational questions:
 
-## Quick start
+- What is the agent's current source of truth?
+- Which old fact was superseded by a newer fact?
+- Where did a memory come from?
+- How much memory may enter the model context?
+- Can a host application isolate users, agents, and sessions?
+- Can a learned behavior be evaluated and rolled back before activation?
 
-```python
+Agent Memory uses a state-first model instead:
+
+~~~text
+agent events
+    |
+    v
+immutable evidence log
+    |
+    +--> claims ----------> current state
+    +--> episodes --------> historical recall
+    +--> procedures ------> reusable behavior
+    |
+    v
+bounded retrieval bundle
+    |
+    v
+next model decision
+~~~
+
+Every returned item keeps provenance. New truth supersedes old truth instead of silently overwriting it. Experimental procedures move through explicit evaluation gates instead of modifying live behavior directly.
+
+## Design Principles
+
+| Principle | Meaning |
+| --- | --- |
+| Pluggable by contract | Agents depend on **MemoryProvider**, not on SQLite, PostgreSQL, MCP, or a framework adapter. |
+| Local by default | The MVP runs in-process with Python and SQLite; the core has no runtime dependencies. |
+| Evidence before inference | Claims and summaries retain links to source events. |
+| State before similarity | Current accepted state is retrieved before semantic or episodic material. |
+| Bounded context | Item count, character count, token estimate, and per-channel limits are enforced. |
+| Host-owned isolation | Scope is supplied by trusted host code, not accepted from model-generated arguments. |
+| Safe evolution | Candidate behaviors are evaluated offline, then in shadow and canary stages, before activation. |
+| Honest degradation | Optional channels may fail without corrupting the current-state path. |
+
+## Five-Minute Start
+
+### 1. Install the local MVP
+
+~~~bash
+git clone https://github.com/chenlianggood8520-sketch/agent-memory.git
+cd agent-memory
+./setup.sh
+~~~
+
+For an editable core-only install:
+
+~~~bash
+python -m pip install -e .
+~~~
+
+### 2. Remember and recall
+
+~~~python
 import asyncio
 
-from agent_memory import MemoryEvent, MemoryQuery, MemoryScope, build_local_kernel
+from agent_memory import AgentMemory, MemoryScope
 
 
 async def main() -> None:
-    memory = build_local_kernel("./agent-memory.db")
-    await memory.initialize()
-
     scope = MemoryScope(
-        tenant_id="acme",
+        tenant_id="demo",
+        app_id="support-agent",
+        agent_id="assistant",
         user_id="user-42",
-        agent_id="research-agent",
-        workspace_id="project-a",
-        session_id="session-7",
+        session_id="session-1",
     )
 
-    await memory.ingest_event(
-        MemoryEvent(
-            scope=scope,
-            event_type="user.preference.updated",
-            content="Use email for project notifications.",
-            idempotency_key="message-1042",
-            metadata={
+    async with AgentMemory.local(
+        path=".agent-memory/demo.sqlite3",
+        scope=scope,
+    ) as memory:
+        await memory.remember(
+            {
+                "type": "user_message",
+                "content": "Please contact me by email.",
                 "claims": [
                     {
-                        "key": "contact.preference",
+                        "subject": "user-42",
+                        "predicate": "preferred_contact_method",
                         "value": "email",
-                        "text": "The user prefers email for project notifications.",
                         "scope": "user",
                         "confidence": 0.98,
                     }
-                ]
-            },
+                ],
+            }
         )
-    )
 
-    bundle = await memory.retrieve(
-        MemoryQuery(scope=scope, text="How should I notify the user?")
-    )
-    print(bundle.current_state)
+        bundle = await memory.recall(
+            "How should I contact this user?",
+            max_items=8,
+            max_chars=4_000,
+        )
+
+        for item in bundle.items:
+            print(item.channel, item.content, item.citations)
 
 
 asyncio.run(main())
-```
+~~~
 
-## Stable plugin boundary
+**AgentMemory.local()** creates a ready-to-use runtime with conservative limits. No vector database, external service, model key, or background worker is required.
 
-Agents depend on `MemoryProvider`, not on SQLite or any future infrastructure:
+## Core Model
 
-```text
-Agent / MCP / SDK / Framework Adapter
-                |
-        Stable MemoryProvider
-                |
-            MemoryKernel
-                |
- Storage / Extraction / Retrieval / Evolution providers
-```
+Agent Memory treats memory as several related but distinct artifacts.
 
-The local composition root is `build_local_kernel`. Production packages can provide a
-different repository, extractor, embedder, reranker, graph provider, or evolution
-provider without changing the domain kernel.
+| Artifact | Purpose | Mutation rule |
+| --- | --- | --- |
+| Event | Immutable evidence from the agent lifecycle | Append-only and idempotent |
+| Claim | Structured statement derived from evidence | Versioned; may supersede an older claim |
+| Current state | Latest accepted claims for a scope | Rebuilt from active claims |
+| Episode | Compressed account of a completed interaction | Append-only with citations |
+| Procedure | Reusable behavioral knowledge | Versioned and governed |
+| Decision | Record of what an agent chose | Linked to context and policy version |
+| Outcome | Observable result of a decision | Linked to the decision |
+| Reward | Evaluation signal for an outcome | Stored separately from activation |
 
-## MCP integration
+A memory bundle is a bounded projection over these artifacts. It is not a database dump and it is not an unqualified list of semantically similar text.
 
-`MCPMemoryTools` exposes the v3 tool surface without binding the kernel to an MCP SDK:
+## Retrieval
 
-- `memory_ingest`
-- `memory_retrieve`
-- `memory_get_state`
-- `memory_propose`
-- `memory_forget`
-- `memory_capabilities`
+The default retrieval pipeline is deterministic and inspectable:
 
-The host constructs `MCPRequestContext` from authenticated identity. Tenant and scope are
-never accepted from model-generated tool arguments. Legal erase additionally requires
-`can_erase=True` in the trusted context. `packages/mcp-server` registers the contract with
-the official MCP Python SDK v2. It supports process-isolated stdio and stateless
-Streamable HTTP. HTTP identity is accepted only through a signed trusted-gateway resolver
-by default; unsigned request headers are never treated as identity.
+~~~text
+query + trusted scope
+    |
+    +--> current-state channel
+    +--> semantic channel
+    +--> episodic channel
+    +--> procedural channel
+    |
+    v
+reciprocal-rank fusion
+    |
+    v
+deduplication + policy filtering
+    |
+    v
+hard budget enforcement
+    |
+    v
+MemoryBundle(items, citations, token_estimate)
+~~~
 
-`packages/python-sdk` provides the same operations through embedded, stdio, or
-Streamable HTTP clients. `packages/langgraph` maps trusted LangGraph run configuration
-and graph lifecycle nodes to `AgentMemoryAdapter`.
+The current-state channel has priority because recent accepted truth should not lose to an older but more similar passage. Reciprocal-rank fusion combines channel rankings without requiring their raw scores to share a scale.
 
-## Agent lifecycle integration
+The local MVP enforces:
 
-`AgentMemoryAdapter` maps framework lifecycle events to the stable provider contract:
+- maximum returned items;
+- maximum characters;
+- estimated token budget;
+- per-channel limits;
+- tenant, application, agent, user, and session scope;
+- deterministic ordering;
+- citations back to source evidence.
 
-```text
-before_model -> retrieve MemoryBundle
-after_tool   -> append tool outcome event and optional claims
-after_model  -> append model event and optional claims
-session_end  -> create candidate Episode with provenance
-```
+## Plugin Architecture
 
-The adapter also records which memories and procedure versions contributed to a decision,
-then links environment outcomes and versioned reward calculations to that decision.
+The public boundary is the **MemoryProvider** protocol. Storage engines, transports, framework integrations, and evolution engines remain replaceable.
 
-## Production PostgreSQL provider
+~~~text
+Agent / Host Application
+          |
+          v
+ AgentMemory facade
+          |
+          v
+   MemoryProvider
+          |
+          +--> local SQLite kernel
+          +--> PostgreSQL provider
+          +--> remote MCP provider
+          +--> future third-party provider
+~~~
 
-The optional package in `packages/postgres` implements the same repository and Unit of
-Work contracts with PostgreSQL. It adds generated full-text indexes, a pgvector component,
-and a leased consolidation queue. Installing or importing the core package does not install
-`psycopg` and does not require PostgreSQL.
+Plugins are discovered lazily through Python entry points. Importing the core does not import optional databases, MCP runtimes, frameworks, or machine-learning libraries.
 
-```python
-from agent_memory_postgres import build_postgres_kernel
+| Entry-point group | Responsibility |
+| --- | --- |
+| agent_memory.providers | Storage and retrieval providers |
+| agent_memory.adapters | Agent-framework lifecycle adapters |
+| agent_memory.embedders | Optional embedding implementations |
+| agent_memory.rerankers | Optional reranking implementations |
+| agent_memory.evolution | Candidate generation and evaluation engines |
 
-memory = build_postgres_kernel("postgresql://memory@localhost:5432/agent_memory")
-await memory.initialize()
-```
+Switching providers does not require changing agent logic:
 
-The production write path is:
+~~~python
+from agent_memory import AgentMemory, MemoryScope
 
-```text
-transaction: Event + Claim/StateDelta/Proposal
-commit
-idempotent consolidation job enqueue
-worker: lease -> process -> complete | retry -> dead-letter
-```
+scope = MemoryScope(
+    tenant_id="acme",
+    app_id="research",
+    agent_id="analyst",
+)
 
-Vector indexing is derivative data. `PgVectorIndex` can be disabled, rebuilt, or replaced
-without changing source events, current state, or the stable `MemoryProvider` contract.
+memory = AgentMemory.from_plugin(
+    "postgres",
+    scope=scope,
+    dsn="postgresql://memory@localhost/agent_memory",
+)
+~~~
 
-## Memory-driven self-evolution boundary
+Third-party packages can implement the protocol and register their own entry point without modifying this repository.
 
-Phase 1 records the evidence required for later evolution:
+## Packages
 
-```text
-DecisionRecord -> OutcomeEvent -> RewardSignal -> Episode/Procedure candidates
-```
+| Package | Role | Core dependency impact |
+| --- | --- | --- |
+| agent-memory | Domain model, local kernel, SQLite store, retrieval, policy, plugin registry | Zero runtime dependencies |
+| agent-memory-postgres | PostgreSQL and pgvector-capable provider | Optional |
+| agent-memory-mcp-server | MCP stdio/HTTP transport | Optional |
+| agent-memory-python-sdk | Client-facing Python facade | Optional |
+| agent-memory-langgraph | LangGraph lifecycle adapter | Optional |
+| agent-memory-evolution | Governed procedure evolution | Optional |
 
-It does not train or promote policies. A later `EvolutionProvider` may generate immutable
-candidate artifacts, but activation must be performed by a separate evaluator and
-artifact registry using versioned shadow/canary/promotion/rollback records.
+This split keeps the default installation small while allowing deployments to add only the integration surface they need.
 
-## Package layout
+## MCP Integration
 
-```text
-src/agent_memory/domain.py       Versioned domain contracts
-src/agent_memory/ports.py        Inbound and outbound plugin ports
-src/agent_memory/kernel.py       Framework-neutral application kernel
-src/agent_memory/providers.py    Deterministic trusted defaults
-src/agent_memory/sqlite.py       Local SQLite provider and Unit of Work
-src/agent_memory/composition.py  Explicit dependency wiring
-packages/mcp-server              Official MCP v2 transport and identity boundary
-packages/python-sdk              Embedded, stdio, and HTTP client SDK
-packages/langgraph               LangGraph node lifecycle adapter
-packages/postgres                PostgreSQL, pgvector, and background jobs
-packages/evolution               Candidate evaluation, promotion, activation, and rollback
-```
+Install the MCP package:
 
-## Controlled self-evolution
+~~~bash
+python -m pip install -e packages/mcp-server
+~~~
 
-`packages/evolution` implements the v3 L2 evolution control plane. High-quality Episodes
-may generate immutable Procedure candidates, but candidates cannot enter retrieval as
-active procedures until separate offline, shadow, and canary reports pass deterministic
-quality and safety gates. Active promotion requires a human approval reference.
+Start a local stdio server:
 
-Activation uses a two-phase `canary -> activating -> active` transition. Failed deployment
-returns to canary. Rollback archives the deployed Procedure through `MemoryProvider` and
-records every transition. Learned policies, latent representations, and online training
-remain disabled experimental capabilities.
+~~~bash
+agent-memory-mcp --transport stdio --database .agent-memory/mcp.sqlite3
+~~~
 
-## Lightweight zero-config use
+The MCP surface exposes six operations:
 
-The default path has no third-party dependency, external service, resident vector index,
-or process-wide cache. Optional providers and integrations are discovered through Python
-entry points and imported only when selected.
+| Tool | Purpose |
+| --- | --- |
+| memory_remember | Ingest an event and optional structured claims |
+| memory_recall | Return a bounded memory bundle |
+| memory_get_state | Read current accepted state |
+| memory_forget | Remove memory according to scope and policy |
+| memory_feedback | Record outcome or evaluation feedback |
+| memory_health | Report provider and protocol health |
 
-```python
-from agent_memory import AgentMemory
+For stdio integrations, the host supplies scope through trusted configuration. For remote HTTP deployments, use a signed gateway or authenticated reverse proxy and derive scope from verified identity. Do not let a model choose arbitrary tenant or user identifiers.
 
-async with AgentMemory.local() as memory:
-    await memory.remember("The user prefers concise answers.")
-    bundle = await memory.recall("How should I answer?")
-```
+## Framework Integration
 
-`MemoryLimits` places hard bounds on event characters, metadata bytes, claims per event,
-retrieved items, state claims, and context tokens. Defaults are intentionally small and
-can be overridden per Agent without changing a Provider.
+Framework adapters translate lifecycle hooks into the provider protocol; they do not own memory semantics.
+
+| Lifecycle point | Memory action |
+| --- | --- |
+| Session start | Resolve trusted scope and open provider |
+| After user/model/tool event | Append evidence |
+| Before model call | Retrieve a bounded bundle |
+| After outcome | Record outcome and feedback |
+| Session end | Finalize episode and close provider |
+
+The included LangGraph package demonstrates this boundary. The same model supports custom agents, command-line agents, hosted runtimes, and other orchestration frameworks.
+
+## Controlled Self-Evolution
+
+Self-evolution is not unrestricted prompt rewriting. Agent Memory models it as a governed release process for procedures:
+
+~~~text
+observations
+    -> candidate
+    -> offline evaluation
+    -> shadow
+    -> canary
+    -> active
+             |
+             +-> rollback
+~~~
+
+Safety rules in the MVP:
+
+- evolution is disabled by default;
+- candidates never become active directly;
+- evaluation evidence is persisted;
+- policy versions are explicit;
+- activation and rollback are auditable;
+- deterministic rules remain the fallback;
+- latent or learned policies cannot replace the source-of-truth state.
+
+This creates a path from task trajectories to improved behavior without allowing experimental memory to silently control production decisions.
+
+## Capability Status
+
+| Capability | Status | Notes |
+| --- | --- | --- |
+| Immutable event ingestion | Implemented | Idempotent event keys |
+| Structured claims and current state | Implemented | Provenance and supersession |
+| Episodic memory | Implemented | Citation-preserving summaries |
+| Procedural memory | Implemented | Versioned procedures |
+| State-first hybrid retrieval | Implemented | Multi-channel RRF |
+| Hard context budgets | Implemented | Items, characters, and token estimate |
+| Scoped forgetting | Implemented | Policy-controlled local deletion |
+| SQLite provider | Implemented | Default zero-config path |
+| Python SDK | Implemented | Optional package |
+| LangGraph adapter | Implemented | Optional package |
+| MCP stdio transport | Implemented | Protocol smoke-tested |
+| PostgreSQL provider | Implemented, not deployment-certified | Requires live environment validation |
+| pgvector retrieval | Optional | Provider capability, not a core requirement |
+| Controlled procedure evolution | MVP implemented | Disabled by default |
+| Graph memory | Planned | Must remain optional |
+| Learned latent memory | Research track | Must not become source of truth |
+| Online autonomous policy training | Not implemented | Requires a separate safety and evaluation design |
+
+## Resource Profile
+
+The project is deliberately optimized for small local agents and plugin hosts.
+
+A local development measurement for the SQLite MVP with 100 events produced:
+
+| Measurement | Observed value |
+| --- | ---: |
+| Heap after core import | approximately 1.84 MiB |
+| Final heap | approximately 1.95 MiB |
+| Peak heap | approximately 2.17 MiB |
+| SQLite database | 136 KiB |
+| SQLite shared-memory file | 32 KiB |
+
+These values are directional measurements from one development environment, not cross-platform guarantees. Embedding models, remote clients, framework runtimes, and database drivers are excluded from the core process unless their plugins are installed and used.
+
+## Security Model
+
+Memory is a privileged subsystem because it can influence future model behavior.
+
+The design assumes:
+
+- the host application authenticates the caller;
+- the host derives the memory scope;
+- stored content is untrusted data, not executable instruction;
+- credentials are supplied at runtime and never committed;
+- providers enforce tenant boundaries;
+- deletion and retention policies are explicit;
+- retrieved items remain attributable to evidence.
+
+Before deploying remotely, read:
+
+- [Security policy](SECURITY.md)
+- [Threat model](docs/THREAT_MODEL.md)
+- [MVP architecture](docs/MVP.md)
+
+If you discover a vulnerability, follow the private reporting process in **SECURITY.md**. Do not open a public issue containing exploit details or secrets.
+
+## Development
+
+Create a development environment:
+
+~~~bash
+./setup.sh --all
+~~~
+
+Run the core test suite:
+
+~~~bash
+python -m pytest -q
+~~~
+
+Build a package:
+
+~~~bash
+python -m build
+python -m twine check dist/*
+~~~
+
+The repository currently contains focused tests for ingestion, idempotency, supersession, scoped retrieval, context budgets, forgetting, plugin discovery, and evolution gates.
+
+## Repository Layout
+
+~~~text
+agent-memory/
+├── src/agent_memory/          # zero-dependency core
+├── packages/
+│   ├── postgres/              # PostgreSQL provider
+│   ├── mcp-server/            # MCP transport
+│   ├── python-sdk/            # Python client facade
+│   ├── langgraph/             # framework adapter
+│   └── evolution/             # governed self-evolution
+├── tests/                     # core behavior tests
+├── examples/                  # runnable examples
+├── docs/                      # architecture, plan, and security
+└── setup.sh                   # local setup entry point
+~~~
+
+## Current Boundaries
+
+The MVP intentionally does not claim to provide:
+
+- a hosted memory service;
+- a production-certified multi-region PostgreSQL deployment;
+- semantic quality guarantees from a bundled embedding model;
+- a universal graph-memory engine;
+- end-to-end deletion across external backups and replicas;
+- safe online autonomous training without human-defined gates;
+- compatibility certification for every agent framework.
+
+These are deployment or research tracks, not hidden behavior in the lightweight core.
+
+## Roadmap
+
+### v0.1: Minimal reliable memory
+
+- local SQLite runtime;
+- event, claim, state, episode, and procedure model;
+- bounded retrieval with citations;
+- plugin protocol and lazy discovery;
+- MCP, SDK, LangGraph, PostgreSQL, and evolution packages;
+- packaging, security, and release documentation.
+
+### v0.2: Operational hardening
+
+- live PostgreSQL integration suite;
+- signed HTTP gateway reference;
+- retention and deletion audit reports;
+- retrieval quality benchmarks;
+- compatibility matrix for supported agent frameworks;
+- package publication and reproducible release workflow.
+
+### v0.3: Optional advanced memory
+
+- graph-memory plugin;
+- external embedding and reranking plugins;
+- conflict-resolution policies;
+- richer evaluation datasets;
+- canary dashboards and automated rollback signals.
+
+### Research
+
+- trajectory compression;
+- learned retrieval policies;
+- latent memory representations;
+- counterfactual procedure evaluation;
+- memory-aware agent planning.
+
+Advanced features must remain optional, measurable, reversible, and subordinate to evidence-backed state.
+
+## Contributing
+
+Contributions should preserve the core constraints: small default footprint, framework neutrality, strict scope isolation, traceable evidence, and optional heavy dependencies.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Architecture changes should include the problem, contract impact, failure behavior, migration path, and resource cost.
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).
