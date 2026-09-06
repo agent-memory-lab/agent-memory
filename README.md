@@ -187,6 +187,10 @@ The local MVP enforces:
 
 ## Plugin Architecture
 
+<p align="center">
+  <img src="docs/assets/plugin-integration-flow.svg" alt="Plugin integration flow" width="100%">
+</p>
+
 The public boundary is the **MemoryProvider** protocol. Storage engines, transports, framework integrations, and evolution engines remain replaceable.
 
 ~~~text

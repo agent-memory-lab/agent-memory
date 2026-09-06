@@ -187,6 +187,10 @@ MemoryBundle（条目、引用、Token 估算）
 
 ## 插件化架构
 
+<p align="center">
+  <img src="docs/assets/plugin-integration-flow.svg" alt="插件接入流程" width="100%">
+</p>
+
 系统的公共边界是 **MemoryProvider** 协议。存储引擎、通信方式、Agent 框架和自进化引擎都可以替换。
 
 ~~~text
