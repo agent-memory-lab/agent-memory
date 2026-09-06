@@ -2,6 +2,10 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
+<p align="center">
+  <img src="docs/assets/agent-memory-architecture.svg" alt="Agent Memory architecture" width="100%">
+</p>
+
 A lightweight, pluggable, evidence-backed memory layer for AI agents.
 
 Agent Memory turns raw agent activity into bounded, traceable context for the next decision. It separates current facts, historical episodes, reusable procedures, and experimental self-evolution so that an agent can remember without turning its prompt, process, or storage into an unbounded black box.

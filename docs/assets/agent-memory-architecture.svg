@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="760" viewBox="0 0 1440 760" role="img" aria-labelledby="title desc">
+  <title id="title">Agent Memory architecture</title>
+  <desc id="desc">A pluggable agent memory architecture from trusted host scope through the provider contract, memory kernel, storage, retrieval, and controlled evolution.</desc>
+  <defs>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#d9d2c5" stroke-width="1"/>
+    </pattern>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#171914"/>
+    </marker>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#171914" flood-opacity=".10"/>
+    </filter>
+    <style>
+      .label{font:700 15px 'Arial Narrow',Arial,sans-serif;letter-spacing:2px;fill:#5d6258}
+      .title{font:900 42px 'Arial Narrow',Arial,sans-serif;letter-spacing:1px;fill:#171914}
+      .subtitle{font:400 18px Georgia,serif;fill:#41473e}
+      .boxTitle{font:800 22px 'Arial Narrow',Arial,sans-serif;fill:#171914}
+      .body{font:400 15px Arial,sans-serif;fill:#41473e}
+      .mono{font:600 13px 'Courier New',monospace;fill:#171914}
+      .small{font:700 12px Arial,sans-serif;letter-spacing:1px;fill:#f7f3eb}
+      .rail{font:800 14px 'Arial Narrow',Arial,sans-serif;letter-spacing:1px;fill:#171914}
+    </style>
+  </defs>
+
+  <rect width="1440" height="760" fill="#f5f0e7"/>
+  <rect width="1440" height="760" fill="url(#grid)" opacity=".55"/>
+  <rect x="24" y="24" width="1392" height="712" rx="22" fill="none" stroke="#171914" stroke-width="2"/>
+
+  <text x="72" y="83" class="label">SYSTEM MAP / V0.1</text>
+  <text x="72" y="132" class="title">MEMORY THAT EARNS ITS PLACE</text>
+  <text x="72" y="166" class="subtitle">Bounded context, traceable evidence, replaceable infrastructure.</text>
+
+  <g transform="translate(72 213)" filter="url(#shadow)">
+    <rect width="270" height="300" rx="16" fill="#fffdf8" stroke="#171914" stroke-width="2"/>
+    <rect width="270" height="54" rx="16" fill="#171914"/>
+    <rect y="38" width="270" height="16" fill="#171914"/>
+    <text x="22" y="34" class="small">01 / TRUSTED HOST</text>
+    <text x="22" y="92" class="boxTitle">Agent lifecycle</text>
+    <text x="22" y="125" class="body">User, model and tool events</text>
+    <text x="22" y="151" class="body">become immutable evidence.</text>
+    <rect x="20" y="180" width="230" height="88" rx="10" fill="#e9eee7" stroke="#9aa596"/>
+    <text x="34" y="205" class="mono">tenant / app / agent</text>
+    <text x="34" y="230" class="mono">user / session</text>
+    <text x="34" y="255" class="mono">scope from host only</text>
+  </g>
+
+  <path d="M354 363H408" stroke="#171914" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <g transform="translate(420 213)" filter="url(#shadow)">
+    <rect width="270" height="300" rx="16" fill="#fffdf8" stroke="#171914" stroke-width="2"/>
+    <rect width="270" height="54" rx="16" fill="#1f5b45"/>
+    <rect y="38" width="270" height="16" fill="#1f5b45"/>
+    <text x="22" y="34" class="small">02 / STABLE CONTRACT</text>
+    <text x="22" y="92" class="boxTitle">MemoryProvider</text>
+    <text x="22" y="125" class="body">One protocol isolates the agent</text>
+    <text x="22" y="151" class="body">from storage and transport.</text>
+    <rect x="20" y="180" width="230" height="88" rx="10" fill="#dce9e2" stroke="#1f5b45"/>
+    <text x="34" y="205" class="mono">remember(event)</text>
+    <text x="34" y="230" class="mono">recall(query, budget)</text>
+    <text x="34" y="255" class="mono">forget / feedback</text>
+  </g>
+
+  <path d="M702 363H756" stroke="#171914" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <g transform="translate(768 213)" filter="url(#shadow)">
+    <rect width="270" height="300" rx="16" fill="#fffdf8" stroke="#171914" stroke-width="2"/>
+    <rect width="270" height="54" rx="16" fill="#e65d3f"/>
+    <rect y="38" width="270" height="16" fill="#e65d3f"/>
+    <text x="22" y="34" class="small">03 / MEMORY KERNEL</text>
+    <text x="22" y="92" class="boxTitle">Truth before similarity</text>
+    <text x="22" y="125" class="body">Claims form current state.</text>
+    <text x="22" y="151" class="body">Episodes and procedures add recall.</text>
+    <rect x="20" y="180" width="230" height="88" rx="10" fill="#f5dfd8" stroke="#e65d3f"/>
+    <text x="34" y="205" class="mono">state-first retrieval</text>
+    <text x="34" y="230" class="mono">RRF + dedup + policy</text>
+    <text x="34" y="255" class="mono">hard context limits</text>
+  </g>
+
+  <path d="M1050 363H1104" stroke="#171914" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <g transform="translate(1116 213)" filter="url(#shadow)">
+    <rect width="252" height="300" rx="16" fill="#fffdf8" stroke="#171914" stroke-width="2"/>
+    <rect width="252" height="54" rx="16" fill="#315d80"/>
+    <rect y="38" width="252" height="16" fill="#315d80"/>
+    <text x="22" y="34" class="small">04 / PLUGINS</text>
+    <text x="22" y="92" class="boxTitle">Choose the surface</text>
+    <text x="22" y="125" class="body">Heavy capabilities stay optional</text>
+    <text x="22" y="151" class="body">and load only when selected.</text>
+    <rect x="20" y="180" width="212" height="88" rx="10" fill="#dfe8ef" stroke="#315d80"/>
+    <text x="34" y="205" class="mono">SQLite / Postgres</text>
+    <text x="34" y="230" class="mono">MCP / LangGraph</text>
+    <text x="34" y="255" class="mono">Evolution / custom</text>
+  </g>
+
+  <g transform="translate(72 566)">
+    <text x="0" y="-18" class="label">DECISION LOOP</text>
+    <rect width="1296" height="104" rx="14" fill="#fffdf8" stroke="#171914" stroke-width="2"/>
+    <g transform="translate(26 24)">
+      <rect width="174" height="56" rx="8" fill="#ece7dc"/>
+      <text x="87" y="34" text-anchor="middle" class="rail">EVIDENCE</text>
+    </g>
+    <path d="M210 618H246" stroke="#171914" stroke-width="2" marker-end="url(#arrow)"/>
+    <g transform="translate(258 590)">
+      <rect width="174" height="56" rx="8" fill="#dce9e2"/>
+      <text x="87" y="34" text-anchor="middle" class="rail">CURRENT STATE</text>
+    </g>
+    <path d="M442 618H478" stroke="#171914" stroke-width="2" marker-end="url(#arrow)"/>
+    <g transform="translate(490 590)">
+      <rect width="174" height="56" rx="8" fill="#f5dfd8"/>
+      <text x="87" y="34" text-anchor="middle" class="rail">RETRIEVAL</text>
+    </g>
+    <path d="M674 618H710" stroke="#171914" stroke-width="2" marker-end="url(#arrow)"/>
+    <g transform="translate(722 590)">
+      <rect width="174" height="56" rx="8" fill="#dfe8ef"/>
+      <text x="87" y="34" text-anchor="middle" class="rail">DECISION</text>
+    </g>
+    <path d="M906 618H942" stroke="#171914" stroke-width="2" marker-end="url(#arrow)"/>
+    <g transform="translate(954 590)">
+      <rect width="140" height="56" rx="8" fill="#ece7dc"/>
+      <text x="70" y="34" text-anchor="middle" class="rail">FEEDBACK</text>
+    </g>
+    <path d="M1104 618H1140" stroke="#171914" stroke-width="2" marker-end="url(#arrow)"/>
+    <g transform="translate(1152 590)">
+      <rect width="118" height="56" rx="8" fill="#171914"/>
+      <text x="59" y="27" text-anchor="middle" class="small">GATED</text>
+      <text x="59" y="43" text-anchor="middle" class="small">EVOLUTION</text>
+    </g>
+  </g>
+
+  <text x="72" y="711" class="label">ZERO-DEPENDENCY CORE</text>
+  <text x="485" y="711" class="label">LAZY ENTRY-POINT DISCOVERY</text>
+  <text x="1045" y="711" class="label">AUDITABLE BY DESIGN</text>
+</svg>

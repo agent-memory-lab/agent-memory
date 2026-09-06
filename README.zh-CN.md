@@ -2,6 +2,10 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
+<p align="center">
+  <img src="docs/assets/agent-memory-architecture.svg" alt="Agent Memory architecture" width="100%">
+</p>
+
 一个轻量、可插拔、证据可追溯的 AI Agent 记忆层。
 
 Agent Memory 将 Agent 运行过程中产生的原始事件，转换成有边界、可验证、可追溯的下一步决策上下文。系统明确区分当前事实、历史经验、可复用流程和实验性自进化能力，避免记忆无限膨胀、事实互相冲突或实验策略直接污染线上行为。
