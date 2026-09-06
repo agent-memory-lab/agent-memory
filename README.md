@@ -152,7 +152,7 @@ and a leased consolidation queue. Installing or importing the core package does 
 ```python
 from agent_memory_postgres import build_postgres_kernel
 
-memory = build_postgres_kernel("postgresql://memory:secret@localhost:5432/agent_memory")
+memory = build_postgres_kernel("postgresql://memory@localhost:5432/agent_memory")
 await memory.initialize()
 ```
 

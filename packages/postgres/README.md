@@ -19,7 +19,7 @@ kernel and SQLite provider do not import PostgreSQL or pgvector dependencies.
 from agent_memory_postgres import build_postgres_kernel
 
 memory = build_postgres_kernel(
-    "postgresql://memory:secret@localhost:5432/agent_memory"
+    "postgresql://memory@localhost:5432/agent_memory"
 )
 await memory.initialize()
 ```
