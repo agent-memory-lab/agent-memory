@@ -55,20 +55,22 @@ class LangGraphMemoryAdapter:
         provider: MemoryProvider,
         *,
         scope_resolver: ScopeResolver = scope_from_config,
-        keys: LangGraphKeys = LangGraphKeys(),
+        keys: LangGraphKeys | None = None,
         token_budget: int = 1200,
         limit: int = 8,
     ) -> None:
         self._adapter = AgentMemoryAdapter(provider)
         self._scope_resolver = scope_resolver
-        self._keys = keys
+        self._keys = keys or LangGraphKeys()
         self._token_budget = token_budget
         self._limit = limit
 
     async def initialize(self) -> None:
         await self._adapter.initialize()
 
-    def _context(self, state: Mapping[str, Any], config: Mapping[str, Any]) -> AgentLifecycleContext:
+    def _context(
+        self, state: Mapping[str, Any], config: Mapping[str, Any]
+    ) -> AgentLifecycleContext:
         configurable = config.get("configurable", {})
         if not isinstance(configurable, Mapping):
             configurable = {}
@@ -138,4 +140,3 @@ class LangGraphMemoryAdapter:
             claims=claims,
         )
         return {self._keys.receipt: to_jsonable(receipt)}
-

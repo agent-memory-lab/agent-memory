@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Protocol, Sequence
+from collections.abc import Sequence
+from typing import Protocol
 
 from agent_memory.domain import Episode, MemoryScope
 
@@ -46,4 +47,3 @@ class EvolutionRegistry(Protocol):
 class ProcedureDeployment(Protocol):
     async def activate(self, candidate: EvolutionCandidate) -> None: ...
     async def deactivate(self, candidate: EvolutionCandidate) -> None: ...
-

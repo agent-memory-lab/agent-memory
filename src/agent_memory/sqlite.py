@@ -4,11 +4,12 @@ import asyncio
 import json
 import re
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Sequence
+from typing import Any
 
 from .domain import (
     ArtifactStatus,
@@ -39,7 +40,7 @@ from .domain import (
 
 
 def _iso(value: datetime) -> str:
-    return value.astimezone(timezone.utc).isoformat()
+    return value.astimezone(UTC).isoformat()
 
 
 def _datetime(value: str | None) -> datetime | None:
@@ -126,13 +127,10 @@ class SQLiteMemoryUnitOfWork:
 
     async def claim_ids_for_event(self, event_id: str) -> Sequence[str]:
         rows = self.connection.execute(
-            "SELECT id, provenance_json FROM claims ORDER BY created_at"
+            "SELECT claim_id FROM claim_sources WHERE event_id = ? ORDER BY rowid",
+            (event_id,),
         ).fetchall()
-        return tuple(
-            row["id"]
-            for row in rows
-            if event_id in _provenance(row["provenance_json"]).source_event_ids
-        )
+        return tuple(row["claim_id"] for row in rows)
 
     async def events_exist(self, scope: MemoryScope, event_ids: Sequence[str]) -> bool:
         if not event_ids:
@@ -246,6 +244,10 @@ class SQLiteMemoryUnitOfWork:
             "UPDATE claims SET provenance_json = ? WHERE id = ?",
             (_provenance_json(updated), claim_id),
         )
+        self.connection.execute(
+            "INSERT OR IGNORE INTO claim_sources (claim_id, event_id) VALUES (?, ?)",
+            (claim_id, event_id),
+        )
 
     async def save_state_delta(self, delta: StateDelta) -> None:
         self.connection.execute(
@@ -309,12 +311,22 @@ class SQLiteMemoryUnitOfWork:
 
     async def save_decision(self, decision: DecisionRecord) -> None:
         self._repository._insert_evolution_record(
-            self.connection, decision.id, decision.scope, "decision", asdict(decision), decision.created_at
+            self.connection,
+            decision.id,
+            decision.scope,
+            "decision",
+            asdict(decision),
+            decision.created_at,
         )
 
     async def save_outcome(self, outcome: OutcomeEvent) -> None:
         self._repository._insert_evolution_record(
-            self.connection, outcome.id, outcome.scope, "outcome", asdict(outcome), outcome.occurred_at
+            self.connection,
+            outcome.id,
+            outcome.scope,
+            "outcome",
+            asdict(outcome),
+            outcome.occurred_at,
         )
 
     async def save_reward(self, reward: RewardSignal) -> None:
@@ -322,9 +334,7 @@ class SQLiteMemoryUnitOfWork:
             self.connection, reward.id, reward.scope, "reward", asdict(reward), reward.created_at
         )
 
-    async def save_proposal(
-        self, proposal: MemoryProposal, result: ProposalResult
-    ) -> None:
+    async def save_proposal(self, proposal: MemoryProposal, result: ProposalResult) -> None:
         self.connection.execute(
             """
             INSERT INTO proposals (
@@ -427,8 +437,14 @@ class SQLiteMemoryRepository:
                     archived_at TEXT
                 );
 
-                CREATE INDEX IF NOT EXISTS claims_current_idx
-                ON claims(partition_key, claim_key, status, version);
+                CREATE TABLE IF NOT EXISTS claim_sources (
+                    claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+                    event_id TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+                    PRIMARY KEY (claim_id, event_id)
+                );
+
+                CREATE INDEX IF NOT EXISTS claim_sources_event_idx
+                ON claim_sources(event_id);
 
                 CREATE TABLE IF NOT EXISTS state_deltas (
                     id TEXT PRIMARY KEY,
@@ -470,7 +486,9 @@ class SQLiteMemoryRepository:
                 );
 
                 CREATE INDEX IF NOT EXISTS artifacts_scope_idx
-                ON artifacts(tenant_id, namespace, user_id, agent_id, workspace_id, session_id, kind);
+                ON artifacts(
+                    tenant_id, namespace, user_id, agent_id, workspace_id, session_id, kind
+                );
 
                 CREATE TABLE IF NOT EXISTS evolution_records (
                     id TEXT PRIMARY KEY,
@@ -511,6 +529,144 @@ class SQLiteMemoryRepository:
                 VALUES (1, CURRENT_TIMESTAMP);
                 """
             )
+            self._migrate_claim_sources(connection)
+            self._ensure_current_claim_index(connection)
+
+    def _migrate_claim_sources(self, connection: sqlite3.Connection) -> None:
+        rows = connection.execute(
+            "SELECT id, tenant_id, namespace, provenance_json FROM claims"
+        ).fetchall()
+        for row in rows:
+            for event_id in dict.fromkeys(_provenance(row["provenance_json"]).source_event_ids):
+                event = connection.execute(
+                    """
+                    SELECT 1 FROM events
+                    WHERE id = ? AND tenant_id = ? AND namespace = ?
+                    """,
+                    (event_id, row["tenant_id"], row["namespace"]),
+                ).fetchone()
+                if event:
+                    connection.execute(
+                        "INSERT OR IGNORE INTO claim_sources (claim_id, event_id) VALUES (?, ?)",
+                        (row["id"], event_id),
+                    )
+
+        orphan_ids = {
+            row["id"]
+            for row in connection.execute(
+                """
+                SELECT id FROM claims
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM claim_sources WHERE claim_sources.claim_id = claims.id
+                )
+                """
+            ).fetchall()
+        }
+        self._delete_claim_rows(connection, orphan_ids)
+
+        for row in connection.execute("SELECT id FROM claims").fetchall():
+            self._sync_claim_source_json(connection, row["id"])
+
+    def _ensure_current_claim_index(self, connection: sqlite3.Connection) -> None:
+        connection.execute("DROP INDEX IF EXISTS claims_current_idx")
+        duplicate_groups = connection.execute(
+            """
+            SELECT partition_key, claim_key
+            FROM claims
+            WHERE status = ?
+            GROUP BY partition_key, claim_key
+            HAVING COUNT(*) > 1
+            """,
+            (ClaimStatus.ACTIVE,),
+        ).fetchall()
+
+        for group in duplicate_groups:
+            rows = connection.execute(
+                """
+                SELECT id, valid_from, created_at, supersedes
+                FROM claims
+                WHERE partition_key = ? AND claim_key = ? AND status = ?
+                ORDER BY version DESC, valid_from DESC, created_at DESC, id DESC
+                """,
+                (group["partition_key"], group["claim_key"], ClaimStatus.ACTIVE),
+            ).fetchall()
+            winner = rows[0]
+            losers = rows[1:]
+            for loser in losers:
+                connection.execute(
+                    """
+                    UPDATE claims
+                    SET status = ?, valid_to = ?, superseded_by = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        ClaimStatus.SUPERSEDED,
+                        winner["valid_from"],
+                        winner["id"],
+                        loser["id"],
+                    ),
+                )
+            if losers and not winner["supersedes"]:
+                connection.execute(
+                    "UPDATE claims SET supersedes = ? WHERE id = ?",
+                    (losers[0]["id"], winner["id"]),
+                )
+
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX claims_current_idx
+            ON claims(partition_key, claim_key)
+            WHERE status = 'active'
+            """
+        )
+
+    @staticmethod
+    def _delete_claim_rows(connection: sqlite3.Connection, claim_ids: set[str]) -> None:
+        if not claim_ids:
+            return
+        placeholders = ",".join("?" for _ in claim_ids)
+        params = tuple(claim_ids)
+        connection.execute(
+            f"UPDATE claims SET supersedes = NULL WHERE supersedes IN ({placeholders})",
+            params,
+        )
+        connection.execute(
+            f"UPDATE claims SET superseded_by = NULL WHERE superseded_by IN ({placeholders})",
+            params,
+        )
+        connection.execute(
+            f"DELETE FROM claims WHERE id IN ({placeholders})",
+            params,
+        )
+
+    @staticmethod
+    def _sync_claim_source_json(connection: sqlite3.Connection, claim_id: str) -> None:
+        row = connection.execute(
+            "SELECT provenance_json FROM claims WHERE id = ?", (claim_id,)
+        ).fetchone()
+        if row is None:
+            return
+        source_ids = [
+            row["event_id"]
+            for row in connection.execute(
+                "SELECT event_id FROM claim_sources WHERE claim_id = ? ORDER BY rowid",
+                (claim_id,),
+            ).fetchall()
+        ]
+        provenance = _provenance(row["provenance_json"])
+        updated = Provenance(
+            source_event_ids=tuple(source_ids),
+            extractor=provenance.extractor,
+            provider=provenance.provider,
+            model=provenance.model,
+            prompt_version=provenance.prompt_version,
+            source_uri=provenance.source_uri,
+            created_at=provenance.created_at,
+        )
+        connection.execute(
+            "UPDATE claims SET provenance_json = ? WHERE id = ?",
+            (_provenance_json(updated), claim_id),
+        )
 
     def unit_of_work(self) -> SQLiteMemoryUnitOfWork:
         return SQLiteMemoryUnitOfWork(self)
@@ -538,11 +694,13 @@ class SQLiteMemoryRepository:
         where, params = self._visible_scope_clause(query.scope)
         with self._connect() as connection:
             claim_rows = connection.execute(
-                f"SELECT * FROM claims WHERE {where} AND status = ? AND archived_at IS NULL LIMIT 500",
+                f"SELECT * FROM claims WHERE {where} "
+                "AND status = ? AND archived_at IS NULL LIMIT 500",
                 (*params, ClaimStatus.ACTIVE),
             ).fetchall()
             event_rows = connection.execute(
-                f"SELECT * FROM events WHERE {where} AND archived_at IS NULL ORDER BY occurred_at DESC LIMIT 500",
+                f"SELECT * FROM events WHERE {where} "
+                "AND archived_at IS NULL ORDER BY occurred_at DESC LIMIT 500",
                 params,
             ).fetchall()
             artifact_rows = connection.execute(
@@ -554,7 +712,9 @@ class SQLiteMemoryRepository:
         candidates: list[MemoryItem] = []
         if MemoryChannel.SEMANTIC in query.channels:
             for row in claim_rows:
-                overlap = self._overlap(query_tokens, f"{row['claim_key']} {row['text']} {row['value_json']}")
+                overlap = self._overlap(
+                    query_tokens, f"{row['claim_key']} {row['text']} {row['value_json']}"
+                )
                 candidates.append(
                     MemoryItem(
                         id=row["id"],
@@ -565,7 +725,9 @@ class SQLiteMemoryRepository:
                         metadata={
                             "channel": MemoryChannel.SEMANTIC,
                             "key": row["claim_key"],
-                            "source_event_ids": _provenance(row["provenance_json"]).source_event_ids,
+                            "source_event_ids": _provenance(
+                                row["provenance_json"]
+                            ).source_event_ids,
                         },
                     )
                 )
@@ -627,18 +789,143 @@ class SQLiteMemoryRepository:
             if request.all_in_scope:
                 where = "partition_key = ?"
                 params: tuple[Any, ...] = (request.scope.partition_key(),)
-            else:
-                placeholders = ",".join("?" for _ in request.memory_ids)
-                where = f"partition_key = ? AND id IN ({placeholders})"
-                params = (request.scope.partition_key(), *request.memory_ids)
+                counts = {
+                    table: connection.execute(
+                        f"SELECT COUNT(*) FROM {table} WHERE {where}", params
+                    ).fetchone()[0]
+                    for table in ("events", "claims", "artifacts")
+                }
+                if request.mode == ForgetMode.ARCHIVE:
+                    archived_at = _iso(utc_now())
+                    connection.execute(
+                        f"UPDATE events SET archived_at = ? WHERE {where}",
+                        (archived_at, *params),
+                    )
+                    connection.execute(
+                        f"UPDATE claims SET archived_at = ?, status = ? WHERE {where}",
+                        (archived_at, ClaimStatus.ARCHIVED, *params),
+                    )
+                    connection.execute(
+                        f"UPDATE artifacts SET archived_at = ?, status = ? WHERE {where}",
+                        (archived_at, ArtifactStatus.ARCHIVED, *params),
+                    )
+                else:
+                    connection.execute(f"DELETE FROM artifacts WHERE {where}", params)
+                    connection.execute(f"DELETE FROM claims WHERE {where}", params)
+                    connection.execute(f"DELETE FROM events WHERE {where}", params)
+                return ForgetResult(
+                    affected_events=counts["events"],
+                    affected_claims=counts["claims"],
+                    affected_artifacts=counts["artifacts"],
+                    mode=request.mode,
+                )
+
+            if not request.memory_ids:
+                return ForgetResult(0, 0, 0, request.mode)
+
+            placeholders = ",".join("?" for _ in request.memory_ids)
+            where = f"partition_key = ? AND id IN ({placeholders})"
+            params = (request.scope.partition_key(), *request.memory_ids)
+
+            event_rows = connection.execute(
+                f"SELECT id FROM events WHERE {where}", params
+            ).fetchall()
+            target_event_ids = tuple(row["id"] for row in event_rows)
+            if not target_event_ids:
+                return ForgetResult(0, 0, 0, request.mode)
+
+            target_event_set = set(target_event_ids)
+            event_placeholders = ",".join("?" for _ in target_event_ids)
+            impacted_claim_ids = {
+                row["claim_id"]
+                for row in connection.execute(
+                    "SELECT DISTINCT claim_id FROM claim_sources "
+                    f"WHERE event_id IN ({event_placeholders})",
+                    target_event_ids,
+                ).fetchall()
+            }
+            partition_claim_ids = {
+                row["id"]
+                for row in connection.execute(
+                    f"SELECT id FROM claims WHERE {where}", params
+                ).fetchall()
+            }
+
+            claims_to_drop: set[str] = set()
+            for claim_id in impacted_claim_ids:
+                row = connection.execute(
+                    "SELECT provenance_json FROM claims WHERE id = ?", (claim_id,)
+                ).fetchone()
+                if row is None:
+                    continue
+                provenance = _provenance(row["provenance_json"])
+                updated_sources = tuple(
+                    source_id
+                    for source_id in provenance.source_event_ids
+                    if source_id not in target_event_set
+                )
+                if len(updated_sources) == len(provenance.source_event_ids):
+                    continue
+                if not updated_sources:
+                    claims_to_drop.add(claim_id)
+                    continue
+                scrubbed = [
+                    source_id
+                    for source_id in provenance.source_event_ids
+                    if source_id in target_event_set
+                ]
+                scrubbed_placeholders = ",".join("?" for _ in scrubbed)
+                connection.execute(
+                    "DELETE FROM claim_sources "
+                    f"WHERE claim_id = ? AND event_id IN ({scrubbed_placeholders})",
+                    (claim_id, *scrubbed),
+                )
+                updated = Provenance(
+                    source_event_ids=updated_sources,
+                    extractor=provenance.extractor,
+                    provider=provenance.provider,
+                    model=provenance.model,
+                    prompt_version=provenance.prompt_version,
+                    source_uri=provenance.source_uri,
+                    created_at=provenance.created_at,
+                )
+                connection.execute(
+                    "UPDATE claims SET provenance_json = ? WHERE id = ?",
+                    (_provenance_json(updated), claim_id),
+                )
+                self._sync_claim_source_json(connection, claim_id)
 
             counts = {
-                table: connection.execute(f"SELECT COUNT(*) FROM {table} WHERE {where}", params).fetchone()[0]
+                table: connection.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE {where}", params
+                ).fetchone()[0]
                 for table in ("events", "claims", "artifacts")
             }
+            if claims_to_drop:
+                extra_counts = len(claims_to_drop - partition_claim_ids)
+                if request.mode == ForgetMode.ARCHIVE:
+                    archived_at = _iso(utc_now())
+                    placeholders = ",".join("?" for _ in claims_to_drop)
+                    connection.execute(
+                        "UPDATE claims SET archived_at = ?, status = ? "
+                        f"WHERE id IN ({placeholders})",
+                        (archived_at, ClaimStatus.ARCHIVED, *tuple(claims_to_drop)),
+                    )
+                    connection.execute(
+                        f"DELETE FROM claim_sources WHERE claim_id IN ({placeholders})",
+                        tuple(claims_to_drop),
+                    )
+                else:
+                    self._delete_claim_rows(connection, claims_to_drop)
+            else:
+                extra_counts = 0
+
             if request.mode == ForgetMode.ARCHIVE:
                 archived_at = _iso(utc_now())
-                connection.execute(f"UPDATE events SET archived_at = ? WHERE {where}", (archived_at, *params))
+                connection.execute(
+                    f"UPDATE events SET archived_at = ? WHERE {where}",
+                    (archived_at, *params),
+                )
                 connection.execute(
                     f"UPDATE claims SET archived_at = ?, status = ? WHERE {where}",
                     (archived_at, ClaimStatus.ARCHIVED, *params),
@@ -651,9 +938,17 @@ class SQLiteMemoryRepository:
                 connection.execute(f"DELETE FROM artifacts WHERE {where}", params)
                 connection.execute(f"DELETE FROM claims WHERE {where}", params)
                 connection.execute(f"DELETE FROM events WHERE {where}", params)
+
+            affected_claims = counts["claims"] + extra_counts
+            if request.mode == ForgetMode.ARCHIVE:
+                for claim_id in claims_to_drop:
+                    if claim_id in partition_claim_ids:
+                        # already counted by claims WHERE ... in counts["claims"]
+                        continue
+                    affected_claims += 1
             return ForgetResult(
                 affected_events=counts["events"],
-                affected_claims=counts["claims"],
+                affected_claims=affected_claims,
                 affected_artifacts=counts["artifacts"],
                 mode=request.mode,
             )
@@ -686,6 +981,11 @@ class SQLiteMemoryRepository:
                 claim.superseded_by,
             ),
         )
+        for source_event_id in claim.provenance.source_event_ids:
+            connection.execute(
+                "INSERT OR IGNORE INTO claim_sources (claim_id, event_id) VALUES (?, ?)",
+                (claim.id, source_event_id),
+            )
 
     def _insert_artifact(
         self,

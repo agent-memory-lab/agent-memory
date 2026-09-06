@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Sequence
+from collections.abc import Sequence
 
 from agent_memory.domain import ArtifactStatus, Episode, MemoryScope, Procedure, Provenance
 
@@ -25,7 +25,10 @@ class RuleBasedProcedureGenerator:
         groups: dict[str, list[Episode]] = defaultdict(list)
         partition = scope.partition_key()
         for episode in episodes:
-            if episode.scope.partition_key() != partition or episode.quality < self._minimum_quality:
+            if (
+                episode.scope.partition_key() != partition
+                or episode.quality < self._minimum_quality
+            ):
                 continue
             groups[episode.action.strip().casefold()].append(episode)
 
@@ -33,11 +36,13 @@ class RuleBasedProcedureGenerator:
         for normalized_action, members in sorted(groups.items()):
             if not normalized_action or len(members) < self._minimum_support:
                 continue
-            source_event_ids = tuple(dict.fromkeys(
-                event_id
-                for episode in members
-                for event_id in episode.provenance.source_event_ids
-            ))
+            source_event_ids = tuple(
+                dict.fromkeys(
+                    event_id
+                    for episode in members
+                    for event_id in episode.provenance.source_event_ids
+                )
+            )
             if not source_event_ids:
                 continue
             representative = max(members, key=lambda item: item.quality)
@@ -55,9 +60,10 @@ class RuleBasedProcedureGenerator:
                     provider="agent-memory-evolution",
                 ),
             )
-            generated.append(GeneratedProcedure(
-                procedure=procedure,
-                source_episode_ids=tuple(item.id for item in members),
-            ))
+            generated.append(
+                GeneratedProcedure(
+                    procedure=procedure,
+                    source_episode_ids=tuple(item.id for item in members),
+                )
+            )
         return tuple(generated)
-

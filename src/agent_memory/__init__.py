@@ -1,5 +1,5 @@
-from .composition import build_local_kernel
 from .adapters import AgentLifecycleContext, AgentMemoryAdapter
+from .composition import build_local_kernel
 from .domain import (
     PROTOCOL_VERSION,
     SCHEMA_VERSION,
@@ -27,8 +27,8 @@ from .domain import (
     Procedure,
     ProposalResult,
     ProposalStatus,
-    ProviderManifest,
     Provenance,
+    ProviderManifest,
     RewardSignal,
     ScopeLevel,
     StateDelta,
@@ -42,7 +42,6 @@ from .plugins import (
     PluginReference,
     PluginRegistry,
 )
-from .runtime import AgentMemory, MemoryLimits
 from .ports import (
     ClaimExtractor,
     ConsolidationScheduler,
@@ -55,6 +54,7 @@ from .ports import (
     MemoryUnitOfWork,
     Reranker,
 )
+from .runtime import AgentMemory, MemoryLimits
 
 __all__ = [
     "PROTOCOL_VERSION",

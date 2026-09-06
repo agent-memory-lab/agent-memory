@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Awaitable, Callable, Mapping
+from typing import Any
 from uuid import uuid4
 
 from agent_memory import IngestResult, MemoryEvent, MemoryScope

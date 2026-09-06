@@ -8,8 +8,8 @@ from agent_memory.providers import (
     TrustedMemoryPolicy,
 )
 
-from .repository import PostgresMemoryRepository
 from .jobs import PostgresConsolidationQueue
+from .repository import PostgresMemoryRepository
 
 
 def build_postgres_kernel(

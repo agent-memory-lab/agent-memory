@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Mapping
 from uuid import uuid4
 
 from agent_memory.domain import MemoryScope, Procedure, utc_now
@@ -106,4 +106,3 @@ class PromotionRecord:
     evaluation_id: str | None = None
     approval_ref: str | None = None
     created_at: datetime = field(default_factory=utc_now)
-

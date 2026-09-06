@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from hashlib import sha256
-from hmac import compare_digest, new as new_hmac
+from hmac import compare_digest
+from hmac import new as new_hmac
 from time import time
-from typing import Mapping, Protocol
+from typing import Protocol
+
+from mcp.server.mcpserver import Context
 
 from agent_memory.domain import MemoryScope
 from agent_memory.mcp import MCPRequestContext
-from mcp.server.mcpserver import Context
 
 IDENTITY_HEADER_PREFIX = "x-agent-memory-"
 IDENTITY_FIELDS = (
@@ -45,8 +48,7 @@ class StaticIdentityResolver:
 def canonical_identity_payload(headers: Mapping[str, str]) -> bytes:
     normalized = {str(key).lower(): str(value) for key, value in headers.items()}
     lines = [
-        f"{field}={normalized.get(IDENTITY_HEADER_PREFIX + field, '')}"
-        for field in IDENTITY_FIELDS
+        f"{field}={normalized.get(IDENTITY_HEADER_PREFIX + field, '')}" for field in IDENTITY_FIELDS
     ]
     return "\n".join(lines).encode("utf-8")
 

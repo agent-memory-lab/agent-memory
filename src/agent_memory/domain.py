@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import StrEnum
 from hashlib import sha256
 from json import dumps
-from typing import Any, Mapping
+from typing import Any
 from uuid import uuid4
 
 PROTOCOL_VERSION = "0.1"
@@ -13,7 +14,7 @@ SCHEMA_VERSION = 1
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def canonical_json(value: Any) -> str:

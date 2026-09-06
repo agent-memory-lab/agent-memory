@@ -90,40 +90,38 @@ from agent_memory import AgentMemory, MemoryScope
 async def main() -> None:
     scope = MemoryScope(
         tenant_id="demo",
-        app_id="support-agent",
+        namespace="support-agent",
         agent_id="assistant",
         user_id="user-42",
         session_id="session-1",
     )
 
     async with AgentMemory.local(
-        path=".agent-memory/demo.sqlite3",
+        ".agent-memory/demo.sqlite3",
         scope=scope,
     ) as memory:
         await memory.remember(
-            {
-                "type": "user_message",
-                "content": "请优先使用电子邮件联系我。",
-                "claims": [
-                    {
-                        "subject": "user-42",
-                        "predicate": "preferred_contact_method",
-                        "value": "email",
-                        "scope": "user",
-                        "confidence": 0.98,
-                    }
-                ],
-            }
+            "请优先使用电子邮件联系我。",
+            event_type="user.message",
+            claims=(
+                {
+                    "key": "contact.preference",
+                    "value": "email",
+                    "text": "用户偏好使用电子邮件。",
+                    "scope": "user",
+                    "confidence": 0.98,
+                },
+            ),
         )
 
         bundle = await memory.recall(
             "应该如何联系这个用户？",
-            max_items=8,
-            max_chars=4_000,
+            limit=8,
+            token_budget=1_200,
         )
 
-        for item in bundle.items:
-            print(item.channel, item.content, item.citations)
+        for claim in bundle.current_state:
+            print(claim.key, claim.value, claim.provenance.source_event_ids)
 
 
 asyncio.run(main())
@@ -225,7 +223,7 @@ from agent_memory import AgentMemory, MemoryScope
 
 scope = MemoryScope(
     tenant_id="acme",
-    app_id="research",
+    namespace="research",
     agent_id="analyst",
 )
 

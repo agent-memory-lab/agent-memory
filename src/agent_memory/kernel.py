@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from json import dumps
-from typing import Any, Sequence
+from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 from .domain import (
@@ -29,9 +30,10 @@ from .domain import (
     Procedure,
     ProposalResult,
     ProposalStatus,
-    ProviderManifest,
     Provenance,
+    ProviderManifest,
     RewardSignal,
+    ScopeLevel,
     StateDelta,
     utc_now,
 )
@@ -89,7 +91,12 @@ class MemoryKernel:
         if await self._policy.should_extract(event):
             extracted = await self._extractor.extract(event)
             accepted: list[ClaimDraft] = []
+            seen_drafts: set[tuple[ScopeLevel, str]] = set()
             for draft in extracted:
+                dedup_key = (draft.scope_level, draft.key)
+                if dedup_key in seen_drafts:
+                    continue
+                seen_drafts.add(dedup_key)
                 if await self._policy.accept_claim(event, draft):
                     accepted.append(draft)
             drafts = tuple(accepted)
@@ -138,7 +145,9 @@ class MemoryKernel:
             return previous, None, None
 
         now = utc_now()
-        claim_id = str(uuid5(NAMESPACE_URL, f"{event.id}:{claim_scope.partition_key()}:{draft.key}"))
+        claim_id = str(
+            uuid5(NAMESPACE_URL, f"{event.id}:{claim_scope.partition_key()}:{draft.key}")
+        )
         provenance = draft.provenance or Provenance(
             source_event_ids=(event.id,),
             extractor=type(self._extractor).__name__,
@@ -229,9 +238,7 @@ class MemoryKernel:
         episodes = tuple(item for item in selected if item.kind == MemoryKind.EPISODE)
         procedures = tuple(item for item in selected if item.kind == MemoryKind.PROCEDURE)
         relevant = tuple(
-            item
-            for item in selected
-            if item.kind not in (MemoryKind.EPISODE, MemoryKind.PROCEDURE)
+            item for item in selected if item.kind not in (MemoryKind.EPISODE, MemoryKind.PROCEDURE)
         )
         return MemoryBundle(
             current_state=tuple(selected_state),
@@ -273,7 +280,10 @@ class MemoryKernel:
                     proposal_id=proposal.id,
                     status=ProposalStatus.CONFLICT,
                     claim_id=previous.id if previous else None,
-                    reason=f"expected version {proposal.expected_version}, current version {actual_version}",
+                    reason=(
+                        f"expected version {proposal.expected_version}, "
+                        f"current version {actual_version}"
+                    ),
                 )
                 await uow.save_proposal(proposal, result)
                 return result

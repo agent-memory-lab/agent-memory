@@ -15,4 +15,3 @@ def test_zero_config_runtime_is_bounded(tmp_path) -> None:
             assert count <= 2
 
     asyncio.run(scenario())
-

@@ -1,6 +1,5 @@
 import asyncio
 
-from agent_memory.domain import ArtifactStatus, MemoryScope, Procedure, Provenance
 from agent_memory_evolution import (
     DeterministicPromotionPolicy,
     EvaluationReport,
@@ -13,11 +12,15 @@ from agent_memory_evolution import (
     SQLiteEvolutionRegistry,
 )
 
+from agent_memory.domain import ArtifactStatus, MemoryScope, Procedure, Provenance
+
 
 def test_candidate_cannot_skip_gates_and_can_rollback(tmp_path) -> None:
     async def scenario() -> None:
         registry = SQLiteEvolutionRegistry(tmp_path / "evolution.db")
-        engine = EvolutionEngine(registry, DeterministicPromotionPolicy(), NullProcedureDeployment())
+        engine = EvolutionEngine(
+            registry, DeterministicPromotionPolicy(), NullProcedureDeployment()
+        )
         await engine.initialize()
         scope = MemoryScope(tenant_id="test", session_id="one")
         candidate = await engine.register_procedure(
@@ -49,15 +52,18 @@ def test_candidate_cannot_skip_gates_and_can_rollback(tmp_path) -> None:
             (EvaluationStage.SHADOW, 50),
             (EvaluationStage.CANARY, 100),
         ):
-            decided = await engine.submit_evaluation(EvaluationReport(
-                candidate_id=candidate.id,
-                stage=stage,
-                dataset_id=f"dataset-{stage}",
-                evaluator_version="1",
-                sample_size=samples,
-                metrics=metrics,
-                evidence_digest=f"sha256:{stage}",
-            ), actor="evaluator")
+            decided = await engine.submit_evaluation(
+                EvaluationReport(
+                    candidate_id=candidate.id,
+                    stage=stage,
+                    dataset_id=f"dataset-{stage}",
+                    evaluator_version="1",
+                    sample_size=samples,
+                    metrics=metrics,
+                    evidence_digest=f"sha256:{stage}",
+                ),
+                actor="evaluator",
+            )
             assert decided.passed is True
             if stage == EvaluationStage.CANARY:
                 approval = PromotionApproval("reviewer", "ticket-1", "reviewed evidence")
@@ -70,4 +76,3 @@ def test_candidate_cannot_skip_gates_and_can_rollback(tmp_path) -> None:
         assert (await registry.get(candidate.id)).state == EvolutionState.ROLLED_BACK
 
     asyncio.run(scenario())
-

@@ -3,10 +3,10 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
-from dataclasses import replace
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from agent_memory.domain import ArtifactStatus, MemoryScope, Procedure, Provenance
 from agent_memory.serialization import to_jsonable

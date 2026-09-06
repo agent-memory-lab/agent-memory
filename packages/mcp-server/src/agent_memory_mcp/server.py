@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from agent_memory.mcp import MCPMemoryTools
-from agent_memory.ports import MemoryProvider
 from mcp.server import MCPServer
 from mcp.server.mcpserver import Context
+
+from agent_memory.mcp import MCPMemoryTools
+from agent_memory.ports import MemoryProvider
 
 from .identity import IdentityResolver
 
@@ -34,13 +35,17 @@ def create_server(
         source_uri: str | None = None,
     ) -> dict[str, Any]:
         """Append an immutable event and derive trusted memory."""
-        return await call(ctx, "memory_ingest", {
-            "event_type": event_type,
-            "content": content,
-            "metadata": metadata or {},
-            "idempotency_key": idempotency_key,
-            "source_uri": source_uri,
-        })
+        return await call(
+            ctx,
+            "memory_ingest",
+            {
+                "event_type": event_type,
+                "content": content,
+                "metadata": metadata or {},
+                "idempotency_key": idempotency_key,
+                "source_uri": source_uri,
+            },
+        )
 
     @server.tool()
     async def memory_retrieve(
@@ -74,16 +79,20 @@ def create_server(
         importance: float = 0.5,
     ) -> dict[str, Any]:
         """Propose an evidence-backed optimistic Current State update."""
-        return await call(ctx, "memory_propose", {
-            "key": key,
-            "value": value,
-            "text": text,
-            "source_event_ids": source_event_ids,
-            "expected_version": expected_version,
-            "scope_level": scope_level,
-            "confidence": confidence,
-            "importance": importance,
-        })
+        return await call(
+            ctx,
+            "memory_propose",
+            {
+                "key": key,
+                "value": value,
+                "text": text,
+                "source_event_ids": source_event_ids,
+                "expected_version": expected_version,
+                "scope_level": scope_level,
+                "confidence": confidence,
+                "importance": importance,
+            },
+        )
 
     @server.tool()
     async def memory_forget(
@@ -93,11 +102,15 @@ def create_server(
         mode: str = "archive",
     ) -> dict[str, Any]:
         """Archive memory or perform an identity-authorized legal erase."""
-        return await call(ctx, "memory_forget", {
-            "memory_ids": memory_ids or [],
-            "all_in_scope": all_in_scope,
-            "mode": mode,
-        })
+        return await call(
+            ctx,
+            "memory_forget",
+            {
+                "memory_ids": memory_ids or [],
+                "all_in_scope": all_in_scope,
+                "mode": mode,
+            },
+        )
 
     @server.tool()
     async def memory_capabilities(ctx: Context) -> dict[str, Any]:

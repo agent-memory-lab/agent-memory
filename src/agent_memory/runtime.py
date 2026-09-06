@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from inspect import isawaitable
 from json import dumps
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Mapping, Self, Sequence
+from typing import Any, Self
 
 from .domain import (
     Claim,
@@ -137,15 +138,17 @@ class AgentMemory:
         metadata_size = len(dumps(combined, ensure_ascii=False, default=str).encode("utf-8"))
         if metadata_size > self.limits.max_metadata_bytes:
             raise ValueError("event metadata exceeds max_metadata_bytes")
-        return await self._provider.ingest_event(MemoryEvent(
-            scope=self.scope,
-            event_type=event_type,
-            content=content,
-            metadata=combined,
-            idempotency_key=idempotency_key,
-            source_uri=source_uri,
-            actor=actor,
-        ))
+        return await self._provider.ingest_event(
+            MemoryEvent(
+                scope=self.scope,
+                event_type=event_type,
+                content=content,
+                metadata=combined,
+                idempotency_key=idempotency_key,
+                source_uri=source_uri,
+                actor=actor,
+            )
+        )
 
     async def recall(
         self,
@@ -160,12 +163,14 @@ class AgentMemory:
             token_budget or self.limits.max_context_tokens,
             self.limits.max_context_tokens,
         )
-        return await self._provider.retrieve(MemoryQuery(
-            scope=self.scope,
-            text=text,
-            limit=max(1, bounded_limit),
-            token_budget=max(64, bounded_tokens),
-        ))
+        return await self._provider.retrieve(
+            MemoryQuery(
+                scope=self.scope,
+                text=text,
+                limit=max(1, bounded_limit),
+                token_budget=max(64, bounded_tokens),
+            )
+        )
 
     async def state(self) -> tuple[Claim, ...]:
         self._require_initialized()
@@ -180,14 +185,15 @@ class AgentMemory:
         erase: bool = False,
     ) -> ForgetResult:
         self._require_initialized()
-        return await self._provider.forget(ForgetRequest(
-            scope=self.scope,
-            memory_ids=tuple(memory_ids),
-            all_in_scope=all_in_scope,
-            mode=ForgetMode.ERASE if erase else ForgetMode.ARCHIVE,
-        ))
+        return await self._provider.forget(
+            ForgetRequest(
+                scope=self.scope,
+                memory_ids=tuple(memory_ids),
+                all_in_scope=all_in_scope,
+                mode=ForgetMode.ERASE if erase else ForgetMode.ARCHIVE,
+            )
+        )
 
     def _require_initialized(self) -> None:
         if not self._initialized:
             raise RuntimeError("use 'async with AgentMemory.local()' or await initialize() first")
-

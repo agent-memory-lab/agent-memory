@@ -15,4 +15,3 @@ __all__ = [
     "canonical_identity_payload",
     "create_server",
 ]
-

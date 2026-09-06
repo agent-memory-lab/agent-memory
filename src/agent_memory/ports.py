@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from types import TracebackType
-from typing import Protocol, Sequence
+from typing import Protocol
 
 from .domain import (
     Claim,
@@ -68,9 +69,7 @@ class MemoryUnitOfWork(Protocol):
 
     async def save_reward(self, reward: RewardSignal) -> None: ...
 
-    async def save_proposal(
-        self, proposal: MemoryProposal, result: ProposalResult
-    ) -> None: ...
+    async def save_proposal(self, proposal: MemoryProposal, result: ProposalResult) -> None: ...
 
 
 class MemoryRepository(Protocol):
@@ -109,7 +108,9 @@ class EmbeddingProvider(Protocol):
 
 
 class GraphProvider(Protocol):
-    async def expand(self, query: MemoryQuery, seeds: Sequence[MemoryItem]) -> Sequence[MemoryItem]: ...
+    async def expand(
+        self, query: MemoryQuery, seeds: Sequence[MemoryItem]
+    ) -> Sequence[MemoryItem]: ...
 
 
 class EvolutionProvider(Protocol):

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from types import TracebackType
-from typing import Any, Mapping, Protocol, Self
+from typing import Any, Protocol, Self
+
+from mcp import Client, StdioServerParameters
+from mcp.client.streamable_http import streamable_http_client
 
 from agent_memory.mcp import MCPMemoryTools, MCPRequestContext
 from agent_memory.ports import MemoryProvider
-from mcp import Client, StdioServerParameters
-from mcp.client.streamable_http import streamable_http_client
 
 
 class MemoryClientError(RuntimeError):
@@ -35,13 +37,16 @@ class _Operations:
         idempotency_key: str | None = None,
         source_uri: str | None = None,
     ) -> dict[str, Any]:
-        return await self._call("memory_ingest", {
-            "event_type": event_type,
-            "content": content,
-            "metadata": dict(metadata or {}),
-            "idempotency_key": idempotency_key,
-            "source_uri": source_uri,
-        })
+        return await self._call(
+            "memory_ingest",
+            {
+                "event_type": event_type,
+                "content": content,
+                "metadata": dict(metadata or {}),
+                "idempotency_key": idempotency_key,
+                "source_uri": source_uri,
+            },
+        )
 
     async def retrieve(
         self,
@@ -71,16 +76,19 @@ class _Operations:
         confidence: float = 1.0,
         importance: float = 0.5,
     ) -> dict[str, Any]:
-        return await self._call("memory_propose", {
-            "key": key,
-            "value": value,
-            "text": text,
-            "source_event_ids": source_event_ids,
-            "expected_version": expected_version,
-            "scope_level": scope_level,
-            "confidence": confidence,
-            "importance": importance,
-        })
+        return await self._call(
+            "memory_propose",
+            {
+                "key": key,
+                "value": value,
+                "text": text,
+                "source_event_ids": source_event_ids,
+                "expected_version": expected_version,
+                "scope_level": scope_level,
+                "confidence": confidence,
+                "importance": importance,
+            },
+        )
 
     async def forget(
         self,
@@ -89,11 +97,14 @@ class _Operations:
         all_in_scope: bool = False,
         mode: str = "archive",
     ) -> dict[str, Any]:
-        return await self._call("memory_forget", {
-            "memory_ids": memory_ids or [],
-            "all_in_scope": all_in_scope,
-            "mode": mode,
-        })
+        return await self._call(
+            "memory_forget",
+            {
+                "memory_ids": memory_ids or [],
+                "all_in_scope": all_in_scope,
+                "mode": mode,
+            },
+        )
 
     async def capabilities(self) -> dict[str, Any]:
         return await self._call("memory_capabilities", {})
@@ -134,11 +145,13 @@ class MCPMemoryClient(_Operations):
         args: list[str] | None = None,
         env: Mapping[str, str] | None = None,
     ) -> MCPMemoryClient:
-        return cls(StdioServerParameters(
-            command=command,
-            args=args or [],
-            env=dict(env) if env is not None else None,
-        ))
+        return cls(
+            StdioServerParameters(
+                command=command,
+                args=args or [],
+                env=dict(env) if env is not None else None,
+            )
+        )
 
     async def __aenter__(self) -> Self:
         await self._client.__aenter__()
@@ -164,4 +177,3 @@ class MCPMemoryClient(_Operations):
         if not isinstance(result.structured_content, dict):
             raise MemoryClientError(f"{name} returned no structured content")
         return result.structured_content
-

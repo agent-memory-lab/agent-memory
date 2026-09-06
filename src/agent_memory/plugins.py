@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from importlib.metadata import entry_points
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from .composition import build_local_kernel
 from .ports import MemoryProvider
@@ -24,7 +25,9 @@ class PluginReference:
     distribution: str | None = None
 
 
-def build_sqlite_plugin(*, database_path: str | Path = "agent-memory.db", **_: Any) -> MemoryProvider:
+def build_sqlite_plugin(
+    *, database_path: str | Path = "agent-memory.db", **_: Any
+) -> MemoryProvider:
     return build_local_kernel(database_path)
 
 
@@ -71,4 +74,3 @@ class PluginRegistry:
         if len(matches) > 1:
             raise PluginError(f"multiple installed integrations use the name {name!r}")
         return matches[0].load()
-

@@ -19,11 +19,13 @@ class MemoryProviderProcedureDeployment:
         await self._provider.publish_procedure(procedure)
 
     async def deactivate(self, candidate: EvolutionCandidate) -> None:
-        await self._provider.forget(ForgetRequest(
-            scope=candidate.scope,
-            memory_ids=(candidate.procedure.id,),
-            mode=ForgetMode.ARCHIVE,
-        ))
+        await self._provider.forget(
+            ForgetRequest(
+                scope=candidate.scope,
+                memory_ids=(candidate.procedure.id,),
+                mode=ForgetMode.ARCHIVE,
+            )
+        )
 
 
 class NullProcedureDeployment:
@@ -34,4 +36,3 @@ class NullProcedureDeployment:
 
     async def deactivate(self, candidate: EvolutionCandidate) -> None:
         return None
-

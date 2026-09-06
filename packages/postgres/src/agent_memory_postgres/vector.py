@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any
 
 from agent_memory import MemoryScope
 
@@ -129,7 +130,7 @@ class PgVectorIndex:
                 f"""
                 SELECT memory_id, embedding <=> %s::vector AS distance
                 FROM agent_memory_vectors
-                WHERE {' AND '.join(clauses)}
+                WHERE {" AND ".join(clauses)}
                 ORDER BY embedding <=> %s::vector
                 LIMIT %s
                 """,

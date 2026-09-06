@@ -35,18 +35,20 @@ def parser() -> argparse.ArgumentParser:
 def _static_resolver(args: argparse.Namespace) -> StaticIdentityResolver:
     if not args.tenant_id:
         raise SystemExit("--tenant-id is required for stdio or fixed-scope HTTP")
-    return StaticIdentityResolver(MCPRequestContext(
-        scope=MemoryScope(
-            tenant_id=args.tenant_id,
-            namespace=args.namespace,
-            user_id=args.user_id,
-            agent_id=args.agent_id,
-            workspace_id=args.workspace_id,
-            session_id=args.session_id,
-        ),
-        actor=args.actor,
-        can_erase=args.can_erase,
-    ))
+    return StaticIdentityResolver(
+        MCPRequestContext(
+            scope=MemoryScope(
+                tenant_id=args.tenant_id,
+                namespace=args.namespace,
+                user_id=args.user_id,
+                agent_id=args.agent_id,
+                workspace_id=args.workspace_id,
+                session_id=args.session_id,
+            ),
+            actor=args.actor,
+            can_erase=args.can_erase,
+        )
+    )
 
 
 def main() -> None:
@@ -81,4 +83,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

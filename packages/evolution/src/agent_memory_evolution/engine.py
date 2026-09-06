@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import replace
-from typing import Sequence
 
 from agent_memory.domain import ArtifactStatus, Episode, MemoryScope
 
@@ -78,12 +78,14 @@ class EvolutionEngine:
         generated = await generator.generate(scope, episodes)
         candidates = []
         for item in generated:
-            candidates.append(await self.register_procedure(
-                item.procedure,
-                item.source_episode_ids,
-                baseline_version=baseline_version,
-                generator=type(generator).__name__,
-            ))
+            candidates.append(
+                await self.register_procedure(
+                    item.procedure,
+                    item.source_episode_ids,
+                    baseline_version=baseline_version,
+                    generator=type(generator).__name__,
+                )
+            )
         return tuple(candidates)
 
     async def submit_evaluation(self, report: EvaluationReport, *, actor: str) -> EvaluationReport:
@@ -104,10 +106,15 @@ class EvolutionEngine:
                 candidate.state,
                 target,
                 actor=actor,
-                reason="evaluation gates passed" if decision.passed else "; ".join(decision.reasons),
+                reason="evaluation gates passed"
+                if decision.passed
+                else "; ".join(decision.reasons),
                 evaluation_id=decided.id,
             )
-        elif not decision.passed and candidate.state in {EvolutionState.SHADOW, EvolutionState.CANARY}:
+        elif not decision.passed and candidate.state in {
+            EvolutionState.SHADOW,
+            EvolutionState.CANARY,
+        }:
             await self._registry.transition(
                 candidate.id,
                 candidate.state,
@@ -182,7 +189,11 @@ class EvolutionEngine:
         if not reason.strip():
             raise ValueError("rollback reason is required")
         candidate = await self._registry.get(candidate_id)
-        if candidate.state in {EvolutionState.EVALUATED, EvolutionState.SHADOW, EvolutionState.CANARY}:
+        if candidate.state in {
+            EvolutionState.EVALUATED,
+            EvolutionState.SHADOW,
+            EvolutionState.CANARY,
+        }:
             return await self._registry.transition(
                 candidate.id,
                 candidate.state,
@@ -217,4 +228,3 @@ class EvolutionEngine:
             actor=actor,
             reason=reason,
         )
-

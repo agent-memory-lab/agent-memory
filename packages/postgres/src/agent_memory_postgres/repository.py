@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
-from typing import Any, Sequence
+from typing import Any
 
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
@@ -33,7 +33,6 @@ from agent_memory.domain import (
     Provenance,
     RewardSignal,
     StateDelta,
-    utc_now,
 )
 from agent_memory.serialization import to_jsonable
 
@@ -315,9 +314,7 @@ class PostgresMemoryUnitOfWork:
             self.connection, reward.id, reward.scope, "reward", reward, reward.created_at
         )
 
-    async def save_proposal(
-        self, proposal: MemoryProposal, result: ProposalResult
-    ) -> None:
+    async def save_proposal(self, proposal: MemoryProposal, result: ProposalResult) -> None:
         await self.connection.execute(
             """
             INSERT INTO agent_memory_proposals (
@@ -352,8 +349,10 @@ class PostgresMemoryRepository:
         self.pool = pool
         packaged = Path(__file__).resolve().parent / "migrations"
         source = Path(__file__).resolve().parents[2] / "migrations"
-        self._migrations_path = Path(migrations_path) if migrations_path else (
-            packaged if packaged.exists() else source
+        self._migrations_path = (
+            Path(migrations_path)
+            if migrations_path
+            else (packaged if packaged.exists() else source)
         )
 
     @classmethod
@@ -422,7 +421,9 @@ class PostgresMemoryRepository:
                             id=row["id"],
                             kind=MemoryKind.CLAIM,
                             text=row["text"],
-                            score=float(row["rank"]) + 0.25 * row["importance"] + 0.20 * row["confidence"],
+                            score=float(row["rank"])
+                            + 0.25 * row["importance"]
+                            + 0.20 * row["confidence"],
                             occurred_at=row["created_at"],
                             metadata={
                                 "channel": MemoryChannel.SEMANTIC,
