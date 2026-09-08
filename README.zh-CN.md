@@ -68,7 +68,7 @@ Agent 原始事件
 ### 1. 安装本地 MVP
 
 ~~~bash
-git clone https://github.com/chenlianggood8520-sketch/agent-memory.git
+git clone https://github.com/your-org/agent-memory.git
 cd agent-memory
 ./setup.sh
 ~~~

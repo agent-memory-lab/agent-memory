@@ -68,7 +68,7 @@ Every returned item keeps provenance. New truth supersedes old truth instead of 
 ### 1. Install the local MVP
 
 ~~~bash
-git clone https://github.com/chenlianggood8520-sketch/agent-memory.git
+git clone https://github.com/your-org/agent-memory.git
 cd agent-memory
 ./setup.sh
 ~~~
