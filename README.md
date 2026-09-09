@@ -73,6 +73,9 @@ cd agent-memory
 ./setup.sh
 ~~~
 
+Python 3.11+ is required. `setup.sh` automatically selects Python 3.13, 3.12, or 3.11 when
+available; set `PYTHON_BIN=/path/to/python3.11 ./setup.sh` to choose one explicitly.
+
 For an editable core-only install:
 
 ~~~bash

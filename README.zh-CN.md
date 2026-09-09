@@ -73,6 +73,9 @@ cd agent-memory
 ./setup.sh
 ~~~
 
+需要 Python 3.11+。`setup.sh` 会自动选择可用的 Python 3.13、3.12 或 3.11；如需指定解释器，可执行
+`PYTHON_BIN=/path/to/python3.11 ./setup.sh`。
+
 只安装可编辑的核心包：
 
 ~~~bash
