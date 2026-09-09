@@ -14,6 +14,7 @@ from .domain import (
     ForgetRequest,
     ForgetResult,
     IngestResult,
+    MemoryBlock,
     MemoryBundle,
     MemoryCapabilities,
     MemoryChannel,
@@ -44,6 +45,7 @@ from .plugins import (
 )
 from .ports import (
     ClaimExtractor,
+    ClaimGenerator,
     ConsolidationScheduler,
     EmbeddingProvider,
     EvolutionProvider,
@@ -53,6 +55,12 @@ from .ports import (
     MemoryRepository,
     MemoryUnitOfWork,
     Reranker,
+)
+from .providers import (
+    CompositeClaimExtractor,
+    GeneratedTrajectoryClaimExtractor,
+    MetadataClaimExtractor,
+    build_trajectory_extractor,
 )
 from .runtime import AgentMemory, MemoryLimits
 
@@ -67,8 +75,10 @@ __all__ = [
     "Claim",
     "ClaimDraft",
     "ClaimExtractor",
+    "ClaimGenerator",
     "ClaimStatus",
     "ConsolidationScheduler",
+    "CompositeClaimExtractor",
     "DecisionRecord",
     "EmbeddingProvider",
     "Episode",
@@ -77,7 +87,9 @@ __all__ = [
     "ForgetRequest",
     "ForgetResult",
     "GraphProvider",
+    "GeneratedTrajectoryClaimExtractor",
     "IngestResult",
+    "MemoryBlock",
     "MemoryBundle",
     "MemoryCapabilities",
     "MemoryChannel",
@@ -97,6 +109,7 @@ __all__ = [
     "MCPRequestContext",
     "MCPToolError",
     "MemoryLimits",
+    "MetadataClaimExtractor",
     "PluginError",
     "PluginReference",
     "PluginRegistry",
@@ -112,4 +125,5 @@ __all__ = [
     "ScopeLevel",
     "StateDelta",
     "build_local_kernel",
+    "build_trajectory_extractor",
 ]

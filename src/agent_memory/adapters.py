@@ -59,6 +59,24 @@ class AgentMemoryAdapter:
             )
         )
 
+    async def after_user(
+        self,
+        context: AgentLifecycleContext,
+        *,
+        content: str,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> IngestResult:
+        return await self._provider.ingest_event(
+            MemoryEvent(
+                scope=context.scope,
+                event_type="user.message",
+                content=content,
+                idempotency_key=context.idempotency_key("after_user"),
+                actor="user",
+                metadata={**context.metadata, **dict(metadata or {})},
+            )
+        )
+
     async def after_tool(
         self,
         context: AgentLifecycleContext,

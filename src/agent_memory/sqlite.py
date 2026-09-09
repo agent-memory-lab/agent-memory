@@ -5,7 +5,7 @@ import json
 import re
 import sqlite3
 from collections.abc import Sequence
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
@@ -20,6 +20,7 @@ from .domain import (
     ForgetMode,
     ForgetRequest,
     ForgetResult,
+    MemoryBlock,
     MemoryChannel,
     MemoryEvent,
     MemoryItem,
@@ -308,6 +309,76 @@ class SQLiteMemoryUnitOfWork:
             procedure.provenance,
             procedure.created_at,
         )
+
+    async def save_block(self, block: MemoryBlock, expected_version: int) -> MemoryBlock:
+        row = self.connection.execute(
+            "SELECT * FROM artifacts WHERE id = ?", (block.id,)
+        ).fetchone()
+        now = utc_now()
+        if row is None:
+            if expected_version != 0:
+                raise RuntimeError(
+                    f"memory block version conflict: expected {expected_version}, current 0"
+                )
+            stored = replace(block, version=1, created_at=now, updated_at=now)
+            self._repository._insert_artifact(
+                self.connection,
+                stored.id,
+                stored.scope,
+                MemoryKind.BLOCK,
+                f"{stored.title}\n{stored.content}",
+                asdict(stored),
+                stored.status,
+                stored.version,
+                1.0,
+                stored.provenance,
+                stored.updated_at,
+            )
+            return stored
+
+        if (
+            row["kind"] != MemoryKind.BLOCK
+            or row["partition_key"] != block.scope.partition_key()
+            or row["archived_at"] is not None
+        ):
+            raise RuntimeError("memory block id conflicts with an existing memory artifact")
+        current = self._repository._block_from_row(row)
+        if current.version != expected_version:
+            raise RuntimeError(
+                f"memory block version conflict: expected {expected_version}, "
+                f"current {current.version}"
+            )
+        stored = replace(
+            block,
+            version=current.version + 1,
+            created_at=current.created_at,
+            updated_at=now,
+        )
+        cursor = self.connection.execute(
+            """
+            UPDATE artifacts
+            SET text = ?, payload_json = ?, status = ?, version = ?, quality = ?,
+                provenance_json = ?, occurred_at = ?
+            WHERE id = ? AND partition_key = ? AND kind = ? AND version = ?
+              AND archived_at IS NULL
+            """,
+            (
+                f"{stored.title}\n{stored.content}",
+                canonical_json(asdict(stored)),
+                stored.status,
+                stored.version,
+                1.0,
+                _provenance_json(stored.provenance),
+                _iso(stored.updated_at),
+                stored.id,
+                stored.scope.partition_key(),
+                MemoryKind.BLOCK,
+                expected_version,
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise RuntimeError("memory block update conflict")
+        return stored
 
     async def save_decision(self, decision: DecisionRecord) -> None:
         self._repository._insert_evolution_record(
@@ -755,13 +826,23 @@ class SQLiteMemoryRepository:
             enabled_kinds.add(MemoryKind.EPISODE)
         if MemoryChannel.PROCEDURAL in query.channels:
             enabled_kinds.add(MemoryKind.PROCEDURE)
+        if query.channels:
+            enabled_kinds.add(MemoryKind.BLOCK)
         for row in artifact_rows:
             kind = MemoryKind(row["kind"])
             if kind not in enabled_kinds:
                 continue
-            channel = (
-                MemoryChannel.EPISODIC if kind == MemoryKind.EPISODE else MemoryChannel.PROCEDURAL
-            )
+            if kind == MemoryKind.BLOCK:
+                block = self._block_from_row(row)
+                channel = block.channel
+                if channel not in query.channels:
+                    continue
+            else:
+                channel = (
+                    MemoryChannel.EPISODIC
+                    if kind == MemoryKind.EPISODE
+                    else MemoryChannel.PROCEDURAL
+                )
             provenance = _provenance(row["provenance_json"])
             candidates.append(
                 MemoryItem(
@@ -774,11 +855,62 @@ class SQLiteMemoryRepository:
                         "channel": channel,
                         "status": row["status"],
                         "version": row["version"],
+                        "token_budget": (
+                            block.token_budget if kind == MemoryKind.BLOCK else None
+                        ),
                         "source_event_ids": provenance.source_event_ids,
                     },
                 )
             )
         return tuple(sorted(candidates, key=lambda item: item.score, reverse=True)[:limit])
+
+    async def read_block(self, scope: MemoryScope, block_id: str) -> MemoryBlock | None:
+        return await asyncio.to_thread(self._read_block_sync, scope, block_id)
+
+    def _read_block_sync(self, scope: MemoryScope, block_id: str) -> MemoryBlock | None:
+        where, params = self._visible_scope_clause(scope)
+        with self._connect() as connection:
+            row = connection.execute(
+                f"SELECT * FROM artifacts WHERE {where} AND id = ? AND kind = ? "
+                "AND archived_at IS NULL",
+                (*params, block_id, MemoryKind.BLOCK),
+            ).fetchone()
+        return self._block_from_row(row) if row else None
+
+    async def search_blocks(
+        self,
+        scope: MemoryScope,
+        text: str,
+        channels: Sequence[MemoryChannel],
+        limit: int,
+    ) -> Sequence[MemoryBlock]:
+        return await asyncio.to_thread(self._search_blocks_sync, scope, text, channels, limit)
+
+    def _search_blocks_sync(
+        self,
+        scope: MemoryScope,
+        text: str,
+        channels: Sequence[MemoryChannel],
+        limit: int,
+    ) -> Sequence[MemoryBlock]:
+        where, params = self._visible_scope_clause(scope)
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"SELECT * FROM artifacts WHERE {where} AND kind = ? AND status = ? "
+                "AND archived_at IS NULL LIMIT 500",
+                (*params, MemoryKind.BLOCK, ArtifactStatus.ACTIVE),
+            ).fetchall()
+        query_tokens = _tokens(text)
+        allowed = set(channels)
+        ranked = [
+            (self._overlap(query_tokens, row["text"]), self._block_from_row(row))
+            for row in rows
+        ]
+        return tuple(
+            block
+            for _, block in sorted(ranked, key=lambda item: item[0], reverse=True)
+            if block.channel in allowed
+        )[:limit]
 
     async def forget(self, request: ForgetRequest) -> ForgetResult:
         async with self._write_lock:
@@ -832,7 +964,26 @@ class SQLiteMemoryRepository:
             ).fetchall()
             target_event_ids = tuple(row["id"] for row in event_rows)
             if not target_event_ids:
-                return ForgetResult(0, 0, 0, request.mode)
+                counts = {
+                    table: connection.execute(
+                        f"SELECT COUNT(*) FROM {table} WHERE {where}", params
+                    ).fetchone()[0]
+                    for table in ("claims", "artifacts")
+                }
+                if request.mode == ForgetMode.ARCHIVE:
+                    archived_at = _iso(utc_now())
+                    connection.execute(
+                        f"UPDATE claims SET archived_at = ?, status = ? WHERE {where}",
+                        (archived_at, ClaimStatus.ARCHIVED, *params),
+                    )
+                    connection.execute(
+                        f"UPDATE artifacts SET archived_at = ?, status = ? WHERE {where}",
+                        (archived_at, ArtifactStatus.ARCHIVED, *params),
+                    )
+                else:
+                    connection.execute(f"DELETE FROM artifacts WHERE {where}", params)
+                    connection.execute(f"DELETE FROM claims WHERE {where}", params)
+                return ForgetResult(0, counts["claims"], counts["artifacts"], request.mode)
 
             target_event_set = set(target_event_ids)
             event_placeholders = ",".join("?" for _ in target_event_ids)
@@ -848,6 +999,12 @@ class SQLiteMemoryRepository:
                 row["id"]
                 for row in connection.execute(
                     f"SELECT id FROM claims WHERE {where}", params
+                ).fetchall()
+            }
+            partition_artifact_ids = {
+                row["id"]
+                for row in connection.execute(
+                    f"SELECT id FROM artifacts WHERE {where}", params
                 ).fetchall()
             }
 
@@ -895,6 +1052,54 @@ class SQLiteMemoryRepository:
                 )
                 self._sync_claim_source_json(connection, claim_id)
 
+            changed_block_ids: set[str] = set()
+            blocks_to_drop: set[str] = set()
+            block_rows = connection.execute(
+                """
+                SELECT * FROM artifacts
+                WHERE partition_key = ? AND kind = ? AND archived_at IS NULL
+                """,
+                (request.scope.partition_key(), MemoryKind.BLOCK),
+            ).fetchall()
+            for row in block_rows:
+                block = self._block_from_row(row)
+                remaining_event_ids = tuple(
+                    event_id for event_id in block.event_ids if event_id not in target_event_set
+                )
+                if len(remaining_event_ids) == len(block.event_ids):
+                    continue
+                changed_block_ids.add(block.id)
+                if not remaining_event_ids:
+                    blocks_to_drop.add(block.id)
+                    continue
+                updated_at = utc_now()
+                provenance = replace(
+                    block.provenance,
+                    source_event_ids=remaining_event_ids,
+                )
+                updated_block = replace(
+                    block,
+                    event_ids=remaining_event_ids,
+                    provenance=provenance,
+                    version=block.version + 1,
+                    updated_at=updated_at,
+                )
+                connection.execute(
+                    """
+                    UPDATE artifacts
+                    SET payload_json = ?, provenance_json = ?, version = ?, occurred_at = ?
+                    WHERE id = ? AND version = ? AND archived_at IS NULL
+                    """,
+                    (
+                        canonical_json(asdict(updated_block)),
+                        _provenance_json(provenance),
+                        updated_block.version,
+                        _iso(updated_at),
+                        block.id,
+                        block.version,
+                    ),
+                )
+
             counts = {
                 table: connection.execute(
                     f"SELECT COUNT(*) FROM {table} WHERE {where}", params
@@ -919,6 +1124,24 @@ class SQLiteMemoryRepository:
                     self._delete_claim_rows(connection, claims_to_drop)
             else:
                 extra_counts = 0
+
+            if blocks_to_drop:
+                block_placeholders = ",".join("?" for _ in blocks_to_drop)
+                if request.mode == ForgetMode.ARCHIVE:
+                    connection.execute(
+                        "UPDATE artifacts SET archived_at = ?, status = ? "
+                        f"WHERE id IN ({block_placeholders})",
+                        (
+                            _iso(utc_now()),
+                            ArtifactStatus.ARCHIVED,
+                            *tuple(blocks_to_drop),
+                        ),
+                    )
+                else:
+                    connection.execute(
+                        f"DELETE FROM artifacts WHERE id IN ({block_placeholders})",
+                        tuple(blocks_to_drop),
+                    )
 
             if request.mode == ForgetMode.ARCHIVE:
                 archived_at = _iso(utc_now())
@@ -949,7 +1172,10 @@ class SQLiteMemoryRepository:
             return ForgetResult(
                 affected_events=counts["events"],
                 affected_claims=affected_claims,
-                affected_artifacts=counts["artifacts"],
+                affected_artifacts=(
+                    counts["artifacts"]
+                    + len(changed_block_ids - partition_artifact_ids)
+                ),
                 mode=request.mode,
             )
 
@@ -1021,6 +1247,27 @@ class SQLiteMemoryRepository:
                 _provenance_json(provenance),
                 _iso(occurred_at),
             ),
+        )
+
+    def _block_from_row(self, row: sqlite3.Row) -> MemoryBlock:
+        payload = json.loads(row["payload_json"])
+        created_at = _datetime(payload.get("created_at"))
+        updated_at = _datetime(payload.get("updated_at"))
+        provenance = _provenance(row["provenance_json"])
+        return MemoryBlock(
+            id=row["id"],
+            scope=self._scope_from_row(row),
+            title=str(payload["title"]),
+            content=str(payload["content"]),
+            event_ids=tuple(payload.get("event_ids", provenance.source_event_ids)),
+            channel=MemoryChannel(payload.get("channel", MemoryChannel.SEMANTIC)),
+            token_budget=int(payload.get("token_budget", 256)),
+            status=ArtifactStatus(row["status"]),
+            metadata=payload.get("metadata", {}),
+            provenance=provenance,
+            version=int(row["version"]),
+            created_at=created_at or (_datetime(row["occurred_at"]) or utc_now()),
+            updated_at=updated_at or (_datetime(row["occurred_at"]) or utc_now()),
         )
 
     def _insert_evolution_record(

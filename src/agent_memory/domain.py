@@ -48,6 +48,7 @@ class ArtifactStatus(StrEnum):
 class MemoryKind(StrEnum):
     EVENT = "event"
     CLAIM = "claim"
+    BLOCK = "block"
     EPISODE = "episode"
     PROCEDURE = "procedure"
     LATENT_REFERENCE = "latent_reference"
@@ -234,6 +235,35 @@ class Procedure:
 
 
 @dataclass(frozen=True, slots=True)
+class MemoryBlock:
+    """A compact, evidence-backed memory unit managed independently by an agent."""
+
+    scope: MemoryScope
+    title: str
+    content: str
+    event_ids: tuple[str, ...]
+    id: str = field(default_factory=lambda: str(uuid4()))
+    channel: MemoryChannel = MemoryChannel.SEMANTIC
+    token_budget: int = 256
+    status: ArtifactStatus = ArtifactStatus.ACTIVE
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+    provenance: Provenance = field(default_factory=Provenance)
+    version: int = 1
+    created_at: datetime = field(default_factory=utc_now)
+    updated_at: datetime = field(default_factory=utc_now)
+
+    def __post_init__(self) -> None:
+        if not self.title.strip() or not self.content.strip():
+            raise ValueError("memory block title and content must not be empty")
+        if not self.event_ids:
+            raise ValueError("memory block requires source event evidence")
+        if not 16 <= self.token_budget <= 4096:
+            raise ValueError("memory block token_budget must be between 16 and 4096")
+        if self.version < 1:
+            raise ValueError("memory block version must be positive")
+
+
+@dataclass(frozen=True, slots=True)
 class DecisionRecord:
     scope: MemoryScope
     action: str
@@ -356,6 +386,8 @@ class MemoryCapabilities:
     self_edit_proposals: bool = True
     mcp_tools: bool = True
     agent_lifecycle_adapter: bool = True
+    automatic_extraction: bool = False
+    memory_blocks: bool = False
     background_consolidation: bool = False
     graph_memory: bool = False
     latent_memory: bool = False

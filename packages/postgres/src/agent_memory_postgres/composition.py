@@ -33,6 +33,10 @@ def build_postgres_kernel(
         policy=policy or TrustedMemoryPolicy(),
         reranker=reranker or ReciprocalRankFusionReranker(),
         provider_name="postgresql",
-        capabilities=MemoryCapabilities(background_consolidation=True),
+        capabilities=MemoryCapabilities(
+            automatic_extraction=extractor is not None,
+            memory_blocks=True,
+            background_consolidation=True,
+        ),
         consolidation_scheduler=queue,
     )

@@ -129,6 +129,26 @@ asyncio.run(main())
 
 **AgentMemory.local()** 会创建一个带保守资源限制的可用运行时，不需要向量数据库、外部服务、模型密钥或后台任务。
 
+### 自动提取任务轨迹
+
+自动提取是可选能力，并且不绑定模型厂商。实现精简的 `ClaimGenerator` 协议后，
+可以在不修改 Agent 和存储层的情况下完成注入：
+
+~~~python
+from agent_memory import AgentMemory, build_trajectory_extractor
+
+extractor = build_trajectory_extractor(
+    my_claim_generator,
+    provider="my-model-provider",
+    model="my-model",
+)
+memory = AgentMemory.local("memory.sqlite3", scope=scope, extractor=extractor)
+~~~
+
+生成器接收可信生命周期事件，包括用户消息和工具元数据。结构化输出会经过 Schema
+校验、置信度门控、作用域检查和单事件数量限制，并绑定来源证据。宿主显式声明具有更高
+优先级；生成器故障时系统退化为仅写入事件，不会阻断 Agent 主流程。
+
 ## 核心记忆模型
 
 Agent Memory 不把所有内容都存成相同的文本块，而是区分不同职责的记忆对象。

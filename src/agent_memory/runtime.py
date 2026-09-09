@@ -14,13 +14,15 @@ from .domain import (
     ForgetRequest,
     ForgetResult,
     IngestResult,
+    MemoryBlock,
     MemoryBundle,
+    MemoryChannel,
     MemoryEvent,
     MemoryQuery,
     MemoryScope,
 )
 from .plugins import PluginRegistry
-from .ports import MemoryProvider
+from .ports import ClaimExtractor, MemoryPolicy, MemoryProvider, Reranker
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,9 +75,18 @@ class AgentMemory:
         *,
         scope: MemoryScope | None = None,
         limits: MemoryLimits | None = None,
+        extractor: ClaimExtractor | None = None,
+        policy: MemoryPolicy | None = None,
+        reranker: Reranker | None = None,
     ) -> AgentMemory:
         return cls(
-            PluginRegistry().create_provider("sqlite", database_path=database_path),
+            PluginRegistry().create_provider(
+                "sqlite",
+                database_path=database_path,
+                extractor=extractor,
+                policy=policy,
+                reranker=reranker,
+            ),
             scope or MemoryScope(tenant_id="local", session_id="default"),
             limits=limits,
         )
@@ -177,6 +188,32 @@ class AgentMemory:
         claims = await self._provider.get_state(self.scope)
         return tuple(claims[: self.limits.max_state_claims])
 
+    async def write_block(self, block: MemoryBlock, *, expected_version: int = 0) -> MemoryBlock:
+        self._require_initialized()
+        if block.scope != self.scope:
+            raise ValueError("memory block scope must match the AgentMemory scope")
+        return await self._provider.write_block(block, expected_version)
+
+    async def read_block(self, block_id: str) -> MemoryBlock | None:
+        self._require_initialized()
+        return await self._provider.read_block(self.scope, block_id)
+
+    async def search_blocks(
+        self,
+        text: str,
+        *,
+        channels: Sequence[MemoryChannel] = (),
+        limit: int | None = None,
+    ) -> tuple[MemoryBlock, ...]:
+        self._require_initialized()
+        bounded_limit = min(limit or self.limits.max_recall_items, self.limits.max_recall_items)
+        return await self._provider.search_blocks(
+            self.scope,
+            text,
+            channels,
+            max(1, bounded_limit),
+        )
+
     async def forget(
         self,
         *,
@@ -192,6 +229,14 @@ class AgentMemory:
                 all_in_scope=all_in_scope,
                 mode=ForgetMode.ERASE if erase else ForgetMode.ARCHIVE,
             )
+        )
+
+    async def forget_block(self, block_id: str, *, erase: bool = False) -> ForgetResult:
+        self._require_initialized()
+        return await self._provider.forget_block(
+            self.scope,
+            block_id,
+            ForgetMode.ERASE if erase else ForgetMode.ARCHIVE,
         )
 
     def _require_initialized(self) -> None:

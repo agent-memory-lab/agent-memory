@@ -5,8 +5,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from .domain import (
+    ArtifactStatus,
     ForgetMode,
     ForgetRequest,
+    MemoryBlock,
     MemoryChannel,
     MemoryEvent,
     MemoryProposal,
@@ -37,7 +39,7 @@ class MCPMemoryTools:
 
     def list_tools(self) -> tuple[dict[str, Any], ...]:
         scope_note = "Scope is derived from the authenticated request and is not an argument."
-        return (
+        tools = (
             self._tool(
                 "memory_ingest",
                 "Append an immutable event and derive trusted memory. " + scope_note,
@@ -71,6 +73,51 @@ class MCPMemoryTools:
                 (),
             ),
             self._tool(
+                "memory_block_read",
+                "Read one visible memory block by id. " + scope_note,
+                {"block_id": {"type": "string"}},
+                ("block_id",),
+            ),
+            self._tool(
+                "memory_block_write",
+                "Create or optimistically update an evidence-backed memory block. " + scope_note,
+                {
+                    "block_id": {"type": "string"},
+                    "title": {"type": "string"},
+                    "content": {"type": "string"},
+                    "event_ids": {"type": "array", "items": {"type": "string"}},
+                    "channel": {"enum": [channel.value for channel in MemoryChannel]},
+                    "scope_level": {"enum": [level.value for level in ScopeLevel]},
+                    "token_budget": {"type": "integer", "minimum": 16, "maximum": 4096},
+                    "expected_version": {"type": "integer", "minimum": 0},
+                    "status": {"enum": [status.value for status in ArtifactStatus]},
+                    "metadata": {"type": "object"},
+                },
+                ("title", "content", "event_ids"),
+            ),
+            self._tool(
+                "memory_block_search",
+                "Search active memory blocks without loading unrelated memory. " + scope_note,
+                {
+                    "text": {"type": "string"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+                    "channels": {
+                        "type": "array",
+                        "items": {"enum": [channel.value for channel in MemoryChannel]},
+                    },
+                },
+                ("text",),
+            ),
+            self._tool(
+                "memory_block_forget",
+                "Archive one memory block or perform an authorized legal erase. " + scope_note,
+                {
+                    "block_id": {"type": "string"},
+                    "mode": {"enum": [mode.value for mode in ForgetMode]},
+                },
+                ("block_id",),
+            ),
+            self._tool(
                 "memory_propose",
                 "Propose an evidence-backed optimistic memory update. " + scope_note,
                 {
@@ -102,6 +149,9 @@ class MCPMemoryTools:
                 (),
             ),
         )
+        if self._provider.manifest().capabilities.memory_blocks:
+            return tools
+        return tuple(tool for tool in tools if not tool["name"].startswith("memory_block_"))
 
     async def call_tool(
         self,
@@ -109,6 +159,11 @@ class MCPMemoryTools:
         arguments: Mapping[str, Any],
         context: MCPRequestContext,
     ) -> dict[str, Any]:
+        if (
+            name.startswith("memory_block_")
+            and not self._provider.manifest().capabilities.memory_blocks
+        ):
+            raise MCPToolError("the selected memory provider does not support memory blocks")
         if name == "memory_ingest":
             result = await self._provider.ingest_event(
                 MemoryEvent(
@@ -143,6 +198,64 @@ class MCPMemoryTools:
 
         if name == "memory_get_state":
             return {"current_state": to_jsonable(await self._provider.get_state(context.scope))}
+
+        if name == "memory_block_read":
+            block = await self._provider.read_block(
+                context.scope, self._string(arguments, "block_id")
+            )
+            return {"block": to_jsonable(block) if block else None}
+
+        if name == "memory_block_write":
+            event_ids = self._string_list(arguments.get("event_ids"), "event_ids")
+            scope_level = ScopeLevel(str(arguments.get("scope_level", ScopeLevel.SESSION)))
+            block_values: dict[str, Any] = {
+                "scope": context.scope.project(scope_level),
+                "title": self._string(arguments, "title"),
+                "content": self._string(arguments, "content"),
+                "event_ids": event_ids,
+                "channel": MemoryChannel(
+                    str(arguments.get("channel", MemoryChannel.SEMANTIC))
+                ),
+                "token_budget": int(arguments.get("token_budget", 256)),
+                "status": ArtifactStatus(str(arguments.get("status", ArtifactStatus.ACTIVE))),
+                "metadata": self._mapping(arguments.get("metadata", {}), "metadata"),
+            }
+            block_id = self._optional_string(arguments, "block_id")
+            if block_id:
+                block_values["id"] = block_id
+            block = await self._provider.write_block(
+                MemoryBlock(**block_values),
+                expected_version=int(arguments.get("expected_version", 0)),
+            )
+            return {"block": to_jsonable(block)}
+
+        if name == "memory_block_search":
+            raw_channels = arguments.get("channels")
+            channels = (
+                tuple(MemoryChannel(str(channel)) for channel in raw_channels)
+                if isinstance(raw_channels, list)
+                else ()
+            )
+            blocks = await self._provider.search_blocks(
+                context.scope,
+                self._string(arguments, "text"),
+                channels,
+                int(arguments.get("limit", 8)),
+            )
+            return {"blocks": to_jsonable(blocks)}
+
+        if name == "memory_block_forget":
+            mode = ForgetMode(str(arguments.get("mode", ForgetMode.ARCHIVE)))
+            if mode == ForgetMode.ERASE and not context.can_erase:
+                raise MCPToolError("legal erase requires an authorized request context")
+            result = await self._provider.forget(
+                ForgetRequest(
+                    scope=context.scope,
+                    memory_ids=(self._string(arguments, "block_id"),),
+                    mode=mode,
+                )
+            )
+            return to_jsonable(result)
 
         if name == "memory_propose":
             source_event_ids = arguments.get("source_event_ids")
@@ -227,3 +340,11 @@ class MCPMemoryTools:
         if not isinstance(value, Mapping):
             raise MCPToolError(f"{key} must be an object")
         return value
+
+    @staticmethod
+    def _string_list(value: Any, key: str) -> tuple[str, ...]:
+        if not isinstance(value, list) or not value or not all(
+            isinstance(item, str) and item.strip() for item in value
+        ):
+            raise MCPToolError(f"{key} must be a non-empty array of strings")
+        return tuple(value)

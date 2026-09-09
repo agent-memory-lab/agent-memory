@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .composition import build_local_kernel
-from .ports import MemoryProvider
+from .ports import ClaimExtractor, MemoryPolicy, MemoryProvider, Reranker
 
 PROVIDER_GROUP = "agent_memory.providers"
 INTEGRATION_GROUP = "agent_memory.integrations"
@@ -26,9 +26,19 @@ class PluginReference:
 
 
 def build_sqlite_plugin(
-    *, database_path: str | Path = "agent-memory.db", **_: Any
+    *,
+    database_path: str | Path = "agent-memory.db",
+    extractor: ClaimExtractor | None = None,
+    policy: MemoryPolicy | None = None,
+    reranker: Reranker | None = None,
+    **_: Any,
 ) -> MemoryProvider:
-    return build_local_kernel(database_path)
+    return build_local_kernel(
+        database_path,
+        extractor=extractor,
+        policy=policy,
+        reranker=reranker,
+    )
 
 
 class PluginRegistry:

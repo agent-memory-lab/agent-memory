@@ -129,6 +129,27 @@ asyncio.run(main())
 
 **AgentMemory.local()** creates a ready-to-use runtime with conservative limits. No vector database, external service, model key, or background worker is required.
 
+### Automatic trajectory extraction
+
+Automatic extraction is optional and model-vendor neutral. Implement the small
+`ClaimGenerator` protocol, then inject it without changing the agent or storage layer:
+
+~~~python
+from agent_memory import AgentMemory, build_trajectory_extractor
+
+extractor = build_trajectory_extractor(
+    my_claim_generator,
+    provider="my-model-provider",
+    model="my-model",
+)
+memory = AgentMemory.local("memory.sqlite3", scope=scope, extractor=extractor)
+~~~
+
+The generator receives trusted lifecycle events, including user messages and tool metadata.
+Its structured output is schema-validated, confidence-gated, scope-checked, capped per event,
+and bound to source evidence. Explicit host claims take priority. Generator failures degrade
+to event-only ingestion and do not block the agent.
+
 ## Core Model
 
 Agent Memory treats memory as several related but distinct artifacts.

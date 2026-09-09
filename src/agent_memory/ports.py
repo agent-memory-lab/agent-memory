@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from types import TracebackType
 from typing import Protocol
 
@@ -9,10 +9,13 @@ from .domain import (
     ClaimDraft,
     DecisionRecord,
     Episode,
+    ForgetMode,
     ForgetRequest,
     ForgetResult,
     IngestResult,
+    MemoryBlock,
     MemoryBundle,
+    MemoryChannel,
     MemoryEvent,
     MemoryItem,
     MemoryProposal,
@@ -63,6 +66,8 @@ class MemoryUnitOfWork(Protocol):
 
     async def save_procedure(self, procedure: Procedure) -> None: ...
 
+    async def save_block(self, block: MemoryBlock, expected_version: int) -> MemoryBlock: ...
+
     async def save_decision(self, decision: DecisionRecord) -> None: ...
 
     async def save_outcome(self, outcome: OutcomeEvent) -> None: ...
@@ -81,11 +86,29 @@ class MemoryRepository(Protocol):
 
     async def search(self, query: MemoryQuery, limit: int) -> Sequence[MemoryItem]: ...
 
+    async def read_block(self, scope: MemoryScope, block_id: str) -> MemoryBlock | None: ...
+
+    async def search_blocks(
+        self,
+        scope: MemoryScope,
+        text: str,
+        channels: Sequence[MemoryChannel],
+        limit: int,
+    ) -> Sequence[MemoryBlock]: ...
+
     async def forget(self, request: ForgetRequest) -> ForgetResult: ...
 
 
 class ClaimExtractor(Protocol):
     async def extract(self, event: MemoryEvent) -> Sequence[ClaimDraft]: ...
+
+
+class ClaimGenerator(Protocol):
+    """Vendor-neutral structured generation boundary for automatic extraction."""
+
+    async def generate_claims(
+        self, event: MemoryEvent
+    ) -> Sequence[Mapping[str, object]]: ...
 
 
 class MemoryPolicy(Protocol):
@@ -134,11 +157,27 @@ class MemoryProvider(Protocol):
 
     async def forget(self, request: ForgetRequest) -> ForgetResult: ...
 
+    async def forget_block(
+        self, scope: MemoryScope, block_id: str, mode: ForgetMode = ForgetMode.ARCHIVE
+    ) -> ForgetResult: ...
+
     async def propose(self, proposal: MemoryProposal) -> ProposalResult: ...
 
     async def record_episode(self, episode: Episode) -> str: ...
 
     async def publish_procedure(self, procedure: Procedure) -> str: ...
+
+    async def write_block(self, block: MemoryBlock, expected_version: int = 0) -> MemoryBlock: ...
+
+    async def read_block(self, scope: MemoryScope, block_id: str) -> MemoryBlock | None: ...
+
+    async def search_blocks(
+        self,
+        scope: MemoryScope,
+        text: str,
+        channels: Sequence[MemoryChannel] = (),
+        limit: int = 8,
+    ) -> tuple[MemoryBlock, ...]: ...
 
     async def record_decision(self, decision: DecisionRecord) -> str: ...
 

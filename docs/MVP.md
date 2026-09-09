@@ -10,6 +10,7 @@
 - Provider and integration plugin discovery.
 - MCP v2 stdio server and Python SDK.
 - Generic and LangGraph lifecycle hooks.
+- Pluggable automatic claim extraction from user, model, and tool events.
 - Decision, outcome, reward, and controlled Procedure evolution records.
 
 ## Acceptance checks
@@ -30,4 +31,3 @@
 - Graph and latent memory.
 - Learned write/retrieval policies and online training.
 - Web administration console backed by a live provider.
-

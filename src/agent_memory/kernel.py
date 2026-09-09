@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from json import dumps
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
@@ -15,11 +16,14 @@ from .domain import (
     ClaimStatus,
     DecisionRecord,
     Episode,
+    ForgetMode,
     ForgetRequest,
     ForgetResult,
     IngestResult,
+    MemoryBlock,
     MemoryBundle,
     MemoryCapabilities,
+    MemoryChannel,
     MemoryEvent,
     MemoryItem,
     MemoryKind,
@@ -96,8 +100,8 @@ class MemoryKernel:
                 dedup_key = (draft.scope_level, draft.key)
                 if dedup_key in seen_drafts:
                     continue
-                seen_drafts.add(dedup_key)
                 if await self._policy.accept_claim(event, draft):
+                    seen_drafts.add(dedup_key)
                     accepted.append(draft)
             drafts = tuple(accepted)
 
@@ -215,11 +219,12 @@ class MemoryKernel:
 
         state_ids = {claim.id for claim in selected_state}
         priority = {
-            MemoryKind.PROCEDURE: 0,
-            MemoryKind.EPISODE: 1,
-            MemoryKind.CLAIM: 2,
-            MemoryKind.EVENT: 3,
-            MemoryKind.LATENT_REFERENCE: 4,
+            MemoryKind.BLOCK: 0,
+            MemoryKind.PROCEDURE: 1,
+            MemoryKind.EPISODE: 2,
+            MemoryKind.CLAIM: 3,
+            MemoryKind.EVENT: 4,
+            MemoryKind.LATENT_REFERENCE: 5,
         }
         for item in sorted(ranked, key=lambda value: (priority[value.kind], -value.score)):
             if item.id in state_ids:
@@ -340,6 +345,38 @@ class MemoryKernel:
             await uow.save_procedure(procedure)
         return procedure.id
 
+    async def write_block(self, block: MemoryBlock, expected_version: int = 0) -> MemoryBlock:
+        self._require_block_capability()
+        if expected_version < 0:
+            raise ValueError("expected_version must be zero or greater")
+        if _token_estimate(f"{block.title}\n{block.content}") > block.token_budget:
+            raise ValueError("memory block content exceeds its token_budget")
+        candidate = replace(
+            block,
+            provenance=replace(block.provenance, source_event_ids=block.event_ids),
+        )
+        async with self._repository.unit_of_work() as uow:
+            if not await uow.events_exist(block.scope, block.event_ids):
+                raise ValueError("source evidence is missing or outside the authorized scope")
+            return await uow.save_block(candidate, expected_version)
+
+    async def read_block(self, scope: MemoryScope, block_id: str) -> MemoryBlock | None:
+        self._require_block_capability()
+        return await self._repository.read_block(scope, block_id)
+
+    async def search_blocks(
+        self,
+        scope: MemoryScope,
+        text: str,
+        channels: Sequence[MemoryChannel] = (),
+        limit: int = 8,
+    ) -> tuple[MemoryBlock, ...]:
+        self._require_block_capability()
+        if not 1 <= limit <= 100:
+            raise ValueError("limit must be between 1 and 100")
+        selected_channels = tuple(channels) or tuple(MemoryChannel)
+        return tuple(await self._repository.search_blocks(scope, text, selected_channels, limit))
+
     async def record_decision(self, decision: DecisionRecord) -> str:
         async with self._repository.unit_of_work() as uow:
             await uow.save_decision(decision)
@@ -358,5 +395,23 @@ class MemoryKernel:
     async def forget(self, request: ForgetRequest) -> ForgetResult:
         return await self._repository.forget(request)
 
+    async def forget_block(
+        self,
+        scope: MemoryScope,
+        block_id: str,
+        mode: ForgetMode = ForgetMode.ARCHIVE,
+    ) -> ForgetResult:
+        self._require_block_capability()
+        block = await self._repository.read_block(scope, block_id)
+        if block is None:
+            return ForgetResult(0, 0, 0, mode)
+        return await self._repository.forget(
+            ForgetRequest(scope=scope, memory_ids=(block.id,), mode=mode)
+        )
+
     def manifest(self) -> ProviderManifest:
         return self._manifest
+
+    def _require_block_capability(self) -> None:
+        if not self._manifest.capabilities.memory_blocks:
+            raise NotImplementedError("the selected memory provider does not support memory blocks")

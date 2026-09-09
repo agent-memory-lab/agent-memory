@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 
-from .domain import ClaimDraft, MemoryEvent, MemoryItem, MemoryQuery, ScopeLevel
+from .domain import ClaimDraft, MemoryEvent, MemoryItem, MemoryQuery, Provenance, ScopeLevel
+from .ports import ClaimExtractor, ClaimGenerator
 
 
 class MetadataClaimExtractor:
@@ -39,9 +41,115 @@ class MetadataClaimExtractor:
         return tuple(claims)
 
 
+class CompositeClaimExtractor:
+    """Combine extractors in priority order and optionally isolate provider failures."""
+
+    def __init__(self, *extractors: ClaimExtractor, fail_open: bool = True) -> None:
+        if not extractors:
+            raise ValueError("at least one claim extractor is required")
+        self._extractors = extractors
+        self._fail_open = fail_open
+
+    async def extract(self, event: MemoryEvent) -> Sequence[ClaimDraft]:
+        drafts: list[ClaimDraft] = []
+        for extractor in self._extractors:
+            try:
+                drafts.extend(await extractor.extract(event))
+            except Exception:
+                if not self._fail_open:
+                    raise
+        return tuple(drafts)
+
+
+class GeneratedTrajectoryClaimExtractor:
+    """Validate structured model output before it enters the memory write policy."""
+
+    DEFAULT_EVENT_TYPES = frozenset(
+        {
+            "user.message",
+            "agent.model.completed",
+            "agent.tool.completed",
+        }
+    )
+
+    def __init__(
+        self,
+        generator: ClaimGenerator,
+        *,
+        provider: str = "external-generator",
+        model: str | None = None,
+        prompt_version: str = "trajectory-claims-v1",
+        minimum_confidence: float = 0.8,
+        max_claims: int = 8,
+        event_types: Sequence[str] | None = None,
+        fail_open: bool = True,
+    ) -> None:
+        if not 0.0 <= minimum_confidence <= 1.0:
+            raise ValueError("minimum_confidence must be between 0 and 1")
+        if max_claims < 1:
+            raise ValueError("max_claims must be positive")
+        self._generator = generator
+        self._provider = provider
+        self._model = model
+        self._prompt_version = prompt_version
+        self._minimum_confidence = minimum_confidence
+        self._max_claims = max_claims
+        self._event_types = frozenset(event_types or self.DEFAULT_EVENT_TYPES)
+        self._fail_open = fail_open
+
+    async def extract(self, event: MemoryEvent) -> Sequence[ClaimDraft]:
+        if event.event_type not in self._event_types:
+            return ()
+        try:
+            generated = await self._generator.generate_claims(event)
+        except Exception:
+            if self._fail_open:
+                return ()
+            raise
+        if not isinstance(generated, Sequence) or isinstance(generated, (str, bytes)):
+            return ()
+
+        generated_event = replace(event, metadata={"claims": list(generated[: self._max_claims])})
+        parsed = await MetadataClaimExtractor().extract(generated_event)
+        accepted: list[ClaimDraft] = []
+        for draft in parsed:
+            if draft.confidence < self._minimum_confidence:
+                continue
+            try:
+                event.scope.project(draft.scope_level)
+            except ValueError:
+                continue
+            accepted.append(
+                replace(
+                    draft,
+                    provenance=Provenance(
+                        source_event_ids=(event.id,),
+                        extractor=type(self).__name__,
+                        provider=self._provider,
+                        model=self._model,
+                        prompt_version=self._prompt_version,
+                        source_uri=event.source_uri,
+                    ),
+                )
+            )
+        return tuple(accepted)
+
+
+def build_trajectory_extractor(
+    generator: ClaimGenerator,
+    **config: object,
+) -> CompositeClaimExtractor:
+    """Preserve trusted explicit claims while adding automatic trajectory extraction."""
+
+    return CompositeClaimExtractor(
+        MetadataClaimExtractor(),
+        GeneratedTrajectoryClaimExtractor(generator, **config),
+    )
+
+
 class TrustedMemoryPolicy:
     async def should_extract(self, event: MemoryEvent) -> bool:
-        return bool(event.metadata.get("claims"))
+        return True
 
     async def accept_claim(self, event: MemoryEvent, claim: ClaimDraft) -> bool:
         return claim.confidence >= 0.5 and bool(claim.text.strip())

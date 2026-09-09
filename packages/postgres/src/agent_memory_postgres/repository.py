@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
@@ -19,6 +20,7 @@ from agent_memory.domain import (
     ForgetMode,
     ForgetRequest,
     ForgetResult,
+    MemoryBlock,
     MemoryChannel,
     MemoryEvent,
     MemoryItem,
@@ -33,6 +35,7 @@ from agent_memory.domain import (
     Provenance,
     RewardSignal,
     StateDelta,
+    utc_now,
 )
 from agent_memory.serialization import to_jsonable
 
@@ -299,6 +302,78 @@ class PostgresMemoryUnitOfWork:
             procedure.created_at,
         )
 
+    async def save_block(self, block: MemoryBlock, expected_version: int) -> MemoryBlock:
+        cursor = await self.connection.execute(
+            "SELECT * FROM agent_memory_artifacts WHERE id = %s FOR UPDATE",
+            (block.id,),
+        )
+        row = await cursor.fetchone()
+        now = utc_now()
+        if row is None:
+            if expected_version != 0:
+                raise RuntimeError(
+                    f"memory block version conflict: expected {expected_version}, current 0"
+                )
+            stored = replace(block, version=1, created_at=now, updated_at=now)
+            await self._repository._insert_artifact(
+                self.connection,
+                stored.id,
+                stored.scope,
+                MemoryKind.BLOCK,
+                f"{stored.title}\n{stored.content}",
+                stored,
+                stored.status,
+                stored.version,
+                1.0,
+                stored.provenance,
+                stored.updated_at,
+            )
+            return stored
+
+        if (
+            MemoryKind(row["kind"]) != MemoryKind.BLOCK
+            or row["partition_key"] != block.scope.partition_key()
+            or row["archived_at"] is not None
+        ):
+            raise RuntimeError("memory block id conflicts with an existing memory artifact")
+        current = self._repository._block_from_row(row)
+        if current.version != expected_version:
+            raise RuntimeError(
+                f"memory block version conflict: expected {expected_version}, "
+                f"current {current.version}"
+            )
+        stored = replace(
+            block,
+            version=current.version + 1,
+            created_at=current.created_at,
+            updated_at=now,
+        )
+        cursor = await self.connection.execute(
+            """
+            UPDATE agent_memory_artifacts
+            SET text = %s, payload_json = %s::jsonb, status = %s, version = %s,
+                quality = %s, provenance_json = %s::jsonb, occurred_at = %s
+            WHERE id = %s AND partition_key = %s AND kind = %s AND version = %s
+              AND archived_at IS NULL
+            """,
+            (
+                f"{stored.title}\n{stored.content}",
+                _json(stored),
+                str(stored.status),
+                stored.version,
+                1.0,
+                _json(stored.provenance),
+                stored.updated_at,
+                stored.id,
+                stored.scope.partition_key(),
+                str(MemoryKind.BLOCK),
+                expected_version,
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise RuntimeError("memory block update conflict")
+        return stored
+
     async def save_decision(self, decision: DecisionRecord) -> None:
         await self._repository._insert_evolution_record(
             self.connection, decision.id, decision.scope, "decision", decision, decision.created_at
@@ -461,6 +536,8 @@ class PostgresMemoryRepository:
                 artifact_kinds.append(str(MemoryKind.EPISODE))
             if MemoryChannel.PROCEDURAL in query.channels:
                 artifact_kinds.append(str(MemoryKind.PROCEDURE))
+            if query.channels:
+                artifact_kinds.append(str(MemoryKind.BLOCK))
             if artifact_kinds:
                 artifacts = await self._search_rows(
                     connection,
@@ -473,6 +550,17 @@ class PostgresMemoryRepository:
                 for row in artifacts:
                     kind = MemoryKind(row["kind"])
                     provenance = _provenance(row["provenance_json"])
+                    if kind == MemoryKind.BLOCK:
+                        block = self._block_from_row(row)
+                        channel = block.channel
+                        if channel not in query.channels:
+                            continue
+                    else:
+                        channel = (
+                            MemoryChannel.EPISODIC
+                            if kind == MemoryKind.EPISODE
+                            else MemoryChannel.PROCEDURAL
+                        )
                     candidates.append(
                         MemoryItem(
                             id=row["id"],
@@ -481,18 +569,52 @@ class PostgresMemoryRepository:
                             score=float(row["rank"]) + 0.25 * row["quality"],
                             occurred_at=row["occurred_at"],
                             metadata={
-                                "channel": (
-                                    MemoryChannel.EPISODIC
-                                    if kind == MemoryKind.EPISODE
-                                    else MemoryChannel.PROCEDURAL
-                                ),
+                                "channel": channel,
                                 "status": row["status"],
                                 "version": row["version"],
+                                "token_budget": (
+                                    block.token_budget if kind == MemoryKind.BLOCK else None
+                                ),
                                 "source_event_ids": provenance.source_event_ids,
                             },
                         )
                     )
         return tuple(sorted(candidates, key=lambda item: item.score, reverse=True)[:limit])
+
+    async def read_block(self, scope: MemoryScope, block_id: str) -> MemoryBlock | None:
+        where, params = self._visible_scope_clause(scope)
+        async with self.pool.connection() as connection:
+            cursor = await connection.execute(
+                f"SELECT * FROM agent_memory_artifacts WHERE {where} AND id = %s "
+                "AND kind = %s AND archived_at IS NULL",
+                (*params, block_id, str(MemoryKind.BLOCK)),
+            )
+            row = await cursor.fetchone()
+        return self._block_from_row(row) if row else None
+
+    async def search_blocks(
+        self,
+        scope: MemoryScope,
+        text: str,
+        channels: Sequence[MemoryChannel],
+        limit: int,
+    ) -> Sequence[MemoryBlock]:
+        where, params = self._visible_scope_clause(scope)
+        async with self.pool.connection() as connection:
+            rows = await self._search_rows(
+                connection,
+                "agent_memory_artifacts",
+                where + " AND kind = %s AND status = 'active' AND archived_at IS NULL",
+                (*params, str(MemoryKind.BLOCK)),
+                text.strip(),
+                min(limit * 4, 500),
+            )
+        allowed = set(channels)
+        return tuple(
+            block
+            for block in (self._block_from_row(row) for row in rows)
+            if block.channel in allowed
+        )[:limit]
 
     async def forget(self, request: ForgetRequest) -> ForgetResult:
         table_names = (
@@ -514,6 +636,82 @@ class PostgresMemoryRepository:
                         f"SELECT count(*) AS count FROM {table} WHERE {where}", params
                     )
                     counts[table] = (await cursor.fetchone())["count"]
+
+                changed_block_ids: set[str] = set()
+                blocks_to_drop: set[str] = set()
+                if not request.all_in_scope:
+                    cursor = await connection.execute(
+                        f"SELECT id FROM agent_memory_events WHERE {where}", params
+                    )
+                    target_event_ids = {
+                        row["id"] for row in await cursor.fetchall()
+                    }
+                    if target_event_ids:
+                        cursor = await connection.execute(
+                            """
+                            SELECT * FROM agent_memory_artifacts
+                            WHERE partition_key = %s AND kind = %s AND archived_at IS NULL
+                            FOR UPDATE
+                            """,
+                            (request.scope.partition_key(), str(MemoryKind.BLOCK)),
+                        )
+                        for row in await cursor.fetchall():
+                            block = self._block_from_row(row)
+                            remaining_event_ids = tuple(
+                                event_id
+                                for event_id in block.event_ids
+                                if event_id not in target_event_ids
+                            )
+                            if len(remaining_event_ids) == len(block.event_ids):
+                                continue
+                            changed_block_ids.add(block.id)
+                            if not remaining_event_ids:
+                                blocks_to_drop.add(block.id)
+                                continue
+                            updated_at = utc_now()
+                            provenance = replace(
+                                block.provenance,
+                                source_event_ids=remaining_event_ids,
+                            )
+                            updated_block = replace(
+                                block,
+                                event_ids=remaining_event_ids,
+                                provenance=provenance,
+                                version=block.version + 1,
+                                updated_at=updated_at,
+                            )
+                            await connection.execute(
+                                """
+                                UPDATE agent_memory_artifacts
+                                SET payload_json = %s::jsonb, provenance_json = %s::jsonb,
+                                    version = %s, occurred_at = %s
+                                WHERE id = %s AND version = %s AND archived_at IS NULL
+                                """,
+                                (
+                                    _json(updated_block),
+                                    _json(provenance),
+                                    updated_block.version,
+                                    updated_at,
+                                    block.id,
+                                    block.version,
+                                ),
+                            )
+
+                if blocks_to_drop:
+                    if request.mode == ForgetMode.ARCHIVE:
+                        await connection.execute(
+                            """
+                            UPDATE agent_memory_artifacts
+                            SET archived_at = now(), status = 'archived'
+                            WHERE id = ANY(%s)
+                            """,
+                            (list(blocks_to_drop),),
+                        )
+                    else:
+                        await connection.execute(
+                            "DELETE FROM agent_memory_artifacts WHERE id = ANY(%s)",
+                            (list(blocks_to_drop),),
+                        )
 
                 if request.mode == ForgetMode.ARCHIVE:
                     await connection.execute(
@@ -546,7 +744,10 @@ class PostgresMemoryRepository:
                 return ForgetResult(
                     affected_events=counts["agent_memory_events"],
                     affected_claims=counts["agent_memory_claims"],
-                    affected_artifacts=counts["agent_memory_artifacts"],
+                    affected_artifacts=(
+                        counts["agent_memory_artifacts"]
+                        + len(changed_block_ids - set(request.memory_ids))
+                    ),
                     mode=request.mode,
                 )
 
@@ -729,4 +930,28 @@ class PostgresMemoryRepository:
             version=row["version"],
             supersedes=row["supersedes"],
             superseded_by=row["superseded_by"],
+        )
+
+    def _block_from_row(self, row: dict[str, Any]) -> MemoryBlock:
+        payload = _object(row["payload_json"])
+        provenance = _provenance(row["provenance_json"])
+
+        def timestamp(key: str, fallback: datetime) -> datetime:
+            value = payload.get(key)
+            return datetime.fromisoformat(value) if isinstance(value, str) else fallback
+
+        return MemoryBlock(
+            id=row["id"],
+            scope=self._scope_from_row(row),
+            title=str(payload["title"]),
+            content=str(payload["content"]),
+            event_ids=tuple(payload.get("event_ids", provenance.source_event_ids)),
+            channel=MemoryChannel(payload.get("channel", MemoryChannel.SEMANTIC)),
+            token_budget=int(payload.get("token_budget", 256)),
+            status=ArtifactStatus(row["status"]),
+            metadata=payload.get("metadata", {}),
+            provenance=provenance,
+            version=int(row["version"]),
+            created_at=timestamp("created_at", row["occurred_at"]),
+            updated_at=timestamp("updated_at", row["occurred_at"]),
         )
