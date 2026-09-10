@@ -22,7 +22,7 @@ from .domain import (
     MemoryScope,
 )
 from .plugins import PluginRegistry
-from .ports import ClaimExtractor, MemoryPolicy, MemoryProvider, Reranker
+from .ports import ClaimExtractor, EmbeddingProvider, MemoryPolicy, MemoryProvider, Reranker
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +78,7 @@ class AgentMemory:
         extractor: ClaimExtractor | None = None,
         policy: MemoryPolicy | None = None,
         reranker: Reranker | None = None,
+        embedding_provider: EmbeddingProvider | None = None,
     ) -> AgentMemory:
         return cls(
             PluginRegistry().create_provider(
@@ -86,6 +87,7 @@ class AgentMemory:
                 extractor=extractor,
                 policy=policy,
                 reranker=reranker,
+                embedding_provider=embedding_provider,
             ),
             scope or MemoryScope(tenant_id="local", session_id="default"),
             limits=limits,

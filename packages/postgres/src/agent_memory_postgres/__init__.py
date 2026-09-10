@@ -6,6 +6,7 @@ from .jobs import (
     PostgresConsolidationQueue,
 )
 from .repository import PostgresMemoryRepository, PostgresMemoryUnitOfWork
+from .semantic import PgVectorBlockMemory
 from .vector import PgVectorIndex, VectorHit
 
 __all__ = [
@@ -16,6 +17,7 @@ __all__ = [
     "PostgresConsolidationQueue",
     "PostgresMemoryRepository",
     "PostgresMemoryUnitOfWork",
+    "PgVectorBlockMemory",
     "VectorHit",
     "build_postgres_kernel",
 ]

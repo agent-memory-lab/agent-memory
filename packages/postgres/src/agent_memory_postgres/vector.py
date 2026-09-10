@@ -141,6 +141,14 @@ class PgVectorIndex:
                 for row in await cursor.fetchall()
             )
 
+    async def delete(self, memory_id: str) -> None:
+        """Remove a vector without touching the authoritative memory record."""
+        async with self._pool.connection() as connection:
+            await connection.execute(
+                "DELETE FROM agent_memory_vectors WHERE memory_id = %s",
+                (memory_id,),
+            )
+
     def _validated_vector(self, embedding: Sequence[float]) -> tuple[float, ...]:
         if len(embedding) != self._dimensions:
             raise ValueError(

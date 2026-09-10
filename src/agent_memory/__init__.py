@@ -58,6 +58,7 @@ from .ports import (
 )
 from .providers import (
     CompositeClaimExtractor,
+    EmbeddingReranker,
     GeneratedTrajectoryClaimExtractor,
     MetadataClaimExtractor,
     build_trajectory_extractor,
@@ -81,6 +82,7 @@ __all__ = [
     "CompositeClaimExtractor",
     "DecisionRecord",
     "EmbeddingProvider",
+    "EmbeddingReranker",
     "Episode",
     "EvolutionProvider",
     "ForgetMode",

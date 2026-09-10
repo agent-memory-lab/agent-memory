@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .composition import build_local_kernel
-from .ports import ClaimExtractor, MemoryPolicy, MemoryProvider, Reranker
+from .ports import ClaimExtractor, EmbeddingProvider, MemoryPolicy, MemoryProvider, Reranker
 
 PROVIDER_GROUP = "agent_memory.providers"
 INTEGRATION_GROUP = "agent_memory.integrations"
@@ -31,6 +31,7 @@ def build_sqlite_plugin(
     extractor: ClaimExtractor | None = None,
     policy: MemoryPolicy | None = None,
     reranker: Reranker | None = None,
+    embedding_provider: EmbeddingProvider | None = None,
     **_: Any,
 ) -> MemoryProvider:
     return build_local_kernel(
@@ -38,6 +39,7 @@ def build_sqlite_plugin(
         extractor=extractor,
         policy=policy,
         reranker=reranker,
+        embedding_provider=embedding_provider,
     )
 
 

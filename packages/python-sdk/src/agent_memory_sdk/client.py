@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from types import TracebackType
-from typing import Any, Protocol, Self
-
-from mcp import Client, StdioServerParameters
-from mcp.client.streamable_http import streamable_http_client
+from typing import TYPE_CHECKING, Any, Protocol, Self
 
 from agent_memory.mcp import MCPMemoryTools, MCPRequestContext
 from agent_memory.ports import MemoryProvider
+
+if TYPE_CHECKING:
+    from mcp import Client
 
 
 class MemoryClientError(RuntimeError):
@@ -21,6 +21,10 @@ class MemoryClient(Protocol):
     async def get_state(self) -> dict[str, Any]: ...
     async def propose(self, **proposal: Any) -> dict[str, Any]: ...
     async def forget(self, **request: Any) -> dict[str, Any]: ...
+    async def read_block(self, block_id: str) -> dict[str, Any]: ...
+    async def write_block(self, **block: Any) -> dict[str, Any]: ...
+    async def search_blocks(self, text: str, **options: Any) -> dict[str, Any]: ...
+    async def forget_block(self, block_id: str, **options: Any) -> dict[str, Any]: ...
     async def capabilities(self) -> dict[str, Any]: ...
 
 
@@ -106,6 +110,56 @@ class _Operations:
             },
         )
 
+    async def read_block(self, block_id: str) -> dict[str, Any]:
+        return await self._call("memory_block_read", {"block_id": block_id})
+
+    async def write_block(
+        self,
+        *,
+        title: str,
+        content: str,
+        event_ids: list[str],
+        block_id: str | None = None,
+        channel: str = "semantic",
+        scope_level: str = "session",
+        token_budget: int = 256,
+        expected_version: int = 0,
+        status: str = "active",
+        metadata: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        arguments: dict[str, Any] = {
+            "title": title,
+            "content": content,
+            "event_ids": event_ids,
+            "channel": channel,
+            "scope_level": scope_level,
+            "token_budget": token_budget,
+            "expected_version": expected_version,
+            "status": status,
+            "metadata": dict(metadata or {}),
+        }
+        if block_id is not None:
+            arguments["block_id"] = block_id
+        return await self._call("memory_block_write", arguments)
+
+    async def search_blocks(
+        self,
+        text: str,
+        *,
+        limit: int = 8,
+        channels: list[str] | None = None,
+    ) -> dict[str, Any]:
+        arguments: dict[str, Any] = {"text": text, "limit": limit}
+        if channels is not None:
+            arguments["channels"] = channels
+        return await self._call("memory_block_search", arguments)
+
+    async def forget_block(self, block_id: str, *, mode: str = "archive") -> dict[str, Any]:
+        return await self._call(
+            "memory_block_forget",
+            {"block_id": block_id, "mode": mode},
+        )
+
     async def capabilities(self) -> dict[str, Any]:
         return await self._call("memory_capabilities", {})
 
@@ -129,10 +183,24 @@ class MCPMemoryClient(_Operations):
     """High-level client backed by the official MCP v2 Client."""
 
     def __init__(self, source: Any) -> None:
-        self._client = Client(source)
+        try:
+            from mcp import Client
+        except ImportError as error:
+            raise MemoryClientError(
+                "MCPMemoryClient requires the optional 'mcp' dependency; "
+                "install agent-memory-sdk[mcp]"
+            ) from error
+        self._client: Client = Client(source)
 
     @classmethod
     def from_http(cls, url: str, *, http_client: Any | None = None) -> MCPMemoryClient:
+        try:
+            from mcp.client.streamable_http import streamable_http_client
+        except ImportError as error:
+            raise MemoryClientError(
+                "MCPMemoryClient requires the optional 'mcp' dependency; "
+                "install agent-memory-sdk[mcp]"
+            ) from error
         if http_client is None:
             return cls(url)
         return cls(streamable_http_client(url, http_client=http_client))
@@ -145,6 +213,13 @@ class MCPMemoryClient(_Operations):
         args: list[str] | None = None,
         env: Mapping[str, str] | None = None,
     ) -> MCPMemoryClient:
+        try:
+            from mcp import StdioServerParameters
+        except ImportError as error:
+            raise MemoryClientError(
+                "MCPMemoryClient requires the optional 'mcp' dependency; "
+                "install agent-memory-sdk[mcp]"
+            ) from error
         return cls(
             StdioServerParameters(
                 command=command,

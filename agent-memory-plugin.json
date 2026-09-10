@@ -36,6 +36,7 @@
     "agent_lifecycle_adapter": true,
     "automatic_extraction": false,
     "memory_blocks": true,
+    "semantic_reranking": false,
     "background_consolidation": false,
     "graph_memory": false,
     "latent_memory": false,

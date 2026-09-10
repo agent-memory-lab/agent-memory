@@ -388,6 +388,7 @@ class MemoryCapabilities:
     agent_lifecycle_adapter: bool = True
     automatic_extraction: bool = False
     memory_blocks: bool = False
+    semantic_reranking: bool = False
     background_consolidation: bool = False
     graph_memory: bool = False
     latent_memory: bool = False

@@ -3,9 +3,10 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
+from math import isfinite, sqrt
 
 from .domain import ClaimDraft, MemoryEvent, MemoryItem, MemoryQuery, Provenance, ScopeLevel
-from .ports import ClaimExtractor, ClaimGenerator
+from .ports import ClaimExtractor, ClaimGenerator, EmbeddingProvider, Reranker
 
 
 class MetadataClaimExtractor:
@@ -187,3 +188,102 @@ class ReciprocalRankFusionReranker:
             )
             for item_id, score in sorted(fused.items(), key=lambda pair: pair[1], reverse=True)
         )
+
+
+class EmbeddingReranker:
+    """Bounded hybrid reranking over a caller-provided embedding provider.
+
+    Vectors are used only for the active request and are never retained by the core.
+    """
+
+    def __init__(
+        self,
+        embedding_provider: EmbeddingProvider,
+        *,
+        fallback: Reranker | None = None,
+        lexical_weight: float = 0.35,
+        semantic_weight: float = 0.65,
+        max_candidates: int = 48,
+        fail_open: bool = True,
+    ) -> None:
+        if lexical_weight < 0.0 or semantic_weight < 0.0:
+            raise ValueError("reranking weights must be non-negative")
+        if lexical_weight + semantic_weight <= 0.0:
+            raise ValueError("at least one reranking weight must be positive")
+        if not 1 <= max_candidates <= 500:
+            raise ValueError("max_candidates must be between 1 and 500")
+        self._embedding_provider = embedding_provider
+        self._fallback = fallback or ReciprocalRankFusionReranker()
+        self._lexical_weight = lexical_weight
+        self._semantic_weight = semantic_weight
+        self._max_candidates = max_candidates
+        self._fail_open = fail_open
+
+    async def rerank(
+        self, query: MemoryQuery, candidates: Sequence[MemoryItem]
+    ) -> Sequence[MemoryItem]:
+        baseline = tuple(await self._fallback.rerank(query, candidates))
+        selected = baseline[: self._max_candidates]
+        if not query.text.strip() or len(selected) < 2:
+            return baseline
+
+        try:
+            vectors = await self._embedding_provider.embed(
+                (query.text, *(candidate.text for candidate in selected))
+            )
+            if len(vectors) != len(selected) + 1:
+                raise ValueError("embedding provider returned an unexpected vector count")
+            query_vector = vectors[0]
+            reranked: list[MemoryItem] = []
+            denominator = max(1, len(selected) - 1)
+            total_weight = self._lexical_weight + self._semantic_weight
+            for index, (candidate, vector) in enumerate(zip(selected, vectors[1:], strict=True)):
+                lexical_score = 1.0 - (index / denominator)
+                semantic_score = (self._cosine_similarity(query_vector, vector) + 1.0) / 2.0
+                score = (
+                    self._lexical_weight * lexical_score
+                    + self._semantic_weight * semantic_score
+                ) / total_weight
+                reranked.append(
+                    MemoryItem(
+                        id=candidate.id,
+                        kind=candidate.kind,
+                        text=candidate.text,
+                        score=score,
+                        occurred_at=candidate.occurred_at,
+                        metadata={
+                            **candidate.metadata,
+                            "semantic_score": semantic_score,
+                            "semantic_dimensions": len(query_vector),
+                            "semantic_reranker": type(self).__name__,
+                        },
+                    )
+                )
+            return tuple(sorted(reranked, key=lambda item: item.score, reverse=True)) + baseline[
+                self._max_candidates :
+            ]
+        except (TypeError, ValueError, ArithmeticError):
+            if self._fail_open:
+                return baseline
+            raise
+        except Exception:
+            if self._fail_open:
+                return baseline
+            raise
+
+    @staticmethod
+    def _cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
+        if not left or len(left) != len(right):
+            raise ValueError("embedding vectors must be non-empty and have equal dimensions")
+        left_values = tuple(float(value) for value in left)
+        right_values = tuple(float(value) for value in right)
+        if not all(isfinite(value) for value in (*left_values, *right_values)):
+            raise ValueError("embedding vectors must contain finite values")
+        left_norm = sqrt(sum(value * value for value in left_values))
+        right_norm = sqrt(sum(value * value for value in right_values))
+        if left_norm == 0.0 or right_norm == 0.0:
+            raise ValueError("embedding vectors must not be zero vectors")
+        similarity = sum(
+            left * right for left, right in zip(left_values, right_values, strict=True)
+        )
+        return max(-1.0, min(1.0, similarity / (left_norm * right_norm)))
