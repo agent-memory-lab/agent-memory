@@ -14,8 +14,18 @@ dependencies = [
   "psycopg[binary,pool]>=3.2,<4",
 ]
 
+[project.optional-dependencies]
+release = ["build>=1,<2"]
+
 [project.entry-points."agent_memory.providers"]
 postgres = "agent_memory_postgres:build_postgres_kernel"
+
+[project.scripts]
+agent-memory-consolidate = "agent_memory_postgres.worker:main"
+agent-memory-health = "agent_memory_postgres.health:main"
+agent-memory-sensitive-scan = "agent_memory_postgres.sensitivity:main"
+agent-memory-release-scan = "agent_memory_postgres.release_scan:main"
+agent-memory-preflight = "agent_memory_postgres.preflight:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agent_memory_postgres"]

@@ -643,9 +643,7 @@ class PostgresMemoryRepository:
                     cursor = await connection.execute(
                         f"SELECT id FROM agent_memory_events WHERE {where}", params
                     )
-                    target_event_ids = {
-                        row["id"] for row in await cursor.fetchall()
-                    }
+                    target_event_ids = {row["id"] for row in await cursor.fetchall()}
                     if target_event_ids:
                         cursor = await connection.execute(
                             """

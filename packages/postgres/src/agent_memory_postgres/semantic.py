@@ -24,9 +24,7 @@ class PgVectorBlockMemory:
         model: str,
     ) -> None:
         if index.dimensions != embedding_provider.dimensions:
-            raise ValueError(
-                "pgvector dimensions must match the embedding provider dimensions"
-            )
+            raise ValueError("pgvector dimensions must match the embedding provider dimensions")
         if not model.strip():
             raise ValueError("model is required")
         self._provider = provider
@@ -37,9 +35,7 @@ class PgVectorBlockMemory:
     async def initialize(self, *, install_extension: bool = False) -> None:
         await self._index.initialize(install_extension=install_extension)
 
-    async def write_block(
-        self, block: MemoryBlock, *, expected_version: int = 0
-    ) -> MemoryBlock:
+    async def write_block(self, block: MemoryBlock, *, expected_version: int = 0) -> MemoryBlock:
         saved = await self._provider.write_block(block, expected_version=expected_version)
         await self.index_block(saved)
         return saved

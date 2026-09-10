@@ -412,6 +412,11 @@ class MemoryKernel:
     def manifest(self) -> ProviderManifest:
         return self._manifest
 
+    @property
+    def consolidation_scheduler(self) -> ConsolidationScheduler | None:
+        """Return the optional scheduler so a host can run its worker separately."""
+        return self._consolidation_scheduler
+
     def _require_block_capability(self) -> None:
         if not self._manifest.capabilities.memory_blocks:
             raise NotImplementedError("the selected memory provider does not support memory blocks")
