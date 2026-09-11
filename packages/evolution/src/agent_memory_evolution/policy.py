@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
 from .domain import EvaluationReport, EvaluationStage, GateDecision, PromotionApproval
@@ -16,7 +16,13 @@ class GateProfile:
 class DeterministicPromotionPolicy:
     """Evidence-only gates; model confidence is not accepted as evaluation evidence."""
 
-    def __init__(self, profiles: Mapping[EvaluationStage, GateProfile] | None = None) -> None:
+    def __init__(
+        self,
+        profiles: Mapping[EvaluationStage, GateProfile] | None = None,
+        *,
+        trusted_evaluators: Iterable[str] = ("evaluator", "trusted-host"),
+        trusted_approvers: Iterable[str] = ("reviewer",),
+    ) -> None:
         self._profiles = dict(
             profiles
             or {
@@ -37,6 +43,16 @@ class DeterministicPromotionPolicy:
                 ),
             }
         )
+        self._trusted_evaluators = frozenset(trusted_evaluators)
+        self._trusted_approvers = frozenset(trusted_approvers)
+
+    def authorize_evaluation(self, report: EvaluationReport, actor: str) -> GateDecision:
+        reasons = []
+        if report.evaluator_id not in self._trusted_evaluators:
+            reasons.append(f"evaluator {report.evaluator_id} is not trusted")
+        if actor != report.evaluator_id:
+            reasons.append("evaluation actor must match evaluator_id")
+        return GateDecision(not reasons, tuple(reasons))
 
     def evaluate(self, report: EvaluationReport) -> GateDecision:
         profile = self._profiles[report.stage]
@@ -59,8 +75,9 @@ class DeterministicPromotionPolicy:
                 reasons.append(f"{name} {value} exceeds {threshold}")
         return GateDecision(not reasons, tuple(reasons))
 
-    @staticmethod
-    def authorize_active(approval: PromotionApproval | None) -> GateDecision:
+    def authorize_active(self, approval: PromotionApproval | None) -> GateDecision:
         if approval is None:
             return GateDecision(False, ("active promotion requires human approval",))
+        if approval.approver not in self._trusted_approvers:
+            return GateDecision(False, (f"approver {approval.approver} is not trusted",))
         return GateDecision(True, ())

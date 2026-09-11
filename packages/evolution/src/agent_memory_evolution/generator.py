@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Sequence
+from uuid import NAMESPACE_URL, uuid5
 
 from agent_memory.domain import ArtifactStatus, Episode, MemoryScope, Procedure, Provenance
 
@@ -34,7 +35,9 @@ class RuleBasedProcedureGenerator:
 
         generated: list[GeneratedProcedure] = []
         for normalized_action, members in sorted(groups.items()):
-            if not normalized_action or len(members) < self._minimum_support:
+            successful = [item for item in members if self._is_success(item)]
+            failures = [item for item in members if not self._is_success(item)]
+            if not normalized_action or len(successful) < self._minimum_support:
                 continue
             source_event_ids = tuple(
                 dict.fromkeys(
@@ -45,14 +48,28 @@ class RuleBasedProcedureGenerator:
             )
             if not source_event_ids:
                 continue
-            representative = max(members, key=lambda item: item.quality)
-            outcomes = tuple(dict.fromkeys(item.outcome for item in members if item.outcome))[:3]
+            representative = max(successful, key=lambda item: item.quality)
+            outcomes = tuple(
+                dict.fromkeys(item.outcome for item in successful if item.outcome)
+            )[:3]
+            failure_patterns = tuple(
+                dict.fromkeys(item.lesson for item in failures if item.lesson)
+            )[:3]
+            member_ids = tuple(sorted(item.id for item in members))
+            procedure_id = str(
+                uuid5(
+                    NAMESPACE_URL,
+                    ":".join((partition, normalized_action, *member_ids)),
+                )
+            )
             procedure = Procedure(
+                id=procedure_id,
                 scope=scope,
                 name=f"Candidate procedure: {representative.action[:80]}",
                 trigger=representative.observation,
                 steps=(representative.action,),
                 success_conditions=outcomes or (representative.outcome,),
+                failure_patterns=failure_patterns,
                 status=ArtifactStatus.CANDIDATE,
                 provenance=Provenance(
                     source_event_ids=source_event_ids,
@@ -63,7 +80,12 @@ class RuleBasedProcedureGenerator:
             generated.append(
                 GeneratedProcedure(
                     procedure=procedure,
-                    source_episode_ids=tuple(item.id for item in members),
+                    source_episode_ids=member_ids,
                 )
             )
         return tuple(generated)
+
+    @staticmethod
+    def _is_success(episode: Episode) -> bool:
+        status = episode.outcome.partition(":")[0]
+        return status not in {"failed", "cancelled", "timed_out", "unknown"}
