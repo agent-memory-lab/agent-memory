@@ -73,8 +73,8 @@ cd agent-memory
 ./setup.sh
 ~~~
 
-Python 3.11+ is required. `setup.sh` automatically selects Python 3.13, 3.12, or 3.11 when
-available; set `PYTHON_BIN=/path/to/python3.11 ./setup.sh` to choose one explicitly.
+Python 3.13+ is required. `setup.sh` selects Python 3.13 when available; set
+`PYTHON_BIN=/path/to/python3.13 ./setup.sh` to choose it explicitly.
 
 For an editable core-only install:
 
@@ -314,7 +314,28 @@ Framework adapters translate lifecycle hooks into the provider protocol; they do
 
 The included LangGraph package demonstrates this boundary. The same model supports custom agents, command-line agents, hosted runtimes, and other orchestration frameworks.
 
-## Controlled Self-Evolution
+## Trusted Feedback Loop
+
+The host owns outcome meaning and identity. Agent Memory only validates, stores, links, and
+consolidates the supplied evidence:
+
+~~~text
+remember / recall -> record_decision -> record_outcome
+                  -> record_evaluation -> record_reward
+                  -> Episode -> Procedure candidate
+~~~
+
+Use `record_decision`, `record_outcome`, `record_evaluation`, and `record_reward` on the local
+facade, Python SDK, or MCP tools. Supply stable idempotency keys for retries. Feedback may arrive
+out of order, but remains `pending` until its parent exists; cross-scope references and untrusted
+evaluators are rejected. `feedback_status` and `feedback_history` expose receipts without SQL.
+
+Corrections supersede prior records rather than rewriting history. Forgetting source evidence
+invalidates dependent feedback, Episodes, evaluations, rewards, and evolution candidates. Archive
+retains permitted audit fields; erase removes sensitive payloads. The full field and compatibility
+contract is in [docs/FEEDBACK_CONTRACT.md](docs/FEEDBACK_CONTRACT.md).
+
+## Controlled Memory Evolution
 
 Self-evolution is not unrestricted prompt rewriting. Agent Memory models it as a governed release process for procedures:
 
@@ -334,12 +355,22 @@ Safety rules in the MVP:
 - evolution is disabled by default;
 - candidates never become active directly;
 - evaluation evidence is persisted;
-- policy versions are explicit;
+- candidate, dataset, evaluator, rubric, reward, and policy versions are explicit;
+- evaluator and approver identities come from host allowlists;
+- active approval is candidate/scope bound and expires;
 - activation and rollback are auditable;
+- one active pointer per exact scope controls selection;
+- interrupted activation and rollback states have deterministic restart recovery;
 - deterministic rules remain the fallback;
 - latent or learned policies cannot replace the source-of-truth state.
 
 This creates a path from task trajectories to improved behavior without allowing experimental memory to silently control production decisions.
+
+SQLite schema upgrades run during provider initialization. Back up persistent databases before
+upgrading or downgrading. Evolution registry upgrades add provenance and idempotency columns
+without rewriting existing evidence; legacy evaluations without scope/version binding cannot drive
+new promotion. PostgreSQL migrations live in `packages/postgres/migrations` and must be applied in
+an isolated environment before deployment.
 
 ## Capability Status
 
@@ -356,9 +387,11 @@ This creates a path from task trajectories to improved behavior without allowing
 | Python SDK | Implemented | Optional package |
 | LangGraph adapter | Implemented | Optional package |
 | MCP stdio transport | Implemented | Protocol smoke-tested |
-| PostgreSQL provider | Implemented, not deployment-certified | Requires live environment validation |
+| PostgreSQL provider | Live contract validated | PostgreSQL 17.11; production operations remain host-owned |
 | pgvector retrieval | Optional | Provider capability, not a core requirement |
-| Controlled procedure evolution | MVP implemented | Disabled by default |
+| Trusted feedback and correction | Implemented | Idempotent, ordered, scoped, and auditable |
+| Controlled procedure evolution | MVP implemented | Disabled by default; host-defined gates |
+| Retrieval policy candidate | Deterministic MVP | Fixed replay only; no causal claim |
 | Graph memory | Planned | Must remain optional |
 | Learned latent memory | Research track | Must not become source of truth |
 | Online autonomous policy training | Not implemented | Requires a separate safety and evaluation design |
@@ -422,7 +455,11 @@ python -m build
 python -m twine check dist/*
 ~~~
 
-The repository currently contains focused tests for ingestion, idempotency, supersession, scoped retrieval, context budgets, forgetting, plugin discovery, and evolution gates.
+The repository contains focused tests for ingestion, feedback lineage, correction, supersession,
+scoped retrieval, context budgets, forgetting, plugin discovery, evolution authorization, restart
+recovery, and deterministic retrieval-policy gates. See
+[docs/ACCEPTANCE_REPORT_2026-09-11.md](docs/ACCEPTANCE_REPORT_2026-09-11.md) for exact results and
+the outstanding live PostgreSQL requirement.
 
 ## Repository Layout
 

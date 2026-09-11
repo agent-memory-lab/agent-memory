@@ -31,3 +31,13 @@
 - Graph and latent memory.
 - Learned write/retrieval policies and online training.
 - Web administration console backed by a live provider.
+
+## Evolution roadmap
+
+The broader project includes memory-driven agent training and runtime orchestration as
+final-stage, independently installed extensions. The core remains usable without either.
+Near-term work prioritizes evidence-linked feedback, memory consolidation, retrieval policy
+versions, and host-controlled Procedure promotion. See
+[the v3 evolution design addendum](EVOLUTION_DESIGN_V3_ADDENDUM.md) for proposed contracts,
+stage dependencies, resource constraints, and acceptance criteria. Roadmap capabilities are
+not claims of implemented functionality.
