@@ -14,6 +14,7 @@ from .domain import (
     MemoryEvent,
     MemoryQuery,
     MemoryScope,
+    MemoryUsage,
     OutcomeEvent,
     Provenance,
     RewardSignal,
@@ -134,6 +135,7 @@ class AgentMemoryAdapter:
         procedure_ids: tuple[str, ...] = (),
         policy_version: str = "trusted-default",
     ) -> DecisionRecord:
+        self._require_feedback()
         memory_ids = tuple(citation.memory_id for citation in bundle.citations)
         digest = sha256(f"{memory_ids}:{procedure_ids}:{policy_version}".encode()).hexdigest()
         decision = DecisionRecord(
@@ -143,6 +145,8 @@ class AgentMemoryAdapter:
             procedure_ids=procedure_ids,
             policy_version=policy_version,
             context_hash=digest,
+            bundle_id=bundle.bundle_id,
+            memory_usage=(MemoryUsage.CONFIRMED if memory_ids else MemoryUsage.NONE),
         )
         await self._provider.record_decision(decision)
         return decision
@@ -157,6 +161,7 @@ class AgentMemoryAdapter:
         score: float | None = None,
         metrics: Mapping[str, float] | None = None,
     ) -> OutcomeEvent:
+        self._require_feedback()
         record = OutcomeEvent(
             scope=context.scope,
             decision_id=decision.id,
@@ -177,6 +182,7 @@ class AgentMemoryAdapter:
         formula_version: str,
         components: Mapping[str, float] | None = None,
     ) -> RewardSignal:
+        self._require_feedback()
         reward = RewardSignal(
             scope=context.scope,
             outcome_id=outcome.id,
@@ -186,6 +192,13 @@ class AgentMemoryAdapter:
         )
         await self._provider.record_reward(reward)
         return reward
+
+    def _require_feedback(self) -> None:
+        capabilities = self._provider.manifest().capabilities
+        if not (capabilities.decision_lineage and capabilities.outcome_feedback):
+            raise NotImplementedError(
+                "the selected memory provider does not support lifecycle feedback"
+            )
 
     async def session_end(
         self,

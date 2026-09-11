@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Collection, Mapping, Sequence
+from dataclasses import dataclass, replace
+from datetime import datetime
 from inspect import isawaitable
 from json import dumps
 from pathlib import Path
@@ -10,6 +11,10 @@ from typing import Any, Self
 
 from .domain import (
     Claim,
+    DecisionRecord,
+    EvaluationRecord,
+    FeedbackPage,
+    FeedbackReceipt,
     ForgetMode,
     ForgetRequest,
     ForgetResult,
@@ -20,6 +25,10 @@ from .domain import (
     MemoryEvent,
     MemoryQuery,
     MemoryScope,
+    MemoryUsage,
+    OutcomeEvent,
+    OutcomeStatus,
+    RewardSignal,
 )
 from .plugins import PluginRegistry
 from .ports import ClaimExtractor, EmbeddingProvider, MemoryPolicy, MemoryProvider, Reranker
@@ -79,6 +88,7 @@ class AgentMemory:
         policy: MemoryPolicy | None = None,
         reranker: Reranker | None = None,
         embedding_provider: EmbeddingProvider | None = None,
+        trusted_evaluator_ids: Collection[str] | None = None,
     ) -> AgentMemory:
         return cls(
             PluginRegistry().create_provider(
@@ -88,6 +98,7 @@ class AgentMemory:
                 policy=policy,
                 reranker=reranker,
                 embedding_provider=embedding_provider,
+                trusted_evaluator_ids=trusted_evaluator_ids,
             ),
             scope or MemoryScope(tenant_id="local", session_id="default"),
             limits=limits,
@@ -189,6 +200,160 @@ class AgentMemory:
         self._require_initialized()
         claims = await self._provider.get_state(self.scope)
         return tuple(claims[: self.limits.max_state_claims])
+
+    async def record_decision(
+        self,
+        action: str,
+        *,
+        memory_ids: Sequence[str] = (),
+        procedure_ids: Sequence[str] = (),
+        run_id: str | None = None,
+        bundle_id: str | None = None,
+        memory_usage: MemoryUsage = MemoryUsage.UNKNOWN,
+        policy_version: str = "trusted-default",
+        context_hash: str = "",
+        idempotency_key: str | None = None,
+        corrects_id: str | None = None,
+        record_id: str | None = None,
+    ) -> DecisionRecord:
+        self._require_initialized()
+        values: dict[str, Any] = {
+            "scope": self.scope,
+            "action": action,
+            "memory_ids": tuple(memory_ids),
+            "procedure_ids": tuple(procedure_ids),
+            "run_id": run_id,
+            "bundle_id": bundle_id,
+            "memory_usage": memory_usage,
+            "policy_version": policy_version,
+            "context_hash": context_hash,
+            "idempotency_key": idempotency_key,
+            "corrects_id": corrects_id,
+        }
+        if record_id is not None:
+            values["id"] = record_id
+        record = DecisionRecord(**values)
+        persisted_id = await self._provider.record_decision(record)
+        return record if persisted_id == record.id else replace(record, id=persisted_id)
+
+    async def record_outcome(
+        self,
+        decision_id: str,
+        outcome: str,
+        success: bool | None,
+        *,
+        score: float | None = None,
+        metrics: Mapping[str, float] | None = None,
+        run_id: str | None = None,
+        termination_reason: str | None = None,
+        outcome_status: OutcomeStatus | None = None,
+        idempotency_key: str | None = None,
+        corrects_id: str | None = None,
+        record_id: str | None = None,
+        expires_at: datetime | None = None,
+    ) -> OutcomeEvent:
+        self._require_initialized()
+        values: dict[str, Any] = {
+            "scope": self.scope,
+            "decision_id": decision_id,
+            "outcome": outcome,
+            "success": success,
+            "score": score,
+            "metrics": metrics or {},
+            "run_id": run_id,
+            "termination_reason": termination_reason,
+            "outcome_status": outcome_status,
+            "idempotency_key": idempotency_key,
+            "corrects_id": corrects_id,
+            "expires_at": expires_at,
+        }
+        if record_id is not None:
+            values["id"] = record_id
+        record = OutcomeEvent(**values)
+        persisted_id = await self._provider.record_outcome(record)
+        return record if persisted_id == record.id else replace(record, id=persisted_id)
+
+    async def record_evaluation(
+        self,
+        outcome_id: str,
+        *,
+        evaluator_id: str,
+        evaluator_version: str,
+        rubric_id: str,
+        rubric_version: str,
+        metrics: Mapping[str, float],
+        evidence_digest: str,
+        idempotency_key: str | None = None,
+        corrects_id: str | None = None,
+        record_id: str | None = None,
+        expires_at: datetime | None = None,
+    ) -> EvaluationRecord:
+        self._require_initialized()
+        values: dict[str, Any] = {
+            "scope": self.scope,
+            "outcome_id": outcome_id,
+            "evaluator_id": evaluator_id,
+            "evaluator_version": evaluator_version,
+            "rubric_id": rubric_id,
+            "rubric_version": rubric_version,
+            "metrics": metrics,
+            "evidence_digest": evidence_digest,
+            "idempotency_key": idempotency_key,
+            "corrects_id": corrects_id,
+            "expires_at": expires_at,
+        }
+        if record_id is not None:
+            values["id"] = record_id
+        record = EvaluationRecord(**values)
+        persisted_id = await self._provider.record_evaluation(record)
+        return record if persisted_id == record.id else replace(record, id=persisted_id)
+
+    async def record_reward(
+        self,
+        outcome_id: str,
+        value: float,
+        formula_version: str,
+        *,
+        evaluation_id: str | None = None,
+        reward_definition_id: str = "legacy",
+        components: Mapping[str, float] | None = None,
+        idempotency_key: str | None = None,
+        corrects_id: str | None = None,
+        record_id: str | None = None,
+        expires_at: datetime | None = None,
+    ) -> RewardSignal:
+        self._require_initialized()
+        values: dict[str, Any] = {
+            "scope": self.scope,
+            "outcome_id": outcome_id,
+            "value": value,
+            "formula_version": formula_version,
+            "evaluation_id": evaluation_id,
+            "reward_definition_id": reward_definition_id,
+            "components": components or {},
+            "idempotency_key": idempotency_key,
+            "corrects_id": corrects_id,
+            "expires_at": expires_at,
+        }
+        if record_id is not None:
+            values["id"] = record_id
+        record = RewardSignal(**values)
+        persisted_id = await self._provider.record_reward(record)
+        return record if persisted_id == record.id else replace(record, id=persisted_id)
+
+    async def feedback_status(
+        self, record_id: str, record_type: str
+    ) -> FeedbackReceipt | None:
+        self._require_initialized()
+        return await self._provider.feedback_status(self.scope, record_id, record_type)
+
+    async def feedback_history(
+        self, record_type: str, *, limit: int = 50, cursor: str | None = None
+    ) -> FeedbackPage:
+        self._require_initialized()
+        return await self._provider.feedback_history(
+            self.scope, record_type, limit=limit, cursor=cursor
+        )
 
     async def write_block(self, block: MemoryBlock, *, expected_version: int = 0) -> MemoryBlock:
         self._require_initialized()

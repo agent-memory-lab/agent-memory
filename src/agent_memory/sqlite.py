@@ -4,9 +4,11 @@ import asyncio
 import json
 import re
 import sqlite3
+import time
 from collections.abc import Sequence
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 from types import TracebackType
 from typing import Any
@@ -17,6 +19,8 @@ from .domain import (
     ClaimStatus,
     DecisionRecord,
     Episode,
+    EvaluationRecord,
+    FeedbackStatus,
     ForgetMode,
     ForgetRequest,
     ForgetResult,
@@ -33,6 +37,7 @@ from .domain import (
     ProposalResult,
     ProposalStatus,
     Provenance,
+    RetrievalTrace,
     RewardSignal,
     StateDelta,
     canonical_json,
@@ -160,6 +165,103 @@ class SQLiteMemoryUnitOfWork:
             state_delta_id=row["state_delta_id"],
             superseded_claim_id=row["superseded_claim_id"],
             reason=row["reason"],
+        )
+
+    async def find_feedback_record(
+        self, record_id: str, record_type: str
+    ) -> dict[str, object] | None:
+        self._expire_pending_feedback()
+        row = self.connection.execute(
+            "SELECT * FROM evolution_records WHERE id = ? AND record_type = ?",
+            (record_id, record_type),
+        ).fetchone()
+        return self._repository._feedback_from_row(row) if row else None
+
+    async def find_feedback_by_idempotency(
+        self, scope: MemoryScope, record_type: str, idempotency_key: str
+    ) -> dict[str, object] | None:
+        self._expire_pending_feedback()
+        row = self.connection.execute(
+            """
+            SELECT * FROM evolution_records
+            WHERE partition_key = ? AND record_type = ? AND idempotency_key = ?
+            """,
+            (scope.partition_key(), record_type, idempotency_key),
+        ).fetchone()
+        return self._repository._feedback_from_row(row) if row else None
+
+    async def activate_pending_children(
+        self, scope: MemoryScope, parent_id: str
+    ) -> Sequence[str]:
+        rows = self.connection.execute(
+            """
+            SELECT id FROM evolution_records
+            WHERE partition_key = ? AND parent_id = ? AND feedback_status = ?
+              AND invalidated_at IS NULL
+            """,
+            (scope.partition_key(), parent_id, FeedbackStatus.PENDING),
+        ).fetchall()
+        self.connection.execute(
+            """
+            UPDATE evolution_records SET feedback_status = ?
+            WHERE partition_key = ? AND parent_id = ? AND feedback_status = ?
+              AND invalidated_at IS NULL
+            """,
+            (
+                FeedbackStatus.ACCEPTED,
+                scope.partition_key(),
+                parent_id,
+                FeedbackStatus.PENDING,
+            ),
+        )
+        return tuple(row["id"] for row in rows)
+
+    async def supersede_feedback(self, scope: MemoryScope, record_id: str) -> None:
+        self.connection.execute(
+            """
+            UPDATE evolution_records SET feedback_status = ?
+            WHERE partition_key = ? AND id = ? AND feedback_status != ?
+            """,
+            (
+                FeedbackStatus.SUPERSEDED,
+                scope.partition_key(),
+                record_id,
+                FeedbackStatus.INVALIDATED,
+            ),
+        )
+        self._repository._invalidate_feedback(
+            self.connection,
+            scope.partition_key(),
+            {record_id},
+            erase=False,
+        )
+        self.connection.execute(
+            """
+            UPDATE evolution_records
+            SET feedback_status = ?, invalidated_at = NULL
+            WHERE partition_key = ? AND id = ?
+            """,
+            (FeedbackStatus.SUPERSEDED, scope.partition_key(), record_id),
+        )
+
+    async def pending_feedback_count(self, scope: MemoryScope) -> int:
+        self._expire_pending_feedback()
+        row = self.connection.execute(
+            """
+            SELECT COUNT(*) AS count FROM evolution_records
+            WHERE partition_key = ? AND feedback_status = ?
+            """,
+            (scope.partition_key(), FeedbackStatus.PENDING),
+        ).fetchone()
+        return int(row["count"] if row else 0)
+
+    def _expire_pending_feedback(self) -> None:
+        self.connection.execute(
+            """
+            UPDATE evolution_records SET feedback_status = ?
+            WHERE feedback_status = ? AND expires_at IS NOT NULL AND expires_at <= ?
+            """,
+            (FeedbackStatus.EXPIRED, FeedbackStatus.PENDING, _iso(utc_now())),
         )
 
     async def append_event(self, event: MemoryEvent) -> None:
@@ -400,9 +502,29 @@ class SQLiteMemoryUnitOfWork:
             outcome.occurred_at,
         )
 
+    async def save_evaluation(self, evaluation: EvaluationRecord) -> None:
+        self._repository._insert_evolution_record(
+            self.connection,
+            evaluation.id,
+            evaluation.scope,
+            "evaluation",
+            asdict(evaluation),
+            evaluation.created_at,
+        )
+
     async def save_reward(self, reward: RewardSignal) -> None:
         self._repository._insert_evolution_record(
             self.connection, reward.id, reward.scope, "reward", asdict(reward), reward.created_at
+        )
+
+    async def save_retrieval_trace(self, trace: RetrievalTrace) -> None:
+        self._repository._insert_evolution_record(
+            self.connection,
+            trace.id,
+            trace.scope,
+            "retrieval",
+            asdict(trace),
+            trace.created_at,
         )
 
     async def save_proposal(self, proposal: MemoryProposal, result: ProposalResult) -> None:
@@ -436,14 +558,15 @@ class SQLiteMemoryRepository:
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self._path, timeout=30)
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA busy_timeout = 30000")
         connection.execute("PRAGMA foreign_keys = ON")
-        connection.execute("PRAGMA journal_mode = WAL")
         return connection
 
     async def initialize(self) -> None:
         await asyncio.to_thread(self._initialize_sync)
 
     def _initialize_sync(self) -> None:
+        self._enable_wal()
         with self._connect() as connection:
             connection.executescript(
                 """
@@ -572,6 +695,13 @@ class SQLiteMemoryRepository:
                     session_id TEXT,
                     record_type TEXT NOT NULL,
                     payload_json TEXT NOT NULL,
+                    feedback_status TEXT NOT NULL DEFAULT 'accepted',
+                    parent_id TEXT,
+                    idempotency_key TEXT,
+                    payload_hash TEXT,
+                    corrects_id TEXT,
+                    expires_at TEXT,
+                    invalidated_at TEXT,
                     occurred_at TEXT NOT NULL
                 );
 
@@ -601,7 +731,58 @@ class SQLiteMemoryRepository:
                 """
             )
             self._migrate_claim_sources(connection)
+            self._migrate_evolution_records(connection)
             self._ensure_current_claim_index(connection)
+
+    def _enable_wal(self) -> None:
+        for attempt in range(8):
+            connection = self._connect()
+            try:
+                connection.execute("PRAGMA journal_mode = WAL")
+                return
+            except sqlite3.OperationalError as error:
+                if "locked" not in str(error).casefold() or attempt == 7:
+                    raise
+                time.sleep(0.01 * (2**attempt))
+            finally:
+                connection.close()
+    @staticmethod
+    def _migrate_evolution_records(connection: sqlite3.Connection) -> None:
+        columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(evolution_records)").fetchall()
+        }
+        additions = {
+            "feedback_status": "TEXT NOT NULL DEFAULT 'accepted'",
+            "parent_id": "TEXT",
+            "idempotency_key": "TEXT",
+            "payload_hash": "TEXT",
+            "corrects_id": "TEXT",
+            "expires_at": "TEXT",
+            "invalidated_at": "TEXT",
+        }
+        for name, declaration in additions.items():
+            if name not in columns:
+                connection.execute(
+                    f"ALTER TABLE evolution_records ADD COLUMN {name} {declaration}"
+                )
+        connection.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS evolution_records_idempotency_idx
+            ON evolution_records(partition_key, record_type, idempotency_key)
+            WHERE idempotency_key IS NOT NULL
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS evolution_records_parent_idx
+            ON evolution_records(partition_key, parent_id, feedback_status)
+            """
+        )
+        connection.execute(
+            "INSERT OR IGNORE INTO memory_schema(schema_version, installed_at) "
+            "VALUES (2, CURRENT_TIMESTAMP)"
+        )
 
     def _migrate_claim_sources(self, connection: sqlite3.Connection) -> None:
         rows = connection.execute(
@@ -745,6 +926,52 @@ class SQLiteMemoryRepository:
     async def current_claims(self, scope: MemoryScope) -> Sequence[Claim]:
         return await asyncio.to_thread(self._current_claims_sync, scope)
 
+    async def list_feedback(
+        self,
+        scope: MemoryScope,
+        record_type: str,
+        limit: int,
+        after_id: str | None = None,
+    ) -> Sequence[dict[str, object]]:
+        return await asyncio.to_thread(
+            self._list_feedback_sync, scope, record_type, limit, after_id
+        )
+
+    def _list_feedback_sync(
+        self,
+        scope: MemoryScope,
+        record_type: str,
+        limit: int,
+        after_id: str | None,
+    ) -> Sequence[dict[str, object]]:
+        partition_key = scope.partition_key()
+        with self._connect() as connection:
+            cursor_clause = ""
+            params: list[object] = [partition_key, record_type]
+            if after_id:
+                anchor = connection.execute(
+                    """
+                    SELECT occurred_at, id FROM evolution_records
+                    WHERE partition_key = ? AND record_type = ? AND id = ?
+                    """,
+                    (partition_key, record_type, after_id),
+                ).fetchone()
+                if anchor is None:
+                    raise ValueError("feedback pagination cursor is invalid")
+                cursor_clause = (
+                    "AND (occurred_at < ? OR (occurred_at = ? AND id < ?))"
+                )
+                params.extend((anchor["occurred_at"], anchor["occurred_at"], anchor["id"]))
+            rows = connection.execute(
+                f"""
+                SELECT * FROM evolution_records
+                WHERE partition_key = ? AND record_type = ? {cursor_clause}
+                ORDER BY occurred_at DESC, id DESC LIMIT ?
+                """,
+                (*params, limit),
+            ).fetchall()
+        return tuple(self._feedback_from_row(row) for row in rows)
+
     def _current_claims_sync(self, scope: MemoryScope) -> Sequence[Claim]:
         where, params = self._visible_scope_clause(scope)
         with self._connect() as connection:
@@ -763,20 +990,21 @@ class SQLiteMemoryRepository:
 
     def _search_sync(self, query: MemoryQuery, limit: int) -> Sequence[MemoryItem]:
         where, params = self._visible_scope_clause(query.scope)
+        scan_limit = min(500, max(64, limit * 4))
         with self._connect() as connection:
             claim_rows = connection.execute(
                 f"SELECT * FROM claims WHERE {where} "
-                "AND status = ? AND archived_at IS NULL LIMIT 500",
-                (*params, ClaimStatus.ACTIVE),
+                "AND status = ? AND archived_at IS NULL LIMIT ?",
+                (*params, ClaimStatus.ACTIVE, scan_limit),
             ).fetchall()
             event_rows = connection.execute(
                 f"SELECT * FROM events WHERE {where} "
-                "AND archived_at IS NULL ORDER BY occurred_at DESC LIMIT 500",
-                params,
+                "AND archived_at IS NULL ORDER BY occurred_at DESC LIMIT ?",
+                (*params, scan_limit),
             ).fetchall()
             artifact_rows = connection.execute(
-                f"SELECT * FROM artifacts WHERE {where} AND archived_at IS NULL LIMIT 500",
-                params,
+                f"SELECT * FROM artifacts WHERE {where} AND archived_at IS NULL LIMIT ?",
+                (*params, scan_limit),
             ).fetchall()
 
         query_tokens = _tokens(query.text)
@@ -941,7 +1169,21 @@ class SQLiteMemoryRepository:
                         f"UPDATE artifacts SET archived_at = ?, status = ? WHERE {where}",
                         (archived_at, ArtifactStatus.ARCHIVED, *params),
                     )
+                    self._invalidate_feedback(
+                        connection,
+                        request.scope.partition_key(),
+                        set(request.memory_ids),
+                        erase=False,
+                        all_in_scope=True,
+                    )
                 else:
+                    self._invalidate_feedback(
+                        connection,
+                        request.scope.partition_key(),
+                        set(request.memory_ids),
+                        erase=True,
+                        all_in_scope=True,
+                    )
                     connection.execute(f"DELETE FROM artifacts WHERE {where}", params)
                     connection.execute(f"DELETE FROM claims WHERE {where}", params)
                     connection.execute(f"DELETE FROM events WHERE {where}", params)
@@ -983,6 +1225,12 @@ class SQLiteMemoryRepository:
                 else:
                     connection.execute(f"DELETE FROM artifacts WHERE {where}", params)
                     connection.execute(f"DELETE FROM claims WHERE {where}", params)
+                self._invalidate_feedback(
+                    connection,
+                    request.scope.partition_key(),
+                    set(request.memory_ids),
+                    erase=request.mode == ForgetMode.ERASE,
+                )
                 return ForgetResult(0, counts["claims"], counts["artifacts"], request.mode)
 
             target_event_set = set(target_event_ids)
@@ -1100,6 +1348,46 @@ class SQLiteMemoryRepository:
                     ),
                 )
 
+            artifact_rows = connection.execute(
+                """
+                SELECT * FROM artifacts
+                WHERE partition_key = ? AND kind != ? AND archived_at IS NULL
+                """,
+                (request.scope.partition_key(), MemoryKind.BLOCK),
+            ).fetchall()
+            for row in artifact_rows:
+                provenance = _provenance(row["provenance_json"])
+                remaining_event_ids = tuple(
+                    event_id
+                    for event_id in provenance.source_event_ids
+                    if event_id not in target_event_set
+                )
+                if len(remaining_event_ids) == len(provenance.source_event_ids):
+                    continue
+                changed_block_ids.add(row["id"])
+                if not remaining_event_ids:
+                    blocks_to_drop.add(row["id"])
+                    continue
+                updated_provenance = replace(
+                    provenance,
+                    source_event_ids=remaining_event_ids,
+                )
+                payload = json.loads(row["payload_json"])
+                if isinstance(payload.get("provenance"), dict):
+                    payload["provenance"]["source_event_ids"] = list(remaining_event_ids)
+                connection.execute(
+                    """
+                    UPDATE artifacts
+                    SET payload_json = ?, provenance_json = ?, version = version + 1
+                    WHERE id = ? AND archived_at IS NULL
+                    """,
+                    (
+                        canonical_json(payload),
+                        _provenance_json(updated_provenance),
+                        row["id"],
+                    ),
+                )
+
             counts = {
                 table: connection.execute(
                     f"SELECT COUNT(*) FROM {table} WHERE {where}", params
@@ -1162,6 +1450,19 @@ class SQLiteMemoryRepository:
                 connection.execute(f"DELETE FROM claims WHERE {where}", params)
                 connection.execute(f"DELETE FROM events WHERE {where}", params)
 
+            impacted_memory_ids = (
+                set(request.memory_ids)
+                | target_event_set
+                | impacted_claim_ids
+                | changed_block_ids
+            )
+            self._invalidate_feedback(
+                connection,
+                request.scope.partition_key(),
+                impacted_memory_ids,
+                erase=request.mode == ForgetMode.ERASE,
+            )
+
             affected_claims = counts["claims"] + extra_counts
             if request.mode == ForgetMode.ARCHIVE:
                 for claim_id in claims_to_drop:
@@ -1178,6 +1479,98 @@ class SQLiteMemoryRepository:
                 ),
                 mode=request.mode,
             )
+
+    @staticmethod
+    def _invalidate_feedback(
+        connection: sqlite3.Connection,
+        partition_key: str,
+        impacted_ids: set[str],
+        *,
+        erase: bool,
+        all_in_scope: bool = False,
+    ) -> None:
+        rows = connection.execute(
+            """
+            SELECT * FROM evolution_records
+            WHERE partition_key = ? AND invalidated_at IS NULL
+            ORDER BY occurred_at, id
+            """,
+            (partition_key,),
+        ).fetchall()
+        invalidated = (
+            {row["id"] for row in rows}
+            if all_in_scope
+            else {row["id"] for row in rows if row["id"] in impacted_ids}
+        )
+        changed = True
+        while changed:
+            changed = False
+            known_impacts = impacted_ids | invalidated
+            for row in rows:
+                if row["id"] in invalidated:
+                    continue
+                payload = json.loads(row["payload_json"])
+                references: set[str] = set()
+                for field in (
+                    "returned_memory_ids",
+                    "memory_ids",
+                    "procedure_ids",
+                    "source_event_ids",
+                ):
+                    value = payload.get(field, ())
+                    if isinstance(value, (list, tuple)):
+                        references.update(map(str, value))
+                for field in (
+                    "bundle_id",
+                    "decision_id",
+                    "outcome_id",
+                    "evaluation_id",
+                ):
+                    value = payload.get(field)
+                    if value:
+                        references.add(str(value))
+                if row["parent_id"]:
+                    references.add(str(row["parent_id"]))
+                if references & known_impacts:
+                    invalidated.add(row["id"])
+                    changed = True
+
+        invalidated_at = _iso(utc_now())
+        for row in rows:
+            if row["id"] not in invalidated:
+                continue
+            if erase:
+                payload_json = canonical_json(
+                    {
+                        "id": row["id"],
+                        "record_type": row["record_type"],
+                        "redacted": True,
+                        "reason": "source_erased",
+                    }
+                )
+                connection.execute(
+                    """
+                    UPDATE evolution_records
+                    SET feedback_status = ?, invalidated_at = ?, payload_json = ?,
+                        payload_hash = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        FeedbackStatus.INVALIDATED,
+                        invalidated_at,
+                        payload_json,
+                        sha256(payload_json.encode("utf-8")).hexdigest(),
+                        row["id"],
+                    ),
+                )
+            else:
+                connection.execute(
+                    """
+                    UPDATE evolution_records
+                    SET feedback_status = ?, invalidated_at = ? WHERE id = ?
+                    """,
+                    (FeedbackStatus.INVALIDATED, invalidated_at, row["id"]),
+                )
 
     def _insert_claim(self, connection: sqlite3.Connection, claim: Claim) -> None:
         connection.execute(
@@ -1279,21 +1672,56 @@ class SQLiteMemoryRepository:
         payload: dict[str, Any],
         occurred_at: datetime,
     ) -> None:
+        payload_json = canonical_json(payload)
+        parent_id = None
+        if record_type == "outcome":
+            parent_id = payload.get("decision_id")
+        elif record_type == "evaluation":
+            parent_id = payload.get("outcome_id")
+        elif record_type == "reward":
+            parent_id = payload.get("evaluation_id") or payload.get("outcome_id")
         connection.execute(
             """
             INSERT INTO evolution_records (
                 id, partition_key, tenant_id, namespace, user_id, agent_id,
-                workspace_id, session_id, record_type, payload_json, occurred_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                workspace_id, session_id, record_type, payload_json, feedback_status,
+                parent_id, idempotency_key, payload_hash, corrects_id, expires_at, occurred_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 record_id,
                 *_scope_values(scope),
                 record_type,
-                canonical_json(payload),
+                payload_json,
+                str(payload.get("feedback_status", FeedbackStatus.ACCEPTED)),
+                parent_id,
+                payload.get("idempotency_key"),
+                sha256(payload_json.encode("utf-8")).hexdigest(),
+                payload.get("corrects_id"),
+                (
+                    _iso(payload["expires_at"])
+                    if isinstance(payload.get("expires_at"), datetime)
+                    else payload.get("expires_at")
+                ),
                 _iso(occurred_at),
             ),
         )
+
+    @staticmethod
+    def _feedback_from_row(row: sqlite3.Row) -> dict[str, object]:
+        return {
+            "id": row["id"],
+            "partition_key": row["partition_key"],
+            "record_type": row["record_type"],
+            "payload": json.loads(row["payload_json"]),
+            "feedback_status": row["feedback_status"],
+            "parent_id": row["parent_id"],
+            "idempotency_key": row["idempotency_key"],
+            "payload_hash": row["payload_hash"],
+            "corrects_id": row["corrects_id"],
+            "expires_at": _datetime(row["expires_at"]),
+            "invalidated_at": row["invalidated_at"],
+        }
 
     @staticmethod
     def _overlap(query_tokens: set[str], text: str) -> float:

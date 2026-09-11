@@ -10,7 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 PROTOCOL_VERSION = "0.1"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def utc_now() -> datetime:
@@ -69,6 +69,28 @@ class ProposalStatus(StrEnum):
     ACCEPTED = "accepted"
     REJECTED = "rejected"
     CONFLICT = "conflict"
+
+
+class FeedbackStatus(StrEnum):
+    ACCEPTED = "accepted"
+    PENDING = "pending"
+    SUPERSEDED = "superseded"
+    EXPIRED = "expired"
+    INVALIDATED = "invalidated"
+
+
+class MemoryUsage(StrEnum):
+    CONFIRMED = "confirmed"
+    NONE = "none"
+    UNKNOWN = "unknown"
+
+
+class OutcomeStatus(StrEnum):
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    TIMED_OUT = "timed_out"
+    UNKNOWN = "unknown"
 
 
 @dataclass(frozen=True, slots=True)
@@ -272,7 +294,21 @@ class DecisionRecord:
     procedure_ids: tuple[str, ...] = ()
     policy_version: str = "trusted-default"
     context_hash: str = ""
+    run_id: str | None = None
+    bundle_id: str | None = None
+    memory_usage: MemoryUsage = MemoryUsage.UNKNOWN
+    idempotency_key: str | None = None
+    corrects_id: str | None = None
+    feedback_status: FeedbackStatus = FeedbackStatus.ACCEPTED
     created_at: datetime = field(default_factory=utc_now)
+
+    def __post_init__(self) -> None:
+        if not self.action.strip() or not self.policy_version.strip():
+            raise ValueError("decision action and policy_version are required")
+        if self.memory_usage == MemoryUsage.CONFIRMED and not self.memory_ids:
+            raise ValueError("confirmed memory usage requires memory_ids")
+        if self.memory_usage == MemoryUsage.NONE and self.memory_ids:
+            raise ValueError("memory_usage none cannot include memory_ids")
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,11 +316,73 @@ class OutcomeEvent:
     scope: MemoryScope
     decision_id: str
     outcome: str
-    success: bool
+    success: bool | None
     id: str = field(default_factory=lambda: str(uuid4()))
     score: float | None = None
     metrics: Mapping[str, float] = field(default_factory=dict)
+    run_id: str | None = None
+    termination_reason: str | None = None
+    outcome_status: OutcomeStatus | None = None
+    idempotency_key: str | None = None
+    corrects_id: str | None = None
+    feedback_status: FeedbackStatus = FeedbackStatus.ACCEPTED
+    expires_at: datetime | None = None
     occurred_at: datetime = field(default_factory=utc_now)
+
+    def __post_init__(self) -> None:
+        if not self.decision_id.strip() or not self.outcome.strip():
+            raise ValueError("outcome decision_id and outcome are required")
+        if self.score is not None and not 0.0 <= self.score <= 1.0:
+            raise ValueError("outcome score must be between 0 and 1")
+        if self.outcome_status is None:
+            inferred = (
+                OutcomeStatus.UNKNOWN
+                if self.success is None
+                else OutcomeStatus.SUCCEEDED
+                if self.success
+                else OutcomeStatus.FAILED
+            )
+            object.__setattr__(self, "outcome_status", inferred)
+        if self.outcome_status == OutcomeStatus.SUCCEEDED and self.success is not True:
+            raise ValueError("succeeded outcome requires success=True")
+        if self.outcome_status == OutcomeStatus.FAILED and self.success is not False:
+            raise ValueError("failed outcome requires success=False")
+        if self.outcome_status in {
+            OutcomeStatus.CANCELLED,
+            OutcomeStatus.TIMED_OUT,
+            OutcomeStatus.UNKNOWN,
+        } and self.success is not None:
+            raise ValueError("cancelled, timed_out, and unknown outcomes require success=None")
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationRecord:
+    scope: MemoryScope
+    outcome_id: str
+    evaluator_id: str
+    evaluator_version: str
+    rubric_id: str
+    rubric_version: str
+    metrics: Mapping[str, float]
+    evidence_digest: str
+    id: str = field(default_factory=lambda: str(uuid4()))
+    idempotency_key: str | None = None
+    corrects_id: str | None = None
+    feedback_status: FeedbackStatus = FeedbackStatus.ACCEPTED
+    expires_at: datetime | None = None
+    created_at: datetime = field(default_factory=utc_now)
+
+    def __post_init__(self) -> None:
+        required = (
+            self.outcome_id,
+            self.evaluator_id,
+            self.evaluator_version,
+            self.rubric_id,
+            self.rubric_version,
+            self.evidence_digest,
+        )
+        if not all(value.strip() for value in required):
+            raise ValueError("evaluation provenance and outcome reference are required")
 
 
 @dataclass(frozen=True, slots=True)
@@ -295,7 +393,36 @@ class RewardSignal:
     formula_version: str
     id: str = field(default_factory=lambda: str(uuid4()))
     components: Mapping[str, float] = field(default_factory=dict)
+    evaluation_id: str | None = None
+    reward_definition_id: str = "legacy"
+    idempotency_key: str | None = None
+    corrects_id: str | None = None
+    feedback_status: FeedbackStatus = FeedbackStatus.ACCEPTED
+    expires_at: datetime | None = None
     created_at: datetime = field(default_factory=utc_now)
+
+    def __post_init__(self) -> None:
+        if not self.outcome_id.strip() or not self.formula_version.strip():
+            raise ValueError("reward outcome_id and formula_version are required")
+        if not self.reward_definition_id.strip():
+            raise ValueError("reward_definition_id is required")
+
+
+@dataclass(frozen=True, slots=True)
+class FeedbackReceipt:
+    record_id: str
+    record_type: str
+    status: FeedbackStatus
+    parent_id: str | None = None
+    idempotency_key: str | None = None
+    corrects_id: str | None = None
+    expires_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FeedbackPage:
+    items: tuple[FeedbackReceipt, ...]
+    next_cursor: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -348,6 +475,10 @@ class MemoryQuery:
         MemoryChannel.EPISODIC,
         MemoryChannel.PROCEDURAL,
     )
+    request_id: str = field(default_factory=lambda: str(uuid4()))
+    run_id: str | None = None
+    policy_version: str = "state-first-rrf-v1"
+    trace_enabled: bool = True
 
     def __post_init__(self) -> None:
         if not 1 <= self.limit <= 100:
@@ -416,6 +547,31 @@ class MemoryBundle:
     token_estimate: int
     retrieval_metadata: Mapping[str, Any]
     capability_snapshot: MemoryCapabilities
+    bundle_id: str = field(default_factory=lambda: str(uuid4()))
+    request_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RetrievalTrace:
+    scope: MemoryScope
+    request_id: str
+    bundle_id: str
+    returned_memory_ids: tuple[str, ...]
+    returned_versions: Mapping[str, int]
+    policy_version: str
+    token_budget: int
+    token_estimate: int
+    candidate_count: int
+    selected_count: int
+    truncated: bool
+    run_id: str | None = None
+    idempotency_key: str | None = None
+    feedback_status: FeedbackStatus = FeedbackStatus.ACCEPTED
+    created_at: datetime = field(default_factory=utc_now)
+
+    @property
+    def id(self) -> str:
+        return self.bundle_id
 
 
 @dataclass(frozen=True, slots=True)

@@ -26,6 +26,15 @@ class MemoryClient(Protocol):
     async def search_blocks(self, text: str, **options: Any) -> dict[str, Any]: ...
     async def forget_block(self, block_id: str, **options: Any) -> dict[str, Any]: ...
     async def capabilities(self) -> dict[str, Any]: ...
+    async def record_decision(self, action: str, **options: Any) -> dict[str, Any]: ...
+    async def record_outcome(
+        self, decision_id: str, outcome: str, success: bool, **options: Any
+    ) -> dict[str, Any]: ...
+    async def record_evaluation(self, outcome_id: str, **evaluation: Any) -> dict[str, Any]: ...
+    async def record_reward(
+        self, outcome_id: str, value: float, formula_version: str, **options: Any
+    ) -> dict[str, Any]: ...
+    async def feedback_status(self, record_id: str, record_type: str) -> dict[str, Any]: ...
 
 
 class _Operations:
@@ -67,6 +76,56 @@ class _Operations:
 
     async def get_state(self) -> dict[str, Any]:
         return await self._call("memory_get_state", {})
+
+    async def record_decision(self, action: str, **options: Any) -> dict[str, Any]:
+        return await self._call("memory_record_decision", {"action": action, **options})
+
+    async def record_outcome(
+        self,
+        decision_id: str,
+        outcome: str,
+        success: bool,
+        **options: Any,
+    ) -> dict[str, Any]:
+        return await self._call(
+            "memory_record_outcome",
+            {
+                "decision_id": decision_id,
+                "outcome": outcome,
+                "success": success,
+                **options,
+            },
+        )
+
+    async def record_evaluation(
+        self, outcome_id: str, **evaluation: Any
+    ) -> dict[str, Any]:
+        return await self._call(
+            "memory_record_evaluation", {"outcome_id": outcome_id, **evaluation}
+        )
+
+    async def record_reward(
+        self,
+        outcome_id: str,
+        value: float,
+        formula_version: str,
+        **options: Any,
+    ) -> dict[str, Any]:
+        return await self._call(
+            "memory_record_reward",
+            {
+                "outcome_id": outcome_id,
+                "value": value,
+                "formula_version": formula_version,
+                **options,
+            },
+        )
+
+    async def feedback_status(self, record_id: str, record_type: str) -> dict[str, Any]:
+        return await self._call(
+            "memory_feedback_status",
+            {"record_id": record_id, "record_type": record_type},
+        )
 
     async def propose(
         self,

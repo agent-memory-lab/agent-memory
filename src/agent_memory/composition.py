@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Collection
 from pathlib import Path
 
 from .domain import MemoryCapabilities
@@ -21,6 +22,7 @@ def build_local_kernel(
     policy: MemoryPolicy | None = None,
     reranker: Reranker | None = None,
     embedding_provider: EmbeddingProvider | None = None,
+    trusted_evaluator_ids: Collection[str] | None = None,
 ) -> MemoryKernel:
     base_reranker = reranker or ReciprocalRankFusionReranker()
     return MemoryKernel(
@@ -33,6 +35,7 @@ def build_local_kernel(
             else base_reranker
         ),
         provider_name="sqlite-local",
+        trusted_evaluator_ids=trusted_evaluator_ids,
         capabilities=MemoryCapabilities(
             automatic_extraction=extractor is not None,
             memory_blocks=True,

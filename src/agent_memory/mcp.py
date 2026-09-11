@@ -6,6 +6,8 @@ from typing import Any
 
 from .domain import (
     ArtifactStatus,
+    DecisionRecord,
+    EvaluationRecord,
     ForgetMode,
     ForgetRequest,
     MemoryBlock,
@@ -14,6 +16,10 @@ from .domain import (
     MemoryProposal,
     MemoryQuery,
     MemoryScope,
+    MemoryUsage,
+    OutcomeEvent,
+    OutcomeStatus,
+    RewardSignal,
     ScopeLevel,
 )
 from .ports import MemoryProvider
@@ -143,15 +149,114 @@ class MCPMemoryTools:
                 (),
             ),
             self._tool(
+                "memory_record_decision",
+                "Record a host decision and confirmed memory usage. " + scope_note,
+                {
+                    "record_id": {"type": "string"},
+                    "action": {"type": "string"},
+                    "memory_ids": {"type": "array", "items": {"type": "string"}},
+                    "procedure_ids": {"type": "array", "items": {"type": "string"}},
+                    "run_id": {"type": "string"},
+                    "bundle_id": {"type": "string"},
+                    "memory_usage": {"enum": [value.value for value in MemoryUsage]},
+                    "policy_version": {"type": "string"},
+                    "context_hash": {"type": "string"},
+                    "idempotency_key": {"type": "string"},
+                    "corrects_id": {"type": "string"},
+                },
+                ("action",),
+            ),
+            self._tool(
+                "memory_record_outcome",
+                "Record an outcome linked to a host decision. " + scope_note,
+                {
+                    "record_id": {"type": "string"},
+                    "decision_id": {"type": "string"},
+                    "outcome": {"type": "string"},
+                    "success": {"type": ["boolean", "null"]},
+                    "score": {"type": "number", "minimum": 0, "maximum": 1},
+                    "metrics": {"type": "object"},
+                    "run_id": {"type": "string"},
+                    "termination_reason": {"type": "string"},
+                    "outcome_status": {"enum": [value.value for value in OutcomeStatus]},
+                    "idempotency_key": {"type": "string"},
+                    "corrects_id": {"type": "string"},
+                },
+                ("decision_id", "outcome", "success"),
+            ),
+            self._tool(
+                "memory_record_evaluation",
+                "Record a versioned host evaluation for an outcome. " + scope_note,
+                {
+                    "record_id": {"type": "string"},
+                    "outcome_id": {"type": "string"},
+                    "evaluator_id": {"type": "string"},
+                    "evaluator_version": {"type": "string"},
+                    "rubric_id": {"type": "string"},
+                    "rubric_version": {"type": "string"},
+                    "metrics": {"type": "object"},
+                    "evidence_digest": {"type": "string"},
+                    "idempotency_key": {"type": "string"},
+                    "corrects_id": {"type": "string"},
+                },
+                (
+                    "outcome_id",
+                    "evaluator_id",
+                    "evaluator_version",
+                    "rubric_id",
+                    "rubric_version",
+                    "metrics",
+                    "evidence_digest",
+                ),
+            ),
+            self._tool(
+                "memory_record_reward",
+                "Record a versioned reward derived by the host. " + scope_note,
+                {
+                    "record_id": {"type": "string"},
+                    "outcome_id": {"type": "string"},
+                    "evaluation_id": {"type": "string"},
+                    "value": {"type": "number"},
+                    "formula_version": {"type": "string"},
+                    "reward_definition_id": {"type": "string"},
+                    "components": {"type": "object"},
+                    "idempotency_key": {"type": "string"},
+                    "corrects_id": {"type": "string"},
+                },
+                ("outcome_id", "value", "formula_version"),
+            ),
+            self._tool(
+                "memory_feedback_status",
+                "Read one feedback receipt without exposing another scope. " + scope_note,
+                {
+                    "record_id": {"type": "string"},
+                    "record_type": {
+                        "enum": ["retrieval", "decision", "outcome", "evaluation", "reward"]
+                    },
+                },
+                ("record_id", "record_type"),
+            ),
+            self._tool(
                 "memory_capabilities",
                 "Return protocol, schema, provider, and capability information.",
                 {},
                 (),
             ),
         )
-        if self._provider.manifest().capabilities.memory_blocks:
-            return tools
-        return tuple(tool for tool in tools if not tool["name"].startswith("memory_block_"))
+        capabilities = self._provider.manifest().capabilities
+        enabled = list(tools)
+        if not capabilities.memory_blocks:
+            enabled = [
+                tool for tool in enabled if not tool["name"].startswith("memory_block_")
+            ]
+        if not (capabilities.decision_lineage and capabilities.outcome_feedback):
+            enabled = [
+                tool
+                for tool in enabled
+                if not tool["name"].startswith("memory_record_")
+                and tool["name"] != "memory_feedback_status"
+            ]
+        return tuple(enabled)
 
     async def call_tool(
         self,
@@ -159,6 +264,13 @@ class MCPMemoryTools:
         arguments: Mapping[str, Any],
         context: MCPRequestContext,
     ) -> dict[str, Any]:
+        if (
+            name.startswith("memory_record_") or name == "memory_feedback_status"
+        ) and not (
+            self._provider.manifest().capabilities.decision_lineage
+            and self._provider.manifest().capabilities.outcome_feedback
+        ):
+            raise MCPToolError("the selected memory provider does not support feedback records")
         if (
             name.startswith("memory_block_")
             and not self._provider.manifest().capabilities.memory_blocks
@@ -295,6 +407,106 @@ class MCPMemoryTools:
                 )
             )
             return to_jsonable(result)
+
+        if name == "memory_record_decision":
+            values: dict[str, Any] = {
+                "scope": context.scope,
+                "action": self._string(arguments, "action"),
+                "memory_ids": tuple(arguments.get("memory_ids", ())),
+                "procedure_ids": tuple(arguments.get("procedure_ids", ())),
+                "run_id": self._optional_string(arguments, "run_id"),
+                "bundle_id": self._optional_string(arguments, "bundle_id"),
+                "memory_usage": MemoryUsage(
+                    str(arguments.get("memory_usage", MemoryUsage.UNKNOWN))
+                ),
+                "policy_version": str(arguments.get("policy_version", "trusted-default")),
+                "context_hash": str(arguments.get("context_hash", "")),
+                "idempotency_key": self._optional_string(arguments, "idempotency_key"),
+                "corrects_id": self._optional_string(arguments, "corrects_id"),
+            }
+            record_id = self._optional_string(arguments, "record_id")
+            if record_id:
+                values["id"] = record_id
+            record = DecisionRecord(**values)
+            persisted_id = await self._provider.record_decision(record)
+            return {"record_id": persisted_id}
+
+        if name == "memory_record_outcome":
+            success = arguments.get("success")
+            if success is not None and not isinstance(success, bool):
+                raise MCPToolError("success must be a boolean or null")
+            values = {
+                "scope": context.scope,
+                "decision_id": self._string(arguments, "decision_id"),
+                "outcome": self._string(arguments, "outcome"),
+                "success": success,
+                "score": arguments.get("score"),
+                "metrics": self._mapping(arguments.get("metrics", {}), "metrics"),
+                "run_id": self._optional_string(arguments, "run_id"),
+                "termination_reason": self._optional_string(arguments, "termination_reason"),
+                "outcome_status": (
+                    OutcomeStatus(str(arguments["outcome_status"]))
+                    if arguments.get("outcome_status") is not None
+                    else None
+                ),
+                "idempotency_key": self._optional_string(arguments, "idempotency_key"),
+                "corrects_id": self._optional_string(arguments, "corrects_id"),
+            }
+            record_id = self._optional_string(arguments, "record_id")
+            if record_id:
+                values["id"] = record_id
+            record = OutcomeEvent(**values)
+            persisted_id = await self._provider.record_outcome(record)
+            return {"record_id": persisted_id}
+
+        if name == "memory_record_evaluation":
+            values = {
+                "scope": context.scope,
+                "outcome_id": self._string(arguments, "outcome_id"),
+                "evaluator_id": self._string(arguments, "evaluator_id"),
+                "evaluator_version": self._string(arguments, "evaluator_version"),
+                "rubric_id": self._string(arguments, "rubric_id"),
+                "rubric_version": self._string(arguments, "rubric_version"),
+                "metrics": self._mapping(arguments.get("metrics"), "metrics"),
+                "evidence_digest": self._string(arguments, "evidence_digest"),
+                "idempotency_key": self._optional_string(arguments, "idempotency_key"),
+                "corrects_id": self._optional_string(arguments, "corrects_id"),
+            }
+            record_id = self._optional_string(arguments, "record_id")
+            if record_id:
+                values["id"] = record_id
+            record = EvaluationRecord(**values)
+            persisted_id = await self._provider.record_evaluation(record)
+            return {"record_id": persisted_id}
+
+        if name == "memory_record_reward":
+            values = {
+                "scope": context.scope,
+                "outcome_id": self._string(arguments, "outcome_id"),
+                "value": float(arguments["value"]),
+                "formula_version": self._string(arguments, "formula_version"),
+                "evaluation_id": self._optional_string(arguments, "evaluation_id"),
+                "reward_definition_id": str(
+                    arguments.get("reward_definition_id", "legacy")
+                ),
+                "components": self._mapping(arguments.get("components", {}), "components"),
+                "idempotency_key": self._optional_string(arguments, "idempotency_key"),
+                "corrects_id": self._optional_string(arguments, "corrects_id"),
+            }
+            record_id = self._optional_string(arguments, "record_id")
+            if record_id:
+                values["id"] = record_id
+            record = RewardSignal(**values)
+            persisted_id = await self._provider.record_reward(record)
+            return {"record_id": persisted_id}
+
+        if name == "memory_feedback_status":
+            receipt = await self._provider.feedback_status(
+                context.scope,
+                self._string(arguments, "record_id"),
+                self._string(arguments, "record_type"),
+            )
+            return {"receipt": to_jsonable(receipt) if receipt else None}
 
         if name == "memory_capabilities":
             return to_jsonable(self._provider.manifest())

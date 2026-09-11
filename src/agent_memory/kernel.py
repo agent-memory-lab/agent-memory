@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import replace
+from collections.abc import Collection, Mapping, Sequence
+from dataclasses import asdict, replace
+from datetime import datetime, timedelta
+from inspect import isawaitable
 from json import dumps
 from typing import Any
-from uuid import NAMESPACE_URL, uuid5
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from .domain import (
     PROTOCOL_VERSION,
@@ -16,6 +18,10 @@ from .domain import (
     ClaimStatus,
     DecisionRecord,
     Episode,
+    EvaluationRecord,
+    FeedbackPage,
+    FeedbackReceipt,
+    FeedbackStatus,
     ForgetMode,
     ForgetRequest,
     ForgetResult,
@@ -30,15 +36,18 @@ from .domain import (
     MemoryProposal,
     MemoryQuery,
     MemoryScope,
+    MemoryUsage,
     OutcomeEvent,
     Procedure,
     ProposalResult,
     ProposalStatus,
     Provenance,
     ProviderManifest,
+    RetrievalTrace,
     RewardSignal,
     ScopeLevel,
     StateDelta,
+    canonical_json,
     utc_now,
 )
 from .ports import (
@@ -62,6 +71,8 @@ def _token_estimate(text: str) -> int:
 
 
 class MemoryKernel:
+    MAX_PENDING_FEEDBACK_PER_SCOPE = 1_000
+
     def __init__(
         self,
         repository: MemoryRepository,
@@ -73,12 +84,16 @@ class MemoryKernel:
         provider_version: str = "0.1.0",
         capabilities: MemoryCapabilities | None = None,
         consolidation_scheduler: ConsolidationScheduler | None = None,
+        trusted_evaluator_ids: Collection[str] | None = None,
     ) -> None:
         self._repository = repository
         self._extractor = extractor
         self._policy = policy
         self._reranker = reranker
         self._consolidation_scheduler = consolidation_scheduler
+        self._trusted_evaluator_ids = (
+            frozenset(trusted_evaluator_ids) if trusted_evaluator_ids is not None else None
+        )
         self._manifest = ProviderManifest(
             name=provider_name,
             version=provider_version,
@@ -89,6 +104,13 @@ class MemoryKernel:
 
     async def initialize(self) -> None:
         await self._repository.initialize()
+
+    async def close(self) -> None:
+        close = getattr(self._repository, "close", None)
+        if callable(close):
+            result = close()
+            if isawaitable(result):
+                await result
 
     async def ingest_event(self, event: MemoryEvent) -> IngestResult:
         drafts: Sequence[ClaimDraft] = ()
@@ -245,7 +267,8 @@ class MemoryKernel:
         relevant = tuple(
             item for item in selected if item.kind not in (MemoryKind.EPISODE, MemoryKind.PROCEDURE)
         )
-        return MemoryBundle(
+        bundle_id = str(uuid4())
+        bundle = MemoryBundle(
             current_state=tuple(selected_state),
             relevant_memories=relevant,
             episodes=episodes,
@@ -260,7 +283,39 @@ class MemoryKernel:
                 "protocol_version": PROTOCOL_VERSION,
             },
             capability_snapshot=self._manifest.capabilities,
+            bundle_id=bundle_id,
+            request_id=query.request_id,
         )
+        if query.trace_enabled:
+            versions = {claim.id: claim.version for claim in selected_state}
+            versions.update(
+                {
+                    item.id: int(item.metadata.get("version", 1))
+                    for item in selected
+                }
+            )
+            trace = RetrievalTrace(
+                scope=query.scope,
+                request_id=query.request_id,
+                bundle_id=bundle_id,
+                returned_memory_ids=tuple(
+                    [claim.id for claim in selected_state] + [item.id for item in selected]
+                ),
+                returned_versions=versions,
+                policy_version=query.policy_version,
+                token_budget=query.token_budget,
+                token_estimate=used_tokens,
+                candidate_count=len(candidates),
+                selected_count=len(selected_state) + len(selected),
+                truncated=(
+                    len(selected_state) < len(current) or len(selected) < len(candidates)
+                ),
+                run_id=query.run_id,
+                idempotency_key=query.request_id,
+            )
+            async with self._repository.unit_of_work() as uow:
+                await uow.save_retrieval_trace(trace)
+        return bundle
 
     async def propose(self, proposal: MemoryProposal) -> ProposalResult:
         claim_scope = proposal.scope.project(proposal.scope_level)
@@ -378,19 +433,203 @@ class MemoryKernel:
         return tuple(await self._repository.search_blocks(scope, text, selected_channels, limit))
 
     async def record_decision(self, decision: DecisionRecord) -> str:
-        async with self._repository.unit_of_work() as uow:
-            await uow.save_decision(decision)
-        return decision.id
+        return await self._record_feedback(decision, "decision")
 
     async def record_outcome(self, outcome: OutcomeEvent) -> str:
-        async with self._repository.unit_of_work() as uow:
-            await uow.save_outcome(outcome)
-        return outcome.id
+        return await self._record_feedback(
+            outcome,
+            "outcome",
+            parent_id=outcome.decision_id,
+            parent_type="decision",
+        )
+
+    async def record_evaluation(self, evaluation: EvaluationRecord) -> str:
+        return await self._record_feedback(
+            evaluation,
+            "evaluation",
+            parent_id=evaluation.outcome_id,
+            parent_type="outcome",
+        )
 
     async def record_reward(self, reward: RewardSignal) -> str:
+        parent_id = reward.evaluation_id or reward.outcome_id
+        parent_type = "evaluation" if reward.evaluation_id else "outcome"
+        return await self._record_feedback(
+            reward,
+            "reward",
+            parent_id=parent_id,
+            parent_type=parent_type,
+        )
+
+    async def _record_feedback(
+        self,
+        record: DecisionRecord | OutcomeEvent | EvaluationRecord | RewardSignal,
+        record_type: str,
+        *,
+        parent_id: str | None = None,
+        parent_type: str | None = None,
+    ) -> str:
+        payload = asdict(record)
+        comparable = self._feedback_comparable(payload)
+        if (
+            isinstance(record, EvaluationRecord)
+            and self._trusted_evaluator_ids is not None
+            and record.evaluator_id not in self._trusted_evaluator_ids
+        ):
+            raise ValueError("evaluation source is not authorized by the host")
         async with self._repository.unit_of_work() as uow:
-            await uow.save_reward(reward)
-        return reward.id
+            if record_type == "decision" and isinstance(record, DecisionRecord):
+                await self._validate_decision_bundle(uow, record)
+            existing = await uow.find_feedback_record(record.id, record_type)
+            if existing is not None:
+                self._validate_feedback_identity(record, comparable, existing)
+                return str(existing["id"])
+
+            idempotency_key = getattr(record, "idempotency_key", None)
+            if idempotency_key:
+                duplicate = await uow.find_feedback_by_idempotency(
+                    record.scope, record_type, idempotency_key
+                )
+                if duplicate is not None:
+                    self._validate_feedback_identity(record, comparable, duplicate)
+                    return str(duplicate["id"])
+
+            status = FeedbackStatus.ACCEPTED
+            if parent_id and parent_type:
+                parent = await uow.find_feedback_record(parent_id, parent_type)
+                if parent is None:
+                    status = FeedbackStatus.PENDING
+                elif parent["partition_key"] != record.scope.partition_key():
+                    raise ValueError("feedback parent reference is outside the authorized scope")
+                elif parent["feedback_status"] != FeedbackStatus.ACCEPTED:
+                    status = FeedbackStatus.PENDING
+
+            if (
+                status == FeedbackStatus.PENDING
+                and await uow.pending_feedback_count(record.scope)
+                >= self.MAX_PENDING_FEEDBACK_PER_SCOPE
+            ):
+                raise ValueError("pending feedback capacity exceeded for this scope")
+
+            corrects_id = getattr(record, "corrects_id", None)
+            if corrects_id:
+                corrected = await uow.find_feedback_record(corrects_id, record_type)
+                if (
+                    corrected is None
+                    or corrected["partition_key"] != record.scope.partition_key()
+                ):
+                    raise ValueError("corrected feedback is missing or outside authorized scope")
+
+            replacements: dict[str, object] = {"feedback_status": status}
+            if status == FeedbackStatus.PENDING and hasattr(record, "expires_at"):
+                expires_at = getattr(record, "expires_at", None)
+                replacements["expires_at"] = expires_at or (utc_now() + timedelta(hours=24))
+            stored = replace(record, **replacements)
+            if record_type == "decision":
+                await uow.save_decision(stored)
+            elif record_type == "outcome":
+                await uow.save_outcome(stored)
+            elif record_type == "evaluation":
+                await uow.save_evaluation(stored)
+            else:
+                await uow.save_reward(stored)
+
+            if corrects_id:
+                await uow.supersede_feedback(record.scope, corrects_id)
+            if status == FeedbackStatus.ACCEPTED:
+                frontier = [record.id]
+                while frontier:
+                    frontier.extend(
+                        await uow.activate_pending_children(record.scope, frontier.pop())
+                    )
+        return record.id
+
+    async def feedback_status(
+        self, scope: MemoryScope, record_id: str, record_type: str
+    ) -> FeedbackReceipt | None:
+        if record_type not in {"retrieval", "decision", "outcome", "evaluation", "reward"}:
+            raise ValueError("unsupported feedback record_type")
+        async with self._repository.unit_of_work() as uow:
+            record = await uow.find_feedback_record(record_id, record_type)
+            if record is None or record["partition_key"] != scope.partition_key():
+                return None
+        return self._feedback_receipt(record)
+
+    async def feedback_history(
+        self,
+        scope: MemoryScope,
+        record_type: str,
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> FeedbackPage:
+        if record_type not in {"retrieval", "decision", "outcome", "evaluation", "reward"}:
+            raise ValueError("unsupported feedback record_type")
+        if not 1 <= limit <= 100:
+            raise ValueError("feedback page limit must be between 1 and 100")
+        rows = await self._repository.list_feedback(scope, record_type, limit + 1, cursor)
+        page_rows = rows[:limit]
+        items = tuple(self._feedback_receipt(row) for row in page_rows)
+        next_cursor = items[-1].record_id if len(rows) > limit and items else None
+        return FeedbackPage(items=items, next_cursor=next_cursor)
+
+    @staticmethod
+    def _feedback_receipt(record: Mapping[str, object]) -> FeedbackReceipt:
+        return FeedbackReceipt(
+            record_id=str(record["id"]),
+            record_type=str(record["record_type"]),
+            status=FeedbackStatus(str(record["feedback_status"])),
+            parent_id=str(record["parent_id"]) if record["parent_id"] else None,
+            idempotency_key=(
+                str(record["idempotency_key"]) if record["idempotency_key"] else None
+            ),
+            corrects_id=str(record["corrects_id"]) if record["corrects_id"] else None,
+            expires_at=record["expires_at"] if isinstance(record["expires_at"], datetime) else None,
+        )
+
+    @staticmethod
+    async def _validate_decision_bundle(
+        uow: MemoryUnitOfWork, decision: DecisionRecord
+    ) -> None:
+        if decision.bundle_id is None:
+            return
+        trace = await uow.find_feedback_record(decision.bundle_id, "retrieval")
+        if trace is None or trace["partition_key"] != decision.scope.partition_key():
+            raise ValueError("retrieval bundle is missing or outside the authorized scope")
+        payload = trace.get("payload")
+        if not isinstance(payload, dict):
+            raise RuntimeError("stored retrieval trace payload is invalid")
+        returned = set(map(str, payload.get("returned_memory_ids", ())))
+        used = set(decision.memory_ids) | set(decision.procedure_ids)
+        if decision.memory_usage == MemoryUsage.CONFIRMED and not used <= returned:
+            raise ValueError("confirmed memory references are not present in the bundle")
+
+    @staticmethod
+    def _validate_feedback_identity(
+        record: DecisionRecord | OutcomeEvent | EvaluationRecord | RewardSignal,
+        comparable: dict[str, Any],
+        existing: Mapping[str, object],
+    ) -> None:
+        if existing["partition_key"] != record.scope.partition_key():
+            raise ValueError("feedback id is already used outside the authorized scope")
+        stored_payload = existing.get("payload")
+        if not isinstance(stored_payload, dict):
+            raise RuntimeError("stored feedback payload is invalid")
+        stored_comparable = MemoryKernel._feedback_comparable(stored_payload)
+        if canonical_json(stored_comparable) != canonical_json(comparable):
+            raise ValueError("feedback idempotency conflict: payload differs")
+
+    @staticmethod
+    def _feedback_comparable(payload: Mapping[str, object]) -> dict[str, object]:
+        comparable = dict(payload)
+        for generated in (
+            "id",
+            "created_at",
+            "occurred_at",
+            "feedback_status",
+            "expires_at",
+        ):
+            comparable.pop(generated, None)
+        return comparable
 
     async def forget(self, request: ForgetRequest) -> ForgetResult:
         return await self._repository.forget(request)

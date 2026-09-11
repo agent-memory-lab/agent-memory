@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from importlib.metadata import entry_points
 from pathlib import Path
@@ -32,6 +32,7 @@ def build_sqlite_plugin(
     policy: MemoryPolicy | None = None,
     reranker: Reranker | None = None,
     embedding_provider: EmbeddingProvider | None = None,
+    trusted_evaluator_ids: Collection[str] | None = None,
     **_: Any,
 ) -> MemoryProvider:
     return build_local_kernel(
@@ -40,6 +41,7 @@ def build_sqlite_plugin(
         policy=policy,
         reranker=reranker,
         embedding_provider=embedding_provider,
+        trusted_evaluator_ids=trusted_evaluator_ids,
     )
 
 

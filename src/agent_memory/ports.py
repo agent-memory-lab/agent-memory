@@ -9,6 +9,9 @@ from .domain import (
     ClaimDraft,
     DecisionRecord,
     Episode,
+    EvaluationRecord,
+    FeedbackPage,
+    FeedbackReceipt,
     ForgetMode,
     ForgetRequest,
     ForgetResult,
@@ -25,6 +28,7 @@ from .domain import (
     Procedure,
     ProposalResult,
     ProviderManifest,
+    RetrievalTrace,
     RewardSignal,
     StateDelta,
 )
@@ -50,6 +54,22 @@ class MemoryUnitOfWork(Protocol):
 
     async def find_proposal_result(self, proposal_id: str) -> ProposalResult | None: ...
 
+    async def find_feedback_record(
+        self, record_id: str, record_type: str
+    ) -> Mapping[str, object] | None: ...
+
+    async def find_feedback_by_idempotency(
+        self, scope: MemoryScope, record_type: str, idempotency_key: str
+    ) -> Mapping[str, object] | None: ...
+
+    async def activate_pending_children(
+        self, scope: MemoryScope, parent_id: str
+    ) -> Sequence[str]: ...
+
+    async def supersede_feedback(self, scope: MemoryScope, record_id: str) -> None: ...
+
+    async def pending_feedback_count(self, scope: MemoryScope) -> int: ...
+
     async def append_event(self, event: MemoryEvent) -> None: ...
 
     async def find_current_claim(self, scope: MemoryScope, key: str) -> Claim | None: ...
@@ -72,7 +92,11 @@ class MemoryUnitOfWork(Protocol):
 
     async def save_outcome(self, outcome: OutcomeEvent) -> None: ...
 
+    async def save_evaluation(self, evaluation: EvaluationRecord) -> None: ...
+
     async def save_reward(self, reward: RewardSignal) -> None: ...
+
+    async def save_retrieval_trace(self, trace: RetrievalTrace) -> None: ...
 
     async def save_proposal(self, proposal: MemoryProposal, result: ProposalResult) -> None: ...
 
@@ -97,6 +121,14 @@ class MemoryRepository(Protocol):
     ) -> Sequence[MemoryBlock]: ...
 
     async def forget(self, request: ForgetRequest) -> ForgetResult: ...
+
+    async def list_feedback(
+        self,
+        scope: MemoryScope,
+        record_type: str,
+        limit: int,
+        after_id: str | None = None,
+    ) -> Sequence[Mapping[str, object]]: ...
 
 
 class ClaimExtractor(Protocol):
@@ -183,6 +215,20 @@ class MemoryProvider(Protocol):
 
     async def record_outcome(self, outcome: OutcomeEvent) -> str: ...
 
+    async def record_evaluation(self, evaluation: EvaluationRecord) -> str: ...
+
     async def record_reward(self, reward: RewardSignal) -> str: ...
+
+    async def feedback_status(
+        self, scope: MemoryScope, record_id: str, record_type: str
+    ) -> FeedbackReceipt | None: ...
+
+    async def feedback_history(
+        self,
+        scope: MemoryScope,
+        record_type: str,
+        limit: int = 50,
+        cursor: str | None = None,
+    ) -> FeedbackPage: ...
 
     def manifest(self) -> ProviderManifest: ...
