@@ -7,7 +7,7 @@ name = "agent-memory"
 version = "0.1.0"
 description = "Framework-neutral, evidence-backed memory plugin kernel for AI agents"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Agent Memory OSS" }]
 keywords = ["agent", "memory", "mcp", "llm", "sqlite", "plugin"]
@@ -15,8 +15,7 @@ classifiers = [
   "Development Status :: 3 - Alpha",
   "License :: OSI Approved :: Apache Software License",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Typing :: Typed",
 ]
 dependencies = []

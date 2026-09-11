@@ -157,6 +157,7 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--max-release-findings", type=int, default=0)
     parser.add_argument("--max-release-report-hits", type=int, default=100)
+    parser.add_argument("--max-release-archive-members", type=int, default=10_000)
     parser.add_argument(
         "--build-python",
         default=sys.executable,
@@ -273,6 +274,7 @@ async def _run_checks(
             policy=ReleaseScanPolicy(
                 max_findings=args.max_release_findings,
                 max_reported_hits=args.max_release_report_hits,
+                max_archive_members=args.max_release_archive_members,
             ),
         )
     return health_report, sensitive_report, tuple(build_results), release_report
@@ -331,7 +333,8 @@ def _print_human(
         print(
             f"release scan: {status} "
             f"({release.total_findings} findings, "
-            f"{release.scanned_files} files, {release.scanned_archives} archives)"
+            f"{release.scanned_files} files, {release.scanned_archives} archives, "
+            f"complete={release.scan_complete})"
         )
         for item in release.violations:
             print(f"  - {item}")
@@ -419,6 +422,7 @@ def _serialize(
                 "scanned_archives": release.scanned_archives,
                 "skipped_large_files": release.skipped_large_files,
                 "total_findings": release.total_findings,
+                "scan_complete": release.scan_complete,
                 "hits": [
                     {
                         "path": hit.path,

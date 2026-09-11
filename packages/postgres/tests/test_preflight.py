@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from agent_memory_postgres import preflight
 
@@ -29,6 +30,20 @@ def test_custom_build_path_replaces_default_path():
     assert args.build_paths == ["custom-package"]
 
 
+def test_release_scan_args_include_max_archive_members():
+    args = preflight._parse_args(
+        [
+            "--skip-health",
+            "--skip-sensitive-scan",
+            "--skip-build",
+            "--max-release-archive-members",
+            "17",
+        ]
+    )
+
+    assert args.max_release_archive_members == 17
+
+
 def test_json_mode_emits_one_machine_readable_document(capsys):
     status = preflight.main(
         [
@@ -46,3 +61,24 @@ def test_json_mode_emits_one_machine_readable_document(capsys):
     assert payload["sensitive_scan"] is None
     assert payload["release_scan"] is None
     assert payload["build"] == []
+
+
+def test_json_mode_includes_release_scan_complete_flag(tmp_path: Path, capsys: object):
+    marker = tmp_path / "safe.txt"
+    marker.write_text("ok", encoding="utf-8")
+
+    status = preflight.main(
+        [
+            "--skip-health",
+            "--skip-sensitive-scan",
+            "--skip-build",
+            "--release-scan-path",
+            str(tmp_path),
+            "--json",
+        ]
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert status == 0
+    assert payload["release_scan"] is not None
+    assert payload["release_scan"]["scan_complete"] is True

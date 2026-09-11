@@ -45,6 +45,7 @@ class ReleaseScanReport:
     skipped_large_files: int
     total_findings: int
     hits: tuple[ReleaseScanHit, ...]
+    scan_complete: bool
     violations: tuple[str, ...]
 
 
@@ -174,25 +175,35 @@ def _archive_members(
 ) -> Iterable[tuple[str, bytes | None]]:
     if zipfile.is_zipfile(path):
         with zipfile.ZipFile(path) as archive:
-            for index, info in enumerate(archive.infolist()):
-                if index >= policy.max_archive_members or info.is_dir():
+            infos = archive.infolist()
+            file_infos = [info for info in infos if not info.is_dir()]
+            if policy.max_archive_members > 0 and len(file_infos) > policy.max_archive_members:
+                raise ValueError(f"archive member cap reached: {path}")
+            for index, info in enumerate(file_infos):
+                if index >= policy.max_archive_members:
                     break
                 if info.file_size > policy.max_file_bytes:
                     yield info.filename, None
                     continue
-                with archive.open(info) as stream:
-                    yield (
-                        info.filename,
-                        _read_limited(
-                            stream,
-                            info.file_size,
-                            policy.max_file_bytes,
-                        ),
-                    )
+                try:
+                    with archive.open(info) as stream:
+                        yield (
+                            info.filename,
+                            _read_limited(
+                                stream,
+                                info.file_size,
+                                policy.max_file_bytes,
+                            ),
+                        )
+                except (OSError, zipfile.BadZipFile, zipfile.LargeZipFile):
+                    continue
         return
 
     with tarfile.open(path, mode="r:*") as archive:
-        for index, info in enumerate(archive):
+        members = list(archive)
+        if policy.max_archive_members > 0 and len(members) > policy.max_archive_members:
+            raise ValueError(f"archive member cap reached: {path}")
+        for index, info in enumerate(members):
             if index >= policy.max_archive_members:
                 break
             if not info.isfile():
@@ -228,6 +239,33 @@ def scan_release_paths(
     scanned_archives = 0
     skipped_large_files = 0
     total_findings = 0
+    violations: list[str] = []
+    scan_complete = True
+    if selected_policy.max_findings is not None and selected_policy.max_findings < 0:
+        violations.append(f"invalid max_findings={selected_policy.max_findings}; must be >= 0")
+    if selected_policy.max_reported_hits < 0:
+        violations.append(
+            f"invalid max_reported_hits={selected_policy.max_reported_hits}; must be >= 0"
+        )
+    if selected_policy.max_file_bytes < 0:
+        violations.append(
+            f"invalid max_file_bytes={selected_policy.max_file_bytes}; must be >= 0"
+        )
+    if selected_policy.max_archive_members < 0:
+        violations.append(
+            f"invalid max_archive_members={selected_policy.max_archive_members}; must be >= 0"
+        )
+    if violations:
+        return ReleaseScanReport(
+            roots=roots,
+            scanned_files=scanned_files,
+            scanned_archives=scanned_archives,
+            skipped_large_files=skipped_large_files,
+            total_findings=total_findings,
+            hits=tuple(hits),
+            scan_complete=False,
+            violations=tuple(violations),
+        )
 
     def record(found: Iterable[ReleaseScanHit]) -> None:
         nonlocal total_findings
@@ -239,6 +277,10 @@ def scan_release_paths(
     seen: set[Path] = set()
     for raw_root in paths:
         root = Path(raw_root).resolve()
+        if not root.exists():
+            violations.append(f"scan path missing: {raw_root}")
+            scan_complete = False
+            continue
         for target_kind, target in _iter_targets(root):
             resolved = target.resolve()
             if resolved in seen:
@@ -262,7 +304,12 @@ def scan_release_paths(
                                 )
                             )
                 except (OSError, tarfile.TarError, zipfile.BadZipFile):
+                    violations.append(f"cannot scan archive: {target}")
+                    scan_complete = False
                     continue
+                except ValueError as exc:
+                    violations.append(str(exc))
+                    scan_complete = False
                 continue
 
             try:
@@ -272,6 +319,8 @@ def scan_release_paths(
                     continue
                 payload = target.read_bytes()
             except OSError:
+                violations.append(f"cannot read file: {target}")
+                scan_complete = False
                 continue
             scanned_files += 1
             text = _decode_text(payload)
@@ -285,11 +334,11 @@ def scan_release_paths(
                     )
                 )
 
-    violations: tuple[str, ...] = ()
     if selected_policy.max_findings is not None and total_findings > selected_policy.max_findings:
-        violations = (
+        violations.append(
             f"release scan findings {total_findings} > max_findings={selected_policy.max_findings}",
         )
+
     return ReleaseScanReport(
         roots=roots,
         scanned_files=scanned_files,
@@ -297,7 +346,8 @@ def scan_release_paths(
         skipped_large_files=skipped_large_files,
         total_findings=total_findings,
         hits=tuple(hits),
-        violations=violations,
+        scan_complete=scan_complete,
+        violations=tuple(violations),
     )
 
 
@@ -309,6 +359,7 @@ def _serialize_report(report: ReleaseScanReport) -> str:
             "scanned_archives": report.scanned_archives,
             "skipped_large_files": report.skipped_large_files,
             "total_findings": report.total_findings,
+            "scan_complete": report.scan_complete,
             "hits": [
                 {
                     "path": hit.path,
@@ -335,6 +386,7 @@ def _format_report(report: ReleaseScanReport) -> str:
         f"scanned_archives: {report.scanned_archives}",
         f"skipped_large_files: {report.skipped_large_files}",
         f"total_findings: {report.total_findings}",
+        f"scan_complete: {report.scan_complete}",
     ]
     if report.violations:
         lines.append("policy violations:")
@@ -359,6 +411,7 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-findings", type=int, default=0)
     parser.add_argument("--max-reported-hits", type=int, default=100)
     parser.add_argument("--max-file-bytes", type=int, default=2 * 1024 * 1024)
+    parser.add_argument("--max-archive-members", type=int, default=10_000)
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--fail-on-violation", action="store_true")
     return parser.parse_args(argv)
@@ -372,6 +425,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             max_findings=args.max_findings,
             max_reported_hits=args.max_reported_hits,
             max_file_bytes=args.max_file_bytes,
+            max_archive_members=args.max_archive_members,
         ),
     )
     print(_serialize_report(report) if args.json else _format_report(report))

@@ -11,15 +11,11 @@ permissions:
 jobs:
   core:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.13"
           cache: pip
       - run: python -m pip install -e '.[dev]'
       - run: python -m pytest -q tests
@@ -30,7 +26,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
           cache: pip
       - run: |
           python -m pip install -e '.[dev]'
@@ -51,7 +47,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
           cache: pip
       - run: python -m pip install build
       - run: |
@@ -59,3 +55,32 @@ jobs:
             python -m build "$package"
           done
 
+  postgres-live:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: memory
+          POSTGRES_PASSWORD: memory-test-password
+          POSTGRES_DB: agent_memory_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U memory -d agent_memory_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      AGENT_MEMORY_TEST_POSTGRES_DSN: >-
+        postgresql://memory:memory-test-password@localhost:5432/agent_memory_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: |
+          python -m pip install -e '.[dev]'
+          python -m pip install -e packages/postgres
+      - run: python -m pytest -q packages/postgres/tests/test_live_contract.py
