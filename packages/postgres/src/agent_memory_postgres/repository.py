@@ -4,6 +4,7 @@ import json
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime
+from hashlib import sha256
 from pathlib import Path
 from types import TracebackType
 from typing import Any
@@ -17,6 +18,8 @@ from agent_memory.domain import (
     ClaimStatus,
     DecisionRecord,
     Episode,
+    EvaluationRecord,
+    FeedbackStatus,
     ForgetMode,
     ForgetRequest,
     ForgetResult,
@@ -33,6 +36,7 @@ from agent_memory.domain import (
     ProposalResult,
     ProposalStatus,
     Provenance,
+    RetrievalTrace,
     RewardSignal,
     StateDelta,
     utc_now,
@@ -104,15 +108,124 @@ class PostgresMemoryUnitOfWork:
     async def find_event_by_idempotency(
         self, scope: MemoryScope, idempotency_key: str
     ) -> MemoryEvent | None:
+        partition_key = scope.partition_key()
+        await self._lock_idempotency("event", partition_key, idempotency_key)
         cursor = await self.connection.execute(
             """
             SELECT * FROM agent_memory_events
             WHERE partition_key = %s AND idempotency_key = %s
             """,
-            (scope.partition_key(), idempotency_key),
+            (partition_key, idempotency_key),
         )
         row = await cursor.fetchone()
         return self._repository._event_from_row(row) if row else None
+
+    async def find_feedback_record(
+        self, record_id: str, record_type: str
+    ) -> dict[str, object] | None:
+        await self._expire_pending_feedback()
+        cursor = await self.connection.execute(
+            """
+            SELECT * FROM agent_memory_evolution_records
+            WHERE id = %s AND record_type = %s
+            """,
+            (record_id, record_type),
+        )
+        row = await cursor.fetchone()
+        return self._repository._feedback_from_row(row) if row else None
+
+    async def find_feedback_by_idempotency(
+        self, scope: MemoryScope, record_type: str, idempotency_key: str
+    ) -> dict[str, object] | None:
+        partition_key = scope.partition_key()
+        await self._lock_idempotency(record_type, partition_key, idempotency_key)
+        await self._expire_pending_feedback()
+        cursor = await self.connection.execute(
+            """
+            SELECT * FROM agent_memory_evolution_records
+            WHERE partition_key = %s AND record_type = %s AND idempotency_key = %s
+            """,
+            (partition_key, record_type, idempotency_key),
+        )
+        row = await cursor.fetchone()
+        return self._repository._feedback_from_row(row) if row else None
+
+    async def _lock_idempotency(
+        self, record_type: str, partition_key: str, idempotency_key: str
+    ) -> None:
+        await self.connection.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+            (f"agent-memory:{record_type}:{partition_key}:{idempotency_key}",),
+        )
+
+    async def activate_pending_children(
+        self, scope: MemoryScope, parent_id: str
+    ) -> Sequence[str]:
+        cursor = await self.connection.execute(
+            """
+            UPDATE agent_memory_evolution_records SET feedback_status = %s
+            WHERE partition_key = %s AND parent_id = %s AND feedback_status = %s
+              AND invalidated_at IS NULL
+            RETURNING id
+            """,
+            (
+                FeedbackStatus.ACCEPTED,
+                scope.partition_key(),
+                parent_id,
+                FeedbackStatus.PENDING,
+            ),
+        )
+        return tuple(row["id"] for row in await cursor.fetchall())
+
+    async def supersede_feedback(self, scope: MemoryScope, record_id: str) -> None:
+        await self.connection.execute(
+            """
+            UPDATE agent_memory_evolution_records SET feedback_status = %s
+            WHERE partition_key = %s AND id = %s AND feedback_status != %s
+            """,
+            (
+                FeedbackStatus.SUPERSEDED,
+                scope.partition_key(),
+                record_id,
+                FeedbackStatus.INVALIDATED,
+            ),
+        )
+        await self._repository._invalidate_feedback(
+            self.connection,
+            scope.partition_key(),
+            {record_id},
+            erase=False,
+            all_in_scope=False,
+        )
+        await self.connection.execute(
+            """
+            UPDATE agent_memory_evolution_records
+            SET feedback_status = %s, invalidated_at = NULL
+            WHERE partition_key = %s AND id = %s
+            """,
+            (FeedbackStatus.SUPERSEDED, scope.partition_key(), record_id),
+        )
+
+    async def pending_feedback_count(self, scope: MemoryScope) -> int:
+        await self._expire_pending_feedback()
+        cursor = await self.connection.execute(
+            """
+            SELECT COUNT(*) AS count FROM agent_memory_evolution_records
+            WHERE partition_key = %s AND feedback_status = %s
+            """,
+            (scope.partition_key(), FeedbackStatus.PENDING),
+        )
+        row = await cursor.fetchone()
+        return int(row["count"] if row else 0)
+
+    async def _expire_pending_feedback(self) -> None:
+        await self.connection.execute(
+            """
+            UPDATE agent_memory_evolution_records SET feedback_status = %s
+            WHERE feedback_status = %s AND expires_at IS NOT NULL AND expires_at <= now()
+            """,
+            (FeedbackStatus.EXPIRED, FeedbackStatus.PENDING),
+        )
 
     async def claim_ids_for_event(self, event_id: str) -> Sequence[str]:
         cursor = await self.connection.execute(
@@ -187,6 +300,8 @@ class PostgresMemoryUnitOfWork:
         )
 
     async def find_current_claim(self, scope: MemoryScope, key: str) -> Claim | None:
+        partition_key = scope.partition_key()
+        await self._lock_idempotency("claim", partition_key, key)
         cursor = await self.connection.execute(
             """
             SELECT * FROM agent_memory_claims
@@ -195,7 +310,7 @@ class PostgresMemoryUnitOfWork:
             ORDER BY version DESC LIMIT 1
             FOR UPDATE
             """,
-            (scope.partition_key(), key),
+            (partition_key, key),
         )
         row = await cursor.fetchone()
         return self._repository._claim_from_row(row) if row else None
@@ -384,9 +499,29 @@ class PostgresMemoryUnitOfWork:
             self.connection, outcome.id, outcome.scope, "outcome", outcome, outcome.occurred_at
         )
 
+    async def save_evaluation(self, evaluation: EvaluationRecord) -> None:
+        await self._repository._insert_evolution_record(
+            self.connection,
+            evaluation.id,
+            evaluation.scope,
+            "evaluation",
+            evaluation,
+            evaluation.created_at,
+        )
+
     async def save_reward(self, reward: RewardSignal) -> None:
         await self._repository._insert_evolution_record(
             self.connection, reward.id, reward.scope, "reward", reward, reward.created_at
+        )
+
+    async def save_retrieval_trace(self, trace: RetrievalTrace) -> None:
+        await self._repository._insert_evolution_record(
+            self.connection,
+            trace.id,
+            trace.scope,
+            "retrieval",
+            trace,
+            trace.created_at,
         )
 
     async def save_proposal(self, proposal: MemoryProposal, result: ProposalResult) -> None:
@@ -450,11 +585,14 @@ class PostgresMemoryRepository:
 
     async def initialize(self) -> None:
         await self.pool.open()
-        migration = self._migrations_path / "001_core.sql"
-        sql = migration.read_text(encoding="utf-8")
         async with self.pool.connection() as connection:
             async with connection.transaction():
-                await connection.execute(sql, prepare=False)
+                for migration in sorted(self._migrations_path.glob("*.sql")):
+                    if migration.name == "002_pgvector.sql":
+                        continue
+                    await connection.execute(
+                        migration.read_text(encoding="utf-8"), prepare=False
+                    )
 
     async def close(self) -> None:
         await self.pool.close()
@@ -474,6 +612,47 @@ class PostgresMemoryRepository:
                 params,
             )
             return tuple(self._claim_from_row(row) for row in await cursor.fetchall())
+
+    async def list_feedback(
+        self,
+        scope: MemoryScope,
+        record_type: str,
+        limit: int,
+        after_id: str | None = None,
+    ) -> Sequence[dict[str, object]]:
+        partition_key = scope.partition_key()
+        async with self.pool.connection() as connection:
+            cursor_values: tuple[object, ...] = ()
+            cursor_clause = ""
+            if after_id:
+                anchor_cursor = await connection.execute(
+                    """
+                    SELECT occurred_at, id FROM agent_memory_evolution_records
+                    WHERE partition_key = %s AND record_type = %s AND id = %s
+                    """,
+                    (partition_key, record_type, after_id),
+                )
+                anchor = await anchor_cursor.fetchone()
+                if anchor is None:
+                    raise ValueError("feedback pagination cursor is invalid")
+                cursor_clause = (
+                    "AND (occurred_at < %s OR (occurred_at = %s AND id < %s))"
+                )
+                cursor_values = (
+                    anchor["occurred_at"],
+                    anchor["occurred_at"],
+                    anchor["id"],
+                )
+            cursor = await connection.execute(
+                f"""
+                SELECT * FROM agent_memory_evolution_records
+                WHERE partition_key = %s AND record_type = %s {cursor_clause}
+                ORDER BY occurred_at DESC, id DESC LIMIT %s
+                """,
+                (partition_key, record_type, *cursor_values, limit),
+            )
+            rows = await cursor.fetchall()
+        return tuple(self._feedback_from_row(row) for row in rows)
 
     async def search(self, query: MemoryQuery, limit: int) -> Sequence[MemoryItem]:
         where, params = self._visible_scope_clause(query.scope)
@@ -637,6 +816,33 @@ class PostgresMemoryRepository:
                     )
                     counts[table] = (await cursor.fetchone())["count"]
 
+                impacted_memory_ids = set(request.memory_ids)
+                if request.all_in_scope:
+                    target_event_ids: set[str] = set()
+                else:
+                    cursor = await connection.execute(
+                        """
+                        SELECT id FROM agent_memory_events
+                        WHERE partition_key = %s AND id = ANY(%s)
+                        """,
+                        (request.scope.partition_key(), list(request.memory_ids)),
+                    )
+                    target_event_ids = {row["id"] for row in await cursor.fetchall()}
+                    if target_event_ids:
+                        for table in ("agent_memory_claims", "agent_memory_artifacts"):
+                            cursor = await connection.execute(
+                                f"""
+                                SELECT id FROM {table}
+                                WHERE partition_key = %s
+                                  AND provenance_json -> 'source_event_ids' ?| %s
+                                """,
+                                (request.scope.partition_key(), list(target_event_ids)),
+                            )
+                            impacted_memory_ids.update(
+                                row["id"] for row in await cursor.fetchall()
+                            )
+                impacted_memory_ids.update(target_event_ids)
+
                 changed_block_ids: set[str] = set()
                 blocks_to_drop: set[str] = set()
                 if not request.all_in_scope:
@@ -739,6 +945,13 @@ class PostgresMemoryRepository:
                     await connection.execute(
                         f"DELETE FROM agent_memory_events WHERE {where}", params
                     )
+                await self._invalidate_feedback(
+                    connection,
+                    request.scope.partition_key(),
+                    impacted_memory_ids,
+                    erase=request.mode == ForgetMode.ERASE,
+                    all_in_scope=request.all_in_scope,
+                )
                 return ForgetResult(
                     affected_events=counts["agent_memory_events"],
                     affected_claims=counts["agent_memory_claims"],
@@ -747,6 +960,98 @@ class PostgresMemoryRepository:
                         + len(changed_block_ids - set(request.memory_ids))
                     ),
                     mode=request.mode,
+                )
+
+    @staticmethod
+    async def _invalidate_feedback(
+        connection: Any,
+        partition_key: str,
+        impacted_ids: set[str],
+        *,
+        erase: bool,
+        all_in_scope: bool,
+    ) -> None:
+        cursor = await connection.execute(
+            """
+            SELECT * FROM agent_memory_evolution_records
+            WHERE partition_key = %s AND invalidated_at IS NULL
+            ORDER BY occurred_at, id
+            FOR UPDATE
+            """,
+            (partition_key,),
+        )
+        rows = await cursor.fetchall()
+        invalidated = (
+            {row["id"] for row in rows}
+            if all_in_scope
+            else {row["id"] for row in rows if row["id"] in impacted_ids}
+        )
+        changed = True
+        while changed:
+            changed = False
+            known_impacts = impacted_ids | invalidated
+            for row in rows:
+                if row["id"] in invalidated:
+                    continue
+                payload = _object(row["payload_json"])
+                references: set[str] = set()
+                for field in (
+                    "returned_memory_ids",
+                    "memory_ids",
+                    "procedure_ids",
+                    "source_event_ids",
+                ):
+                    value = payload.get(field, ())
+                    if isinstance(value, (list, tuple)):
+                        references.update(map(str, value))
+                for field in (
+                    "bundle_id",
+                    "decision_id",
+                    "outcome_id",
+                    "evaluation_id",
+                ):
+                    value = payload.get(field)
+                    if value:
+                        references.add(str(value))
+                if row["parent_id"]:
+                    references.add(str(row["parent_id"]))
+                if references & known_impacts:
+                    invalidated.add(row["id"])
+                    changed = True
+
+        for row in rows:
+            if row["id"] not in invalidated:
+                continue
+            if erase:
+                payload_json = _json(
+                    {
+                        "id": row["id"],
+                        "record_type": row["record_type"],
+                        "redacted": True,
+                        "reason": "source_erased",
+                    }
+                )
+                await connection.execute(
+                    """
+                    UPDATE agent_memory_evolution_records
+                    SET feedback_status = %s, invalidated_at = now(),
+                        payload_json = %s::jsonb, payload_hash = %s
+                    WHERE id = %s
+                    """,
+                    (
+                        FeedbackStatus.INVALIDATED,
+                        payload_json,
+                        sha256(payload_json.encode("utf-8")).hexdigest(),
+                        row["id"],
+                    ),
+                )
+            else:
+                await connection.execute(
+                    """
+                    UPDATE agent_memory_evolution_records
+                    SET feedback_status = %s, invalidated_at = now() WHERE id = %s
+                    """,
+                    (FeedbackStatus.INVALIDATED, row["id"]),
                 )
 
     async def _insert_claim(self, connection: Any, claim: Claim) -> None:
@@ -829,15 +1134,56 @@ class PostgresMemoryRepository:
         payload: Any,
         occurred_at: datetime,
     ) -> None:
+        payload_json = _json(payload)
+        payload_object = _object(payload_json)
+        parent_id = None
+        if record_type == "outcome":
+            parent_id = payload_object.get("decision_id")
+        elif record_type == "evaluation":
+            parent_id = payload_object.get("outcome_id")
+        elif record_type == "reward":
+            parent_id = payload_object.get("evaluation_id") or payload_object.get("outcome_id")
         await connection.execute(
             """
             INSERT INTO agent_memory_evolution_records (
                 id, partition_key, tenant_id, namespace, user_id, agent_id,
-                workspace_id, session_id, record_type, payload_json, occurred_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
+                workspace_id, session_id, record_type, payload_json, feedback_status,
+                parent_id, idempotency_key, payload_hash, corrects_id, expires_at, occurred_at
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb,
+                %s, %s, %s, %s, %s, %s, %s
+            )
             """,
-            (record_id, *_scope_values(scope), record_type, _json(payload), occurred_at),
+            (
+                record_id,
+                *_scope_values(scope),
+                record_type,
+                payload_json,
+                payload_object.get("feedback_status", FeedbackStatus.ACCEPTED),
+                parent_id,
+                payload_object.get("idempotency_key"),
+                sha256(payload_json.encode("utf-8")).hexdigest(),
+                payload_object.get("corrects_id"),
+                payload_object.get("expires_at"),
+                occurred_at,
+            ),
         )
+
+    @staticmethod
+    def _feedback_from_row(row: dict[str, Any]) -> dict[str, object]:
+        return {
+            "id": row["id"],
+            "partition_key": row["partition_key"],
+            "record_type": row["record_type"],
+            "payload": _object(row["payload_json"]),
+            "feedback_status": row["feedback_status"],
+            "parent_id": row["parent_id"],
+            "idempotency_key": row["idempotency_key"],
+            "payload_hash": row["payload_hash"],
+            "corrects_id": row["corrects_id"],
+            "expires_at": row["expires_at"],
+            "invalidated_at": row["invalidated_at"],
+        }
 
     @staticmethod
     async def _search_rows(
@@ -909,14 +1255,11 @@ class PostgresMemoryRepository:
         )
 
     def _claim_from_row(self, row: dict[str, Any]) -> Claim:
-        value = row["value_json"]
-        if isinstance(value, str):
-            value = json.loads(value)
         return Claim(
             id=row["id"],
             scope=self._scope_from_row(row),
             key=row["claim_key"],
-            value=value,
+            value=row["value_json"],
             text=row["text"],
             confidence=row["confidence"],
             importance=row["importance"],

@@ -21,3 +21,15 @@ def test_pgvector_is_not_required_by_the_core_migration():
 
     assert "create extension" not in core
     assert "create extension if not exists vector" in optional
+
+
+def test_feedback_migration_is_additive_and_indexed():
+    migration = Path(__file__).parents[1] / "migrations" / "003_feedback.sql"
+    sql = migration.read_text(encoding="utf-8").lower()
+
+    assert "add column if not exists feedback_status" in sql
+    assert "add column if not exists parent_id" in sql
+    assert "add column if not exists idempotency_key" in sql
+    assert "agent_memory_evolution_idempotency_idx" in sql
+    assert "agent_memory_evolution_parent_idx" in sql
+    assert "values (2)" in sql

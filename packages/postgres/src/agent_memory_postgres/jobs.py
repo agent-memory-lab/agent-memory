@@ -38,9 +38,16 @@ class ConsolidationJob:
 JobHandler = Callable[[ConsolidationJob], Awaitable[None]]
 
 
+class QueueCapacityExceeded(RuntimeError):
+    pass
+
+
 class PostgresConsolidationQueue:
-    def __init__(self, pool: Any) -> None:
+    def __init__(self, pool: Any, *, max_pending_per_scope: int = 10_000) -> None:
+        if max_pending_per_scope < 1:
+            raise ValueError("max_pending_per_scope must be positive")
         self._pool = pool
+        self._max_pending_per_scope = max_pending_per_scope
 
     async def enqueue_event(self, event: MemoryEvent, result: IngestResult) -> str:
         return await self.enqueue(
@@ -66,34 +73,57 @@ class PostgresConsolidationQueue:
         if max_attempts < 1:
             raise ValueError("max_attempts must be positive")
         job_id = str(uuid4())
+        partition_key = scope.partition_key()
         async with self._pool.connection() as connection:
-            cursor = await connection.execute(
-                """
-                INSERT INTO agent_memory_consolidation_jobs (
-                    id, job_key, partition_key, tenant_id, namespace, user_id,
-                    agent_id, workspace_id, session_id, job_type, payload_json, max_attempts
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s
+            async with connection.transaction():
+                await connection.execute(
+                    "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    (f"agent-memory:queue:{partition_key}",),
                 )
-                ON CONFLICT (job_key) DO UPDATE SET job_key = excluded.job_key
-                RETURNING id
-                """,
-                (
-                    job_id,
-                    job_key,
-                    scope.partition_key(),
-                    scope.tenant_id,
-                    scope.namespace,
-                    scope.user_id,
-                    scope.agent_id,
-                    scope.workspace_id,
-                    scope.session_id,
-                    job_type,
-                    json.dumps(to_jsonable(payload), ensure_ascii=False),
-                    max_attempts,
-                ),
-            )
-            return (await cursor.fetchone())["id"]
+                existing_cursor = await connection.execute(
+                    """SELECT id FROM agent_memory_consolidation_jobs
+                       WHERE job_key = %s""",
+                    (job_key,),
+                )
+                existing = await existing_cursor.fetchone()
+                if existing:
+                    return existing["id"]
+                count_cursor = await connection.execute(
+                    """SELECT count(*) AS count FROM agent_memory_consolidation_jobs
+                       WHERE partition_key = %s AND status IN ('pending', 'running')""",
+                    (partition_key,),
+                )
+                pending = int((await count_cursor.fetchone())["count"])
+                if pending >= self._max_pending_per_scope:
+                    raise QueueCapacityExceeded(
+                        f"consolidation queue capacity reached for scope ({pending})"
+                    )
+                cursor = await connection.execute(
+                    """
+                    INSERT INTO agent_memory_consolidation_jobs (
+                        id, job_key, partition_key, tenant_id, namespace, user_id,
+                        agent_id, workspace_id, session_id, job_type, payload_json, max_attempts
+                    ) VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s
+                    )
+                    RETURNING id
+                    """,
+                    (
+                        job_id,
+                        job_key,
+                        partition_key,
+                        scope.tenant_id,
+                        scope.namespace,
+                        scope.user_id,
+                        scope.agent_id,
+                        scope.workspace_id,
+                        scope.session_id,
+                        job_type,
+                        json.dumps(to_jsonable(payload), ensure_ascii=False),
+                        max_attempts,
+                    ),
+                )
+                return (await cursor.fetchone())["id"]
 
     async def claim(self, worker_id: str, *, lease_seconds: int = 60) -> ConsolidationJob | None:
         if lease_seconds < 5:

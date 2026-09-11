@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Collection
+
 from agent_memory import MemoryCapabilities, MemoryKernel
 from agent_memory.ports import ClaimExtractor, EmbeddingProvider, MemoryPolicy, Reranker
 from agent_memory.providers import (
@@ -22,6 +24,7 @@ def build_postgres_kernel(
     embedding_provider: EmbeddingProvider | None = None,
     min_pool_size: int = 1,
     max_pool_size: int = 10,
+    trusted_evaluator_ids: Collection[str] | None = None,
 ) -> MemoryKernel:
     base_reranker = reranker or ReciprocalRankFusionReranker()
     repository = PostgresMemoryRepository.from_dsn(
@@ -47,4 +50,5 @@ def build_postgres_kernel(
             background_consolidation=True,
         ),
         consolidation_scheduler=queue,
+        trusted_evaluator_ids=trusted_evaluator_ids,
     )

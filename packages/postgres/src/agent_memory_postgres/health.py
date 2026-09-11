@@ -54,6 +54,7 @@ class VectorIntegrityHealth:
     vector_rows: int
     orphan_vectors: int
     vectors_for_archived_blocks: int
+    available: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,44 +279,53 @@ async def collect_memory_health(
         )
         dead_job_rows = await dead_job_cursor.fetchall()
 
-        vector_total_cursor = await connection.execute(
-            f"""
-            SELECT COUNT(*) AS vector_rows
-            FROM agent_memory_vectors AS v
-            WHERE {vector_where}
-            """,
-            vector_params,
+        vector_table_cursor = await connection.execute(
+            "SELECT to_regclass('agent_memory_vectors') AS table_name"
         )
-        vector_total = await vector_total_cursor.fetchone()
+        vector_available = (await vector_table_cursor.fetchone())["table_name"] is not None
+        if vector_available:
+            vector_total_cursor = await connection.execute(
+                f"""
+                SELECT COUNT(*) AS vector_rows
+                FROM agent_memory_vectors AS v
+                WHERE {vector_where}
+                """,
+                vector_params,
+            )
+            vector_total = await vector_total_cursor.fetchone()
 
-        orphan_cursor = await connection.execute(
-            f"""
-            SELECT COUNT(*) AS orphan_vectors
-            FROM agent_memory_vectors AS v
-            LEFT JOIN agent_memory_artifacts AS a
-              ON a.id = v.memory_id
-             AND a.kind = 'block'
-             AND a.archived_at IS NULL
-            WHERE {vector_where}
-              AND a.id IS NULL
-            """,
-            vector_params,
-        )
-        orphan = await orphan_cursor.fetchone()
+            orphan_cursor = await connection.execute(
+                f"""
+                SELECT COUNT(*) AS orphan_vectors
+                FROM agent_memory_vectors AS v
+                LEFT JOIN agent_memory_artifacts AS a
+                  ON a.id = v.memory_id
+                 AND a.kind = 'block'
+                 AND a.archived_at IS NULL
+                WHERE {vector_where}
+                  AND a.id IS NULL
+                """,
+                vector_params,
+            )
+            orphan = await orphan_cursor.fetchone()
 
-        archived_vector_cursor = await connection.execute(
-            f"""
-            SELECT COUNT(*) AS vectors_for_archived_blocks
-            FROM agent_memory_vectors AS v
-            JOIN agent_memory_artifacts AS a
-              ON a.id = v.memory_id
-             AND a.kind = 'block'
-            WHERE {vector_where}
-              AND a.archived_at IS NOT NULL
-            """,
-            vector_params,
-        )
-        archived_vector = await archived_vector_cursor.fetchone()
+            archived_vector_cursor = await connection.execute(
+                f"""
+                SELECT COUNT(*) AS vectors_for_archived_blocks
+                FROM agent_memory_vectors AS v
+                JOIN agent_memory_artifacts AS a
+                  ON a.id = v.memory_id
+                 AND a.kind = 'block'
+                WHERE {vector_where}
+                  AND a.archived_at IS NOT NULL
+                """,
+                vector_params,
+            )
+            archived_vector = await archived_vector_cursor.fetchone()
+        else:
+            vector_total = {"vector_rows": 0}
+            orphan = {"orphan_vectors": 0}
+            archived_vector = {"vectors_for_archived_blocks": 0}
 
     storage = MemoryStorageHealth(
         events_active=_int(events["active_events"]),
@@ -344,6 +354,7 @@ async def collect_memory_health(
         vector_rows=_int(vector_total["vector_rows"]),
         orphan_vectors=_int(orphan["orphan_vectors"]),
         vectors_for_archived_blocks=_int(archived_vector["vectors_for_archived_blocks"]),
+        available=vector_available,
     )
 
     dead_jobs = tuple(

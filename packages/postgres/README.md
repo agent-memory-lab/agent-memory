@@ -88,6 +88,20 @@ Use `agent-memory-consolidate --once` for a single-job health check or a schedul
 command uses the same conservative block policy as the in-process example and does not require
 an embedding model.
 
+## Live contract tests
+
+The live suite refuses ordinary database names. Create an isolated database whose name contains
+`test`, then run:
+
+```bash
+export AGENT_MEMORY_TEST_POSTGRES_DSN='postgresql://memory@localhost:5432/agent_memory_test'
+python -m pytest -q packages/postgres/tests/test_live_contract.py
+```
+
+The suite applies packaged migrations and verifies feedback idempotency, restart persistence,
+pagination, and erase propagation. Never point this variable at a business database. A skipped
+live test is not PostgreSQL certification.
+
 ## Release-ready health scan for capacity governance
 
 Use `agent-memory-health` to run a release-oriented, read-only scan before deployment.

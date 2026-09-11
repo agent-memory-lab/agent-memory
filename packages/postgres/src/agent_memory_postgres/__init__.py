@@ -15,6 +15,7 @@ from .jobs import (
     ConsolidationWorker,
     JobStatus,
     PostgresConsolidationQueue,
+    QueueCapacityExceeded,
 )
 from .release_scan import (
     ReleasePattern,
@@ -43,6 +44,7 @@ __all__ = [
     "JobStatus",
     "PgVectorIndex",
     "PostgresConsolidationQueue",
+    "QueueCapacityExceeded",
     "PostgresMemoryRepository",
     "PostgresMemoryUnitOfWork",
     "ReleasePattern",
