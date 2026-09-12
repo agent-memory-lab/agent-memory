@@ -1,5 +1,6 @@
 import asyncio
 import sqlite3
+from contextlib import closing
 
 import pytest
 from agent_memory_evolution import (
@@ -17,7 +18,7 @@ from agent_memory import ArtifactStatus, MemoryScope, Procedure, Provenance
 
 def test_legacy_registry_schema_is_upgraded(tmp_path) -> None:
     path = tmp_path / "legacy.db"
-    with sqlite3.connect(path) as connection:
+    with closing(sqlite3.connect(path)) as connection:
         connection.executescript(
             """
             CREATE TABLE evolution_evaluations (
@@ -36,7 +37,7 @@ def test_legacy_registry_schema_is_upgraded(tmp_path) -> None:
             """
         )
     asyncio.run(SQLiteEvolutionRegistry(path).initialize())
-    with sqlite3.connect(path) as connection:
+    with closing(sqlite3.connect(path)) as connection:
         evaluation_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(evolution_evaluations)")
         }

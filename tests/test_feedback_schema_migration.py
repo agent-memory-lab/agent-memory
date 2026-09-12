@@ -1,5 +1,6 @@
 import asyncio
 import sqlite3
+from contextlib import closing
 
 from agent_memory import SCHEMA_VERSION
 from agent_memory.sqlite import SQLiteMemoryRepository
@@ -7,7 +8,7 @@ from agent_memory.sqlite import SQLiteMemoryRepository
 
 def test_existing_sqlite_feedback_table_upgrades_in_place(tmp_path) -> None:
     database = tmp_path / "legacy.db"
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection:
         connection.executescript(
             """
             CREATE TABLE memory_schema (
@@ -33,7 +34,7 @@ def test_existing_sqlite_feedback_table_upgrades_in_place(tmp_path) -> None:
 
     asyncio.run(SQLiteMemoryRepository(database).initialize())
 
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection:
         columns = {
             row[1] for row in connection.execute("PRAGMA table_info(evolution_records)")
         }

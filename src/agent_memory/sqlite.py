@@ -6,6 +6,7 @@ import re
 import sqlite3
 import time
 from collections.abc import Sequence
+from contextlib import contextmanager
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -562,12 +563,21 @@ class SQLiteMemoryRepository:
         connection.execute("PRAGMA foreign_keys = ON")
         return connection
 
+    @contextmanager
+    def _connection(self):
+        connection = self._connect()
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
+
     async def initialize(self) -> None:
         await asyncio.to_thread(self._initialize_sync)
 
     def _initialize_sync(self) -> None:
         self._enable_wal()
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS memory_schema (
@@ -945,7 +955,7 @@ class SQLiteMemoryRepository:
         after_id: str | None,
     ) -> Sequence[dict[str, object]]:
         partition_key = scope.partition_key()
-        with self._connect() as connection:
+        with self._connection() as connection:
             cursor_clause = ""
             params: list[object] = [partition_key, record_type]
             if after_id:
@@ -974,7 +984,7 @@ class SQLiteMemoryRepository:
 
     def _current_claims_sync(self, scope: MemoryScope) -> Sequence[Claim]:
         where, params = self._visible_scope_clause(scope)
-        with self._connect() as connection:
+        with self._connection() as connection:
             rows = connection.execute(
                 f"""
                 SELECT * FROM claims
@@ -991,7 +1001,7 @@ class SQLiteMemoryRepository:
     def _search_sync(self, query: MemoryQuery, limit: int) -> Sequence[MemoryItem]:
         where, params = self._visible_scope_clause(query.scope)
         scan_limit = min(500, max(64, limit * 4))
-        with self._connect() as connection:
+        with self._connection() as connection:
             claim_rows = connection.execute(
                 f"SELECT * FROM claims WHERE {where} "
                 "AND status = ? AND archived_at IS NULL LIMIT ?",
@@ -1097,7 +1107,7 @@ class SQLiteMemoryRepository:
 
     def _read_block_sync(self, scope: MemoryScope, block_id: str) -> MemoryBlock | None:
         where, params = self._visible_scope_clause(scope)
-        with self._connect() as connection:
+        with self._connection() as connection:
             row = connection.execute(
                 f"SELECT * FROM artifacts WHERE {where} AND id = ? AND kind = ? "
                 "AND archived_at IS NULL",
@@ -1122,7 +1132,7 @@ class SQLiteMemoryRepository:
         limit: int,
     ) -> Sequence[MemoryBlock]:
         where, params = self._visible_scope_clause(scope)
-        with self._connect() as connection:
+        with self._connection() as connection:
             rows = connection.execute(
                 f"SELECT * FROM artifacts WHERE {where} AND kind = ? AND status = ? "
                 "AND archived_at IS NULL LIMIT 500",
@@ -1145,7 +1155,7 @@ class SQLiteMemoryRepository:
             return await asyncio.to_thread(self._forget_sync, request)
 
     def _forget_sync(self, request: ForgetRequest) -> ForgetResult:
-        with self._connect() as connection:
+        with self._connection() as connection:
             if request.all_in_scope:
                 where = "partition_key = ?"
                 params: tuple[Any, ...] = (request.scope.partition_key(),)

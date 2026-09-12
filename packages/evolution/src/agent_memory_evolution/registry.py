@@ -4,6 +4,7 @@ import asyncio
 import json
 import sqlite3
 from collections.abc import Sequence
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -50,11 +51,20 @@ class SQLiteEvolutionRegistry:
         connection.row_factory = sqlite3.Row
         return connection
 
+    @contextmanager
+    def _connection(self):
+        connection = self._connect()
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
+
     async def initialize(self) -> None:
         await asyncio.to_thread(self._initialize)
 
     def _initialize(self) -> None:
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.executescript("""
                 PRAGMA journal_mode = WAL;
                 CREATE TABLE IF NOT EXISTS evolution_candidates (
@@ -152,7 +162,7 @@ class SQLiteEvolutionRegistry:
         return await asyncio.to_thread(self._register, candidate)
 
     def _register(self, candidate: EvolutionCandidate) -> str:
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute(
                 """INSERT OR IGNORE INTO evolution_candidates
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -175,7 +185,7 @@ class SQLiteEvolutionRegistry:
         return await asyncio.to_thread(self._get, candidate_id)
 
     def _get(self, candidate_id: str) -> EvolutionCandidate:
-        with self._connect() as connection:
+        with self._connection() as connection:
             row = connection.execute(
                 "SELECT * FROM evolution_candidates WHERE id = ?", (candidate_id,)
             ).fetchone()
@@ -189,7 +199,7 @@ class SQLiteEvolutionRegistry:
     def _append_evaluation(self, report: EvaluationReport) -> str:
         if report.passed is None:
             raise ValueError("policy decision must be attached before storing evaluation")
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute(
                 """INSERT INTO evolution_evaluations (
                      id, candidate_id, candidate_version, scope_partition_key,
@@ -229,7 +239,7 @@ class SQLiteEvolutionRegistry:
     def _latest_evaluation(
         self, candidate_id: str, stage: EvaluationStage
     ) -> EvaluationReport | None:
-        with self._connect() as connection:
+        with self._connection() as connection:
             row = connection.execute(
                 """SELECT * FROM evolution_evaluations
                    WHERE candidate_id = ? AND stage = ? ORDER BY created_at DESC LIMIT 1""",
@@ -320,7 +330,7 @@ class SQLiteEvolutionRegistry:
     def _promotion_by_idempotency_key(
         self, candidate_id: str, idempotency_key: str
     ) -> PromotionRecord | None:
-        with self._connect() as connection:
+        with self._connection() as connection:
             row = connection.execute(
                 """SELECT * FROM evolution_promotions
                    WHERE candidate_id = ? AND idempotency_key = ?""",
@@ -339,7 +349,7 @@ class SQLiteEvolutionRegistry:
         if not states:
             return ()
         placeholders = ",".join("?" for _ in states)
-        with self._connect() as connection:
+        with self._connection() as connection:
             rows = connection.execute(
                 f"SELECT * FROM evolution_candidates WHERE state IN ({placeholders})",
                 tuple(state.value for state in states),
@@ -352,7 +362,7 @@ class SQLiteEvolutionRegistry:
     def _set_active_pointer(self, candidate: EvolutionCandidate) -> None:
         if candidate.state != EvolutionState.ACTIVE:
             raise EvolutionConflict("active pointer requires an active candidate")
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute(
                 """INSERT INTO evolution_active_pointers VALUES (?, ?, ?, ?)
                    ON CONFLICT(scope_partition_key) DO UPDATE SET
@@ -373,7 +383,7 @@ class SQLiteEvolutionRegistry:
         await asyncio.to_thread(self._clear_active_pointer, scope, candidate_id)
 
     def _clear_active_pointer(self, scope: MemoryScope, candidate_id: str) -> None:
-        with self._connect() as connection:
+        with self._connection() as connection:
             connection.execute(
                 """DELETE FROM evolution_active_pointers
                    WHERE scope_partition_key = ? AND candidate_id = ?""",
@@ -384,7 +394,7 @@ class SQLiteEvolutionRegistry:
         return await asyncio.to_thread(self._active_candidate_id, scope)
 
     def _active_candidate_id(self, scope: MemoryScope) -> str | None:
-        with self._connect() as connection:
+        with self._connection() as connection:
             row = connection.execute(
                 """SELECT candidate_id FROM evolution_active_pointers
                    WHERE scope_partition_key = ?""",
@@ -477,7 +487,7 @@ class SQLiteEvolutionRegistry:
             connection.close()
 
     def _history(self, candidate_id: str) -> Sequence[PromotionRecord]:
-        with self._connect() as connection:
+        with self._connection() as connection:
             rows = connection.execute(
                 """SELECT * FROM evolution_promotions
                    WHERE candidate_id = ? ORDER BY created_at""",

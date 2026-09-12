@@ -1,6 +1,7 @@
 import asyncio
 import json
 import sqlite3
+from contextlib import closing
 
 import pytest
 
@@ -31,7 +32,7 @@ def test_retrieval_trace_links_confirmed_usage_without_copying_content(tmp_path)
                 bundle_id=bundle.bundle_id,
             )
 
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection:
             row = connection.execute(
                 "SELECT payload_json FROM evolution_records WHERE id = ?",
                 (bundle.bundle_id,),
@@ -76,7 +77,7 @@ def test_retrieval_tracing_can_be_disabled(tmp_path) -> None:
             bundle = await memory.provider.retrieve(
                 MemoryQuery(scope=memory.scope, text="anything", trace_enabled=False)
             )
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection:
             count = connection.execute(
                 "SELECT COUNT(*) FROM evolution_records WHERE record_type = 'retrieval'"
             ).fetchone()[0]

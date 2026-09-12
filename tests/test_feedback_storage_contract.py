@@ -1,5 +1,6 @@
 import asyncio
 import sqlite3
+from contextlib import closing
 
 import pytest
 
@@ -69,7 +70,7 @@ def test_feedback_unit_of_work_rolls_back_atomically(tmp_path) -> None:
                 await uow.save_decision(decision)
                 raise RuntimeError("force rollback")
 
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection:
             count = connection.execute(
                 "SELECT COUNT(*) FROM evolution_records WHERE id = ?", (decision.id,)
             ).fetchone()[0]
@@ -96,7 +97,7 @@ def test_multiple_sqlite_providers_share_feedback_idempotency(tmp_path) -> None:
             asyncio.to_thread(lambda: asyncio.run(write())),
         )
         assert ids[0] == ids[1]
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection:
             count = connection.execute(
                 """
                 SELECT COUNT(*) FROM evolution_records

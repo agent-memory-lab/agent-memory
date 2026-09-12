@@ -1,5 +1,6 @@
 import asyncio
 import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -14,7 +15,7 @@ from agent_memory import (
 
 
 def _statuses(database) -> dict[str, str]:
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection:
         return dict(connection.execute("SELECT id, feedback_status FROM evolution_records"))
 
 

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import sqlite3
+from contextlib import closing
 
 from agent_memory import (
     AgentMemory,
@@ -68,7 +69,7 @@ def test_erasing_source_redacts_feedback_payload_but_keeps_safe_audit(tmp_path) 
             chain = await _feedback_chain(memory, "secret")
             await memory.forget(memory_ids=(event.event_id,), erase=True)
 
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection:
             rows = connection.execute(
                 "SELECT feedback_status, payload_json FROM evolution_records"
             ).fetchall()
@@ -111,7 +112,7 @@ def test_forget_removes_event_derived_episode_and_procedure(tmp_path) -> None:
             await memory.provider.publish_procedure(procedure)
             await memory.forget(memory_ids=(event.event_id,))
 
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection:
             states = dict(connection.execute("SELECT id, status FROM artifacts"))
         assert states[episode.id] == ArtifactStatus.ARCHIVED
         assert states[procedure.id] == ArtifactStatus.ARCHIVED

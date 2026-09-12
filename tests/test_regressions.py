@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+from contextlib import closing
 
 from agent_memory import (
     ForgetMode,
@@ -212,7 +213,7 @@ def test_initialize_migrates_duplicate_active_claim_rows_and_repairs_uniqueness(
         await base.ingest_event(claim_event)
         base_scope = scope.project(ScopeLevel.USER).partition_key()
 
-        with sqlite3.connect(db_path) as connection:
+        with closing(sqlite3.connect(db_path)) as connection:
             connection.row_factory = sqlite3.Row
             connection.execute("DROP INDEX IF EXISTS claims_current_idx")
             row = connection.execute(
@@ -240,7 +241,7 @@ def test_initialize_migrates_duplicate_active_claim_rows_and_repairs_uniqueness(
         await reloaded.initialize()
         claims = await reloaded.get_state(scope)
         assert len(claims) == 1
-        with sqlite3.connect(db_path) as connection:
+        with closing(sqlite3.connect(db_path)) as connection:
             connection.row_factory = sqlite3.Row
             count = connection.execute(
                 """
