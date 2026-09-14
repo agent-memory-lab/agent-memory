@@ -12,8 +12,6 @@ Agent Memory 将 Agent 运行过程中产生的原始事件，转换成有边界
 
 > 当前状态：**v0.1 MVP**。本地 SQLite 内核、插件协议、MCP 适配器、Python SDK、LangGraph 适配器和受控自进化基础能力已经实现。当前版本尚不建议直接用于生产环境。
 
-> 最新目标设计：[Agent Memory 插件化架构设计 v4](docs/AGENT_MEMORY_PLUGIN_ARCHITECTURE_V4.md)。该文档区分当前能力与下一阶段目标，并定义 Plugin Protocol v1、自动轨迹采集、混合检索、异步巩固和评测闭环。
-
 ## 为什么需要 Agent Memory
 
 常见的 Agent 记忆方案通常从向量检索开始，也在向量检索结束：

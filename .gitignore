@@ -18,3 +18,10 @@ venv/
 *.sqlite3
 .DS_Store
 
+# Local-only architecture and internal execution plans
+docs/AGENT_MEMORY_PLUGIN_ARCHITECTURE_V4.md
+docs/EVOLUTION_DESIGN_V3_ADDENDUM.md
+docs/PLAN.md
+docs/PLAN_V4.md
+docs/TASKS.md
+docs/TASKS_V4.md
