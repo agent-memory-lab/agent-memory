@@ -5,7 +5,7 @@ from typing import Any
 from mcp.server import MCPServer
 from mcp.server.mcpserver import Context
 
-from agent_memory.mcp import MCPMemoryTools
+from agent_memory.mcp import MCPMemoryTools, MCPToolError
 from agent_memory.ports import MemoryProvider
 
 from .identity import IdentityResolver
@@ -23,7 +23,10 @@ def create_server(
 
     async def call(ctx: Context, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         identity = await identity_resolver.resolve(ctx)
-        return await tools.call_tool(name, arguments, identity)
+        try:
+            return await tools.call_tool(name, arguments, identity)
+        except MCPToolError as error:
+            raise RuntimeError(error.to_transport()) from None
 
     @server.tool()
     async def memory_ingest(

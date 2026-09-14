@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Protocol, Self
 
-from agent_memory.mcp import MCPMemoryTools, MCPRequestContext
+from agent_memory.mcp import MCPMemoryTools, MCPRequestContext, MCPToolError, decode_mcp_error
 from agent_memory.ports import MemoryProvider
 
 if TYPE_CHECKING:
@@ -12,7 +12,22 @@ if TYPE_CHECKING:
 
 
 class MemoryClientError(RuntimeError):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "memory_client_error",
+        field: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.field = field
+
+    def to_dict(self) -> dict[str, str]:
+        payload = {"code": self.code, "message": str(self)}
+        if self.field is not None:
+            payload["field"] = self.field
+        return payload
 
 
 class MemoryClient(Protocol):
@@ -235,7 +250,14 @@ class EmbeddedMemoryClient(_Operations):
         await self._provider.initialize()
 
     async def _call(self, name: str, arguments: Mapping[str, Any]) -> dict[str, Any]:
-        return await self._tools.call_tool(name, arguments, self._context)
+        try:
+            return await self._tools.call_tool(name, arguments, self._context)
+        except MCPToolError as error:
+            raise MemoryClientError(
+                str(error),
+                code=error.code,
+                field=error.field,
+            ) from error
 
 
 class MCPMemoryClient(_Operations):
@@ -307,6 +329,14 @@ class MCPMemoryClient(_Operations):
                 for block in result.content
                 if getattr(block, "text", None)
             ]
+            for message in messages:
+                payload = decode_mcp_error(message)
+                if payload is not None:
+                    raise MemoryClientError(
+                        payload["message"],
+                        code=payload["code"],
+                        field=payload.get("field"),
+                    )
             raise MemoryClientError("; ".join(messages) or f"{name} failed")
         if not isinstance(result.structured_content, dict):
             raise MemoryClientError(f"{name} returned no structured content")

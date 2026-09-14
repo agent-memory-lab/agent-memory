@@ -45,10 +45,17 @@ from .kernel import MemoryKernel
 from .mcp import MCPMemoryTools, MCPRequestContext, MCPToolError
 from .plugins import (
     INTEGRATION_GROUP,
+    PLUGIN_API_VERSION,
     PROVIDER_GROUP,
     PluginError,
+    PluginErrorCode,
+    PluginFailureMode,
+    PluginKind,
+    PluginManifest,
+    PluginManifestError,
     PluginReference,
     PluginRegistry,
+    PluginResourceLimits,
 )
 from .ports import (
     ClaimExtractor,
@@ -126,8 +133,15 @@ __all__ = [
     "MemoryLimits",
     "MetadataClaimExtractor",
     "PluginError",
+    "PluginErrorCode",
+    "PluginFailureMode",
+    "PluginKind",
+    "PluginManifest",
+    "PluginManifestError",
     "PluginReference",
     "PluginRegistry",
+    "PluginResourceLimits",
+    "PLUGIN_API_VERSION",
     "PROVIDER_GROUP",
     "INTEGRATION_GROUP",
     "Procedure",

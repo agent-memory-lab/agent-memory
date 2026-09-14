@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+import json
 from typing import Any
 
 from .domain import (
@@ -23,11 +24,71 @@ from .domain import (
     ScopeLevel,
 )
 from .ports import MemoryProvider
+from .plugins import PluginError, PluginErrorCode
 from .serialization import to_jsonable
+
+MCP_ERROR_PREFIX = "agent-memory-error:"
 
 
 class MCPToolError(ValueError):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "invalid_request",
+        field: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.field = field
+
+    @classmethod
+    def from_plugin_error(cls, error: PluginError) -> MCPToolError:
+        message = str(error)
+        if error.code is PluginErrorCode.PLUGIN_LOAD_FAILED:
+            message = "memory plugin operation failed"
+        return cls(message, code=error.code.value, field=error.field)
+
+    def to_dict(self) -> dict[str, str]:
+        payload = {"code": self.code, "message": str(self)}
+        if self.field is not None:
+            payload["field"] = self.field
+        return payload
+
+    def to_transport(self) -> str:
+        return MCP_ERROR_PREFIX + json.dumps(
+            {"error": self.to_dict()},
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+
+
+def decode_mcp_error(value: str) -> dict[str, str] | None:
+    marker = value.find(MCP_ERROR_PREFIX)
+    if marker < 0:
+        return None
+    encoded = value[marker + len(MCP_ERROR_PREFIX) :]
+    try:
+        decoded, _ = json.JSONDecoder().raw_decode(encoded)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(decoded, Mapping):
+        return None
+    payload = decoded.get("error")
+    if not isinstance(payload, Mapping):
+        return None
+    code = payload.get("code")
+    message = payload.get("message")
+    field = payload.get("field")
+    if not isinstance(code, str) or not isinstance(message, str):
+        return None
+    if field is not None and not isinstance(field, str):
+        return None
+    result = {"code": code, "message": message}
+    if field is not None:
+        result["field"] = field
+    return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,6 +320,19 @@ class MCPMemoryTools:
         return tuple(enabled)
 
     async def call_tool(
+        self,
+        name: str,
+        arguments: Mapping[str, Any],
+        context: MCPRequestContext,
+    ) -> dict[str, Any]:
+        try:
+            return await self._call_tool(name, arguments, context)
+        except MCPToolError:
+            raise
+        except PluginError as error:
+            raise MCPToolError.from_plugin_error(error) from error
+
+    async def _call_tool(
         self,
         name: str,
         arguments: Mapping[str, Any],
