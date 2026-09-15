@@ -4,8 +4,12 @@ from collections.abc import Mapping
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Protocol, Self
 
+from agent_memory.capture_api import submit_capture
+from agent_memory.capture_sink import CaptureError, CaptureSink
+from agent_memory.lifecycle import LifecycleEventError
 from agent_memory.mcp import MCPMemoryTools, MCPRequestContext, MCPToolError, decode_mcp_error
 from agent_memory.ports import MemoryProvider
+from agent_memory.serialization import to_jsonable
 
 if TYPE_CHECKING:
     from mcp import Client
@@ -50,6 +54,11 @@ class MemoryClient(Protocol):
         self, outcome_id: str, value: float, formula_version: str, **options: Any
     ) -> dict[str, Any]: ...
     async def feedback_status(self, record_id: str, record_type: str) -> dict[str, Any]: ...
+
+
+class CaptureClient(Protocol):
+    async def capture(self, event: Mapping[str, Any]) -> dict[str, Any]: ...
+    async def try_capture(self, event: Mapping[str, Any]) -> dict[str, Any]: ...
 
 
 class _Operations:
@@ -241,10 +250,17 @@ class _Operations:
 class EmbeddedMemoryClient(_Operations):
     """Run the exact MCP contract in-process without a protocol hop."""
 
-    def __init__(self, provider: MemoryProvider, context: MCPRequestContext) -> None:
+    def __init__(
+        self,
+        provider: MemoryProvider,
+        context: MCPRequestContext,
+        *,
+        capture_sink: CaptureSink | None = None,
+    ) -> None:
         self._provider = provider
         self._tools = MCPMemoryTools(provider)
         self._context = context
+        self._capture_sink = capture_sink
 
     async def initialize(self) -> None:
         await self._provider.initialize()
@@ -258,6 +274,43 @@ class EmbeddedMemoryClient(_Operations):
                 code=error.code,
                 field=error.field,
             ) from error
+
+    async def capture(self, event: Mapping[str, Any]) -> dict[str, Any]:
+        """Append a host-scoped lifecycle event; disabled unless explicitly configured.
+
+        Queue receipts confirm durable admission, not completion of provider ingest.
+        Direct capture does not offer queue-backed crash recovery.
+        """
+
+        if self._capture_sink is None:
+            return {"status": "disabled"}
+        try:
+            return to_jsonable(
+                await submit_capture(
+                    event,
+                    sink=self._capture_sink,
+                    scope=self._context.scope,
+                    actor=self._context.actor,
+                )
+            )
+        except LifecycleEventError as error:
+            raise MemoryClientError(
+                str(error), code="capture_invalid_event", field=error.field
+            ) from error
+        except CaptureError as error:
+            raise MemoryClientError(str(error), code=error.code, field=error.field) from error
+        except Exception as error:
+            raise MemoryClientError(
+                "capture storage failed", code="capture_storage_failed"
+            ) from error
+
+    async def try_capture(self, event: Mapping[str, Any]) -> dict[str, Any]:
+        """Non-blocking failure policy: errors cannot interrupt the host's turn."""
+
+        try:
+            return await self.capture(event)
+        except MemoryClientError as error:
+            return {"status": "skipped", "reason": error.code}
 
 
 class MCPMemoryClient(_Operations):
@@ -341,3 +394,16 @@ class MCPMemoryClient(_Operations):
         if not isinstance(result.structured_content, dict):
             raise MemoryClientError(f"{name} returned no structured content")
         return result.structured_content
+
+    async def capture(self, event: Mapping[str, Any]) -> dict[str, Any]:
+        """Invoke an MCP Capture tool only when the server explicitly enables it."""
+
+        if not isinstance(event, Mapping):
+            raise MemoryClientError("capture event must be an object", code="capture_invalid_event")
+        return await self._call("memory_capture", {"event": dict(event)})
+
+    async def try_capture(self, event: Mapping[str, Any]) -> dict[str, Any]:
+        try:
+            return await self.capture(event)
+        except MemoryClientError as error:
+            return {"status": "skipped", "reason": error.code}

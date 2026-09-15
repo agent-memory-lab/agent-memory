@@ -5,8 +5,12 @@ from typing import Any
 from mcp.server import MCPServer
 from mcp.server.mcpserver import Context
 
+from agent_memory.capture_api import submit_capture
+from agent_memory.capture_sink import CaptureError, CaptureSink
+from agent_memory.lifecycle import LifecycleEventError
 from agent_memory.mcp import MCPMemoryTools, MCPToolError
 from agent_memory.ports import MemoryProvider
+from agent_memory.serialization import to_jsonable
 
 from .identity import IdentityResolver
 
@@ -16,6 +20,7 @@ def create_server(
     identity_resolver: IdentityResolver,
     *,
     name: str = "Agent Memory",
+    capture_sink: CaptureSink | None = None,
 ) -> MCPServer:
     """Create an MCP v2 server while retaining one core business contract."""
     server = MCPServer(name)
@@ -133,5 +138,29 @@ def create_server(
         if view != "manifest":
             raise ValueError("capability resource view must be 'manifest'")
         return await call(ctx, "memory_capabilities", {})
+
+    if capture_sink is not None:
+        @server.tool()
+        async def memory_capture(ctx: Context, event: dict[str, Any]) -> dict[str, Any]:
+            """Capture a lifecycle event under the authenticated request scope."""
+
+            identity = await identity_resolver.resolve(ctx)
+            try:
+                submission = await submit_capture(
+                    event,
+                    sink=capture_sink,
+                    scope=identity.scope,
+                    actor=identity.actor,
+                )
+                return to_jsonable(submission)
+            except (CaptureError, LifecycleEventError) as error:
+                code = error.code if isinstance(error, CaptureError) else "capture_invalid_event"
+                raise RuntimeError(
+                    MCPToolError(str(error), code=code, field=error.field).to_transport()
+                ) from None
+            except Exception:
+                raise RuntimeError(
+                    MCPToolError("capture storage failed", code="capture_storage_failed").to_transport()
+                ) from None
 
     return server
