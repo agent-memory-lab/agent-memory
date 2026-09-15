@@ -1,5 +1,22 @@
 from .adapters import AgentLifecycleContext, AgentMemoryAdapter
 from .composition import build_local_kernel
+from .capture_policy import (
+    CapturePlan,
+    CaptureArtifactStore,
+    CaptureLimits,
+    CapturePolicyError,
+    CaptureRedactor,
+    CaptureSanitizer,
+    DefaultCaptureRedactor,
+)
+from .capture_artifacts import CaptureArtifactError, FileCaptureArtifactStore
+from .capture_queue import (
+    CaptureLease,
+    CaptureQueueError,
+    CaptureQueueLimits,
+    CaptureReceipt,
+    SQLiteCaptureQueue,
+)
 from .domain import (
     PROTOCOL_VERSION,
     SCHEMA_VERSION,
@@ -42,6 +59,13 @@ from .domain import (
     StateDelta,
 )
 from .kernel import MemoryKernel
+from .lifecycle import (
+    LIFECYCLE_SCHEMA_VERSION,
+    LifecycleEvent,
+    LifecycleEventError,
+    LifecycleEventType,
+    LifecycleOrigin,
+)
 from .mcp import MCPMemoryTools, MCPRequestContext, MCPToolError
 from .plugins import (
     INTEGRATION_GROUP,
@@ -79,6 +103,30 @@ from .plugin_protocol import (
     StorageProviderPlugin,
     SystemPluginClock,
 )
+from .plugin_loader import (
+    PLUGIN_ENTRY_POINT_GROUPS,
+    LoadedPlugin,
+    PluginCandidateReference,
+    PluginLoader,
+    PluginLoadRequest,
+    installed_core_version,
+    version_satisfies,
+)
+from .plugin_testing import (
+    PluginContractError,
+    PluginContractFailure,
+    PluginContractReport,
+    assert_plugin_contract,
+    verify_plugin_contract,
+)
+from .reference_plugins import (
+    ReferenceCaptureAdapter,
+    ReferenceConsolidator,
+    ReferenceEvaluator,
+    ReferenceExtractor,
+    ReferenceRetriever,
+    ReferenceStorageProvider,
+)
 from .ports import (
     ClaimExtractor,
     ClaimGenerator,
@@ -115,12 +163,24 @@ __all__ = [
     "ClaimGenerator",
     "ClaimStatus",
     "CaptureAdapterPlugin",
+    "CaptureArtifactStore",
+    "CaptureArtifactError",
+    "CaptureLimits",
+    "CaptureLease",
+    "CapturePolicyError",
+    "CaptureQueueError",
+    "CaptureQueueLimits",
+    "CaptureReceipt",
+    "CaptureRedactor",
+    "CaptureSanitizer",
+    "CapturePlan",
     "ConsolidationRequest",
     "ConsolidationResult",
     "ConsolidationScheduler",
     "ConsolidatorPlugin",
     "CompositeClaimExtractor",
     "DecisionRecord",
+    "DefaultCaptureRedactor",
     "EvaluationRecord",
     "FeedbackStatus",
     "FeedbackReceipt",
@@ -133,11 +193,17 @@ __all__ = [
     "ExtractionResult",
     "ExtractorPlugin",
     "ForgetMode",
+    "FileCaptureArtifactStore",
     "ForgetRequest",
     "ForgetResult",
     "GraphProvider",
     "GeneratedTrajectoryClaimExtractor",
     "IngestResult",
+    "LIFECYCLE_SCHEMA_VERSION",
+    "LifecycleEvent",
+    "LifecycleEventError",
+    "LifecycleEventType",
+    "LifecycleOrigin",
     "MemoryBlock",
     "MemoryBundle",
     "MemoryCapabilities",
@@ -163,6 +229,11 @@ __all__ = [
     "MetadataClaimExtractor",
     "NeverCancelled",
     "NullPluginLogger",
+    "LoadedPlugin",
+    "PluginCandidateReference",
+    "PluginContractError",
+    "PluginContractFailure",
+    "PluginContractReport",
     "PluginCancellation",
     "PluginClock",
     "PluginContext",
@@ -172,6 +243,8 @@ __all__ = [
     "PluginHealth",
     "PluginHealthStatus",
     "PluginKind",
+    "PluginLoader",
+    "PluginLoadRequest",
     "PluginLifecycle",
     "PluginLogger",
     "PluginManifest",
@@ -180,6 +253,7 @@ __all__ = [
     "PluginRegistry",
     "PluginResourceLimits",
     "PLUGIN_API_VERSION",
+    "PLUGIN_ENTRY_POINT_GROUPS",
     "PROVIDER_GROUP",
     "INTEGRATION_GROUP",
     "Procedure",
@@ -191,11 +265,22 @@ __all__ = [
     "RewardSignal",
     "RetrievalCandidate",
     "RetrieverPlugin",
+    "ReferenceCaptureAdapter",
+    "ReferenceConsolidator",
+    "ReferenceEvaluator",
+    "ReferenceExtractor",
+    "ReferenceRetriever",
+    "ReferenceStorageProvider",
     "RetrievalTrace",
     "ScopeLevel",
+    "SQLiteCaptureQueue",
     "StateDelta",
     "StorageProviderPlugin",
     "SystemPluginClock",
     "build_local_kernel",
     "build_trajectory_extractor",
+    "assert_plugin_contract",
+    "installed_core_version",
+    "verify_plugin_contract",
+    "version_satisfies",
 ]

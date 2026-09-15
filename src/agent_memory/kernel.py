@@ -113,6 +113,14 @@ class MemoryKernel:
                 await result
 
     async def ingest_event(self, event: MemoryEvent) -> IngestResult:
+        if event.idempotency_key:
+            async with self._repository.unit_of_work() as uow:
+                stored = await uow.find_event_by_idempotency(event.scope, event.idempotency_key)
+                if stored:
+                    self._check_lifecycle_duplicate(stored, event)
+                    claim_ids = tuple(await uow.claim_ids_for_event(stored.id))
+                    return IngestResult(stored.id, claim_ids, (), True, ())
+
         drafts: Sequence[ClaimDraft] = ()
         if await self._policy.should_extract(event):
             extracted = await self._extractor.extract(event)
@@ -131,6 +139,7 @@ class MemoryKernel:
             if event.idempotency_key:
                 stored = await uow.find_event_by_idempotency(event.scope, event.idempotency_key)
                 if stored:
+                    self._check_lifecycle_duplicate(stored, event)
                     claim_ids = tuple(await uow.claim_ids_for_event(stored.id))
                     return IngestResult(stored.id, claim_ids, (), True, ())
 
@@ -157,6 +166,23 @@ class MemoryKernel:
         if self._consolidation_scheduler:
             await self._consolidation_scheduler.enqueue_event(event, result)
         return result
+
+    @staticmethod
+    def _check_lifecycle_duplicate(stored: MemoryEvent, incoming: MemoryEvent) -> None:
+        stored_lifecycle = stored.metadata.get("lifecycle")
+        incoming_lifecycle = incoming.metadata.get("lifecycle")
+        stored_hash = (
+            stored_lifecycle.get("content_hash")
+            if isinstance(stored_lifecycle, Mapping)
+            else None
+        )
+        incoming_hash = (
+            incoming_lifecycle.get("content_hash")
+            if isinstance(incoming_lifecycle, Mapping)
+            else None
+        )
+        if (stored_hash is not None or incoming_hash is not None) and stored_hash != incoming_hash:
+            raise ValueError("lifecycle event ID reused with different content")
 
     async def _apply_claim(
         self,
