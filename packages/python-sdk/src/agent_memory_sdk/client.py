@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
+import math
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Protocol, Self
 
@@ -32,6 +34,21 @@ class MemoryClientError(RuntimeError):
         if self.field is not None:
             payload["field"] = self.field
         return payload
+
+
+def _capture_deadline(value: float) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or not 0 < value <= 30
+    ):
+        raise MemoryClientError(
+            "capture_timeout_seconds must be between 0 and 30",
+            code="capture_configuration",
+            field="capture_timeout_seconds",
+        )
+    return float(value)
 
 
 class MemoryClient(Protocol):
@@ -256,11 +273,13 @@ class EmbeddedMemoryClient(_Operations):
         context: MCPRequestContext,
         *,
         capture_sink: CaptureSink | None = None,
+        capture_timeout_seconds: float = 0.25,
     ) -> None:
         self._provider = provider
         self._tools = MCPMemoryTools(provider)
         self._context = context
         self._capture_sink = capture_sink
+        self._capture_timeout_seconds = _capture_deadline(capture_timeout_seconds)
 
     async def initialize(self) -> None:
         await self._provider.initialize()
@@ -286,13 +305,18 @@ class EmbeddedMemoryClient(_Operations):
             return {"status": "disabled"}
         try:
             return to_jsonable(
-                await submit_capture(
-                    event,
-                    sink=self._capture_sink,
-                    scope=self._context.scope,
-                    actor=self._context.actor,
+                await asyncio.wait_for(
+                    submit_capture(
+                        event,
+                        sink=self._capture_sink,
+                        scope=self._context.scope,
+                        actor=self._context.actor,
+                    ),
+                    timeout=self._capture_timeout_seconds,
                 )
             )
+        except TimeoutError as error:
+            raise MemoryClientError("capture deadline exceeded", code="capture_timeout") from error
         except LifecycleEventError as error:
             raise MemoryClientError(
                 str(error), code="capture_invalid_event", field=error.field
@@ -305,7 +329,7 @@ class EmbeddedMemoryClient(_Operations):
             ) from error
 
     async def try_capture(self, event: Mapping[str, Any]) -> dict[str, Any]:
-        """Non-blocking failure policy: errors cannot interrupt the host's turn."""
+        """Fail open on async errors and deadlines; sinks must bound synchronous I/O."""
 
         try:
             return await self.capture(event)
@@ -316,7 +340,7 @@ class EmbeddedMemoryClient(_Operations):
 class MCPMemoryClient(_Operations):
     """High-level client backed by the official MCP v2 Client."""
 
-    def __init__(self, source: Any) -> None:
+    def __init__(self, source: Any, *, capture_timeout_seconds: float = 0.25) -> None:
         try:
             from mcp import Client
         except ImportError as error:
@@ -325,9 +349,16 @@ class MCPMemoryClient(_Operations):
                 "install agent-memory-sdk[mcp]"
             ) from error
         self._client: Client = Client(source)
+        self._capture_timeout_seconds = _capture_deadline(capture_timeout_seconds)
 
     @classmethod
-    def from_http(cls, url: str, *, http_client: Any | None = None) -> MCPMemoryClient:
+    def from_http(
+        cls,
+        url: str,
+        *,
+        http_client: Any | None = None,
+        capture_timeout_seconds: float = 0.25,
+    ) -> MCPMemoryClient:
         try:
             from mcp.client.streamable_http import streamable_http_client
         except ImportError as error:
@@ -336,8 +367,11 @@ class MCPMemoryClient(_Operations):
                 "install agent-memory-sdk[mcp]"
             ) from error
         if http_client is None:
-            return cls(url)
-        return cls(streamable_http_client(url, http_client=http_client))
+            return cls(url, capture_timeout_seconds=capture_timeout_seconds)
+        return cls(
+            streamable_http_client(url, http_client=http_client),
+            capture_timeout_seconds=capture_timeout_seconds,
+        )
 
     @classmethod
     def from_stdio(
@@ -346,6 +380,7 @@ class MCPMemoryClient(_Operations):
         *,
         args: list[str] | None = None,
         env: Mapping[str, str] | None = None,
+        capture_timeout_seconds: float = 0.25,
     ) -> MCPMemoryClient:
         try:
             from mcp import StdioServerParameters
@@ -359,7 +394,8 @@ class MCPMemoryClient(_Operations):
                 command=command,
                 args=args or [],
                 env=dict(env) if env is not None else None,
-            )
+            ),
+            capture_timeout_seconds=capture_timeout_seconds,
         )
 
     async def __aenter__(self) -> Self:
@@ -400,7 +436,13 @@ class MCPMemoryClient(_Operations):
 
         if not isinstance(event, Mapping):
             raise MemoryClientError("capture event must be an object", code="capture_invalid_event")
-        return await self._call("memory_capture", {"event": dict(event)})
+        try:
+            return await asyncio.wait_for(
+                self._call("memory_capture", {"event": dict(event)}),
+                timeout=self._capture_timeout_seconds,
+            )
+        except TimeoutError as error:
+            raise MemoryClientError("capture deadline exceeded", code="capture_timeout") from error
 
     async def try_capture(self, event: Mapping[str, Any]) -> dict[str, Any]:
         try:
