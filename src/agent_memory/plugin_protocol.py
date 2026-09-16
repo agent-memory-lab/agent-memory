@@ -158,10 +158,20 @@ class RetrievalCandidate:
     source_event_ids: tuple[str, ...]
     retriever: str
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    retrieval_method: str | None = None
 
     def __post_init__(self) -> None:
         if type(self.rank) is not int or self.rank < 1:
             raise PluginManifestError("retrieval candidate rank must be a positive integer")
+        method = self.retrieval_method
+        if method is not None and (
+            not isinstance(method, str)
+            or not 1 <= len(method) <= 64
+            or not method.isascii()
+            or not method[0].isalpha()
+            or any(character not in "abcdefghijklmnopqrstuvwxyz0123456789._-" for character in method)
+        ):
+            raise PluginManifestError("retrieval_method must be a lowercase ASCII identifier")
         if not self.source_event_ids or any(
             not isinstance(event_id, str) or not event_id.strip()
             for event_id in self.source_event_ids
