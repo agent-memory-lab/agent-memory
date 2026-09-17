@@ -616,6 +616,10 @@ class SQLiteMemoryRepository:
                 CREATE INDEX IF NOT EXISTS events_scope_idx
                 ON events(tenant_id, namespace, user_id, agent_id, workspace_id, session_id);
 
+                CREATE INDEX IF NOT EXISTS events_recent_scope_idx
+                ON events(partition_key, occurred_at DESC, id DESC)
+                WHERE archived_at IS NULL;
+
                 CREATE TABLE IF NOT EXISTS claims (
                     id TEXT PRIMARY KEY,
                     partition_key TEXT NOT NULL,
@@ -932,6 +936,58 @@ class SQLiteMemoryRepository:
 
     def unit_of_work(self) -> SQLiteMemoryUnitOfWork:
         return SQLiteMemoryUnitOfWork(self)
+
+    def load_recent_event_evidence(self, scope: MemoryScope, *, limit: int):
+        """Read a bounded, exact-scope window of source events for lexical ranking.
+
+        This is a recent-window source, not a full-text index. Stored scope fields
+        are returned independently so the caller can reject inconsistent rows.
+        """
+        from datetime import datetime
+
+        from .domain import MemoryChannel, MemoryItem, MemoryKind
+        from .lexical_retrieval import EvidenceItem
+        from .scoped_lexical_retrieval import ScopedEvidenceItem
+
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 512:
+            raise ValueError("limit must be between 1 and 512")
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, tenant_id, namespace, user_id, agent_id, workspace_id,
+                       session_id, content, occurred_at
+                FROM events
+                WHERE partition_key = ? AND archived_at IS NULL
+                  AND length(content) BETWEEN 1 AND 2048
+                ORDER BY occurred_at DESC, id DESC
+                LIMIT ?
+                """,
+                (scope.partition_key(), limit),
+            ).fetchall()
+        return tuple(
+            ScopedEvidenceItem(
+                scope=MemoryScope(
+                    row["tenant_id"],
+                    namespace=row["namespace"],
+                    user_id=row["user_id"],
+                    agent_id=row["agent_id"],
+                    workspace_id=row["workspace_id"],
+                    session_id=row["session_id"],
+                ),
+                evidence=EvidenceItem(
+                    item=MemoryItem(
+                        row["id"],
+                        MemoryKind.EVENT,
+                        row["content"],
+                        0.5,
+                        datetime.fromisoformat(row["occurred_at"]),
+                    ),
+                    channel=MemoryChannel.EPISODIC,
+                    source_event_ids=(row["id"],),
+                ),
+            )
+            for row in rows
+        )
 
     async def current_claims(self, scope: MemoryScope) -> Sequence[Claim]:
         return await asyncio.to_thread(self._current_claims_sync, scope)
