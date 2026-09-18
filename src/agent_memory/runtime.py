@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -31,6 +32,9 @@ from .domain import (
     RewardSignal,
 )
 from .plugins import PluginRegistry
+from .plugin_loader import LoadedPlugin
+from .plugin_protocol import RetrievalCandidate
+from .plugins import PluginKind
 from .ports import ClaimExtractor, EmbeddingProvider, MemoryPolicy, MemoryProvider, Reranker
 
 
@@ -195,6 +199,45 @@ class AgentMemory:
                 token_budget=max(64, bounded_tokens),
             )
         )
+
+    async def retrieve_candidates(
+        self,
+        text: str,
+        plugin: LoadedPlugin,
+        *,
+        limit: int | None = None,
+    ) -> tuple[RetrievalCandidate, ...]:
+        """Call an explicitly loaded retriever without changing default recall."""
+        self._require_initialized()
+        if not isinstance(plugin, LoadedPlugin) or plugin.manifest.kind is not PluginKind.RETRIEVER:
+            raise ValueError("plugin must be a loaded retriever")
+        if plugin.context.scope != self.scope:
+            raise ValueError("retriever scope must match the AgentMemory scope")
+        if limit is not None and (type(limit) is not int or limit < 1):
+            raise ValueError("limit must be a positive integer")
+        limits = plugin.context.resource_limits
+        bounded_limit = min(
+            limit if limit is not None else self.limits.max_recall_items,
+            self.limits.max_recall_items,
+            limits.max_candidates,
+        )
+        query = MemoryQuery(
+            scope=self.scope,
+            text=text,
+            limit=bounded_limit,
+            token_budget=self.limits.max_context_tokens,
+        )
+        candidates = await asyncio.wait_for(
+            plugin.instance.retrieve(query, plugin.context),
+            timeout=limits.timeout_ms / 1_000,
+        )
+        if not isinstance(candidates, Sequence) or isinstance(candidates, (str, bytes)):
+            raise ValueError("retriever must return a sequence of candidates")
+        if len(candidates) > bounded_limit or any(
+            not isinstance(candidate, RetrievalCandidate) for candidate in candidates
+        ):
+            raise ValueError("retriever returned invalid or excessive candidates")
+        return tuple(candidates)
 
     async def state(self) -> tuple[Claim, ...]:
         self._require_initialized()
