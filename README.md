@@ -10,7 +10,7 @@ A lightweight, pluggable, evidence-backed memory layer for AI agents.
 
 Agent Memory turns raw agent activity into bounded, traceable context for the next decision. It separates current facts, historical episodes, reusable procedures, and experimental self-evolution so that an agent can remember without turning its prompt, process, or storage into an unbounded black box.
 
-> Status: **v0.1 MVP**. The local SQLite path, plugin contract, MCP adapter, Python SDK, LangGraph adapter, and controlled evolution primitives are implemented. The project is not yet recommended for production use.
+> Status: **v0.1 MVP**. The local SQLite path, Plugin Protocol v1, automatic capture primitives, bounded lexical/hybrid candidate plugins, MCP adapter, Python SDK, LangGraph adapter, and controlled evolution primitives are implemented. The project is not yet recommended for production use.
 
 ## Why Agent Memory
 
@@ -207,6 +207,71 @@ The local MVP enforces:
 - deterministic ordering;
 - citations back to source evidence.
 
+### Optional lexical and hybrid candidates
+
+V4 adds an opt-in candidate layer without silently changing `AgentMemory.recall()`:
+
+~~~text
+trusted scope + query
+        |
+        +--> bounded lexical source
+        +--> optional host retrievers
+        |
+        v
+scope and provenance validation
+        |
+        v
+deterministic reciprocal-rank fusion
+~~~
+
+The bundled lexical retriever scans a bounded window of recent, unarchived SQLite events. It is
+dependency-free, supports Latin and Chinese terms, uses deterministic BM25 ranking, preserves
+source event IDs, and rejects the entire batch if a source returns unlabelled or cross-scope data.
+It is intentionally a recent-event baseline, not a full-text or vector index.
+
+Hosts explicitly load and call retriever plugins. The default retrieval path remains unchanged:
+
+~~~python
+from agent_memory import (
+    AgentMemory,
+    PluginContext,
+    PluginKind,
+    PluginLoader,
+    PluginResourceLimits,
+)
+from agent_memory.retriever_plugin import register_sqlite_lexical_retriever
+from agent_memory.sqlite import SQLiteMemoryRepository
+
+database = ".agent-memory/demo.sqlite3"
+
+async with AgentMemory.local(database, scope=scope) as memory:
+    loader = PluginLoader(core_version="0.1.0")
+    register_sqlite_lexical_retriever(loader, SQLiteMemoryRepository(database))
+    loaded = await loader.load(
+        "scoped-lexical",
+        PluginKind.RETRIEVER,
+        PluginContext(
+            scope=scope,
+            resource_limits=PluginResourceLimits(
+                timeout_ms=1_000,
+                max_candidates=8,
+                max_batch_size=128,
+                max_concurrency=1,
+            ),
+            request_id="retrieval-1",
+        ),
+        required_capabilities=("lexical.search",),
+    )
+    try:
+        candidates = await memory.retrieve_candidates("migration rollback", loaded)
+    finally:
+        await loader.close()
+~~~
+
+`retrieve_candidates()` enforces the AgentMemory scope, plugin timeout, host and plugin candidate
+limits, and candidate type before returning results. Candidate plugins do not write memory, activate
+procedures, or bypass the normal bounded `MemoryBundle` path.
+
 ## Plugin Architecture
 
 <p align="center">
@@ -230,15 +295,21 @@ Agent / Host Application
           +--> future third-party provider
 ~~~
 
-Plugins are discovered lazily through Python entry points. Importing the core does not import optional databases, MCP runtimes, frameworks, or machine-learning libraries.
+Plugins are discovered lazily through Python entry points. Importing the core does not import optional databases, MCP runtimes, frameworks, or machine-learning libraries. Plugin Protocol v1 provides a versioned manifest, capability negotiation, resource limits, lifecycle health, stable errors, and rollback when initialization fails.
 
 | Entry-point group | Responsibility |
 | --- | --- |
-| agent_memory.providers | Storage and retrieval providers |
-| agent_memory.adapters | Agent-framework lifecycle adapters |
-| agent_memory.embedders | Optional embedding implementations |
-| agent_memory.rerankers | Optional reranking implementations |
-| agent_memory.evolution | Candidate generation and evaluation engines |
+| agent_memory.capture | Agent-framework lifecycle capture adapters |
+| agent_memory.extractors | Evidence-to-claim extractors |
+| agent_memory.retrievers | Lexical, semantic, temporal, or entity candidate sources |
+| agent_memory.consolidators | Episode, claim, and procedure proposal builders |
+| agent_memory.storage | Replaceable storage providers |
+| agent_memory.evaluators | Candidate and release evaluators |
+
+Every Plugin Protocol v1 implementation exposes `plugin_manifest()`, `initialize()`, `health()`,
+and `close()`. The host supplies a `PluginContext` containing the trusted scope, deadline,
+cancellation signal, configuration, and effective resource limits. Plugins return candidates or
+proposals; the host and kernel retain final validation and commit authority.
 
 Switching providers does not require changing agent logic:
 
@@ -381,6 +452,10 @@ an isolated environment before deployment.
 | Episodic memory | Implemented | Citation-preserving summaries |
 | Procedural memory | Implemented | Versioned procedures |
 | State-first hybrid retrieval | Implemented | Multi-channel RRF |
+| Deterministic lexical candidates | Implemented, opt-in | Bounded recent-event SQLite window |
+| Scope-checked retriever plugin | Implemented, opt-in | Plugin Protocol v1 with timeout and capacity limits |
+| External candidate fusion | Implemented, opt-in | Deterministic RRF; up to four additional sources |
+| Parallel retriever orchestration | Planned | Independent timeout, cancellation, and degradation trace |
 | Hard context budgets | Implemented | Items, characters, and token estimate |
 | Scoped forgetting | Implemented | Policy-controlled local deletion |
 | SQLite provider | Implemented | Default zero-config path |
@@ -508,7 +583,10 @@ These are deployment or research tracks, not hidden behavior in the lightweight 
 - live PostgreSQL integration suite;
 - signed HTTP gateway reference;
 - retention and deletion audit reports;
-- retrieval quality benchmarks;
+- lexical-only and hybrid retrieval quality benchmarks;
+- semantic, temporal, and entity retriever contracts;
+- parallel candidate execution with per-plugin timeout and degradation trace;
+- final candidate-to-MemoryBundle policy validation;
 - compatibility matrix for supported agent frameworks;
 - package publication and reproducible release workflow.
 
