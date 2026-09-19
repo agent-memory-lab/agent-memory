@@ -35,6 +35,7 @@ from .plugins import PluginRegistry
 from .plugin_loader import LoadedPlugin
 from .plugin_protocol import RetrievalCandidate
 from .plugins import PluginKind
+from .governed_recall import RecallPipeline
 from .ports import ClaimExtractor, EmbeddingProvider, MemoryPolicy, MemoryProvider, Reranker
 
 
@@ -67,7 +68,7 @@ class MemoryLimits:
 class AgentMemory:
     """Zero-config bounded facade over a lazily selected MemoryProvider."""
 
-    __slots__ = ("_provider", "scope", "limits", "_initialized")
+    __slots__ = ("_provider", "_recall_pipeline", "scope", "limits", "_initialized")
 
     def __init__(
         self,
@@ -75,8 +76,10 @@ class AgentMemory:
         scope: MemoryScope,
         *,
         limits: MemoryLimits | None = None,
+        recall_pipeline: RecallPipeline | None = None,
     ) -> None:
         self._provider = provider
+        self._recall_pipeline = recall_pipeline
         self.scope = scope
         self.limits = limits or MemoryLimits()
         self._initialized = False
@@ -93,6 +96,7 @@ class AgentMemory:
         reranker: Reranker | None = None,
         embedding_provider: EmbeddingProvider | None = None,
         trusted_evaluator_ids: Collection[str] | None = None,
+        recall_pipeline: RecallPipeline | None = None,
     ) -> AgentMemory:
         return cls(
             PluginRegistry().create_provider(
@@ -106,6 +110,7 @@ class AgentMemory:
             ),
             scope or MemoryScope(tenant_id="local", session_id="default"),
             limits=limits,
+            recall_pipeline=recall_pipeline,
         )
 
     @classmethod
@@ -115,9 +120,15 @@ class AgentMemory:
         *,
         scope: MemoryScope,
         limits: MemoryLimits | None = None,
+        recall_pipeline: RecallPipeline | None = None,
         **config: Any,
     ) -> AgentMemory:
-        return cls(PluginRegistry().create_provider(name, **config), scope, limits=limits)
+        return cls(
+            PluginRegistry().create_provider(name, **config),
+            scope,
+            limits=limits,
+            recall_pipeline=recall_pipeline,
+        )
 
     @property
     def provider(self) -> MemoryProvider:
@@ -191,13 +202,18 @@ class AgentMemory:
             token_budget or self.limits.max_context_tokens,
             self.limits.max_context_tokens,
         )
-        return await self._provider.retrieve(
-            MemoryQuery(
-                scope=self.scope,
-                text=text,
-                limit=max(1, bounded_limit),
-                token_budget=max(64, bounded_tokens),
-            )
+        query = MemoryQuery(
+            scope=self.scope,
+            text=text,
+            limit=max(1, bounded_limit),
+            token_budget=max(64, bounded_tokens),
+        )
+        if self._recall_pipeline is None:
+            return await self._provider.retrieve(query)
+        current_state = await self._provider.get_state(self.scope)
+        return await self._recall_pipeline.retrieve(
+            query,
+            tuple(current_state[: self.limits.max_state_claims]),
         )
 
     async def retrieve_candidates(
