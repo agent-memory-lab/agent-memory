@@ -10,6 +10,7 @@ from .worker_tasks import (
     WorkerLease,
     WorkerLimits,
     WorkerQueue,
+    WorkerQueueError,
     WorkerTaskHandler,
     validate_handlers,
 )
@@ -21,6 +22,7 @@ class WorkerBatchResult:
     completed: int
     failed: int
     idle: bool
+    cancelled: int = 0
 
 
 class BoundedWorker:
@@ -77,7 +79,7 @@ class BoundedWorker:
 
         semaphore = asyncio.Semaphore(self._limits.max_concurrency)
 
-        async def execute(lease: WorkerLease) -> bool:
+        async def execute(lease: WorkerLease) -> str:
             async with semaphore:
                 try:
                     handler = self._handlers[lease.task.task_type]
@@ -89,21 +91,33 @@ class BoundedWorker:
                         handler(lease.task, checkpoint),
                         timeout=self._limits.task_timeout_seconds,
                     )
-                    await self._queue.complete(lease)
-                    return True
+                    try:
+                        await self._queue.complete(lease)
+                    except WorkerQueueError as error:
+                        if error.code == "stale_lease":
+                            return "cancelled"
+                        raise
+                    return "completed"
                 except BaseException as error:
                     if isinstance(error, (KeyboardInterrupt, SystemExit)):
                         raise
-                    await self._queue.fail(lease, error)
-                    return False
+                    try:
+                        await self._queue.fail(lease, error)
+                    except WorkerQueueError as queue_error:
+                        if queue_error.code == "stale_lease":
+                            return "cancelled"
+                        raise
+                    return "failed"
 
         outcomes = await asyncio.gather(*(execute(lease) for lease in leases))
-        completed = sum(outcomes)
+        completed = outcomes.count("completed")
+        cancelled = outcomes.count("cancelled")
         return WorkerBatchResult(
             claimed=len(leases),
             completed=completed,
-            failed=len(leases) - completed,
+            failed=outcomes.count("failed"),
             idle=False,
+            cancelled=cancelled,
         )
 
     async def run_forever(

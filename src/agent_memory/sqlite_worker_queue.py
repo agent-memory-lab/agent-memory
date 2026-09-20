@@ -11,7 +11,7 @@ import sqlite3
 from typing import Any, Mapping
 from uuid import uuid4
 
-from .domain import IngestResult, MemoryEvent, MemoryScope
+from .domain import ForgetRequest, IngestResult, MemoryEvent, MemoryScope
 from .serialization import to_jsonable
 from .worker_tasks import (
     WorkerLease,
@@ -106,7 +106,7 @@ class SQLiteWorkerQueue:
             "memory.consolidate",
             {
                 "event_id": event.id,
-                "claim_ids": tuple(result.accepted_ids),
+                "claim_ids": tuple(result.claim_ids),
             },
         )
 
@@ -154,6 +154,7 @@ class SQLiteWorkerQueue:
         now = _now()
         partition_key = scope.partition_key()
         with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             existing = connection.execute(
                 "SELECT id FROM agent_memory_worker_tasks WHERE partition_key=? AND task_key=?",
                 (partition_key, task_key),
@@ -363,6 +364,10 @@ class SQLiteWorkerQueue:
         async with self._write_lock:
             return await asyncio.to_thread(self._cancel_sync, task_id, scope)
 
+    async def cancel_forget(self, request: ForgetRequest) -> int:
+        async with self._write_lock:
+            return await asyncio.to_thread(self._cancel_forget_sync, request)
+
     def _cancel_sync(self, task_id: str, scope: MemoryScope) -> bool:
         with self._connection() as connection:
             cursor = connection.execute(
@@ -381,6 +386,53 @@ class SQLiteWorkerQueue:
                 ),
             )
             return cursor.rowcount == 1
+
+    def _cancel_forget_sync(self, request: ForgetRequest) -> int:
+        requested_ids = set(request.memory_ids)
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            rows = connection.execute(
+                """
+                SELECT id, payload_json FROM agent_memory_worker_tasks
+                WHERE partition_key=? AND status IN (?, ?)
+                """,
+                (
+                    request.scope.partition_key(),
+                    WorkerTaskStatus.PENDING,
+                    WorkerTaskStatus.LEASED,
+                ),
+            ).fetchall()
+            task_ids: list[str] = []
+            for row in rows:
+                if request.all_in_scope:
+                    task_ids.append(str(row["id"]))
+                    continue
+                payload = json.loads(row["payload_json"])
+                evidence_ids = {str(payload.get("event_id", ""))}
+                evidence_ids.update(str(item) for item in payload.get("claim_ids", ()))
+                if requested_ids.intersection(evidence_ids):
+                    task_ids.append(str(row["id"]))
+            if not task_ids:
+                return 0
+            placeholders = ",".join("?" for _ in task_ids)
+            cursor = connection.execute(
+                f"""
+                UPDATE agent_memory_worker_tasks
+                SET status=?, leased_by=NULL, lease_token=NULL,
+                    lease_expires_at=NULL, updated_at=?
+                WHERE partition_key=? AND id IN ({placeholders})
+                  AND status IN (?, ?)
+                """,
+                (
+                    WorkerTaskStatus.CANCELLED,
+                    _iso(_now()),
+                    request.scope.partition_key(),
+                    *task_ids,
+                    WorkerTaskStatus.PENDING,
+                    WorkerTaskStatus.LEASED,
+                ),
+            )
+            return int(cursor.rowcount)
 
     async def stats(self) -> WorkerQueueStats:
         return await asyncio.to_thread(self._stats_sync)

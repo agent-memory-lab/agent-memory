@@ -5,7 +5,13 @@ from pathlib import Path
 
 from .domain import MemoryCapabilities
 from .kernel import MemoryKernel
-from .ports import ClaimExtractor, EmbeddingProvider, MemoryPolicy, Reranker
+from .ports import (
+    ClaimExtractor,
+    ConsolidationScheduler,
+    EmbeddingProvider,
+    MemoryPolicy,
+    Reranker,
+)
 from .providers import (
     EmbeddingReranker,
     MetadataClaimExtractor,
@@ -22,6 +28,7 @@ def build_local_kernel(
     policy: MemoryPolicy | None = None,
     reranker: Reranker | None = None,
     embedding_provider: EmbeddingProvider | None = None,
+    consolidation_scheduler: ConsolidationScheduler | None = None,
     trusted_evaluator_ids: Collection[str] | None = None,
 ) -> MemoryKernel:
     base_reranker = reranker or ReciprocalRankFusionReranker()
@@ -35,6 +42,7 @@ def build_local_kernel(
             else base_reranker
         ),
         provider_name="sqlite-local",
+        consolidation_scheduler=consolidation_scheduler,
         trusted_evaluator_ids=trusted_evaluator_ids,
         capabilities=MemoryCapabilities(
             automatic_extraction=extractor is not None,

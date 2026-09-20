@@ -1686,6 +1686,52 @@ class SQLiteMemoryRepository:
         provenance: Provenance,
         occurred_at: datetime,
     ) -> None:
+        payload_json = canonical_json(payload)
+        provenance_json = _provenance_json(provenance)
+        occurred_at_text = _iso(occurred_at)
+        existing = connection.execute(
+            """
+            SELECT partition_key, kind, text, payload_json, status, version,
+                   quality, provenance_json, occurred_at
+            FROM artifacts WHERE id = ?
+            """,
+            (artifact_id,),
+        ).fetchone()
+        if existing is not None:
+            if existing["partition_key"] != scope.partition_key() or existing["kind"] != kind:
+                raise ValueError("artifact identity conflicts with an existing artifact")
+            unchanged = (
+                existing["text"] == text
+                and existing["payload_json"] == payload_json
+                and existing["status"] == status
+                and int(existing["version"]) == version
+                and float(existing["quality"]) == quality
+                and existing["provenance_json"] == provenance_json
+                and existing["occurred_at"] == occurred_at_text
+            )
+            if unchanged:
+                return
+            if version != int(existing["version"]) + 1:
+                raise ValueError("artifact update must increment version by one")
+            connection.execute(
+                """
+                UPDATE artifacts
+                SET text=?, payload_json=?, status=?, version=?, quality=?,
+                    provenance_json=?, occurred_at=?, archived_at=NULL
+                WHERE id=?
+                """,
+                (
+                    text,
+                    payload_json,
+                    status,
+                    version,
+                    quality,
+                    provenance_json,
+                    occurred_at_text,
+                    artifact_id,
+                ),
+            )
+            return
         connection.execute(
             """
             INSERT INTO artifacts (
@@ -1699,12 +1745,12 @@ class SQLiteMemoryRepository:
                 *_scope_values(scope),
                 kind,
                 text,
-                canonical_json(payload),
+                payload_json,
                 status,
                 version,
                 quality,
-                _provenance_json(provenance),
-                _iso(occurred_at),
+                provenance_json,
+                occurred_at_text,
             ),
         )
 

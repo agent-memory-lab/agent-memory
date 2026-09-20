@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any, Protocol, Sequence
 
-from .domain import MemoryScope
+from .domain import ForgetRequest, MemoryScope
 
 
 class WorkerTaskStatus(StrEnum):
@@ -113,6 +113,8 @@ class WorkerQueue(Protocol):
     async def fail(self, lease: WorkerLease, error: BaseException) -> None: ...
 
     async def cancel(self, task_id: str, scope: MemoryScope) -> bool: ...
+
+    async def cancel_forget(self, request: ForgetRequest) -> int: ...
 
     async def stats(self) -> WorkerQueueStats: ...
 
