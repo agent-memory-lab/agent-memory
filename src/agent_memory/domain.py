@@ -71,6 +71,13 @@ class ProposalStatus(StrEnum):
     CONFLICT = "conflict"
 
 
+class ClaimProposalOperation(StrEnum):
+    UPSERT = "upsert"
+    MERGE = "merge"
+    SUPERSEDE = "supersede"
+    CONFLICT = "conflict"
+
+
 class FeedbackStatus(StrEnum):
     ACCEPTED = "accepted"
     PENDING = "pending"
@@ -237,8 +244,21 @@ class Episode:
     quality: float = 0.5
     status: ArtifactStatus = ArtifactStatus.CANDIDATE
     provenance: Provenance = field(default_factory=Provenance)
+    outcome_status: OutcomeStatus = OutcomeStatus.UNKNOWN
+    run_id: str | None = None
+    decision_ids: tuple[str, ...] = ()
+    outcome_ids: tuple[str, ...] = ()
+    retrieval_trace_ids: tuple[str, ...] = ()
+    used_memory_ids: tuple[str, ...] = ()
     occurred_at: datetime = field(default_factory=utc_now)
     version: int = 1
+
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.quality <= 1.0:
+            raise ValueError("episode quality must be between 0 and 1")
+        if self.version < 1:
+            raise ValueError("episode version must be positive")
+        object.__setattr__(self, "outcome_status", OutcomeStatus(self.outcome_status))
 
 
 @dataclass(frozen=True, slots=True)
@@ -250,10 +270,49 @@ class Procedure:
     success_conditions: tuple[str, ...]
     id: str = field(default_factory=lambda: str(uuid4()))
     failure_patterns: tuple[str, ...] = ()
+    applicability_conditions: tuple[str, ...] = ()
+    counterexample_episode_ids: tuple[str, ...] = ()
+    source_episode_ids: tuple[str, ...] = ()
+    extractor_version: str = "legacy"
+    evidence_start_at: datetime | None = None
+    evidence_end_at: datetime | None = None
+    reward_definition_id: str | None = None
+    reward_formula_version: str | None = None
     status: ArtifactStatus = ArtifactStatus.CANDIDATE
     provenance: Provenance = field(default_factory=Provenance)
     version: int = 1
     created_at: datetime = field(default_factory=utc_now)
+
+    def __post_init__(self) -> None:
+        if self.version < 1:
+            raise ValueError("procedure version must be positive")
+        if not self.extractor_version.strip():
+            raise ValueError("procedure extractor_version must not be empty")
+        for field_name, value in (
+            ("evidence_start_at", self.evidence_start_at),
+            ("evidence_end_at", self.evidence_end_at),
+        ):
+            if value is not None and value.utcoffset() is None:
+                raise ValueError(f"procedure {field_name} must include a timezone")
+        if (
+            self.evidence_start_at is not None
+            and self.evidence_end_at is not None
+            and self.evidence_start_at > self.evidence_end_at
+        ):
+            raise ValueError("procedure evidence time range is invalid")
+        if not self.applicability_conditions and self.trigger.strip():
+            object.__setattr__(self, "applicability_conditions", (self.trigger,))
+
+
+@dataclass(frozen=True, slots=True)
+class ProcedureInductionRejection:
+    group_key: str
+    reason: str
+    episode_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if not self.group_key.strip() or not self.reason.strip():
+            raise ValueError("procedure induction rejection requires group_key and reason")
 
 
 @dataclass(frozen=True, slots=True)
@@ -426,6 +485,36 @@ class FeedbackPage:
 
 
 @dataclass(frozen=True, slots=True)
+class ClaimEvidenceUpdate:
+    scope: MemoryScope
+    claim_id: str
+    expected_version: int
+    retained_source_event_ids: tuple[str, ...]
+    removed_source_event_ids: tuple[str, ...] = ()
+    excluded_untrusted_event_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.claim_id.strip():
+            raise ValueError("claim evidence update requires a claim_id")
+        if self.expected_version < 1:
+            raise ValueError("claim evidence update expected_version must be positive")
+        collections = (
+            self.retained_source_event_ids,
+            self.removed_source_event_ids,
+            self.excluded_untrusted_event_ids,
+        )
+        if any(any(not value.strip() for value in values) for values in collections):
+            raise ValueError("claim evidence update IDs must not be empty")
+        combined = [value for values in collections for value in values]
+        if len(combined) != len(set(combined)):
+            raise ValueError("claim evidence update source sets must be disjoint")
+
+    @property
+    def invalidated(self) -> bool:
+        return not self.retained_source_event_ids
+
+
+@dataclass(frozen=True, slots=True)
 class MemoryProposal:
     scope: MemoryScope
     key: str
@@ -438,6 +527,9 @@ class MemoryProposal:
     confidence: float = 1.0
     importance: float = 0.5
     actor: str = "agent"
+    operation: ClaimProposalOperation = ClaimProposalOperation.UPSERT
+    valid_from: datetime | None = None
+    reason: str | None = None
     created_at: datetime = field(default_factory=utc_now)
 
     def __post_init__(self) -> None:
@@ -451,6 +543,11 @@ class MemoryProposal:
             raise ValueError("confidence must be between 0 and 1")
         if not 0.0 <= self.importance <= 1.0:
             raise ValueError("importance must be between 0 and 1")
+        object.__setattr__(self, "operation", ClaimProposalOperation(self.operation))
+        if self.valid_from is not None and self.valid_from.utcoffset() is None:
+            raise ValueError("proposal valid_from must include a timezone")
+        if self.reason is not None and not self.reason.strip():
+            raise ValueError("proposal reason must not be empty")
 
 
 @dataclass(frozen=True, slots=True)

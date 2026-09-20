@@ -5,7 +5,7 @@ from dataclasses import asdict, replace
 from datetime import datetime, timedelta
 from inspect import isawaitable
 from json import dumps
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from .domain import (
@@ -15,6 +15,7 @@ from .domain import (
     Citation,
     Claim,
     ClaimDraft,
+    ClaimProposalOperation,
     ClaimStatus,
     DecisionRecord,
     Episode,
@@ -58,6 +59,9 @@ from .ports import (
     MemoryUnitOfWork,
     Reranker,
 )
+
+if TYPE_CHECKING:
+    from .plugin_protocol import ConsolidationResult
 
 
 def _canonical_value(value: Any) -> str:
@@ -344,85 +348,165 @@ class MemoryKernel:
         return bundle
 
     async def propose(self, proposal: MemoryProposal) -> ProposalResult:
-        claim_scope = proposal.scope.project(proposal.scope_level)
         async with self._repository.unit_of_work() as uow:
-            existing = await uow.find_proposal_result(proposal.id)
-            if existing:
-                return existing
+            return await self._propose_in_uow(uow, proposal)
 
-            if not await uow.events_exist(proposal.scope, proposal.source_event_ids):
-                result = ProposalResult(
-                    proposal_id=proposal.id,
-                    status=ProposalStatus.REJECTED,
-                    reason="source evidence is missing or outside the authorized scope",
-                )
-                await uow.save_proposal(proposal, result)
-                return result
+    async def _propose_in_uow(
+        self,
+        uow: MemoryUnitOfWork,
+        proposal: MemoryProposal,
+    ) -> ProposalResult:
+        claim_scope = proposal.scope.project(proposal.scope_level)
+        existing = await uow.find_proposal_result(proposal.id)
+        if existing:
+            return existing
 
-            previous = await uow.find_current_claim(claim_scope, proposal.key)
-            actual_version = previous.version if previous else 0
-            if actual_version != proposal.expected_version:
-                result = ProposalResult(
-                    proposal_id=proposal.id,
-                    status=ProposalStatus.CONFLICT,
-                    claim_id=previous.id if previous else None,
-                    reason=(
-                        f"expected version {proposal.expected_version}, "
-                        f"current version {actual_version}"
-                    ),
-                )
-                await uow.save_proposal(proposal, result)
-                return result
-
-            audit_event = MemoryEvent(
-                id=str(uuid5(NAMESPACE_URL, f"proposal-event:{proposal.id}")),
-                scope=proposal.scope,
-                event_type="memory.proposal.accepted",
-                content=proposal.text,
-                metadata={
-                    "proposal_id": proposal.id,
-                    "source_event_ids": proposal.source_event_ids,
-                },
-                idempotency_key=f"proposal:{proposal.id}",
-                actor=proposal.actor,
-            )
-            await uow.append_event(audit_event)
-            draft = ClaimDraft(
-                key=proposal.key,
-                value=proposal.value,
-                text=proposal.text,
-                confidence=proposal.confidence,
-                importance=proposal.importance,
-                scope_level=proposal.scope_level,
-                valid_from=audit_event.occurred_at,
-                provenance=Provenance(
-                    source_event_ids=(*proposal.source_event_ids, audit_event.id),
-                    extractor="MemoryProposal",
-                    provider=self._manifest.name,
-                ),
-            )
-            claim, delta, superseded = await self._apply_claim(uow, audit_event, draft)
-            if delta:
-                await uow.save_state_delta(delta)
+        if not await uow.events_exist(proposal.scope, proposal.source_event_ids):
             result = ProposalResult(
                 proposal_id=proposal.id,
-                status=ProposalStatus.ACCEPTED,
-                claim_id=claim.id,
-                state_delta_id=delta.id if delta else None,
-                superseded_claim_id=superseded,
+                status=ProposalStatus.REJECTED,
+                reason="source evidence is missing or outside the authorized scope",
             )
             await uow.save_proposal(proposal, result)
             return result
 
+        previous = await uow.find_current_claim(claim_scope, proposal.key)
+        actual_version = previous.version if previous else 0
+        if actual_version != proposal.expected_version:
+            result = ProposalResult(
+                proposal_id=proposal.id,
+                status=ProposalStatus.CONFLICT,
+                claim_id=previous.id if previous else None,
+                reason=(
+                    f"expected version {proposal.expected_version}, "
+                    f"current version {actual_version}"
+                ),
+            )
+            await uow.save_proposal(proposal, result)
+            return result
+
+        if proposal.operation is ClaimProposalOperation.CONFLICT:
+            result = ProposalResult(
+                proposal_id=proposal.id,
+                status=ProposalStatus.CONFLICT,
+                claim_id=previous.id if previous else None,
+                reason=proposal.reason or "consolidator reported conflicting evidence",
+            )
+            await uow.save_proposal(proposal, result)
+            return result
+
+        same_value = previous is not None and (
+            _canonical_value(previous.value) == _canonical_value(proposal.value)
+        )
+        invalid_operation = (
+            proposal.operation is ClaimProposalOperation.MERGE and not same_value
+        ) or (
+            proposal.operation is ClaimProposalOperation.SUPERSEDE
+            and (previous is None or same_value)
+        )
+        if invalid_operation:
+            result = ProposalResult(
+                proposal_id=proposal.id,
+                status=ProposalStatus.CONFLICT,
+                claim_id=previous.id if previous else None,
+                reason=f"invalid {proposal.operation.value} proposal for current state",
+            )
+            await uow.save_proposal(proposal, result)
+            return result
+
+        audit_event = MemoryEvent(
+            id=str(uuid5(NAMESPACE_URL, f"proposal-event:{proposal.id}")),
+            scope=proposal.scope,
+            event_type="memory.proposal.accepted",
+            content=proposal.text,
+            metadata={
+                "proposal_id": proposal.id,
+                "operation": proposal.operation.value,
+                "source_event_ids": proposal.source_event_ids,
+            },
+            idempotency_key=f"proposal:{proposal.id}",
+            actor=proposal.actor,
+        )
+        await uow.append_event(audit_event)
+        if proposal.operation is ClaimProposalOperation.MERGE:
+            for source_event_id in (*proposal.source_event_ids, audit_event.id):
+                await uow.add_claim_source(previous.id, source_event_id)
+            result = ProposalResult(
+                proposal_id=proposal.id,
+                status=ProposalStatus.ACCEPTED,
+                claim_id=previous.id,
+            )
+            await uow.save_proposal(proposal, result)
+            return result
+        draft = ClaimDraft(
+            key=proposal.key,
+            value=proposal.value,
+            text=proposal.text,
+            confidence=proposal.confidence,
+            importance=proposal.importance,
+            scope_level=proposal.scope_level,
+            valid_from=proposal.valid_from or audit_event.occurred_at,
+            provenance=Provenance(
+                source_event_ids=(*proposal.source_event_ids, audit_event.id),
+                extractor="MemoryProposal",
+                provider=self._manifest.name,
+            ),
+        )
+        claim, delta, superseded = await self._apply_claim(uow, audit_event, draft)
+        if delta:
+            await uow.save_state_delta(delta)
+        result = ProposalResult(
+            proposal_id=proposal.id,
+            status=ProposalStatus.ACCEPTED,
+            claim_id=claim.id,
+            state_delta_id=delta.id if delta else None,
+            superseded_claim_id=superseded,
+        )
+        await uow.save_proposal(proposal, result)
+        return result
+
+    async def commit_consolidation(
+        self,
+        result: ConsolidationResult,
+    ) -> tuple[ProposalResult, ...]:
+        async with self._repository.unit_of_work() as uow:
+            sourced = (*result.claims, *result.episodes, *result.procedures)
+            for item in sourced:
+                source_event_ids = (
+                    item.source_event_ids
+                    if isinstance(item, MemoryProposal)
+                    else item.provenance.source_event_ids
+                )
+                if not source_event_ids or not await uow.events_exist(
+                    item.scope, source_event_ids
+                ):
+                    raise ValueError(
+                        "source evidence is missing or outside the authorized scope"
+                    )
+            proposal_results = tuple(
+                [await self._propose_in_uow(uow, proposal) for proposal in result.claims]
+            )
+            for episode in result.episodes:
+                await uow.save_episode(episode)
+            for procedure in result.procedures:
+                await uow.save_procedure(procedure)
+            return proposal_results
+
     async def record_episode(self, episode: Episode) -> str:
         async with self._repository.unit_of_work() as uow:
+            if not episode.provenance.source_event_ids or not await uow.events_exist(
+                episode.scope, episode.provenance.source_event_ids
+            ):
+                raise ValueError("source evidence is missing or outside the authorized scope")
             await uow.save_episode(episode)
         return episode.id
 
     async def publish_procedure(self, procedure: Procedure) -> str:
-        if procedure.status == ArtifactStatus.ACTIVE and not procedure.provenance.source_event_ids:
-            raise ValueError("active procedures require source evidence")
         async with self._repository.unit_of_work() as uow:
+            if not procedure.provenance.source_event_ids or not await uow.events_exist(
+                procedure.scope, procedure.provenance.source_event_ids
+            ):
+                raise ValueError("source evidence is missing or outside the authorized scope")
             await uow.save_procedure(procedure)
         return procedure.id
 
@@ -658,7 +742,13 @@ class MemoryKernel:
         return comparable
 
     async def forget(self, request: ForgetRequest) -> ForgetResult:
-        return await self._repository.forget(request)
+        result = await self._repository.forget(request)
+        if self._consolidation_scheduler is not None:
+            try:
+                await self._consolidation_scheduler.cancel_forget(request)
+            except Exception:
+                pass
+        return result
 
     async def forget_block(
         self,

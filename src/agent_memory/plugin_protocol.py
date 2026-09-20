@@ -10,6 +10,8 @@ from typing import Any, Protocol, TypeVar, runtime_checkable
 from .domain import (
     Claim,
     ClaimDraft,
+    ClaimEvidenceUpdate,
+    DecisionRecord,
     Episode,
     MemoryChannel,
     MemoryEvent,
@@ -17,7 +19,10 @@ from .domain import (
     MemoryProposal,
     MemoryQuery,
     MemoryScope,
+    OutcomeEvent,
     Procedure,
+    ProcedureInductionRejection,
+    RetrievalTrace,
     RewardSignal,
 )
 from .plugins import PluginManifest, PluginManifestError, PluginResourceLimits
@@ -195,13 +200,19 @@ class ConsolidationRequest:
     claims: tuple[Claim, ...] = ()
     episodes: tuple[Episode, ...] = ()
     rewards: tuple[RewardSignal, ...] = ()
+    decisions: tuple[DecisionRecord, ...] = ()
+    outcomes: tuple[OutcomeEvent, ...] = ()
+    retrieval_traces: tuple[RetrievalTrace, ...] = ()
+    deleted_event_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class ConsolidationResult:
     claims: tuple[MemoryProposal, ...] = ()
+    claim_evidence_updates: tuple[ClaimEvidenceUpdate, ...] = ()
     episodes: tuple[Episode, ...] = ()
     procedures: tuple[Procedure, ...] = ()
+    procedure_rejections: tuple[ProcedureInductionRejection, ...] = ()
 
 
 class PluginLifecycle(Protocol):

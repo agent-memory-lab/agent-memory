@@ -37,6 +37,11 @@ NOW = datetime(2026, 9, 19, tzinfo=timezone.utc)
 SCOPE = MemoryScope("tenant-a", session_id="session-a")
 
 
+class FixedClock:
+    def now(self):
+        return NOW
+
+
 def item(item_id="memory-1"):
     return MemoryItem(item_id, MemoryKind.EVENT, "Acme migration", 0.5, NOW)
 
@@ -51,6 +56,7 @@ def context(scope=SCOPE, *, timeout_ms=1000, max_candidates=8, max_batch_size=16
             max_concurrency=2,
         ),
         request_id="request-1",
+        clock=FixedClock(),
     )
 
 
