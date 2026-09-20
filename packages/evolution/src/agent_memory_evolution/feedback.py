@@ -87,6 +87,10 @@ class FeedbackEpisodeBuilder:
             outcome=outcome,
             lesson=lesson,
             quality=quality,
+            outcome_status=outcome_status,
+            run_id=trajectory.decision.run_id or trajectory.outcome.run_id,
+            decision_ids=(trajectory.decision.id,),
+            outcome_ids=(trajectory.outcome.id,),
             provenance=Provenance(
                 source_event_ids=source_event_ids,
                 extractor=type(self).__name__,
