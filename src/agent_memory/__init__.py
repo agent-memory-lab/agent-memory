@@ -1,4 +1,24 @@
 from .adapters import AgentLifecycleContext, AgentMemoryAdapter
+from .benchmark_harness import (
+    BenchmarkSkip,
+    CallableMemoryBenchmarkArm,
+    MemoryArmMetrics,
+    MemoryBenchmarkCase,
+    MemoryBenchmarkCaseResult,
+    MemoryBenchmarkComparison,
+    MemoryBenchmarkConfig,
+    MemoryBenchmarkDataset,
+    MemoryBenchmarkDatasetAdapter,
+    MemoryBenchmarkDimension,
+    MemoryBenchmarkFailure,
+    MemoryBenchmarkObservation,
+    MemoryBenchmarkReport,
+    MemoryBenchmarkSkip,
+    MemoryDimensionMetrics,
+    NoMemoryBenchmarkArm,
+    load_benchmark_dataset,
+    run_memory_benchmark,
+)
 from .composition import build_local_kernel
 from .capture_policy import (
     CapturePlan,
@@ -193,6 +213,24 @@ from .snapshot_replay import (
 )
 
 __all__ = [
+    "BenchmarkSkip",
+    "CallableMemoryBenchmarkArm",
+    "MemoryArmMetrics",
+    "MemoryBenchmarkCase",
+    "MemoryBenchmarkCaseResult",
+    "MemoryBenchmarkComparison",
+    "MemoryBenchmarkConfig",
+    "MemoryBenchmarkDataset",
+    "MemoryBenchmarkDatasetAdapter",
+    "MemoryBenchmarkDimension",
+    "MemoryBenchmarkFailure",
+    "MemoryBenchmarkObservation",
+    "MemoryBenchmarkReport",
+    "MemoryBenchmarkSkip",
+    "MemoryDimensionMetrics",
+    "NoMemoryBenchmarkArm",
+    "load_benchmark_dataset",
+    "run_memory_benchmark",
     "SNAPSHOT_FORMAT_VERSION",
     "SnapshotDataLicense",
     "SnapshotDeletionImpact",
