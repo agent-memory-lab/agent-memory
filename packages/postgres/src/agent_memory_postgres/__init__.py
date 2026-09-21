@@ -1,5 +1,6 @@
 from .composition import build_postgres_kernel
 from .consolidation import BlockConsolidationPolicy, TrajectoryBlockConsolidator
+from .doctor import PostgresMemoryDoctor
 from .health import (
     DeadQueueJob,
     HealthCapacityPolicy,
@@ -44,6 +45,7 @@ __all__ = [
     "JobStatus",
     "PgVectorIndex",
     "PostgresConsolidationQueue",
+    "PostgresMemoryDoctor",
     "QueueCapacityExceeded",
     "PostgresMemoryRepository",
     "PostgresMemoryUnitOfWork",

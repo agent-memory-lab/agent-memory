@@ -111,6 +111,19 @@ from .lifecycle import (
     LifecycleOrigin,
 )
 from .mcp import MCPMemoryTools, MCPRequestContext, MCPToolError
+from .memory_doctor import (
+    MemoryDoctorCode,
+    MemoryDoctorFinding,
+    MemoryDoctorLimits,
+    MemoryDoctorProvider,
+    MemoryDoctorReport,
+    MemoryDoctorSeverity,
+    MemoryDoctorStatus,
+    MemoryRepairAction,
+    MemoryRepairPlan,
+    SQLiteMemoryDoctor,
+    build_memory_repair_plan,
+)
 from .plugins import (
     INTEGRATION_GROUP,
     PLUGIN_API_VERSION,
@@ -214,6 +227,21 @@ from .resource_evaluation import (
     detect_resource_hardware,
     run_resource_evaluation,
 )
+from .release_acceptance import (
+    ReleaseAcceptancePlan,
+    ReleaseAcceptanceReport,
+    ReleaseAcceptanceStatus,
+    ReleaseCheckKind,
+    ReleaseCheckOutcome,
+    ReleaseCheckStatus,
+    ReleaseClaim,
+    ReleaseClaimResult,
+    SensitiveInformationFinding,
+    evaluate_release_acceptance,
+    run_documentation_consistency_check,
+    run_release_checks,
+    run_sensitive_information_check,
+)
 from .snapshot_replay import (
     SNAPSHOT_FORMAT_VERSION,
     SnapshotDataLicense,
@@ -235,6 +263,30 @@ from .snapshot_replay import (
 )
 
 __all__ = [
+    "MemoryDoctorCode",
+    "MemoryDoctorFinding",
+    "MemoryDoctorLimits",
+    "MemoryDoctorProvider",
+    "MemoryDoctorReport",
+    "MemoryDoctorSeverity",
+    "MemoryDoctorStatus",
+    "MemoryRepairAction",
+    "MemoryRepairPlan",
+    "SQLiteMemoryDoctor",
+    "build_memory_repair_plan",
+    "ReleaseAcceptancePlan",
+    "ReleaseAcceptanceReport",
+    "ReleaseAcceptanceStatus",
+    "ReleaseCheckKind",
+    "ReleaseCheckOutcome",
+    "ReleaseCheckStatus",
+    "ReleaseClaim",
+    "ReleaseClaimResult",
+    "SensitiveInformationFinding",
+    "evaluate_release_acceptance",
+    "run_documentation_consistency_check",
+    "run_release_checks",
+    "run_sensitive_information_check",
     "ProcessResourceProbe",
     "ResourceComparisonReport",
     "ResourceEvaluationPlan",

@@ -5,6 +5,7 @@ from mcp import Client
 
 from agent_memory.composition import build_local_kernel
 from agent_memory.domain import MemoryScope
+from agent_memory.memory_doctor import SQLiteMemoryDoctor
 from agent_memory.mcp import MCPRequestContext
 
 
@@ -17,7 +18,8 @@ def test_in_memory_mcp_round_trip(tmp_path) -> None:
                 scope=MemoryScope(tenant_id="contract", user_id="user-1", session_id="session-1")
             )
         )
-        async with Client(create_server(provider, identity)) as client:
+        doctor = SQLiteMemoryDoctor(tmp_path / "memory.db")
+        async with Client(create_server(provider, identity, doctor=doctor)) as client:
             result = await client.call_tool(
                 "memory_ingest",
                 {
@@ -38,5 +40,11 @@ def test_in_memory_mcp_round_trip(tmp_path) -> None:
             assert result.is_error is False
             state = await client.call_tool("memory_get_state", {})
             assert state.structured_content["current_state"][0]["key"] == "answer.style"
+            diagnosis = await client.call_tool("memory_doctor", {})
+            assert diagnosis.is_error is False
+            assert diagnosis.structured_content["report"]["scope_fingerprint"]
+            repair = await client.call_tool("memory_repair_plan", {})
+            assert repair.is_error is False
+            assert repair.structured_content["repair_plan"]["actions"] == []
 
     asyncio.run(scenario())

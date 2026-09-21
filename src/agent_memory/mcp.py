@@ -23,6 +23,7 @@ from .domain import (
     RewardSignal,
     ScopeLevel,
 )
+from .memory_doctor import MemoryDoctorProvider, build_memory_repair_plan
 from .ports import MemoryProvider
 from .plugins import PluginError, PluginErrorCode
 from .serialization import to_jsonable
@@ -101,8 +102,14 @@ class MCPRequestContext:
 
 
 class MCPMemoryTools:
-    def __init__(self, provider: MemoryProvider) -> None:
+    def __init__(
+        self,
+        provider: MemoryProvider,
+        *,
+        doctor: MemoryDoctorProvider | None = None,
+    ) -> None:
         self._provider = provider
+        self._doctor = doctor
 
     def list_tools(self) -> tuple[dict[str, Any], ...]:
         scope_note = "Scope is derived from the authenticated request and is not an argument."
@@ -304,6 +311,21 @@ class MCPMemoryTools:
                 (),
             ),
         )
+        if self._doctor is not None:
+            tools += (
+                self._tool(
+                    "memory_doctor",
+                    "Run bounded, read-only diagnostics in the authenticated request scope.",
+                    {},
+                    (),
+                ),
+                self._tool(
+                    "memory_repair_plan",
+                    "Generate approval-gated repair recommendations without applying changes.",
+                    {},
+                    (),
+                ),
+            )
         capabilities = self._provider.manifest().capabilities
         enabled = list(tools)
         if not capabilities.memory_blocks:
@@ -584,6 +606,20 @@ class MCPMemoryTools:
 
         if name == "memory_capabilities":
             return to_jsonable(self._provider.manifest())
+
+        if name in {"memory_doctor", "memory_repair_plan"}:
+            if self._doctor is None:
+                raise MCPToolError(
+                    "memory diagnostics are not configured",
+                    code="diagnostics_unavailable",
+                )
+            report = await self._doctor.inspect(context.scope)
+            if name == "memory_doctor":
+                return {"report": to_jsonable(report)}
+            return {
+                "report": to_jsonable(report),
+                "repair_plan": to_jsonable(build_memory_repair_plan(report)),
+            }
 
         raise MCPToolError(f"unknown memory tool: {name}")
 

@@ -8,6 +8,7 @@ from mcp.server.mcpserver import Context
 from agent_memory.capture_api import submit_capture
 from agent_memory.capture_sink import CaptureError, CaptureSink
 from agent_memory.lifecycle import LifecycleEventError
+from agent_memory.memory_doctor import MemoryDoctorProvider
 from agent_memory.mcp import MCPMemoryTools, MCPToolError
 from agent_memory.ports import MemoryProvider
 from agent_memory.serialization import to_jsonable
@@ -21,10 +22,11 @@ def create_server(
     *,
     name: str = "Agent Memory",
     capture_sink: CaptureSink | None = None,
+    doctor: MemoryDoctorProvider | None = None,
 ) -> MCPServer:
     """Create an MCP v2 server while retaining one core business contract."""
     server = MCPServer(name)
-    tools = MCPMemoryTools(provider)
+    tools = MCPMemoryTools(provider, doctor=doctor)
 
     async def call(ctx: Context, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         identity = await identity_resolver.resolve(ctx)
@@ -124,6 +126,17 @@ def create_server(
     async def memory_capabilities(ctx: Context) -> dict[str, Any]:
         """Return protocol, schema, provider, and capability information."""
         return await call(ctx, "memory_capabilities", {})
+
+    if doctor is not None:
+        @server.tool()
+        async def memory_doctor(ctx: Context) -> dict[str, Any]:
+            """Run bounded, read-only diagnostics for the authenticated scope."""
+            return await call(ctx, "memory_doctor", {})
+
+        @server.tool()
+        async def memory_repair_plan(ctx: Context) -> dict[str, Any]:
+            """Return approval-gated repair recommendations without applying them."""
+            return await call(ctx, "memory_repair_plan", {})
 
     @server.resource("memory://state/{view}")
     async def current_state_resource(view: str, ctx: Context) -> dict[str, Any]:
