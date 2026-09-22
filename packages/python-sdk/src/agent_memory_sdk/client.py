@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Protocol, Self
 
 from agent_memory.capture_api import submit_capture
 from agent_memory.capture_sink import CaptureError, CaptureSink
+from agent_memory.deletion_audit import DeletionAuditService
 from agent_memory.lifecycle import LifecycleEventError
 from agent_memory.mcp import MCPMemoryTools, MCPRequestContext, MCPToolError, decode_mcp_error
 from agent_memory.ports import MemoryProvider
@@ -71,6 +72,7 @@ class MemoryClient(Protocol):
         self, outcome_id: str, value: float, formula_version: str, **options: Any
     ) -> dict[str, Any]: ...
     async def feedback_status(self, record_id: str, record_type: str) -> dict[str, Any]: ...
+    async def deletion_audit(self, *, limit: int = 100) -> dict[str, Any]: ...
 
 
 class CaptureClient(Protocol):
@@ -263,6 +265,9 @@ class _Operations:
     async def capabilities(self) -> dict[str, Any]:
         return await self._call("memory_capabilities", {})
 
+    async def deletion_audit(self, *, limit: int = 100) -> dict[str, Any]:
+        return await self._call("memory_deletion_audit", {"limit": limit})
+
 
 class EmbeddedMemoryClient(_Operations):
     """Run the exact MCP contract in-process without a protocol hop."""
@@ -274,9 +279,10 @@ class EmbeddedMemoryClient(_Operations):
         *,
         capture_sink: CaptureSink | None = None,
         capture_timeout_seconds: float = 0.25,
+        deletion_auditor: DeletionAuditService | None = None,
     ) -> None:
         self._provider = provider
-        self._tools = MCPMemoryTools(provider)
+        self._tools = MCPMemoryTools(provider, deletion_auditor=deletion_auditor)
         self._context = context
         self._capture_sink = capture_sink
         self._capture_timeout_seconds = _capture_deadline(capture_timeout_seconds)

@@ -23,6 +23,7 @@ from .domain import (
     RewardSignal,
     ScopeLevel,
 )
+from .deletion_audit import DeletionAuditError, DeletionAuditService
 from .memory_doctor import MemoryDoctorProvider, build_memory_repair_plan
 from .ports import MemoryProvider
 from .plugins import PluginError, PluginErrorCode
@@ -107,9 +108,11 @@ class MCPMemoryTools:
         provider: MemoryProvider,
         *,
         doctor: MemoryDoctorProvider | None = None,
+        deletion_auditor: DeletionAuditService | None = None,
     ) -> None:
         self._provider = provider
         self._doctor = doctor
+        self._deletion_auditor = deletion_auditor
 
     def list_tools(self) -> tuple[dict[str, Any], ...]:
         scope_note = "Scope is derived from the authenticated request and is not an argument."
@@ -326,6 +329,15 @@ class MCPMemoryTools:
                     (),
                 ),
             )
+        if self._deletion_auditor is not None:
+            tools += (
+                self._tool(
+                    "memory_deletion_audit",
+                    "Return privacy-safe deletion receipts for the authenticated scope.",
+                    {"limit": {"type": "integer", "minimum": 1, "maximum": 1000}},
+                    (),
+                ),
+            )
         capabilities = self._provider.manifest().capabilities
         enabled = list(tools)
         if not capabilities.memory_blocks:
@@ -353,6 +365,8 @@ class MCPMemoryTools:
             raise
         except PluginError as error:
             raise MCPToolError.from_plugin_error(error) from error
+        except DeletionAuditError as error:
+            raise MCPToolError(str(error), code=error.code) from error
 
     async def _call_tool(
         self,
@@ -456,13 +470,17 @@ class MCPMemoryTools:
             mode = ForgetMode(str(arguments.get("mode", ForgetMode.ARCHIVE)))
             if mode == ForgetMode.ERASE and not context.can_erase:
                 raise MCPToolError("legal erase requires an authorized request context")
-            result = await self._provider.forget(
-                ForgetRequest(
-                    scope=context.scope,
-                    memory_ids=(self._string(arguments, "block_id"),),
-                    mode=mode,
-                )
+            request = ForgetRequest(
+                scope=context.scope,
+                memory_ids=(self._string(arguments, "block_id"),),
+                mode=mode,
             )
+            if self._deletion_auditor is not None:
+                receipt = await self._deletion_auditor.forget(
+                    self._provider, request, actor=context.actor
+                )
+                return self._audited_forget_payload(receipt)
+            result = await self._provider.forget(request)
             return to_jsonable(result)
 
         if name == "memory_propose":
@@ -494,14 +512,18 @@ class MCPMemoryTools:
             raw_ids = arguments.get("memory_ids", [])
             if not isinstance(raw_ids, list) or not all(isinstance(item, str) for item in raw_ids):
                 raise MCPToolError("memory_ids must be an array of strings")
-            result = await self._provider.forget(
-                ForgetRequest(
-                    scope=context.scope,
-                    memory_ids=tuple(raw_ids),
-                    all_in_scope=bool(arguments.get("all_in_scope", False)),
-                    mode=mode,
-                )
+            request = ForgetRequest(
+                scope=context.scope,
+                memory_ids=tuple(raw_ids),
+                all_in_scope=bool(arguments.get("all_in_scope", False)),
+                mode=mode,
             )
+            if self._deletion_auditor is not None:
+                receipt = await self._deletion_auditor.forget(
+                    self._provider, request, actor=context.actor
+                )
+                return self._audited_forget_payload(receipt)
+            result = await self._provider.forget(request)
             return to_jsonable(result)
 
         if name == "memory_record_decision":
@@ -621,7 +643,29 @@ class MCPMemoryTools:
                 "repair_plan": to_jsonable(build_memory_repair_plan(report)),
             }
 
+        if name == "memory_deletion_audit":
+            if self._deletion_auditor is None:
+                raise MCPToolError(
+                    "deletion audit is not configured",
+                    code="audit_unavailable",
+                )
+            limit = int(arguments.get("limit", 100))
+            if not 1 <= limit <= 1000:
+                raise MCPToolError("limit must be between 1 and 1000", field="limit")
+            report = await self._deletion_auditor.report(context.scope, limit=limit)
+            return {"report": to_jsonable(report)}
+
         raise MCPToolError(f"unknown memory tool: {name}")
+
+    @staticmethod
+    def _audited_forget_payload(receipt: Any) -> dict[str, Any]:
+        return {
+            "affected_events": receipt.affected_events,
+            "affected_claims": receipt.affected_claims,
+            "affected_artifacts": receipt.affected_artifacts,
+            "mode": receipt.mode.value,
+            "audit": to_jsonable(receipt),
+        }
 
     @staticmethod
     def _tool(

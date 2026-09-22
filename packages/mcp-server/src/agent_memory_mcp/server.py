@@ -7,6 +7,7 @@ from mcp.server.mcpserver import Context
 
 from agent_memory.capture_api import submit_capture
 from agent_memory.capture_sink import CaptureError, CaptureSink
+from agent_memory.deletion_audit import DeletionAuditService
 from agent_memory.lifecycle import LifecycleEventError
 from agent_memory.memory_doctor import MemoryDoctorProvider
 from agent_memory.mcp import MCPMemoryTools, MCPToolError
@@ -23,10 +24,15 @@ def create_server(
     name: str = "Agent Memory",
     capture_sink: CaptureSink | None = None,
     doctor: MemoryDoctorProvider | None = None,
+    deletion_auditor: DeletionAuditService | None = None,
 ) -> MCPServer:
     """Create an MCP v2 server while retaining one core business contract."""
     server = MCPServer(name)
-    tools = MCPMemoryTools(provider, doctor=doctor)
+    tools = MCPMemoryTools(
+        provider,
+        doctor=doctor,
+        deletion_auditor=deletion_auditor,
+    )
 
     async def call(ctx: Context, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         identity = await identity_resolver.resolve(ctx)
@@ -137,6 +143,12 @@ def create_server(
         async def memory_repair_plan(ctx: Context) -> dict[str, Any]:
             """Return approval-gated repair recommendations without applying them."""
             return await call(ctx, "memory_repair_plan", {})
+
+    if deletion_auditor is not None:
+        @server.tool()
+        async def memory_deletion_audit(ctx: Context, limit: int = 100) -> dict[str, Any]:
+            """Return signed deletion receipts for the authenticated scope."""
+            return await call(ctx, "memory_deletion_audit", {"limit": limit})
 
     @server.resource("memory://state/{view}")
     async def current_state_resource(view: str, ctx: Context) -> dict[str, Any]:

@@ -111,6 +111,15 @@ from .lifecycle import (
     LifecycleOrigin,
 )
 from .mcp import MCPMemoryTools, MCPRequestContext, MCPToolError
+from .deletion_audit import (
+    DeletionAuditError,
+    DeletionAuditReceipt,
+    DeletionAuditReport,
+    DeletionAuditService,
+    DeletionAuditSink,
+    DeletionAuditStatus,
+    SQLiteDeletionAuditSink,
+)
 from .memory_doctor import (
     MemoryDoctorCode,
     MemoryDoctorFinding,
@@ -263,6 +272,13 @@ from .snapshot_replay import (
 )
 
 __all__ = [
+    "DeletionAuditError",
+    "DeletionAuditReceipt",
+    "DeletionAuditReport",
+    "DeletionAuditService",
+    "DeletionAuditSink",
+    "DeletionAuditStatus",
+    "SQLiteDeletionAuditSink",
     "MemoryDoctorCode",
     "MemoryDoctorFinding",
     "MemoryDoctorLimits",
