@@ -158,6 +158,14 @@ from .ontology_plugin import (
     load_ontology_memory,
     register_ontology_memory,
 )
+from .ontology_registry import (
+    OntologyActivation,
+    OntologyRegistryConflict,
+    OntologySwitchAudit,
+    OntologySwitchAuthorizer,
+    OntologySwitchRequest,
+    SQLiteOntologyRegistry,
+)
 from .ontology_upgrade import (
     OntologyUpgradeAuthorizer,
     OntologyUpgradeReceipt,
@@ -338,6 +346,12 @@ __all__ = [
     "load_ontology_memory",
     "register_ontology_memory",
     "ONTOLOGY_SCHEMA_FORMAT",
+    "OntologyActivation",
+    "OntologyRegistryConflict",
+    "OntologySwitchAudit",
+    "OntologySwitchAuthorizer",
+    "OntologySwitchRequest",
+    "SQLiteOntologyRegistry",
     "OntologyUpgradeAuthorizer",
     "OntologyUpgradeReceipt",
     "OntologyUpgradeRequest",
