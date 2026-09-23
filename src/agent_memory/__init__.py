@@ -158,6 +158,12 @@ from .ontology_plugin import (
     load_ontology_memory,
     register_ontology_memory,
 )
+from .ontology_upgrade import (
+    OntologyUpgradeAuthorizer,
+    OntologyUpgradeReceipt,
+    OntologyUpgradeRequest,
+    register_ontology_upgrade,
+)
 from .ontology_schema import (
     ONTOLOGY_SCHEMA_FORMAT,
     OntologyChangeSeverity,
@@ -332,6 +338,10 @@ __all__ = [
     "load_ontology_memory",
     "register_ontology_memory",
     "ONTOLOGY_SCHEMA_FORMAT",
+    "OntologyUpgradeAuthorizer",
+    "OntologyUpgradeReceipt",
+    "OntologyUpgradeRequest",
+    "register_ontology_upgrade",
     "OntologyChangeSeverity",
     "OntologyMigrationPlan",
     "OntologySchemaChange",
