@@ -172,6 +172,9 @@ from .ontology_upgrade import (
     OntologyUpgradeRequest,
     register_ontology_upgrade,
 )
+from .ontology_source import SQLiteOntologySource, SQLiteOntologySnapshot
+from .ontology_acceptance import OntologyIndexAcceptance, validate_ontology_index
+from .ontology_live import LiveOntologyMemory, OntologySyncPending
 from .ontology_readiness import (
     BackfillGatedOntologyAuthorizer,
     OntologyCheckpointReader,
@@ -366,6 +369,12 @@ __all__ = [
     "load_ontology_memory",
     "register_ontology_memory",
     "ONTOLOGY_SCHEMA_FORMAT",
+    "SQLiteOntologySource",
+    "SQLiteOntologySnapshot",
+    "OntologyIndexAcceptance",
+    "validate_ontology_index",
+    "LiveOntologyMemory",
+    "OntologySyncPending",
     "BackfillGatedOntologyAuthorizer",
     "OntologyCheckpointReader",
     "OntologyCheckpointConflict",
