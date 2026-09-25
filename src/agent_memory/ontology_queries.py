@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 import json
 
 
@@ -20,11 +20,27 @@ def _ids(values, maximum, name):
     return tuple(dict.fromkeys(values))
 
 
+def ontology_instant(value):
+    """SQLite scalar: timezone-aware ISO timestamp to exact UTC microseconds."""
+    if value is None:
+        return None
+    instant = datetime.fromisoformat(value)
+    if instant.utcoffset() is None:
+        raise ValueError("ontology timestamps must be timezone aware")
+    delta = instant - datetime(1970, 1, 1, tzinfo=UTC)
+    return (delta.days * 86400 + delta.seconds) * 1000000 + delta.microseconds
+
+
 class SQLOntologyQueries:
     """Small SQL query mixin; adapter supplies a transactional _connect()."""
 
+    def _timestamp_sql(self, expression):
+        return f"ontology_instant({expression})"
+
     def _validity_sql(self):
-        return "julianday(a.valid_from)<=julianday(?) AND (a.valid_to IS NULL OR julianday(a.valid_to)>julianday(?))"
+        start, end = self._timestamp_sql("a.valid_from"), self._timestamp_sql("a.valid_to")
+        parameter = self._timestamp_sql("?")
+        return f"{start}<={parameter} AND (a.valid_to IS NULL OR {end}>{parameter})"
 
     async def get_assertions(self, scope, assertion_ids, *, ontology_id, ontology_version, at_time):
         ids = _ids(assertion_ids, 256, "assertion_ids")

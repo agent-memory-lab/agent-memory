@@ -86,6 +86,5 @@ class PostgresOntologyStore(SQLiteOntologyStore):
             raw.close()
             raise
 
-    def _validity_sql(self):
-        return ("CAST(a.valid_from AS TIMESTAMPTZ)<=CAST(? AS TIMESTAMPTZ) AND "
-                "(a.valid_to IS NULL OR CAST(a.valid_to AS TIMESTAMPTZ)>CAST(? AS TIMESTAMPTZ))")
+    def _timestamp_sql(self, expression):
+        return f"CAST({expression} AS TIMESTAMPTZ)"

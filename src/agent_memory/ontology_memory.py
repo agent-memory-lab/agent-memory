@@ -387,7 +387,7 @@ class OntologyStore(Protocol):
     ) -> OntologyAssertion: ...
 
 
-from .ontology_queries import SQLOntologyQueries
+from .ontology_queries import SQLOntologyQueries, ontology_instant
 
 
 class SQLiteOntologyStore(SQLOntologyQueries):
@@ -488,6 +488,7 @@ class SQLiteOntologyStore(SQLOntologyQueries):
         self._database_path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self._database_path, timeout=5)
         connection.row_factory = sqlite3.Row
+        connection.create_function("ontology_instant", 1, ontology_instant, deterministic=True)
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA journal_mode=WAL")
         return connection
@@ -944,6 +945,8 @@ class SQLiteOntologyStore(SQLOntologyQueries):
         limit: int,
         max_scan: int,
     ) -> tuple[OntologyMatch, ...]:
+        if not isinstance(at_time, datetime) or at_time.utcoffset() is None:
+            raise ValueError("at_time must be timezone aware")
         connection = self._connect()
         try:
             visible_scopes = _visible_scope_partitions(scope)
@@ -969,9 +972,8 @@ class SQLiteOntologyStore(SQLOntologyQueries):
                 WHERE a.partition_key IN ({placeholders}) AND a.ontology_id=?
                   AND a.ontology_version=? AND a.status='active'
                   AND a.archived_at IS NULL
-                  AND a.valid_from<=?
-                  AND (a.valid_to IS NULL OR a.valid_to>=?)
-                ORDER BY a.valid_from DESC, a.assertion_id
+                  AND {self._validity_sql()}
+                ORDER BY {self._timestamp_sql("a.valid_from")} DESC, a.assertion_id
                 LIMIT ?
                 """,
                 (
