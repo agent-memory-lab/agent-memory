@@ -172,6 +172,26 @@ from .ontology_upgrade import (
     OntologyUpgradeRequest,
     register_ontology_upgrade,
 )
+from .ontology_readiness import (
+    BackfillGatedOntologyAuthorizer,
+    OntologyCheckpointReader,
+)
+from .ontology_checkpoint import (
+    OntologyCheckpointConflict,
+    SQLiteOntologyCheckpointSink,
+)
+from .ontology_backfill import (
+    OntologyBackfillCheckpoint,
+    OntologyCheckpointSink,
+    OntologyClaimPage,
+    OntologyClaimSnapshot,
+    backfill_ontology_memory,
+)
+from .ontology_runtime import (
+    ActiveOntologyCatalog,
+    ActiveOntologyMemory,
+    open_active_ontology_memory,
+)
 from .ontology_schema import (
     ONTOLOGY_SCHEMA_FORMAT,
     OntologyChangeSeverity,
@@ -346,6 +366,18 @@ __all__ = [
     "load_ontology_memory",
     "register_ontology_memory",
     "ONTOLOGY_SCHEMA_FORMAT",
+    "BackfillGatedOntologyAuthorizer",
+    "OntologyCheckpointReader",
+    "OntologyCheckpointConflict",
+    "SQLiteOntologyCheckpointSink",
+    "OntologyBackfillCheckpoint",
+    "OntologyCheckpointSink",
+    "OntologyClaimPage",
+    "OntologyClaimSnapshot",
+    "backfill_ontology_memory",
+    "ActiveOntologyCatalog",
+    "ActiveOntologyMemory",
+    "open_active_ontology_memory",
     "OntologyActivation",
     "OntologyRegistryConflict",
     "OntologySwitchAudit",
