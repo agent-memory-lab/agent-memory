@@ -40,6 +40,10 @@ class SQLiteOntologySource:
     def __init__(self, path: str | Path):
         self.path = Path(path).resolve()
 
+    @property
+    def storage_key(self):
+        return str(self.path)
+
     async def initialize(self):
         await asyncio.to_thread(self._initialize)
 

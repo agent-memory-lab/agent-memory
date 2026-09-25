@@ -1,4 +1,5 @@
 from .ontology import PostgresOntologyStore
+from .ontology_source import PostgresOntologySource
 from .composition import build_postgres_kernel
 from .consolidation import BlockConsolidationPolicy, TrajectoryBlockConsolidator
 from .doctor import PostgresMemoryDoctor
@@ -40,6 +41,7 @@ from .vector import PgVectorIndex, VectorHit
 from .worker import run_consolidation_worker
 
 __all__ = [
+    "PostgresOntologySource",
     "PostgresOntologyStore",
     "ConsolidationJob",
     "ConsolidationWorker",

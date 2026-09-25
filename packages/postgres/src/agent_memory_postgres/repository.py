@@ -945,6 +945,46 @@ class PostgresMemoryRepository:
                     await connection.execute(
                         f"DELETE FROM agent_memory_events WHERE {where}", params
                     )
+                # Events are gone or archived, but JSON provenance has no FK.
+                # Scrub dependent claims in the same transaction, in bounded
+                # pages. Directly targeted claims are already counted above.
+                if target_event_ids and not request.all_in_scope:
+                    after_id = None
+                    while True:
+                        cursor = await connection.execute(
+                            """SELECT id, provenance_json FROM agent_memory_claims
+                            WHERE partition_key = %s
+                              AND provenance_json -> 'source_event_ids' ?| %s
+                              AND NOT (id = ANY(%s))
+                              AND (%s::text IS NULL OR id > %s)
+                            ORDER BY id LIMIT 128 FOR UPDATE""",
+                            (request.scope.partition_key(), list(target_event_ids),
+                             list(request.memory_ids), after_id, after_id),
+                        )
+                        rows = await cursor.fetchall()
+                        if not rows:
+                            break
+                        for row in rows:
+                            provenance = _provenance(row["provenance_json"])
+                            remaining = tuple(event_id for event_id in provenance.source_event_ids
+                                              if event_id not in target_event_ids)
+                            if not remaining and request.mode == ForgetMode.ERASE:
+                                await connection.execute(
+                                    "DELETE FROM agent_memory_claims WHERE id = %s",
+                                    (row["id"],),
+                                )
+                            else:
+                                await connection.execute(
+                                    """UPDATE agent_memory_claims
+                                    SET provenance_json = %s::jsonb,
+                                        archived_at = CASE WHEN %s THEN now() ELSE archived_at END,
+                                        status = CASE WHEN %s THEN 'archived' ELSE status END
+                                    WHERE id = %s""",
+                                    (_json(replace(provenance, source_event_ids=remaining)),
+                                     not remaining, not remaining, row["id"]),
+                                )
+                            counts["agent_memory_claims"] += 1
+                        after_id = rows[-1]["id"]
                 await self._invalidate_feedback(
                     connection,
                     request.scope.partition_key(),

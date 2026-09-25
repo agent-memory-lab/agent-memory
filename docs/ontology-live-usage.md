@@ -1,5 +1,42 @@
 # Managed SQLite Ontology Memory
 
+## Optional PostgreSQL core source
+
+Install the optional PostgreSQL package and initialize its core repository first.
+The same coordinator can consume PostgreSQL Claims using `PostgresOntologySource`:
+
+```python
+import os
+from agent_memory_postgres import PostgresOntologySource
+from agent_memory import LiveOntologyMemory
+
+source = PostgresOntologySource(os.environ["AGENT_MEMORY_POSTGRES_DSN"])
+async with LiveOntologyMemory(
+    source, registry, ontology_id, context, work_directory="ontology-work",
+) as ontology:
+    while not await ontology.refresh():
+        pass
+    # Inject ontology as the host's recall pipeline or use borrow_store with
+    # OntologyAPI. Registry, context and activation remain host-controlled.
+```
+
+PostgreSQL source tracking covers committed inserts, updates, deletes and
+truncation of core Claims and Events. Rolled-back changes do not advance the
+counter. A repeatable-read transaction streams Claims and evidence in batches
+of 128 into the durable snapshot. Existing local checkpoint, acceptance and
+generation recovery mechanisms are reused. The database role needs permission
+to create the tracker table, trigger function and triggers in the core schema;
+normal writers must be able to update the tracker table. Initialize explicitly
+during deployment rather than granting these permissions to untrusted callers.
+
+This is a hybrid deployment: source records live in PostgreSQL, while snapshots,
+checkpoints, the schema registry shown above and managed ontology indexes remain
+local. Protect the work directory as sensitive data. It is not a distributed
+worker coordinator or PostgreSQL-hosted generation manager. Use a single local
+work directory per job; schema-level revision tracking may cause extra rebuilds
+for unrelated scopes. No polling daemon or mandatory PostgreSQL dependency is
+added to the default SQLite path.
+
 `LiveOntologyMemory` joins core Claim snapshots, automatic change detection,
 index acceptance, and runtime schema replacement. It is an optional
 `recall_pipeline` with no additional dependencies or background daemon.

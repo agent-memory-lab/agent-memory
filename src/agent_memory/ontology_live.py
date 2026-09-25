@@ -1,4 +1,4 @@
-"""Opt-in SQLite synchronization and safe runtime generation replacement."""
+"""Opt-in source synchronization and safe local index generation replacement."""
 from __future__ import annotations
 
 import asyncio
@@ -35,7 +35,7 @@ class LiveOntologyMemory:
     their committed changes. No background thread or daemon is started.
     """
 
-    def __init__(self, source: SQLiteOntologySource, catalog, ontology_id, context, *,
+    def __init__(self, source, catalog, ontology_id, context, *,
                  work_directory: str | Path, batch_size=32, max_batches=8):
         if type(batch_size) is not int or not 1 <= batch_size <= 256:
             raise ValueError("batch_size must be between 1 and 256")
@@ -50,7 +50,7 @@ class LiveOntologyMemory:
         self._opened = False
         self.last_acceptance = None
         self._workspace = OntologyWorkspace(self.directory,
-            str(source.path) + ":" + context.scope.partition_key() + ":" + ontology_id)
+            source.storage_key + ":" + context.scope.partition_key() + ":" + ontology_id)
 
     async def __aenter__(self):
         if self._opened:
@@ -59,7 +59,7 @@ class LiveOntologyMemory:
         self.directory.mkdir(parents=True, exist_ok=True)
         self._source_id = await self.source.identity()
         self._workspace = OntologyWorkspace(self.directory,
-            str(self.source.path) + ":" + self.context.scope.partition_key() + ":" + self.ontology_id + ":" + self._source_id)
+            self.source.storage_key + ":" + self.context.scope.partition_key() + ":" + self.ontology_id + ":" + self._source_id)
         self._workspace.open()
         self._opened = True
         return self
