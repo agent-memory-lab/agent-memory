@@ -85,7 +85,8 @@ class PostgresMemoryDoctor:
                     for row in await _all(
                         connection,
                         "SELECT table_name FROM information_schema.tables "
-                        "WHERE table_schema=current_schema() AND table_name LIKE 'agent_memory_%'",
+                    "WHERE table_schema=current_schema() AND table_name LIKE %s",
+                    ("agent_memory_%",),
                     )
                 }
                 required = {

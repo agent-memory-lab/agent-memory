@@ -61,11 +61,15 @@ using the tracked SQLite tables are detected at the next refresh or recall.
   acceptance failures stop serving; old results are not used as fallback.
 - Current-state Claims are supplied by the caller's provider and retain its own
   consistency semantics. This adapter governs the ontology retrieval channel.
-- Temporary generations are removed on normal exit. After an abrupt process
-  death the host may remove abandoned work directories when no worker owns them.
-  A new runtime rebuilds; standalone snapshot/backfill APIs support durable resume.
+- Generations and checkpoints persist across exit. A new runtime resumes matching
+  work after checking source, Schema and index identities. An OS lock prevents
+  concurrent workers from sharing the same job. Retired indexes are reclaimed
+  according to the bounded generation retention policy.
 - Acceptance is a snapshot integrity check, not a business quality benchmark.
   Hosts still decide approval, quality thresholds and when to activate versions.
 
 The source tracker is installed only by `SQLiteOntologySource.initialize()`.
 Existing core providers and default recall paths do not enable it implicitly.
+
+See [ontology operations](ontology-operations.md) for graph queries, checkpoint
+identity, recovery, SDK/MCP configuration and the optional PostgreSQL adapter.

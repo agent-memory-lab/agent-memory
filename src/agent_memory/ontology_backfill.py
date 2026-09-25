@@ -39,12 +39,15 @@ class OntologyBackfillCheckpoint:
     cursor: str | None = None
     processed_claims: int = 0
     completed: bool = False
+    target_index_id: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.scope, MemoryScope):
             raise TypeError("scope must be a MemoryScope")
         _identifier(self.snapshot_id, "snapshot_id")
         _identifier(self.schema_digest, "schema_digest")
+        if self.target_index_id is not None:
+            _identifier(self.target_index_id, "target_index_id")
         if self.cursor is not None:
             _identifier(self.cursor, "cursor")
         if type(self.processed_claims) is not int or self.processed_claims < 0:
@@ -75,6 +78,7 @@ async def backfill_ontology_memory(
     resume: OntologyBackfillCheckpoint | None = None,
     batch_size: int = 32,
     max_batches: int = 8,
+    target_index_id: str | None = None,
 ) -> OntologyBackfillCheckpoint:
     """Backfill at most max_batches; checkpoint only after successful projection.
 
@@ -93,15 +97,19 @@ async def backfill_ontology_memory(
     if type(max_batches) is not int or not 1 <= max_batches <= 128:
         raise ValueError("max_batches must be between 1 and 128")
     current = resume or OntologyBackfillCheckpoint(
-        context.scope, snapshot_id, ontology_schema_digest(schema),
+        context.scope, snapshot_id, ontology_schema_digest(schema), target_index_id=target_index_id,
     )
     if (
         current.scope != context.scope
         or current.snapshot_id != snapshot_id
         or current.schema_digest != ontology_schema_digest(schema)
+        or current.target_index_id != target_index_id
     ):
         raise ValueError("checkpoint does not match scope, snapshot, or target schema")
     _live(context)
+    if target_index_id is not None:
+        if await store.index_identity() != target_index_id:
+            raise ValueError("target index identity changed; refusing checkpoint resume")
     if current.completed:
         return current
     plugin = OntologyProjectionConsolidatorPlugin(store, schema, evidence_verifier)
@@ -137,6 +145,7 @@ async def backfill_ontology_memory(
                 cursor=page.next_cursor,
                 processed_claims=current.processed_claims + len(page.claims),
                 completed=page.next_cursor is None,
+                target_index_id=target_index_id,
             )
             await asyncio.wait_for(checkpoint_sink.save(next_checkpoint), timeout=timeout)
             current = next_checkpoint

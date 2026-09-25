@@ -47,7 +47,11 @@ class SQLiteOntologySource:
         with database(self.path) as db:
             db.execute("BEGIN IMMEDIATE")
             db.execute("CREATE TABLE IF NOT EXISTS ontology_source_revision (id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL)")
-            db.execute("INSERT OR IGNORE INTO ontology_source_revision VALUES (1, 0)")
+            columns = {row["name"] for row in db.execute("PRAGMA table_info(ontology_source_revision)")}
+            if "source_id" not in columns:
+                db.execute("ALTER TABLE ontology_source_revision ADD COLUMN source_id TEXT")
+            db.execute("INSERT OR IGNORE INTO ontology_source_revision (id,revision,source_id) VALUES (1, 0, ?)", (str(uuid4()),))
+            db.execute("UPDATE ontology_source_revision SET source_id=? WHERE source_id IS NULL", (str(uuid4()),))
             for table in ("claims", "events", "claim_sources"):
                 for action in ("INSERT", "UPDATE", "DELETE"):
                     db.execute(
@@ -58,6 +62,12 @@ class SQLiteOntologySource:
 
     async def revision(self) -> int:
         return await asyncio.to_thread(self._revision)
+
+    async def identity(self) -> str:
+        def read():
+            with database(self.path, readonly=True) as db:
+                return db.execute("SELECT source_id FROM ontology_source_revision WHERE id=1").fetchone()[0]
+        return await asyncio.to_thread(read)
 
     def _revision(self):
         with database(self.path, readonly=True) as db:

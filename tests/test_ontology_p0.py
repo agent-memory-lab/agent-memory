@@ -115,7 +115,8 @@ def test_recall_automatically_observes_insert_replace_and_erase(tmp_path):
                 await memory.forget(memory_ids=second.provenance.source_event_ids, erase=True)
                 assert (await memory.recall("Alice")).relevant_memories == ()
                 assert live.last_acceptance.ready
-        assert list((tmp_path / "work").iterdir()) == []
+        assert live._active is None and live._pending is None
+        assert live._workspace._lock is None
     asyncio.run(scenario())
 
 
@@ -214,7 +215,8 @@ def test_failed_new_schema_never_falls_back_to_old_index(tmp_path):
             await registry.activate(SCOPE, SCHEMA.ontology_id, "2.0.0", expected_generation=1, reason="host test", authorizer=Approval())
             with pytest.raises(ValueError):
                 await live.retrieve(MemoryQuery(SCOPE, "Alice"), ())
-        assert list((tmp_path / "work").iterdir()) == []
+        assert live._active is None and live._pending is None
+        assert live._workspace._lock is None
     asyncio.run(scenario())
 
 
@@ -238,7 +240,8 @@ def test_cancelled_refresh_settles_before_cleanup(tmp_path):
             with pytest.raises(asyncio.CancelledError):
                 await task
             assert await live.refresh()
-        assert list((tmp_path / "work").iterdir()) == []
+        assert live._active is None and live._pending is None
+        assert live._workspace._lock is None
     asyncio.run(scenario())
 
 

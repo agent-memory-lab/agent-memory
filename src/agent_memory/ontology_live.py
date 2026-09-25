@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from .ontology_workspace import OntologyWorkspace
 
 from .ontology_acceptance import validate_ontology_index
 from .ontology_backfill import backfill_ontology_memory
@@ -11,7 +12,7 @@ from .ontology_checkpoint import SQLiteOntologyCheckpointSink
 from .ontology_memory import SQLiteOntologyStore
 from .ontology_runtime import open_active_ontology_memory
 from .ontology_schema import ontology_schema_digest
-from .ontology_source import SQLiteOntologySource
+from .ontology_source import SQLiteOntologySource, SQLiteOntologySnapshot
 
 
 class OntologySyncPending(RuntimeError):
@@ -48,12 +49,18 @@ class LiveOntologyMemory:
         self._pending = None
         self._opened = False
         self.last_acceptance = None
+        self._workspace = OntologyWorkspace(self.directory,
+            str(source.path) + ":" + context.scope.partition_key() + ":" + ontology_id)
 
     async def __aenter__(self):
         if self._opened:
             raise RuntimeError("live ontology runtime is already open")
         await self.source.initialize()
         self.directory.mkdir(parents=True, exist_ok=True)
+        self._source_id = await self.source.identity()
+        self._workspace = OntologyWorkspace(self.directory,
+            str(self.source.path) + ":" + self.context.scope.partition_key() + ":" + self.ontology_id + ":" + self._source_id)
+        self._workspace.open()
         self._opened = True
         return self
 
@@ -64,10 +71,25 @@ class LiveOntologyMemory:
                 if self._active:
                     await self._active["manager"].__aexit__(None, None, None)
             finally:
-                for generation in (self._active, self._pending):
-                    if generation:
-                        generation["temporary"].cleanup()
                 self._active = self._pending = None
+                self._workspace.close()
+
+    @asynccontextmanager
+    async def borrow_store(self, scope, activation):
+        """Pin a prepared store through one SDK/MCP query, then check freshness."""
+        if scope != self.context.scope:
+            raise ValueError("ontology store is outside the runtime scope")
+        async with self._lock:
+            if not await self._settled_refresh():
+                raise OntologySyncPending("ontology index is still being prepared")
+            if self._active["key"][0] != activation:
+                raise OntologySyncPending("activation changed during store resolution")
+            active = self._active
+            yield active["store"]
+            if (await self.source.identity() != self._source_id
+                or await self.source.revision() != active["key"][1]
+                or await self.catalog.active(scope, self.ontology_id) != activation):
+                raise OntologySyncPending("source or activation changed during ontology query")
 
     async def refresh(self) -> bool:
         async with self._lock:
@@ -89,6 +111,8 @@ class LiveOntologyMemory:
     async def _refresh(self):
         if not self._opened or self.context.cancelled or self.context.expired:
             raise RuntimeError("live ontology runtime is inactive or expired")
+        if await self.source.identity() != self._source_id:
+            raise ValueError("source database identity changed; reopen runtime")
         activation = await self.catalog.active(self.context.scope, self.ontology_id)
         if activation is None:
             raise LookupError("no active ontology schema")
@@ -100,27 +124,45 @@ class LiveOntologyMemory:
             self._pending["temporary"].cleanup()
             self._pending = None
         if self._pending is None:
-            temporary = TemporaryDirectory(prefix="ontology-", dir=self.directory)
+            workspace_key = activation.digest + ":" + str(revision)
+            temporary = self._workspace.recover(workspace_key)
+            recovered = temporary is not None
+            if temporary is None:
+                temporary = self._workspace.create(workspace_key)
             root = Path(temporary.name)
             try:
-                snapshot = await self.source.snapshot(self.context.scope, root / "snapshot.db")
+                snapshot = (await SQLiteOntologySnapshot.open(root / "snapshot.db", self.context.scope)
+                    if recovered else await self.source.snapshot(self.context.scope, root / "snapshot.db"))
                 schema = await self.catalog.get(self.context.scope, self.ontology_id, activation.version)
                 if ontology_schema_digest(schema) != activation.digest:
                     raise ValueError("active schema digest mismatch")
+                store = SQLiteOntologyStore(root / "index.db")
+                if recovered:
+                    if not (root / "index.db").is_file():
+                        raise ValueError("target index is missing; recovery refused")
+                    index_id = await store.index_identity()
+                    if index_id != self._workspace.index_id(temporary):
+                        raise ValueError("target index identity changed; recovery refused")
+                else:
+                    await store.initialize()
+                    index_id = await store.index_identity()
+                    self._workspace.bind(temporary, index_id)
                 sink = SQLiteOntologyCheckpointSink(root / "checkpoint.db", scope=self.context.scope,
-                    snapshot_id=snapshot.snapshot_id, schema_digest=activation.digest)
+                    snapshot_id=snapshot.snapshot_id, schema_digest=activation.digest, target_index_id=index_id)
                 await sink.initialize()
                 self._pending = dict(temporary=temporary, snapshot=snapshot, schema=schema,
-                    sink=sink, path=root / "index.db", store=SQLiteOntologyStore(root / "index.db"),
+                    sink=sink, path=root / "index.db", store=store, index_id=index_id,
                     key=(activation, snapshot.revision))
             except BaseException:
-                temporary.cleanup()
+                if not recovered:
+                    temporary.cleanup()
                 raise
         pending = self._pending
         checkpoint = await backfill_ontology_memory(
             pending["snapshot"], pending["snapshot"].snapshot_id, pending["schema"], pending["store"],
             pending["snapshot"], self.context, checkpoint_sink=pending["sink"],
             resume=await pending["sink"].load(), batch_size=self.batch_size, max_batches=self.max_batches,
+            target_index_id=pending["index_id"],
         )
         if not checkpoint.completed:
             return False
@@ -137,13 +179,20 @@ class LiveOntologyMemory:
             await manager.__aexit__(None, None, None)
             return False
         previous = self._active
+        try:
+            self._workspace.promote(pending["temporary"])
+        except BaseException:
+            await manager.__aexit__(None, None, None)
+            raise
         pending.update(manager=manager, handle=handle)
         self._active, self._pending = pending, None
         if previous:
             try:
                 await previous["manager"].__aexit__(None, None, None)
             finally:
-                previous["temporary"].cleanup()
+                self._workspace.collect()
+        else:
+            self._workspace.collect()
         return True
 
     async def retrieve(self, query, current_state):
@@ -154,7 +203,8 @@ class LiveOntologyMemory:
                 raise OntologySyncPending("ontology synchronization is incomplete; call refresh to continue")
             active = self._active
             bundle = await active["handle"].recall_pipeline.retrieve(query, current_state)
-            if (await self.source.revision() != active["key"][1]
+            if (await self.source.identity() != self._source_id
+                or await self.source.revision() != active["key"][1]
                 or await self.catalog.active(self.context.scope, self.ontology_id) != active["key"][0]):
                 raise OntologySyncPending("source or activation changed during recall; retry after refresh")
             return bundle

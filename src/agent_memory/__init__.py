@@ -172,6 +172,10 @@ from .ontology_upgrade import (
     OntologyUpgradeRequest,
     register_ontology_upgrade,
 )
+from .ontology_config import OntologyStoreConfig
+from .ontology_api import OntologyAPI
+from .ontology_queries import OntologyGraphResult, traverse_ontology
+from .ontology_workspace import OntologyWorkspace
 from .ontology_source import SQLiteOntologySource, SQLiteOntologySnapshot
 from .ontology_acceptance import OntologyIndexAcceptance, validate_ontology_index
 from .ontology_live import LiveOntologyMemory, OntologySyncPending
@@ -369,6 +373,11 @@ __all__ = [
     "load_ontology_memory",
     "register_ontology_memory",
     "ONTOLOGY_SCHEMA_FORMAT",
+    "OntologyStoreConfig",
+    "OntologyAPI",
+    "OntologyGraphResult",
+    "traverse_ontology",
+    "OntologyWorkspace",
     "SQLiteOntologySource",
     "SQLiteOntologySnapshot",
     "OntologyIndexAcceptance",

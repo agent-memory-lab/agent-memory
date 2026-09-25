@@ -342,7 +342,14 @@ class OntologyMatch:
 class OntologyStore(Protocol):
     async def initialize(self) -> None: ...
 
+    async def index_identity(self) -> str: ...
+
     async def register_schema(self, schema: OntologySchema) -> None: ...
+
+    async def get_assertions(self, scope, assertion_ids, *, ontology_id, ontology_version, at_time): ...
+
+    async def neighbors(self, scope, entity_ids, *, ontology_id, ontology_version, at_time,
+                        predicates=(), direction="outgoing", limit=100): ...
 
     async def upsert_projection(self, projection: OntologyProjection) -> None: ...
 
@@ -380,7 +387,10 @@ class OntologyStore(Protocol):
     ) -> OntologyAssertion: ...
 
 
-class SQLiteOntologyStore:
+from .ontology_queries import SQLOntologyQueries
+
+
+class SQLiteOntologyStore(SQLOntologyQueries):
     """Optional local ontology index with no dependency beyond Python stdlib."""
 
     def __init__(self, database_path: str | Path) -> None:
@@ -388,6 +398,15 @@ class SQLiteOntologyStore:
 
     async def initialize(self) -> None:
         await asyncio.to_thread(self._initialize_sync)
+
+    async def index_identity(self) -> str:
+        def read():
+            connection = self._connect()
+            try:
+                return connection.execute("SELECT index_id FROM ontology_index_identity WHERE singleton=1").fetchone()["index_id"]
+            finally:
+                connection.close()
+        return await asyncio.to_thread(read)
 
     async def register_schema(self, schema: OntologySchema) -> None:
         await asyncio.to_thread(self._register_schema_sync, schema)
@@ -479,6 +498,10 @@ class SQLiteOntologyStore:
             with connection:
                 connection.executescript(
                     """
+                    CREATE TABLE IF NOT EXISTS ontology_index_identity (
+                        singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+                        index_id TEXT NOT NULL
+                    );
                     CREATE TABLE IF NOT EXISTS ontology_schemas (
                         ontology_id TEXT NOT NULL,
                         version TEXT NOT NULL,
@@ -562,6 +585,9 @@ class SQLiteOntologyStore:
                         created_at TEXT NOT NULL
                     );
                     """
+                )
+                connection.execute(
+                    "INSERT OR IGNORE INTO ontology_index_identity VALUES (1, ?)", (str(uuid4()),)
                 )
                 assertion_columns = {
                     row["name"]

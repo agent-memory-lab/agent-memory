@@ -33,8 +33,9 @@ class SQLiteOntologyCheckpointSink:
         scope: MemoryScope,
         snapshot_id: str,
         schema_digest: str,
+        target_index_id: str | None = None,
     ) -> None:
-        self._binding = OntologyBackfillCheckpoint(scope, snapshot_id, schema_digest)
+        self._binding = OntologyBackfillCheckpoint(scope, snapshot_id, schema_digest, target_index_id=target_index_id)
         self._path = Path(path)
         self._key = (scope.partition_key(), snapshot_id, schema_digest)
 
@@ -70,6 +71,9 @@ class SQLiteOntologyCheckpointSink:
                     CHECK(completed = 1 OR processed_claims = 0 OR cursor IS NOT NULL)
                 )
             """)
+            columns = {row["name"] for row in db.execute("PRAGMA table_info(ontology_backfill_checkpoints)")}
+            if "target_index_id" not in columns:
+                db.execute("ALTER TABLE ontology_backfill_checkpoints ADD COLUMN target_index_id TEXT")
 
     async def load(self) -> OntologyBackfillCheckpoint | None:
         """Return durable progress for this job, or None for a fresh job."""
@@ -78,7 +82,7 @@ class SQLiteOntologyCheckpointSink:
     def _load(self) -> OntologyBackfillCheckpoint | None:
         with self._connection() as db:
             row = db.execute(
-                "SELECT cursor, processed_claims, completed FROM ontology_backfill_checkpoints "
+                "SELECT cursor, processed_claims, completed, target_index_id FROM ontology_backfill_checkpoints "
                 "WHERE partition_key=? AND snapshot_id=? AND schema_digest=?", self._key,
             ).fetchone()
         return None if row is None else self._decode(row)
@@ -90,6 +94,7 @@ class SQLiteOntologyCheckpointSink:
             checkpoint.scope != self._binding.scope
             or checkpoint.snapshot_id != self._binding.snapshot_id
             or checkpoint.schema_digest != self._binding.schema_digest
+            or checkpoint.target_index_id != self._binding.target_index_id
         ):
             raise ValueError("checkpoint does not match the bound backfill job")
         await asyncio.to_thread(self._save, checkpoint)
@@ -98,7 +103,7 @@ class SQLiteOntologyCheckpointSink:
         with self._connection() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute(
-                "SELECT cursor, processed_claims, completed FROM ontology_backfill_checkpoints "
+                "SELECT cursor, processed_claims, completed, target_index_id FROM ontology_backfill_checkpoints "
                 "WHERE partition_key=? AND snapshot_id=? AND schema_digest=?", self._key,
             ).fetchone()
             if row is not None:
@@ -114,15 +119,19 @@ class SQLiteOntologyCheckpointSink:
                 if not checkpoint.completed and checkpoint.cursor == previous.cursor:
                     raise OntologyCheckpointConflict("progress advanced without a new cursor")
             db.execute(
-                "INSERT INTO ontology_backfill_checkpoints VALUES (?, ?, ?, ?, ?, ?, ?) "
+                "INSERT INTO ontology_backfill_checkpoints "
+                "(partition_key,snapshot_id,schema_digest,cursor,processed_claims,completed,updated_at,target_index_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(partition_key, snapshot_id, schema_digest) DO UPDATE SET "
                 "cursor=excluded.cursor, processed_claims=excluded.processed_claims, "
                 "completed=excluded.completed, updated_at=excluded.updated_at",
                 (*self._key, checkpoint.cursor, checkpoint.processed_claims,
-                 int(checkpoint.completed), datetime.now(UTC).isoformat()),
+                 int(checkpoint.completed), datetime.now(UTC).isoformat(), checkpoint.target_index_id),
             )
 
     def _decode(self, row: sqlite3.Row) -> OntologyBackfillCheckpoint:
+        if row["target_index_id"] != self._binding.target_index_id:
+            raise OntologyCheckpointConflict("checkpoint belongs to a different index instance")
         return OntologyBackfillCheckpoint(
             scope=self._binding.scope,
             snapshot_id=self._binding.snapshot_id,
@@ -130,4 +139,5 @@ class SQLiteOntologyCheckpointSink:
             cursor=row["cursor"],
             processed_claims=row["processed_claims"],
             completed=bool(row["completed"]),
+            target_index_id=row["target_index_id"],
         )

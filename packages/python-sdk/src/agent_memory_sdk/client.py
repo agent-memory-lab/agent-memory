@@ -53,6 +53,12 @@ def _capture_deadline(value: float) -> float:
 
 
 class MemoryClient(Protocol):
+    async def ontology_status(self) -> dict[str, Any]: ...
+    async def ontology_search(self, text: str, *, limit: int = 8) -> dict[str, Any]: ...
+    async def ontology_assertions(self, ids: list[str]) -> dict[str, Any]: ...
+    async def ontology_graph(self, start_entity: str, **options: Any) -> dict[str, Any]: ...
+    async def ontology_switch(self, version: str, *, expected_generation: int,
+        reason: str, action: str = "activate") -> dict[str, Any]: ...
     async def ingest(self, event_type: str, content: str, **options: Any) -> dict[str, Any]: ...
     async def retrieve(self, text: str, **options: Any) -> dict[str, Any]: ...
     async def get_state(self) -> dict[str, Any]: ...
@@ -81,6 +87,22 @@ class CaptureClient(Protocol):
 
 
 class _Operations:
+    async def ontology_status(self):
+        return await self._call("memory_ontology_status", {})
+
+    async def ontology_search(self, text: str, *, limit=8):
+        return await self._call("memory_ontology_search", dict(text=text, limit=limit))
+
+    async def ontology_assertions(self, ids):
+        return await self._call("memory_ontology_assertions", dict(ids=list(ids)))
+
+    async def ontology_graph(self, start_entity: str, **options):
+        return await self._call("memory_ontology_graph", dict(start_entity=start_entity, **options))
+
+    async def ontology_switch(self, version: str, *, expected_generation: int, reason: str, action="activate"):
+        return await self._call("memory_ontology_switch", dict(version=version,
+            expected_generation=expected_generation, reason=reason, action=action))
+
     async def _call(self, name: str, arguments: Mapping[str, Any]) -> dict[str, Any]:
         raise NotImplementedError
 
@@ -280,9 +302,10 @@ class EmbeddedMemoryClient(_Operations):
         capture_sink: CaptureSink | None = None,
         capture_timeout_seconds: float = 0.25,
         deletion_auditor: DeletionAuditService | None = None,
+        ontology=None,
     ) -> None:
         self._provider = provider
-        self._tools = MCPMemoryTools(provider, deletion_auditor=deletion_auditor)
+        self._tools = MCPMemoryTools(provider, deletion_auditor=deletion_auditor, ontology=ontology)
         self._context = context
         self._capture_sink = capture_sink
         self._capture_timeout_seconds = _capture_deadline(capture_timeout_seconds)

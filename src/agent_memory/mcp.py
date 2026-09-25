@@ -109,10 +109,12 @@ class MCPMemoryTools:
         *,
         doctor: MemoryDoctorProvider | None = None,
         deletion_auditor: DeletionAuditService | None = None,
+        ontology=None,
     ) -> None:
         self._provider = provider
         self._doctor = doctor
         self._deletion_auditor = deletion_auditor
+        self._ontology = ontology
 
     def list_tools(self) -> tuple[dict[str, Any], ...]:
         scope_note = "Scope is derived from the authenticated request and is not an argument."
@@ -338,6 +340,8 @@ class MCPMemoryTools:
                     (),
                 ),
             )
+        if self._ontology is not None:
+            tools += self._ontology.tools()
         capabilities = self._provider.manifest().capabilities
         enabled = list(tools)
         if not capabilities.memory_blocks:
@@ -360,6 +364,10 @@ class MCPMemoryTools:
         context: MCPRequestContext,
     ) -> dict[str, Any]:
         try:
+            if name.startswith("memory_ontology_"):
+                if self._ontology is None:
+                    raise MCPToolError("ontology is not configured", code="ontology_unavailable")
+                return await self._ontology.call(name, dict(arguments), context)
             return await self._call_tool(name, arguments, context)
         except MCPToolError:
             raise

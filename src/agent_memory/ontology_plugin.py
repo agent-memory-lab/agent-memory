@@ -9,7 +9,7 @@ from datetime import datetime
 
 from .candidate_fusion import FusedCandidate
 from .candidate_guard import GovernedCandidate
-from .domain import MemoryScope
+from .domain import MemoryKind, MemoryScope
 from .governed_recall import GovernedRecallPipeline
 from .ontology_memory import (
     OntologyEvidenceVerifier,
@@ -57,34 +57,47 @@ class OntologyCandidateGovernance:
         if len(candidates) > 256:
             raise ValueError("candidate input exceeds the governance limit")
 
+        if any(not isinstance(candidate, FusedCandidate) for candidate in candidates):
+            raise TypeError("candidate must be a FusedCandidate")
+        selected = tuple(value for value in candidates if "ontology-retriever" in value.retrievers)
+        if not selected:
+            return ()
+        assertions = await self._store.get_assertions(
+            scope, tuple(value.item.id for value in selected),
+            ontology_id=self._schema.ontology_id, ontology_version=self._schema.version,
+            at_time=self._clock(),
+        )
+        by_id = {value.assertion_id: value for value in assertions}
         governed: list[GovernedCandidate] = []
         for candidate in candidates:
             if not isinstance(candidate, FusedCandidate):
                 raise TypeError("candidate must be a FusedCandidate")
             if "ontology-retriever" not in candidate.retrievers:
                 continue
-            matches = await self._store.search(
-                candidate.item.text,
-                scope,
-                ontology_id=self._schema.ontology_id,
-                ontology_version=self._schema.version,
-                at_time=self._clock(),
-                limit=min(8, len(candidates) or 1),
-                max_scan=self._max_scan,
-            )
-            authoritative = next(
-                (match for match in matches if match.item.id == candidate.item.id),
-                None,
-            )
+            authoritative = by_id.get(candidate.item.id)
             if authoritative is None:
                 continue
             if tuple(sorted(authoritative.source_event_ids)) != tuple(
                 sorted(candidate.source_event_ids)
             ):
                 continue
-            if authoritative.item != candidate.item:
+            if (candidate.item.kind is not MemoryKind.CLAIM
+                or authoritative.text != candidate.item.text
+                or authoritative.valid_from != candidate.item.occurred_at):
                 continue
-            governed.append(GovernedCandidate(scope=scope, candidate=candidate))
+            expected_metadata = {
+                "ontology_id": authoritative.ontology_id,
+                "ontology_version": authoritative.ontology_version,
+                "subject_entity_id": authoritative.subject_entity_id,
+                "predicate_id": authoritative.predicate_id,
+                "object_entity_id": authoritative.object_entity_id,
+                "literal_value": authoritative.literal_value,
+                "valid_to": authoritative.valid_to.isoformat() if authoritative.valid_to else None,
+            }
+            if any(candidate.item.metadata.get(key) != value for key, value in expected_metadata.items()):
+                continue
+            governed.append(GovernedCandidate(scope=scope, candidate=candidate,
+                valid_from=authoritative.valid_from, valid_to=authoritative.valid_to))
         return tuple(governed)
 
 

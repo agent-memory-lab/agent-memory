@@ -25,6 +25,7 @@ def create_server(
     capture_sink: CaptureSink | None = None,
     doctor: MemoryDoctorProvider | None = None,
     deletion_auditor: DeletionAuditService | None = None,
+    ontology=None,
 ) -> MCPServer:
     """Create an MCP v2 server while retaining one core business contract."""
     server = MCPServer(name)
@@ -32,6 +33,7 @@ def create_server(
         provider,
         doctor=doctor,
         deletion_auditor=deletion_auditor,
+        ontology=ontology,
     )
 
     async def call(ctx: Context, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -149,6 +151,44 @@ def create_server(
         async def memory_deletion_audit(ctx: Context, limit: int = 100) -> dict[str, Any]:
             """Return signed deletion receipts for the authenticated scope."""
             return await call(ctx, "memory_deletion_audit", {"limit": limit})
+
+    if ontology is not None:
+        @server.tool()
+        async def memory_ontology_status(ctx: Context) -> dict[str, Any]:
+            """Read the authenticated scope's ontology activation and versions."""
+            return await call(ctx, "memory_ontology_status", {})
+
+        @server.tool()
+        async def memory_ontology_search(ctx: Context, text: str, limit: int = 8) -> dict[str, Any]:
+            """Search evidence-backed assertions in the active ontology version."""
+            return await call(ctx, "memory_ontology_search", dict(text=text, limit=limit))
+
+        @server.tool()
+        async def memory_ontology_assertions(ctx: Context, ids: list[str]) -> dict[str, Any]:
+            """Read active assertions by exact ID under authenticated scope."""
+            return await call(ctx, "memory_ontology_assertions", dict(ids=ids))
+
+        @server.tool()
+        async def memory_ontology_graph(ctx: Context, start_entity: str,
+            target_entity: str | None = None, max_depth: int = 2, max_nodes: int = 32,
+            max_edges: int = 64, token_budget: int = 1200,
+            predicates: list[str] | None = None, direction: str = "outgoing") -> dict[str, Any]:
+            """Run a bounded, evidence-backed relation traversal."""
+            args = dict(start_entity=start_entity, max_depth=max_depth, max_nodes=max_nodes,
+                max_edges=max_edges, token_budget=token_budget, direction=direction)
+            if target_entity is not None:
+                args["target_entity"] = target_entity
+            if predicates is not None:
+                args["predicates"] = predicates
+            return await call(ctx, "memory_ontology_graph", args)
+
+        if ontology.switch_policy is not None:
+            @server.tool()
+            async def memory_ontology_switch(ctx: Context, version: str,
+                expected_generation: int, reason: str, action: str = "activate") -> dict[str, Any]:
+                """Request a version switch through the configured host policy."""
+                return await call(ctx, "memory_ontology_switch", dict(version=version,
+                    expected_generation=expected_generation, reason=reason, action=action))
 
     @server.resource("memory://state/{view}")
     async def current_state_resource(view: str, ctx: Context) -> dict[str, Any]:

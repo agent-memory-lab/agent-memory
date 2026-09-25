@@ -17,6 +17,12 @@ def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description="Agent Memory MCP v2 server")
     result.add_argument("--transport", choices=("stdio", "streamable-http"), default="stdio")
     result.add_argument("--database", type=Path, default=Path("agent-memory.db"))
+    result.add_argument("--ontology-id")
+    result.add_argument("--ontology-registry", type=Path, default=Path("ontology-registry.db"))
+    result.add_argument("--ontology-backend", choices=("sqlite", "postgres"), default="sqlite")
+    result.add_argument("--ontology-database", default="ontology.db")
+    result.add_argument("--ontology-dsn-env", default="AGENT_MEMORY_ONTOLOGY_DSN")
+    result.add_argument("--ontology-namespace", default="agent_memory_ontology")
     result.add_argument("--host", default="127.0.0.1")
     result.add_argument("--port", type=int, default=8000)
     result.add_argument("--tenant-id")
@@ -68,7 +74,18 @@ def main() -> None:
                 "Streamable HTTP requires a gateway HMAC secret; the fixed-scope "
                 "override is for isolated development only"
             )
-    server = create_server(provider, resolver)
+    ontology = None
+    if args.ontology_id:
+        from agent_memory.ontology_api import OntologyAPI
+        from agent_memory.ontology_config import OntologyStoreConfig
+        from agent_memory.ontology_registry import SQLiteOntologyRegistry
+        store = OntologyStoreConfig(args.ontology_backend, args.ontology_database,
+            args.ontology_dsn_env, args.ontology_namespace).create_store()
+        registry = SQLiteOntologyRegistry(args.ontology_registry)
+        asyncio.run(store.initialize())
+        asyncio.run(registry.initialize())
+        ontology = OntologyAPI(store, registry, args.ontology_id)
+    server = create_server(provider, resolver, ontology=ontology)
     if args.transport == "stdio":
         server.run(transport="stdio")
     else:
