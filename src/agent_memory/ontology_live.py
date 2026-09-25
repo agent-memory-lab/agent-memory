@@ -9,6 +9,7 @@ from .ontology_workspace import OntologyWorkspace
 from .ontology_acceptance import validate_ontology_index
 from .ontology_backfill import backfill_ontology_memory
 from .ontology_checkpoint import SQLiteOntologyCheckpointSink
+from .ontology_delta import prepare_delta, projection_source
 from .ontology_memory import SQLiteOntologyStore
 from .ontology_runtime import open_active_ontology_memory
 from .ontology_schema import ontology_schema_digest
@@ -36,7 +37,10 @@ class LiveOntologyMemory:
     """
 
     def __init__(self, source, catalog, ontology_id, context, *,
-                 work_directory: str | Path, batch_size=32, max_batches=8):
+                 work_directory: str | Path, batch_size=32, max_batches=8, incremental=False):
+        if type(incremental) is not bool:
+            raise ValueError("incremental must be a boolean")
+        self.incremental = incremental
         if type(batch_size) is not int or not 1 <= batch_size <= 256:
             raise ValueError("batch_size must be between 1 and 256")
         if type(max_batches) is not int or not 1 <= max_batches <= 128:
@@ -59,7 +63,8 @@ class LiveOntologyMemory:
         self.directory.mkdir(parents=True, exist_ok=True)
         self._source_id = await self.source.identity()
         self._workspace = OntologyWorkspace(self.directory,
-            self.source.storage_key + ":" + self.context.scope.partition_key() + ":" + self.ontology_id + ":" + self._source_id)
+            self.source.storage_key + ":" + self.context.scope.partition_key() + ":" + self.ontology_id + ":" + self._source_id
+            + (":delta-v1" if self.incremental else ""))
         self._workspace.open()
         self._opened = True
         return self
@@ -144,6 +149,10 @@ class LiveOntologyMemory:
                     if index_id != self._workspace.index_id(temporary):
                         raise ValueError("target index identity changed; recovery refused")
                 else:
+                    if (self.incremental and self._active is not None
+                        and self._active["key"][0].digest == activation.digest):
+                        await prepare_delta(snapshot, self._active["snapshot"], schema,
+                            self._active["path"], root / "index.db")
                     await store.initialize()
                     index_id = await store.index_identity()
                     self._workspace.bind(temporary, index_id)
@@ -151,6 +160,7 @@ class LiveOntologyMemory:
                     snapshot_id=snapshot.snapshot_id, schema_digest=activation.digest, target_index_id=index_id)
                 await sink.initialize()
                 self._pending = dict(temporary=temporary, snapshot=snapshot, schema=schema,
+                    page_source=await projection_source(snapshot),
                     sink=sink, path=root / "index.db", store=store, index_id=index_id,
                     key=(activation, snapshot.revision))
             except BaseException:
@@ -159,7 +169,7 @@ class LiveOntologyMemory:
                 raise
         pending = self._pending
         checkpoint = await backfill_ontology_memory(
-            pending["snapshot"], pending["snapshot"].snapshot_id, pending["schema"], pending["store"],
+            pending["page_source"], pending["snapshot"].snapshot_id, pending["schema"], pending["store"],
             pending["snapshot"], self.context, checkpoint_sink=pending["sink"],
             resume=await pending["sink"].load(), batch_size=self.batch_size, max_batches=self.max_batches,
             target_index_id=pending["index_id"],

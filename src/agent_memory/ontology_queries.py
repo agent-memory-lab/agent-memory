@@ -100,11 +100,21 @@ class OntologyGraphResult:
     paths: tuple[tuple[str, ...], ...]
     truncated: bool
     token_estimate: int
+    token_count_kind: str = "estimate"
+    tokenizer_id: str | None = None
+
+
+def serialize_graph_content(nodes, edges, paths, truncated):
+    """Canonical counted content; transport wrappers and accounting are excluded."""
+    return json.dumps(dict(nodes=sorted(nodes), edges=[asdict(edge) for edge in edges],
+                           paths=paths, truncated=truncated), default=str,
+                      ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 async def traverse_ontology(store, scope, start_entity, *, ontology_id, ontology_version,
                             at_time, target_entity=None, predicates=(), direction="outgoing",
-                            max_depth=2, max_nodes=32, max_edges=64, token_budget=1200):
+                            max_depth=2, max_nodes=32, max_edges=64, token_budget=1200,
+                            token_counter=None):
     """Bounded BFS; paths contain assertion IDs and terminate at target_entity.
 
     Scope partitions never join into one path: repeated entity identifiers in
@@ -130,7 +140,22 @@ async def traverse_ontology(store, scope, start_entity, *, ontology_id, ontology
     seen = {(partition, start_entity) for partition in partitions}
     nodes, edges, paths, edge_ids = {start_entity}, [], [], set()
     tokens, truncated = max(1, (len(start_entity) + 7) // 4), False
+    def measured(nodes, edges, paths):
+        # Reserve both terminal flag values: BPE counts need not be additive.
+        return max(token_counter.measure(serialize_graph_content(nodes, edges, paths, flag))
+                   for flag in (True, False))
+
+    if token_counter is not None:
+        from .token_budget import TokenCounter
+        if not isinstance(token_counter, TokenCounter):
+            raise TypeError("token_counter must be a TokenCounter")
+        tokens = measured(nodes, edges, paths)
     if tokens > token_budget:
+        if token_counter is not None:
+            tokens = token_counter.measure(serialize_graph_content((), (), (), True))
+            if tokens > token_budget:
+                raise ValueError("token budget cannot fit an empty graph payload")
+            return OntologyGraphResult((), (), (), True, tokens, "exact", token_counter.identifier)
         return OntologyGraphResult((), (), (), True, 0)
     for depth in range(max_depth):
         next_frontier = []
@@ -152,13 +177,18 @@ async def traverse_ontology(store, scope, start_entity, *, ontology_id, ontology
                 cost = max(1, (len(serialized) + sum(len(v) + 4 for v in destinations - nodes) + 3) // 4)
                 if target_entity is not None:
                     cost += sum(len(v) + 4 for v in (*path, edge.assertion_id)) // 4 + 1
-                if len(edges) >= max_edges or len(nodes | destinations) > max_nodes or tokens + cost > token_budget:
+                other = edge.object_entity_id if edge.subject_entity_id == entity else edge.subject_entity_id
+                new_path = (*path, edge.assertion_id)
+                proposed_paths = [*paths, new_path] if other is not None and target_entity is not None and other == target_entity else paths
+                proposed_tokens = (measured(nodes | destinations, [*edges, edge], proposed_paths)
+                                   if token_counter is not None else tokens + cost)
+                if len(edges) >= max_edges or len(nodes | destinations) > max_nodes or proposed_tokens > token_budget:
                     truncated = True
                     continue
                 edges.append(edge)
                 edge_ids.add(edge.assertion_id)
                 nodes.update(destinations)
-                tokens += cost
+                tokens = proposed_tokens
                 other = edge.object_entity_id if edge.subject_entity_id == entity else edge.subject_entity_id
                 if other is None:
                     continue
@@ -173,4 +203,8 @@ async def traverse_ontology(store, scope, start_entity, *, ontology_id, ontology
         frontier = next_frontier
         if depth + 1 == max_depth:
             truncated = True
+    if token_counter is not None:
+        tokens = token_counter.measure(serialize_graph_content(nodes, edges, paths, truncated))
+        return OntologyGraphResult(tuple(sorted(nodes)), tuple(edges), tuple(paths), truncated,
+                                   tokens, "exact", token_counter.identifier)
     return OntologyGraphResult(tuple(sorted(nodes)), tuple(edges), tuple(paths), truncated, tokens)

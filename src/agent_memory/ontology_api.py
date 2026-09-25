@@ -17,9 +17,11 @@ class OntologyAPI:
     returns an async context manager that pins an index until the query finishes.
     """
 
-    def __init__(self, store, catalog, ontology_id, *, switch_policy=None, store_resolver=None):
+    def __init__(self, store, catalog, ontology_id, *, switch_policy=None, store_resolver=None,
+                 token_counter=None):
         self.store, self.catalog, self.ontology_id = store, catalog, ontology_id
         self.switch_policy, self.store_resolver = switch_policy, store_resolver
+        self.token_counter = token_counter
 
     def tools(self):
         definitions = [
@@ -109,7 +111,8 @@ class OntologyAPI:
         elif operation == "assertions":
             result = {"assertions": to_jsonable(await store.get_assertions(scope, tuple(args["ids"]), **options))}
         else:
-            result = {"graph": to_jsonable(await traverse_ontology(store, scope, **options, **args))}
+            result = {"graph": to_jsonable(await traverse_ontology(store, scope,
+                token_counter=self.token_counter, **options, **args))}
         if await self.catalog.active(scope, self.ontology_id) != activation:
             raise ValueError("activation changed during query; retry")
         return result
