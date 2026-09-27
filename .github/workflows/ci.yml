@@ -20,6 +20,7 @@ jobs:
       - run: |
           python -m pip install -e '.[dev]'
           python -m pip install -e packages/python-sdk
+          python -m pip install -e packages/postgres
       - run: python -m pytest -q tests
 
   integrations:
@@ -36,6 +37,7 @@ jobs:
           python -m pip install -e packages/langgraph
           python -m pip install -e packages/python-sdk
           python -m pip install -e packages/mcp-server
+          python -m pip install -e packages/postgres
       - run: >-
           python -m pytest -q
           packages/evolution/tests
