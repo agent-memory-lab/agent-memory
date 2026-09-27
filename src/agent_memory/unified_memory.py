@@ -26,6 +26,8 @@ class _ExactExtractor:
         drafts = await self.extractor.extract(event)
         if any(event.scope.project(d.scope_level) != event.scope for d in drafts):
             raise ValueError("unified capture requires exact-scope generated claims")
+        from .recovery import _extracted_event
+        _extracted_event.set(event.id)
         return drafts
 
 
@@ -103,24 +105,56 @@ class UnifiedMemory:
     and must raise on incomplete cleanup. Hosts own all injected resources.
     This is a recovery protocol, not a distributed transaction or writer fence.
     """
-    def __init__(self, provider, scope, *, journal, targets=None, sanitizer=None):
+    def __init__(self, provider, scope, *, journal, targets=None, sanitizer=None,
+                 recovery=None, compressor=None, compression_validator=None,
+                 token_counter=None):
         self.provider, self.scope, self.journal = provider, scope, journal
         self.targets = dict(targets or {})
+        self._recovery, self._compression = recovery, None
+        if recovery is not None:
+            if recovery.scope != scope or "__recovery_v1" in self.targets:
+                raise ValueError("recovery scope mismatch or reserved deletion target")
+            self.targets["__recovery_v1"] = recovery
+            from .context_compression import CompressionCoordinator
+            self._compression = CompressionCoordinator(recovery, compressor=compressor,
+                validator=compression_validator, counter=token_counter)
+        elif any(value is not None for value in (compressor, compression_validator, token_counter)):
+            raise ValueError("compression requires recovery persistence")
         if len(self.targets) > 16 or any(not isinstance(k, str) or not 1 <= len(k) <= 128 for k in self.targets):
             raise ValueError("configure at most 16 named deletion targets")
         if any(not callable(getattr(v, "forget_sources", None)) for v in self.targets.values()):
             raise TypeError("every deletion target must implement forget_sources")
         self.sink = DirectCaptureSink(provider, sanitizer or CaptureSanitizer())
+        if recovery is not None:
+            from .recovery import RecoveryCaptureSink
+            self.sink = RecoveryCaptureSink(provider, self.sink.sanitizer, recovery)
         self._lock = asyncio.Lock()
 
     @classmethod
-    def local(cls, path, scope, *, generator=None, targets=None, journal_path=None):
+    def local(cls, path, scope, *, generator=None, targets=None, journal_path=None,
+              recovery_path=None, retrieval_probe=None, compressor=None,
+              compression_validator=None, token_counter=None):
         kernel = build_local_kernel(path, extractor=_ExactExtractor(generator) if generator else None)
-        return cls(kernel, scope, journal=SQLiteDeletionJournal(journal_path or str(path) + ".deletions.db"), targets=targets)
+        recovery = None
+        if recovery_path is not None:
+            if str(path) == ":memory:":
+                raise ValueError("recovery requires persistent source evidence")
+            from .recovery import RecoveryMemory, RepositoryEvidenceVerifier
+            from .recovery_store import SQLiteRecoveryStore
+            from .sqlite import SQLiteMemoryRepository
+            recovery = RecoveryMemory(scope, SQLiteRecoveryStore(recovery_path),
+                RepositoryEvidenceVerifier(SQLiteMemoryRepository(path)), retrieval_probe=retrieval_probe)
+        elif retrieval_probe is not None:
+            raise ValueError("retrieval probe requires recovery persistence")
+        return cls(kernel, scope, journal=SQLiteDeletionJournal(journal_path or str(path) + ".deletions.db"),
+                   targets=targets, recovery=recovery, compressor=compressor,
+                   compression_validator=compression_validator, token_counter=token_counter)
 
     async def initialize(self):
         await self.journal.initialize()
         await self.provider.initialize()
+        if self._recovery is not None:
+            await self._recovery.initialize()
 
     async def close(self):
         await self.provider.close()
@@ -147,6 +181,58 @@ class UnifiedMemory:
         async with self._lock:
             await self._ready()
             result = await self.provider.retrieve(MemoryQuery(self.scope, text, token_budget=token_budget))
+            await self._ready()
+            return result
+
+    def _require_recovery(self):
+        if self._recovery is None:
+            raise RuntimeError("enable recovery_path or inject RecoveryMemory first")
+
+    async def capture_with_receipt(self, **event):
+        self._require_recovery()
+        result = await self.capture(**event)
+        receipt = await self.capture_receipt(result.event_id)
+        if receipt is None:
+            raise PendingMemoryDeletion("capture evidence is no longer available")
+        return receipt
+
+    async def capture_receipt(self, event_id):
+        self._require_recovery()
+        async with self._lock:
+            await self._ready()
+            result = await self._recovery.receipt(event_id)
+            await self._ready()
+            return result
+
+    async def save_recovery(self, state, *, expected_version=0):
+        self._require_recovery()
+        async with self._lock:
+            await self._ready()
+            result = await self._recovery.save(state, expected_version=expected_version)
+            await self._ready()
+            return result
+
+    async def load_recovery(self, run_id):
+        self._require_recovery()
+        async with self._lock:
+            await self._ready()
+            result = await self._recovery.load(run_id)
+            await self._ready()
+            return result
+
+    async def propose_compression(self, plan):
+        self._require_recovery()
+        async with self._lock:
+            await self._ready()
+            result = await self._compression.propose(plan)
+            await self._ready()
+            return result
+
+    async def load_compression(self, summary_id):
+        self._require_recovery()
+        async with self._lock:
+            await self._ready()
+            result = await self._compression.load(summary_id)
             await self._ready()
             return result
 
