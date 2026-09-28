@@ -42,10 +42,13 @@ class RecoveryStore(Protocol):
     async def cleanup(self, scope, *, limit=100) -> int: ...
     async def stats(self, scope) -> dict: ...
     async def next_job(self, scope) -> tuple[str, StoredRecoveryRecord] | None: ...
+    async def list_runs(self, scope, *, limit=20, after=None) -> dict: ...
+    async def run_status(self, scope, run_id) -> dict | None: ...
+    async def cancel_job(self, scope, event_id) -> dict | None: ...
 
 
 def _key(kind, identity):
-    if kind not in ("receipt", "state", "summary", "job"):
+    if kind not in ("receipt", "state", "summary", "job", "feedback"):
         raise ValueError("unknown recovery record kind")
     if not isinstance(identity, str) or not 1 <= len(identity) <= 256:
         raise ValueError("recovery identity must contain 1 to 256 characters")
@@ -280,3 +283,98 @@ class SQLiteRecoveryStore:
                     (scope.partition_key(), datetime.now(UTC).isoformat())).fetchone()
                 return (row[0], self._decode(row[1:])) if row else None
         return await asyncio.to_thread(read)
+
+    @staticmethod
+    def _run_status(db, scope_key, row, now):
+        run_id, stored_state, expires_at = row
+        status = stored_state
+        if status == "active" and expires_at is not None and expires_at <= now:
+            status = "expired"
+        records = db.execute("""SELECT count(*),coalesce(sum(payload IS NOT NULL),0),
+            coalesce(sum(length(CAST(payload AS BLOB))),0)
+            FROM recovery_records_v1 WHERE scope=? AND run_id=?""",
+            (scope_key, run_id)).fetchone()
+        state = db.execute("""SELECT revision FROM recovery_records_v1
+            WHERE scope=? AND kind='state' AND identity=? AND payload IS NOT NULL""",
+            (scope_key, run_id)).fetchone()
+        jobs = db.execute("""SELECT json_extract(payload,'$.status'),count(*)
+            FROM recovery_records_v1 WHERE scope=? AND run_id=? AND kind='job'
+            AND payload IS NOT NULL GROUP BY json_extract(payload,'$.status')""",
+            (scope_key, run_id)).fetchall()
+        return dict(run_id=run_id, status=status, expires_at=expires_at,
+                    recovery_version=state[0] if state and status == "active" else None,
+                    retained_records=records[0], retained_payloads=records[1],
+                    payload_bytes=records[2], retained_jobs={key: count for key, count in jobs})
+
+    async def list_runs(self, scope, *, limit=20, after=None):
+        """Lexicographic keyset pagination over registered runs, exact scope.
+
+        Each call is a read snapshot. Pages across separate calls are not one
+        snapshot: new IDs ordered before the cursor require a fresh traversal.
+        Retired run fences remain visible even after payload cleanup.
+        """
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("run page limit must be between 1 and 100")
+        if after is not None:
+            _key("state", after)
+        def read():
+            with self._db() as db:
+                db.execute("BEGIN")
+                scope_key = scope.partition_key()
+                now = datetime.now(UTC).isoformat()
+                rows = db.execute("""SELECT run_id,state,expires_at FROM recovery_runs_v1
+                    WHERE scope=? AND (? IS NULL OR run_id>?)
+                    ORDER BY run_id LIMIT ?""", (scope_key, after, after, limit + 1)).fetchall()
+                items = [self._run_status(db, scope_key, row, now) for row in rows[:limit]]
+                return dict(items=items, next_cursor=items[-1]["run_id"] if len(rows) > limit else None)
+        return await asyncio.to_thread(read)
+
+    async def run_status(self, scope, run_id):
+        _key("state", run_id)
+        def read():
+            with self._db() as db:
+                db.execute("BEGIN")
+                key = scope.partition_key()
+                row = db.execute("SELECT run_id,state,expires_at FROM recovery_runs_v1 "
+                                 "WHERE scope=? AND run_id=?", (key, run_id)).fetchone()
+                return self._run_status(db, key, row, datetime.now(UTC).isoformat()) if row else None
+        return await asyncio.to_thread(read)
+
+    async def cancel_job(self, scope, event_id):
+        """Atomically scrub a queued/failed envelope and mark its receipt.
+
+        A processing job is ambiguous after a crash and must be reconciled by
+        the host. This operation never claims to undo committed source events.
+        """
+        _key("job", event_id)
+        def write():
+            with self._db() as db:
+                db.execute("BEGIN IMMEDIATE")
+                key = scope.partition_key()
+                row = db.execute("""SELECT payload,run_id FROM recovery_records_v1
+                    WHERE scope=? AND kind='job' AND identity=? AND payload IS NOT NULL""",
+                    (key, event_id)).fetchone()
+                if row is None or not self._run_open(db, key, row[1]):
+                    return None
+                payload = json.loads(row[0])
+                status, attempts = payload["status"], payload["attempts"]
+                if status not in ("queued", "failed", "cancelled"):
+                    return dict(event_id=event_id, cancelled=False, status=status,
+                                reason="already_ingested" if status == "done" else "reconciliation_required")
+                if status != "cancelled":
+                    replacement = dict(run_id=payload["run_id"], status="cancelled", attempts=attempts)
+                    db.execute("""UPDATE recovery_records_v1 SET payload=?,revision=revision+1
+                        WHERE scope=? AND kind='job' AND identity=?""",
+                        (json.dumps(replacement), key, event_id))
+                    receipt_row = db.execute("""SELECT payload FROM recovery_records_v1
+                        WHERE scope=? AND kind='receipt' AND identity=? AND payload IS NOT NULL""",
+                        (key, event_id)).fetchone()
+                    if receipt_row:
+                        receipt = json.loads(receipt_row[0])
+                        receipt.update(queue_status="cancelled", attempts=attempts, error_code="capture_cancelled")
+                        db.execute("""UPDATE recovery_records_v1 SET payload=?,revision=revision+1
+                            WHERE scope=? AND kind='receipt' AND identity=?""",
+                            (json.dumps(receipt), key, event_id))
+                return dict(event_id=event_id, cancelled=True, status="cancelled",
+                            source_may_be_persisted=attempts > 0, source_rollback=False)
+        return await asyncio.to_thread(write)

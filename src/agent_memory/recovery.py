@@ -161,6 +161,9 @@ class RecoveryMemory:
         _text(safe.event_id, limit=256)
         _text(safe.run_id, limit=256)
         await self.store.ensure_run(self.scope, safe.run_id)
+        job = await self.store.read(self.scope, "job", safe.event_id)
+        if job is not None and job.payload["status"] == "cancelled":
+            raise RecoveryConflict("cancelled capture identity cannot be reused")
         old = await self.store.read(self.scope, "receipt", safe.event_id)
         if old:
             receipt = CaptureReceipt(**old.payload)

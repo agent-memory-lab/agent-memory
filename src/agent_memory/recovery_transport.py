@@ -30,7 +30,9 @@ class RecoveryTransport:
     """
     OPERATIONS = frozenset(("capture", "receipt", "save", "load", "compress",
         "load_compression", "validate_compression", "enqueue", "process_one",
-        "retry", "complete", "expire", "cleanup", "stats", "forget", "resume_deletion"))
+        "retry", "complete", "expire", "cleanup", "stats", "forget", "resume_deletion",
+        "runs", "run_status", "queue_status", "cancel", "record_compression_feedback",
+        "compression_feedback"))
 
     def __init__(self, memory, authorizer):
         memory._require_recovery()
@@ -99,6 +101,20 @@ class RecoveryTransport:
                 result = await memory.cleanup_recovery(**p)
             elif operation == "stats":
                 result = await memory.recovery_stats(**p)
+            elif operation == "runs":
+                result = await memory.list_recovery_runs(**p)
+            elif operation == "run_status":
+                result = await memory.recovery_run_status(**p)
+            elif operation == "queue_status":
+                result = await memory.capture_queue_status(**p)
+            elif operation == "cancel":
+                result = await memory.cancel_capture(**p)
+            elif operation == "record_compression_feedback":
+                from .compression_feedback import CompressionFeedback
+                p["outcome_event_ids"] = tuple(p.get("outcome_event_ids", ()))
+                result = await memory.record_compression_feedback(CompressionFeedback(**p))
+            elif operation == "compression_feedback":
+                result = await memory.compression_feedback(**p)
             elif operation == "forget":
                 if type(p.get("erase", True)) is not bool or type(p.get("all_in_scope", False)) is not bool:
                     raise ValueError("deletion flags must be booleans")

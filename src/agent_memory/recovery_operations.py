@@ -80,6 +80,54 @@ class LocalRetrievalReadinessProbe:
 
 class RecoveryOperations:
     """Mixin: all operations enter the owning UnifiedMemory deletion gate."""
+    async def cancel_capture(self, event_id):
+        self._require_recovery()
+        async with self._lock:
+            await self._ready()
+            result = await self._recovery.store.cancel_job(self.scope, event_id)
+            await self._ready()
+            return result
+
+    async def record_compression_feedback(self, feedback):
+        from .compression_feedback import CompressionFeedback
+        if not isinstance(feedback, CompressionFeedback):
+            raise TypeError("feedback requires CompressionFeedback")
+        self._require_recovery()
+        async with self._lock:
+            await self._ready()
+            store = self._recovery.store
+            summary = await store.read(self.scope, "summary", feedback.summary_id)
+            if summary is None:
+                raise ValueError("compression proposal is unavailable")
+            run_id = summary.payload["run_id"]
+            refs = tuple(dict.fromkeys((*summary.source_event_ids, *feedback.outcome_event_ids)))
+            await self._recovery.require_sources(run_id, refs)
+            payload = to_jsonable(feedback)
+            payload.update(run_id=run_id, input_digest=summary.payload["input_digest"],
+                           recovery_version=summary.payload["recovery_version"],
+                           saved_units=feedback.before_units - feedback.after_units,
+                           measurement_source="host_reported")
+            old = await store.read(self.scope, "feedback", feedback.feedback_id)
+            if old is not None:
+                if old.payload != payload or old.source_event_ids != refs:
+                    raise RecoveryConflict("feedback identity already contains different measurements")
+            else:
+                await store.write(self.scope, "feedback", feedback.feedback_id, payload,
+                                  refs, expected_revision=0)
+            await self._ready()
+            return payload
+
+    async def compression_feedback(self, feedback_id):
+        self._require_recovery()
+        async with self._lock:
+            await self._ready()
+            row = await self._recovery.store.read(self.scope, "feedback", feedback_id)
+            if row is None:
+                return None
+            await self._recovery.require_sources(row.payload["run_id"], row.source_event_ids)
+            await self._ready()
+            return row.payload
+
     async def _queue_mark(self, event_id, status, attempts, error_code=None):
         row = await self._recovery.store.read(self.scope, "receipt", event_id)
         if row is None:
@@ -225,3 +273,43 @@ class RecoveryOperations:
         async with self._lock:
             await self._ready()
             return await self._recovery.store.stats(self.scope)
+
+    async def list_recovery_runs(self, *, limit=20, after=None):
+        self._require_recovery()
+        async with self._lock:
+            await self._ready()
+            result = await self._recovery.store.list_runs(self.scope, limit=limit, after=after)
+            await self._ready()
+            return result
+
+    async def recovery_run_status(self, run_id):
+        self._require_recovery()
+        async with self._lock:
+            await self._ready()
+            result = await self._recovery.store.run_status(self.scope, run_id)
+            await self._ready()
+            return result
+
+    async def capture_queue_status(self, event_id):
+        """No raw envelope, provider error detail, retrieval call or retry."""
+        self._require_recovery()
+        async with self._lock:
+            await self._ready()
+            job = await self._recovery.store.read(self.scope, "job", event_id)
+            if job is None:
+                return None
+            receipt = await self._recovery.store.read(self.scope, "receipt", event_id)
+            payload = job.payload
+            # The durable job is authoritative: a crash may leave the receipt's
+            # queue acknowledgement behind the job transition.
+            acknowledged = receipt.payload if receipt else {}
+            status = payload["status"]
+            attempts = payload["attempts"]
+            matches = acknowledged.get("queue_status") == status and acknowledged.get("attempts") == attempts
+            result = dict(event_id=event_id, run_id=payload["run_id"], status=status,
+                          attempts=attempts, receipt_synchronized=matches,
+                          error_code=acknowledged.get("error_code") if matches else None,
+                          retryable=status == "failed" and attempts < 5,
+                          resumable=status == "processing" and attempts < 5)
+            await self._ready()
+            return result

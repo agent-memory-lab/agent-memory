@@ -50,6 +50,24 @@ class RecoveryClientOperations:
     async def recovery_stats(self):
         return await self.recovery_call("stats")
 
+    async def list_recovery_runs(self, *, limit=20, after=None):
+        return await self.recovery_call("runs", dict(limit=limit, after=after))
+
+    async def recovery_run_status(self, run_id):
+        return await self.recovery_call("run_status", dict(run_id=run_id))
+
+    async def capture_queue_status(self, event_id):
+        return await self.recovery_call("queue_status", dict(event_id=event_id))
+
+    async def cancel_capture(self, event_id):
+        return await self.recovery_call("cancel", dict(event_id=event_id))
+
+    async def record_compression_feedback(self, feedback):
+        return await self.recovery_call("record_compression_feedback", feedback)
+
+    async def compression_feedback(self, feedback_id):
+        return await self.recovery_call("compression_feedback", dict(feedback_id=feedback_id))
+
     async def forget_sources(self, source_event_ids=(), *, all_in_scope=False, erase=True):
         return await self.recovery_call("forget", dict(source_event_ids=source_event_ids,
             all_in_scope=all_in_scope, erase=erase))
