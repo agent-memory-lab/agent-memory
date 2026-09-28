@@ -52,3 +52,24 @@ class ModelTokenCounter:
 
     def count(self, text):
         return self.measure(text)["total_budget_units"]
+
+
+class TiktokenModelCounter(ModelTokenCounter):
+    """Optional real tokenizer, with explicit encoding and host-owned framing.
+
+    Importing this module never imports tiktoken. Construction may download
+    the encoding's public vocabulary on first use; provision its cache offline
+    when network access is forbidden. No chat-template overhead is guessed.
+    """
+    def __init__(self, *, encoding_name, model_id, template_version,
+                 render=None, framing_tokens=0, reserve_tokens=0):
+        from importlib.metadata import version
+        try:
+            import tiktoken
+        except ImportError as error:
+            raise ImportError("install the optional tiktoken package in the host environment") from error
+        encoding = tiktoken.get_encoding(encoding_name)
+        super().__init__(lambda text: encoding.encode(text, disallowed_special=()),
+            model_id=model_id, tokenizer_version=f"tiktoken:{version('tiktoken')}:{encoding.name}",
+            template_version=template_version, render=render,
+            framing_tokens=framing_tokens, reserve_tokens=reserve_tokens)
