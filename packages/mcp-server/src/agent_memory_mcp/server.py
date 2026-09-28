@@ -242,6 +242,7 @@ def create_server(
             validate_compression, load_compression, enqueue, process_one, retry,
             complete, expire, cleanup, stats, runs, run_status, queue_status,
             cancel, record_compression_feedback, compression_feedback,
+            history, restore, feedback_report,
             forget, or resume_deletion.
             Scope is identity-derived. Context replacement remains host-owned.
             """

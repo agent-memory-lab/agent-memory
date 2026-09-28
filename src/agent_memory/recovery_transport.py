@@ -32,7 +32,7 @@ class RecoveryTransport:
         "load_compression", "validate_compression", "enqueue", "process_one",
         "retry", "complete", "expire", "cleanup", "stats", "forget", "resume_deletion",
         "runs", "run_status", "queue_status", "cancel", "record_compression_feedback",
-        "compression_feedback"))
+        "compression_feedback", "history", "restore", "feedback_report"))
 
     def __init__(self, memory, authorizer):
         memory._require_recovery()
@@ -115,6 +115,12 @@ class RecoveryTransport:
                 result = await memory.record_compression_feedback(CompressionFeedback(**p))
             elif operation == "compression_feedback":
                 result = await memory.compression_feedback(**p)
+            elif operation == "history":
+                result = await memory.recovery_history(**p)
+            elif operation == "restore":
+                result = await memory.restore_recovery(**p)
+            elif operation == "feedback_report":
+                result = await memory.compression_feedback_report(**p)
             elif operation == "forget":
                 if type(p.get("erase", True)) is not bool or type(p.get("all_in_scope", False)) is not bool:
                     raise ValueError("deletion flags must be booleans")

@@ -68,6 +68,15 @@ class RecoveryClientOperations:
     async def compression_feedback(self, feedback_id):
         return await self.recovery_call("compression_feedback", dict(feedback_id=feedback_id))
 
+    async def recovery_history(self, run_id, *, limit=20, before=None):
+        return await self.recovery_call("history", dict(run_id=run_id, limit=limit, before=before))
+
+    async def restore_recovery(self, run_id, version, *, expected_version):
+        return await self.recovery_call("restore", dict(run_id=run_id, version=version, expected_version=expected_version))
+
+    async def compression_feedback_report(self, *, limit=100, after=None):
+        return await self.recovery_call("feedback_report", dict(limit=limit, after=after))
+
     async def forget_sources(self, source_event_ids=(), *, all_in_scope=False, erase=True):
         return await self.recovery_call("forget", dict(source_event_ids=source_event_ids,
             all_in_scope=all_in_scope, erase=erase))
