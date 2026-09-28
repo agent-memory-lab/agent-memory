@@ -12,6 +12,7 @@ from .capture_sink import DirectCaptureSink
 from .composition import build_local_kernel
 from .domain import ForgetMode, ForgetRequest, MemoryQuery
 from .providers import GeneratedTrajectoryClaimExtractor
+from .recovery_operations import RecoveryOperations
 
 
 class PendingMemoryDeletion(RuntimeError):
@@ -98,7 +99,7 @@ class ManagedOntologyDeletionTarget:
             raise PendingMemoryDeletion("ontology rebuild incomplete; resume deletion")
 
 
-class UnifiedMemory:
+class UnifiedMemory(RecoveryOperations):
     """One host-owned instance per scope; callers must not bypass this gate.
 
     Targets expose async forget_sources(ForgetRequest), must be idempotent,
@@ -142,8 +143,12 @@ class UnifiedMemory:
             from .recovery import RecoveryMemory, RepositoryEvidenceVerifier
             from .recovery_store import SQLiteRecoveryStore
             from .sqlite import SQLiteMemoryRepository
+            from .recovery_operations import LocalRetrievalReadinessProbe
+            evidence_repository = SQLiteMemoryRepository(path)
+            evidence = RepositoryEvidenceVerifier(evidence_repository)
             recovery = RecoveryMemory(scope, SQLiteRecoveryStore(recovery_path),
-                RepositoryEvidenceVerifier(SQLiteMemoryRepository(path)), retrieval_probe=retrieval_probe)
+                evidence, retrieval_probe=retrieval_probe if retrieval_probe is not None else
+                LocalRetrievalReadinessProbe(evidence_repository, kernel, evidence))
         elif retrieval_probe is not None:
             raise ValueError("retrieval probe requires recovery persistence")
         return cls(kernel, scope, journal=SQLiteDeletionJournal(journal_path or str(path) + ".deletions.db"),

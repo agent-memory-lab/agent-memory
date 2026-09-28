@@ -13,6 +13,7 @@ from agent_memory.lifecycle import LifecycleEventError
 from agent_memory.mcp import MCPMemoryTools, MCPRequestContext, MCPToolError, decode_mcp_error
 from agent_memory.ports import MemoryProvider
 from agent_memory.serialization import to_jsonable
+from .recovery import RecoveryClientOperations
 
 if TYPE_CHECKING:
     from mcp import Client
@@ -86,7 +87,7 @@ class CaptureClient(Protocol):
     async def try_capture(self, event: Mapping[str, Any]) -> dict[str, Any]: ...
 
 
-class _Operations:
+class _Operations(RecoveryClientOperations):
     async def ontology_status(self):
         return await self._call("memory_ontology_status", {})
 
@@ -303,7 +304,11 @@ class EmbeddedMemoryClient(_Operations):
         capture_timeout_seconds: float = 0.25,
         deletion_auditor: DeletionAuditService | None = None,
         ontology=None,
+        recovery_tools=None,
     ) -> None:
+        if recovery_tools is not None and (capture_sink is not None or recovery_tools.memory.provider is not provider):
+            raise ValueError("recovery requires its own provider and capture gate")
+        self._recovery_tools = recovery_tools
         self._provider = provider
         self._tools = MCPMemoryTools(provider, deletion_auditor=deletion_auditor, ontology=ontology)
         self._context = context
@@ -311,10 +316,20 @@ class EmbeddedMemoryClient(_Operations):
         self._capture_timeout_seconds = _capture_deadline(capture_timeout_seconds)
 
     async def initialize(self) -> None:
-        await self._provider.initialize()
+        if self._recovery_tools is not None:
+            await self._recovery_tools.memory.initialize()
+        else:
+            await self._provider.initialize()
 
     async def _call(self, name: str, arguments: Mapping[str, Any]) -> dict[str, Any]:
         try:
+            if name == "memory_recovery":
+                if self._recovery_tools is None:
+                    raise MCPToolError("recovery is not enabled", code="recovery_disabled")
+                return await self._recovery_tools.call(arguments["operation"],
+                    arguments.get("payload", {}), self._context)
+            if self._recovery_tools is not None:
+                return await self._recovery_tools.legacy(self._tools, name, arguments, self._context)
             return await self._tools.call_tool(name, arguments, self._context)
         except MCPToolError as error:
             raise MemoryClientError(

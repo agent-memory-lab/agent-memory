@@ -26,9 +26,12 @@ def create_server(
     doctor: MemoryDoctorProvider | None = None,
     deletion_auditor: DeletionAuditService | None = None,
     ontology=None,
+    recovery_tools=None,
 ) -> MCPServer:
     """Create an MCP v2 server while retaining one core business contract."""
     server = MCPServer(name)
+    if recovery_tools is not None and (capture_sink is not None or recovery_tools.memory.provider is not provider):
+        raise ValueError("recovery requires its own provider and capture gate")
     tools = MCPMemoryTools(
         provider,
         doctor=doctor,
@@ -39,6 +42,8 @@ def create_server(
     async def call(ctx: Context, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         identity = await identity_resolver.resolve(ctx)
         try:
+            if recovery_tools is not None:
+                return await recovery_tools.legacy(tools, name, arguments, identity)
             return await tools.call_tool(name, arguments, identity)
         except MCPToolError as error:
             raise RuntimeError(error.to_transport()) from None
@@ -227,5 +232,20 @@ def create_server(
                 raise RuntimeError(
                     MCPToolError("capture storage failed", code="capture_storage_failed").to_transport()
                 ) from None
+
+    if recovery_tools is not None:
+        @server.tool()
+        async def memory_recovery(ctx: Context, operation: str,
+                                  payload: dict[str, Any] | None = None) -> dict[str, Any]:
+            """Authorized recovery: capture, receipt, save, load, compress,
+            validate_compression, load_compression, enqueue, process_one, retry,
+            complete, expire, cleanup, stats, forget, or resume_deletion.
+            Scope is identity-derived. Context replacement remains host-owned.
+            """
+            identity = await identity_resolver.resolve(ctx)
+            try:
+                return await recovery_tools.call(operation, payload or {}, identity)
+            except MCPToolError as error:
+                raise RuntimeError(error.to_transport()) from None
 
     return server
