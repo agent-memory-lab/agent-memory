@@ -68,6 +68,8 @@ class UTF8ByteCounter:
     Inject the target model's counter for a model-token guarantee. Framing,
     system instructions and other host context are outside this local budget.
     """
+    counter_id = "utf8-bytes-v1"
+
     def count(self, text):
         return len(text.encode("utf-8"))
 
@@ -78,6 +80,8 @@ class ExtractiveContextCompressor:
     No model calls. Omission remains lossy; exact recovery state is attached
     separately by the coordinator. Text order in the result stays chronological.
     """
+    compressor_id = "extractive-v1"
+
     async def compress(self, plan, *, summary_budget):
         selected, used = [], 0
         for segment in reversed(plan.segments):
@@ -104,13 +108,21 @@ def _json(value):
 
 
 class CompressionCoordinator:
-    def __init__(self, recovery, *, compressor=None, validator=None, counter=None, timeout_seconds=30):
+    def __init__(self, recovery, *, compressor=None, validator=None, counter=None, timeout_seconds=30,
+                 strategy_registry=None):
         if not isinstance(timeout_seconds, (int, float)) or not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= 120:
             raise ValueError("compression timeout must be between zero and 120 seconds")
         self.recovery = recovery
         self.compressor = compressor if compressor is not None else ExtractiveContextCompressor()
         self.validator, self.counter = validator, counter or UTF8ByteCounter()
         self.timeout_seconds = timeout_seconds
+        self.strategy_registry = strategy_registry
+        if strategy_registry is not None and strategy_registry.scope != recovery.scope:
+            raise ValueError("compression strategy registry scope mismatch")
+
+    @staticmethod
+    def _counter_id(counter):
+        return getattr(counter, "counter_id", type(counter).__module__ + "." + type(counter).__qualname__)
 
     def _count(self, text):
         count = self.counter.count(text)
@@ -123,6 +135,12 @@ class CompressionCoordinator:
             raise TypeError("compression requires CompressionPlan")
         try:
             async with asyncio.timeout(self.timeout_seconds):
+                if self.strategy_registry is not None:
+                    snapshot, binding = await self.strategy_registry.resolve()
+                    worker = CompressionCoordinator(self.recovery, compressor=binding.compressor,
+                        validator=binding.validator, counter=binding.counter, timeout_seconds=self.timeout_seconds)
+                    return await worker._propose(plan, strategy_snapshot=snapshot,
+                                                  registry=self.strategy_registry)
                 return await self._propose(plan)
         except TimeoutError:
             return CompressionResult(False, "compression_timeout", input_digest=plan.digest)
@@ -131,7 +149,7 @@ class CompressionCoordinator:
             # Cancellation (BaseException) still propagates to the host.
             return CompressionResult(False, "compression_or_validation_failed", input_digest=plan.digest)
 
-    async def _propose(self, plan):
+    async def _propose(self, plan, *, strategy_snapshot=None, registry=None):
         state = await self.recovery.load(plan.run_id)
         if state is None or state.version != plan.recovery_version:
             return CompressionResult(False, "recovery_version_unavailable", input_digest=plan.digest)
@@ -163,7 +181,10 @@ class CompressionCoordinator:
         identity = str(uuid4())
         payload = {"run_id": plan.run_id, "recovery_version": state.version,
                    "input_digest": plan.digest, "replacement": replacement,
-                   "budget_used": used, "token_budget": plan.token_budget}
+                   "budget_used": used, "token_budget": plan.token_budget,
+                   "counter_id": self._counter_id(self.counter), "strategy": strategy_snapshot}
+        if registry is not None and not await registry.is_current(strategy_snapshot):
+            return CompressionResult(False, "compression_strategy_changed", input_digest=plan.digest)
         await self.recovery.store.write(self.recovery.scope, "summary", identity,
                                        payload, refs, expected_revision=0)
         return CompressionResult(True, "host_approval_required", identity, replacement, plan.digest, used)
@@ -173,12 +194,24 @@ class CompressionCoordinator:
         if row is None:
             return None
         payload = row.payload
+        counter = self.counter
+        if self.strategy_registry is not None:
+            snapshot, binding = await self.strategy_registry.resolve()
+            if payload.get("strategy") != snapshot:
+                return None
+            counter = binding.counter
+        elif payload.get("strategy") is not None:
+            return None
+        if payload.get("counter_id", self._counter_id(counter)) != self._counter_id(counter):
+            return None
         state = await self.recovery.load(payload["run_id"])
         if state is None or state.version != payload["recovery_version"]:
             return None
         await self.recovery.require_sources(payload["run_id"], row.source_event_ids)
         replacement = payload["replacement"]
-        used = self._count(replacement)
+        used = counter.count(replacement)
+        if type(used) is not int or used < 0:
+            raise ValueError("token counter returned an invalid count")
         if used > payload["token_budget"]:
             return None
         return CompressionResult(True, "host_approval_required", summary_id,

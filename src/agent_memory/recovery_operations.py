@@ -80,6 +80,24 @@ class LocalRetrievalReadinessProbe:
 
 class RecoveryOperations:
     """Mixin: all operations enter the owning UnifiedMemory deletion gate."""
+    async def recovery_partition_info(self):
+        self._require_recovery()
+        async with self._lock:
+            await self._ready()
+            return await self._recovery.store.partition_info()
+
+    async def rotate_recovery_partition(self, *, expected_generation, approval):
+        self._require_recovery()
+        async with self._lock:
+            await self._ready()
+            return await self._recovery.store.rotate(expected_generation=expected_generation, approval=approval)
+
+    async def retire_recovery_partition(self, generation, *, approval):
+        self._require_recovery()
+        async with self._lock:
+            await self._ready()
+            return await self._recovery.store.retire(generation, approval=approval)
+
     async def cancel_capture(self, event_id):
         self._require_recovery()
         async with self._lock:
@@ -105,6 +123,8 @@ class RecoveryOperations:
             payload = to_jsonable(feedback)
             payload.update(run_id=run_id, input_digest=summary.payload["input_digest"],
                            recovery_version=summary.payload["recovery_version"],
+                           strategy=summary.payload.get("strategy"),
+                           proposal_counter_id=summary.payload.get("counter_id"),
                            saved_units=feedback.before_units - feedback.after_units,
                            measurement_source="host_reported")
             old = await store.read(self.scope, "feedback", feedback.feedback_id)
