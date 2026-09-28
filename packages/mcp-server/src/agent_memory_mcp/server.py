@@ -4,6 +4,7 @@ from typing import Any
 
 from mcp.server import MCPServer
 from mcp.server.mcpserver import Context
+from mcp.server.mcpserver.exceptions import ToolError
 
 from agent_memory.capture_api import submit_capture
 from agent_memory.capture_sink import CaptureError, CaptureSink
@@ -46,7 +47,7 @@ def create_server(
                 return await recovery_tools.legacy(tools, name, arguments, identity)
             return await tools.call_tool(name, arguments, identity)
         except MCPToolError as error:
-            raise RuntimeError(error.to_transport()) from None
+            raise ToolError(error.to_transport()) from None
 
     @server.tool()
     async def memory_ingest(
@@ -225,11 +226,11 @@ def create_server(
                 return to_jsonable(submission)
             except (CaptureError, LifecycleEventError) as error:
                 code = error.code if isinstance(error, CaptureError) else "capture_invalid_event"
-                raise RuntimeError(
+                raise ToolError(
                     MCPToolError(str(error), code=code, field=error.field).to_transport()
                 ) from None
             except Exception:
-                raise RuntimeError(
+                raise ToolError(
                     MCPToolError("capture storage failed", code="capture_storage_failed").to_transport()
                 ) from None
 
@@ -239,13 +240,15 @@ def create_server(
                                   payload: dict[str, Any] | None = None) -> dict[str, Any]:
             """Authorized recovery: capture, receipt, save, load, compress,
             validate_compression, load_compression, enqueue, process_one, retry,
-            complete, expire, cleanup, stats, forget, or resume_deletion.
+            complete, expire, cleanup, stats, runs, run_status, queue_status,
+            cancel, record_compression_feedback, compression_feedback,
+            forget, or resume_deletion.
             Scope is identity-derived. Context replacement remains host-owned.
             """
             identity = await identity_resolver.resolve(ctx)
             try:
                 return await recovery_tools.call(operation, payload or {}, identity)
             except MCPToolError as error:
-                raise RuntimeError(error.to_transport()) from None
+                raise ToolError(error.to_transport()) from None
 
     return server
