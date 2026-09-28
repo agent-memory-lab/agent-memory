@@ -8,6 +8,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 import sqlite3
+from hashlib import sha256
 from typing import Protocol
 
 from .domain import MemoryScope
@@ -45,10 +46,13 @@ class RecoveryStore(Protocol):
     async def list_runs(self, scope, *, limit=20, after=None) -> dict: ...
     async def run_status(self, scope, run_id) -> dict | None: ...
     async def cancel_job(self, scope, event_id) -> dict | None: ...
+    async def history(self, scope, run_id, *, limit=20, before=None) -> dict: ...
+    async def historical_state(self, scope, run_id, version) -> StoredRecoveryRecord | None: ...
+    async def feedback_page(self, scope, *, limit=100, after=None) -> dict: ...
 
 
 def _key(kind, identity):
-    if kind not in ("receipt", "state", "summary", "job", "feedback"):
+    if kind not in ("receipt", "state", "summary", "job", "feedback", "state_history"):
         raise ValueError("unknown recovery record kind")
     if not isinstance(identity, str) or not 1 <= len(identity) <= 256:
         raise ValueError("recovery identity must contain 1 to 256 characters")
@@ -151,14 +155,21 @@ class SQLiteRecoveryStore:
                 db.execute("BEGIN IMMEDIATE")
                 if not self._run_open(db, scope.partition_key(), run_id):
                     raise RecoveryConflict("recovery run is completed or expired")
-                old = db.execute("SELECT revision,payload FROM recovery_records_v1 "
+                old = db.execute("SELECT revision,payload,sources,run_id FROM recovery_records_v1 "
                                  "WHERE scope=? AND kind=? AND identity=?", key).fetchone()
                 if old and old[1] is None:
                     raise RecoveryConflict("deleted recovery identity cannot be reused")
                 if (old[0] if old else 0) != expected_revision:
                     raise RecoveryConflict("recovery revision changed")
-                if old is None and db.execute("SELECT count(*) FROM recovery_records_v1").fetchone()[0] >= self.max_records:
+                needed = int(old is None or kind == "state")
+                if db.execute("SELECT count(*) FROM recovery_records_v1").fetchone()[0] + needed > self.max_records:
                     raise ValueError("recovery store capacity exceeded")
+                if old is not None and kind == "state":
+                    history_id = self._history_id(identity, old[0])
+                    db.execute("""INSERT INTO recovery_records_v1
+                        (scope,kind,identity,revision,payload,sources,run_id)
+                        VALUES (?,'state_history',?,?,?,?,?)""",
+                        (scope.partition_key(), history_id, old[0], old[1], old[2], old[3]))
                 revision = expected_revision + 1
                 db.execute("""INSERT INTO recovery_records_v1
                     (scope,kind,identity,revision,payload,sources,run_id) VALUES (?,?,?,?,?,?,?)
@@ -378,3 +389,52 @@ class SQLiteRecoveryStore:
                 return dict(event_id=event_id, cancelled=True, status="cancelled",
                             source_may_be_persisted=attempts > 0, source_rollback=False)
         return await asyncio.to_thread(write)
+
+    @staticmethod
+    def _history_id(run_id, version):
+        return sha256(json.dumps([run_id, version]).encode()).hexdigest()
+
+    async def historical_state(self, scope, run_id, version):
+        _key("state", run_id)
+        if type(version) is not int or version < 1:
+            raise ValueError("history version must be positive")
+        return await self.read(scope, "state_history", self._history_id(run_id, version))
+
+    async def history(self, scope, run_id, *, limit=20, before=None):
+        _key("state", run_id)
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError("history page size must be between 1 and 100")
+        if before is not None and (type(before) is not int or before < 1):
+            raise ValueError("history cursor must be a positive version")
+        def read():
+            with self._db() as db:
+                db.execute("BEGIN")
+                if not self._run_open(db, scope.partition_key(), run_id):
+                    return dict(items=[], next_cursor=None)
+                rows = db.execute("""SELECT revision,payload,sources FROM recovery_records_v1
+                    WHERE scope=? AND kind='state_history' AND run_id=? AND payload IS NOT NULL
+                    AND (? IS NULL OR revision<?) ORDER BY revision DESC LIMIT ?""",
+                    (scope.partition_key(), run_id, before, before, limit+1)).fetchall()
+                items = [self._decode(row) for row in rows[:limit]]
+                return dict(items=items, next_cursor=items[-1].revision if len(rows)>limit else None)
+        return await asyncio.to_thread(read)
+
+    async def feedback_page(self, scope, *, limit=100, after=None):
+        if type(limit) is not int or not 1 <= limit <= 500:
+            raise ValueError("feedback page size must be between 1 and 500")
+        if after is not None:
+            _key("feedback", after)
+        def read():
+            with self._db() as db:
+                db.execute("BEGIN")
+                rows = db.execute("""SELECT r.identity,r.revision,r.payload,r.sources
+                    FROM recovery_records_v1 r WHERE r.scope=? AND r.kind='feedback'
+                    AND r.payload IS NOT NULL AND (? IS NULL OR r.identity>?)
+                    AND NOT EXISTS (SELECT 1 FROM recovery_runs_v1 lifecycle
+                        WHERE lifecycle.scope=r.scope AND lifecycle.run_id=r.run_id
+                        AND (lifecycle.state!='active' OR lifecycle.expires_at<=?))
+                    ORDER BY r.identity LIMIT ?""",
+                    (scope.partition_key(), after, after, datetime.now(UTC).isoformat(), limit+1)).fetchall()
+                return dict(items=[self._decode(row[1:]) for row in rows[:limit]],
+                            next_cursor=rows[limit-1][0] if len(rows)>limit else None)
+        return await asyncio.to_thread(read)

@@ -80,6 +80,74 @@ class LocalRetrievalReadinessProbe:
 
 class RecoveryOperations:
     """Mixin: all operations enter the owning UnifiedMemory deletion gate."""
+    async def retry_retired_cleanup(self, *, limit=8):
+        self._require_recovery()
+        async with self._lock:
+            await self._ready()
+            return await self._recovery.store.retry_retired_cleanup(limit=limit)
+
+    async def recovery_history(self, run_id, *, limit=20, before=None):
+        from .recovery import RecoveryState
+        self._require_recovery()
+        async with self._lock:
+            await self._ready()
+            page = await self._recovery.store.history(self.scope, run_id, limit=limit, before=before)
+            states = []
+            for row in page["items"]:
+                await self._recovery.require_sources(run_id, row.source_event_ids)
+                states.append(to_jsonable(RecoveryState.from_dict(row.payload)))
+            await self._ready()
+            return dict(items=states, next_cursor=page["next_cursor"])
+
+    async def restore_recovery(self, run_id, version, *, expected_version):
+        from .recovery import RecoveryState
+        self._require_recovery()
+        async with self._lock:
+            await self._ready()
+            current = await self._recovery.load(run_id)
+            if current is None or current.version != expected_version:
+                raise RecoveryConflict("current recovery version changed")
+            old = await self._recovery.store.historical_state(self.scope, run_id, version)
+            if old is None:
+                raise ValueError("historical recovery version is unavailable")
+            state = RecoveryState.from_dict(old.payload)
+            # Historic side-effect status is not current execution evidence.
+            tools = tuple(replace(tool, status="unknown") if tool.side_effecting else tool for tool in state.tools)
+            restored = replace(state, version=expected_version+1, tools=tools)
+            result = await self._recovery.save(restored, expected_version=expected_version)
+            await self._ready()
+            return result
+
+    async def compression_feedback_report(self, *, limit=100, after=None):
+        """Bounded page aggregates; never mixes units/counters/evaluators."""
+        from hashlib import sha256
+        self._require_recovery()
+        async with self._lock:
+            await self._ready()
+            page = await self._recovery.store.feedback_page(self.scope, limit=limit, after=after)
+            groups, identities = {}, []
+            for row in page["items"]:
+                payload = row.payload
+                await self._recovery.require_sources(payload["run_id"], row.source_event_ids)
+                identity = dict(unit=payload["measurement_unit"], counter_id=payload["counter_id"],
+                    evaluator_id=payload["evaluator_id"], strategy=payload.get("strategy"),
+                    proposal_counter_id=payload.get("proposal_counter_id"))
+                key = json.dumps(identity, sort_keys=True)
+                item = groups.setdefault(key, dict(**identity, samples=0, before_units=0, after_units=0,
+                    succeeded=0, failed=0, unknown=0))
+                item["samples"] += 1
+                item["before_units"] += payload["before_units"]
+                item["after_units"] += payload["after_units"]
+                item[payload["outcome"]] += 1
+                identities.append(payload["feedback_id"])
+            for item in groups.values():
+                item["saved_units"] = item["before_units"]-item["after_units"]
+            await self._ready()
+            return dict(groups=list(groups.values()), scanned=len(identities),
+                next_cursor=page["next_cursor"], page_only=True, source="host_reported",
+                feedback_snapshot_digest=sha256(json.dumps(identities).encode()).hexdigest(),
+                automatic_promotion=False)
+
     async def recovery_partition_info(self):
         self._require_recovery()
         async with self._lock:
