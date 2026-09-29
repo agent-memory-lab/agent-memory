@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import asdict, replace
 from datetime import datetime, timedelta
@@ -11,7 +12,6 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 from .domain import (
     PROTOCOL_VERSION,
     SCHEMA_VERSION,
-    ArtifactStatus,
     Citation,
     Claim,
     ClaimDraft,
@@ -72,6 +72,68 @@ def _token_estimate(text: str) -> int:
     latin = sum(1 for character in text if ord(character) < 128)
     non_latin = len(text) - latin
     return max(1, non_latin + (latin + 3) // 4)
+
+
+def _event_excerpt(text: str, query: str, max_characters: int) -> str:
+    """Keep the most relevant short passages of an oversized source event."""
+    if max_characters <= 0:
+        return ""
+    if len(text) <= max_characters:
+        return text
+
+    def words(value: str) -> set[str]:
+        latin = set(re.findall(r"[a-z0-9_-]+", value.casefold()))
+        cjk = re.findall(r"[\u3400-\u9fff]", value)
+        return latin | set(cjk) | {
+            "".join(cjk[index : index + 2]) for index in range(len(cjk) - 1)
+        }
+
+    terms = words(query)
+
+    def relevance(passage: str) -> float:
+        passage_words = words(passage)
+        return len(terms & passage_words) / (1.0 + len(passage_words) / 20.0)
+
+    def shortened(passage: str, budget: int) -> str:
+        if len(passage) <= budget:
+            return passage
+        sentences = [
+            value.strip()
+            for value in re.split(r"(?<=[.!?。！？])\s+|\n", passage)
+            if value.strip()
+        ]
+        best = max(enumerate(sentences), key=lambda pair: (relevance(pair[1]), -pair[0]))
+        index, sentence = best
+        if len(sentence) > budget:
+            positions = [
+                sentence.casefold().find(term)
+                for term in sorted(terms, key=len, reverse=True)
+            ]
+            anchor = next((position for position in positions if position >= 0), 0)
+            start = min(max(0, anchor - budget // 3), len(sentence) - budget)
+            return sentence[start : start + budget]
+        previous = sentences[index - 1] if index > 0 else ""
+        if previous and len(previous) + len(sentence) + 1 <= budget:
+            sentence = previous + " " + sentence
+        return sentence[:budget]
+
+    passages = [
+        value.strip()
+        for value in re.split(r"(?=\n(?:user|assistant|tool):\s)|\n{2,}", text)
+        if value.strip()
+    ]
+    ordered = sorted(enumerate(passages), key=lambda pair: (-relevance(pair[1]), pair[0]))
+    chosen: list[tuple[int, str]] = []
+    remaining = max_characters
+    for index, passage in ordered:
+        if remaining <= 0 or len(chosen) >= 4:
+            break
+        excerpt = shortened(passage, remaining) if not chosen else passage
+        if len(excerpt) > remaining:
+            continue
+        chosen.append((index, excerpt))
+        remaining -= len(excerpt) + 1
+    return "\n".join(value for _, value in sorted(chosen))
 
 
 class MemoryKernel:
@@ -270,19 +332,23 @@ class MemoryKernel:
             used_tokens += cost
 
         state_ids = {claim.id for claim in selected_state}
-        priority = {
-            MemoryKind.BLOCK: 0,
-            MemoryKind.PROCEDURE: 1,
-            MemoryKind.EPISODE: 2,
-            MemoryKind.CLAIM: 3,
-            MemoryKind.EVENT: 4,
-            MemoryKind.LATENT_REFERENCE: 5,
-        }
-        for item in sorted(ranked, key=lambda value: (priority[value.kind], -value.score)):
+        for item in sorted(ranked, key=lambda value: (-value.score, value.id)):
             if item.id in state_ids:
                 continue
+            available = query.token_budget - used_tokens
             cost = _token_estimate(item.text)
-            if used_tokens + cost > query.token_budget:
+            if item.kind == MemoryKind.EVENT and (len(item.text) > 1200 or cost > available):
+                if available < 64:
+                    continue
+                excerpt = _event_excerpt(item.text, query.text, min(1200, available))
+                if excerpt:
+                    item = replace(
+                        item,
+                        text=excerpt,
+                        metadata={**item.metadata, "excerpt": True},
+                    )
+                    cost = _token_estimate(excerpt)
+            if cost > available:
                 continue
             selected.append(item)
             source_ids = item.metadata.get("source_event_ids", ())

@@ -1056,21 +1056,22 @@ class SQLiteMemoryRepository:
 
     def _search_sync(self, query: MemoryQuery, limit: int) -> Sequence[MemoryItem]:
         where, params = self._visible_scope_clause(query.scope)
-        scan_limit = min(500, max(64, limit * 4))
         with self._connection() as connection:
             claim_rows = connection.execute(
                 f"SELECT * FROM claims WHERE {where} "
-                "AND status = ? AND archived_at IS NULL LIMIT ?",
-                (*params, ClaimStatus.ACTIVE, scan_limit),
+                "AND status = ? AND archived_at IS NULL "
+                "ORDER BY created_at DESC, id DESC",
+                (*params, ClaimStatus.ACTIVE),
             ).fetchall()
             event_rows = connection.execute(
                 f"SELECT * FROM events WHERE {where} "
-                "AND archived_at IS NULL ORDER BY occurred_at DESC LIMIT ?",
-                (*params, scan_limit),
+                "AND archived_at IS NULL ORDER BY occurred_at DESC, id DESC",
+                params,
             ).fetchall()
             artifact_rows = connection.execute(
-                f"SELECT * FROM artifacts WHERE {where} AND archived_at IS NULL LIMIT ?",
-                (*params, scan_limit),
+                f"SELECT * FROM artifacts WHERE {where} AND archived_at IS NULL "
+                "ORDER BY occurred_at DESC, id DESC",
+                params,
             ).fetchall()
 
         query_tokens = _tokens(query.text)
@@ -1156,6 +1157,8 @@ class SQLiteMemoryRepository:
                     },
                 )
             )
+        # Apply the limit only after scoring every visible item. A LIMIT on the
+        # SQL rows silently made claim-key index order decide recall eligibility.
         return tuple(sorted(candidates, key=lambda item: item.score, reverse=True)[:limit])
 
     async def read_block(self, scope: MemoryScope, block_id: str) -> MemoryBlock | None:
