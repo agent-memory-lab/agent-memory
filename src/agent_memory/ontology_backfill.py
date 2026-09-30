@@ -79,6 +79,7 @@ async def backfill_ontology_memory(
     batch_size: int = 32,
     max_batches: int = 8,
     target_index_id: str | None = None,
+    phase_timeout_ms: int | None = None,
 ) -> OntologyBackfillCheckpoint:
     """Backfill at most max_batches; checkpoint only after successful projection.
 
@@ -90,12 +91,20 @@ async def backfill_ontology_memory(
     Completion means source exhaustion, not activation readiness. This operation
     does not remove old projections, rebuild from deleted evidence, or activate
     a schema. Full rebuilds require a fresh target index managed by the host.
+
+    phase_timeout_ms configures this job's projection plugin budget, still
+    capped by the host context timeout. None retains the 2-second plugin
+    default. This is a per-phase budget, not an overall job deadline.
     """
     _identifier(snapshot_id, "snapshot_id")
     if type(batch_size) is not int or not 1 <= batch_size <= 256:
         raise ValueError("batch_size must be between 1 and 256")
     if type(max_batches) is not int or not 1 <= max_batches <= 128:
         raise ValueError("max_batches must be between 1 and 128")
+    if phase_timeout_ms is not None and (
+        type(phase_timeout_ms) is not int or not 1 <= phase_timeout_ms <= 300_000
+    ):
+        raise ValueError("phase_timeout_ms must be between 1 and 300000")
     current = resume or OntologyBackfillCheckpoint(
         context.scope, snapshot_id, ontology_schema_digest(schema), target_index_id=target_index_id,
     )
@@ -112,18 +121,34 @@ async def backfill_ontology_memory(
             raise ValueError("target index identity changed; refusing checkpoint resume")
     if current.completed:
         return current
-    plugin = OntologyProjectionConsolidatorPlugin(store, schema, evidence_verifier)
+    plugin = OntologyProjectionConsolidatorPlugin(
+        store, schema, evidence_verifier,
+        timeout_ms=2_000 if phase_timeout_ms is None else phase_timeout_ms,
+    )
     limits = plugin.plugin_manifest().resource_limits
     limit = min(batch_size, context.resource_limits.max_batch_size, limits.max_batch_size)
     timeout = min(context.resource_limits.timeout_ms, limits.timeout_ms) / 1_000
     visited = {current.cursor}
+
+    async def run_phase(name, operation):
+        try:
+            return await asyncio.wait_for(operation, timeout=timeout)
+        except TimeoutError as exc:
+            # Do not include tenant identities, opaque cursors or claim data.
+            exc.add_note(
+                f"ontology backfill phase={name}; timeout_ms={int(timeout * 1000)}; "
+                f"last_acknowledged_processed_claims={current.processed_claims}; "
+                "resume from the last durable checkpoint; writes may have completed"
+            )
+            raise
+
     try:
-        await asyncio.wait_for(plugin.initialize(context), timeout=timeout)
+        await run_phase("initialize", plugin.initialize(context))
         for _ in range(max_batches):
             _live(context)
-            page = await asyncio.wait_for(
+            page = await run_phase(
+                "read_page",
                 source.read_page(context.scope, snapshot_id, cursor=current.cursor, limit=limit),
-                timeout=timeout,
             )
             if not isinstance(page, OntologyClaimPage) or not isinstance(page.claims, tuple):
                 raise TypeError("source must return an OntologyClaimPage with tuple claims")
@@ -136,9 +161,9 @@ async def backfill_ontology_memory(
                 if page.next_cursor in visited or not page.claims:
                     raise ValueError("source pagination did not make progress")
             _live(context)
-            await asyncio.wait_for(
+            await run_phase(
+                "consolidate",
                 plugin.consolidate(ConsolidationRequest(context.scope, claims=page.claims), context),
-                timeout=timeout,
             )
             next_checkpoint = OntologyBackfillCheckpoint(
                 context.scope, snapshot_id, current.schema_digest,
@@ -147,7 +172,7 @@ async def backfill_ontology_memory(
                 completed=page.next_cursor is None,
                 target_index_id=target_index_id,
             )
-            await asyncio.wait_for(checkpoint_sink.save(next_checkpoint), timeout=timeout)
+            await run_phase("save_checkpoint", checkpoint_sink.save(next_checkpoint))
             current = next_checkpoint
             if current.completed:
                 break

@@ -1417,6 +1417,8 @@ class OntologyProjectionConsolidatorPlugin(_OntologyPlugin):
         store: OntologyStore,
         schema: OntologySchema,
         evidence_verifier: OntologyEvidenceVerifier,
+        *,
+        timeout_ms: int = 2_000,
     ) -> None:
         super().__init__(
             store,
@@ -1429,7 +1431,7 @@ class OntologyProjectionConsolidatorPlugin(_OntologyPlugin):
                 requires={"core": ">=0.1,<1.0"},
                 config_schema={"type": "object", "additionalProperties": False},
                 resource_limits=PluginResourceLimits(
-                    timeout_ms=2_000,
+                    timeout_ms=timeout_ms,
                     max_candidates=100,
                     max_batch_size=256,
                     max_concurrency=1,

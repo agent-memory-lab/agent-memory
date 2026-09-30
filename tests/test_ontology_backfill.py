@@ -64,7 +64,9 @@ def options(tmp_path, source, sink):
         source=source, snapshot_id="snapshot-1", schema=SCHEMA,
         store=SQLiteOntologyStore(tmp_path / "ontology.db"),
         evidence_verifier=CallableOntologyEvidenceVerifier(verify),
-        context=PluginContext(SCOPE, PluginResourceLimits(max_batch_size=2)),
+        # Correctness with real disk IO must not depend on a 1-second SLA.
+        context=PluginContext(SCOPE, PluginResourceLimits(max_batch_size=2, timeout_ms=10_000)),
+        phase_timeout_ms=10_000,
         checkpoint_sink=sink,
     )
 
@@ -152,4 +154,103 @@ def test_failed_evidence_does_not_advance_checkpoint(tmp_path):
         with pytest.raises(ValueError, match="evidence"):
             await backfill_ontology_memory(**args)
         assert sink.checkpoints == []
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("phase", ["initialize", "read_page", "consolidate", "save_checkpoint"])
+def test_timeout_reports_phase_and_retry_preserves_claims(tmp_path, monkeypatch, phase):
+    from agent_memory.ontology_memory import OntologyProjectionConsolidatorPlugin
+
+    async def scenario():
+        source, sink = Source([claim(i) for i in range(5)]), Sink()
+        args = options(tmp_path, source, sink)
+        first = await backfill_ontology_memory(**args, max_batches=1)
+        original_initialize = OntologyProjectionConsolidatorPlugin.initialize
+        original_consolidate = OntologyProjectionConsolidatorPlugin.consolidate
+        original_read = source.read_page
+        original_save = sink.save
+
+        async def interrupted_initialize(plugin, context):
+            await original_initialize(plugin, context)
+            raise TimeoutError("injected initialization timeout")
+
+        async def interrupted_read(*a, **kw):
+            await original_read(*a, **kw)
+            raise TimeoutError("injected source timeout")
+
+        async def interrupted_consolidate(plugin, request, context):
+            # Commit the projection before failure to exercise replay safety.
+            await original_consolidate(plugin, request, context)
+            raise TimeoutError("injected projection timeout")
+
+        async def interrupted_save(checkpoint):
+            # Model a durable checkpoint whose acknowledgement was lost.
+            await original_save(checkpoint)
+            raise TimeoutError("injected checkpoint acknowledgement timeout")
+
+        with monkeypatch.context() as patch:
+            if phase == "initialize":
+                patch.setattr(OntologyProjectionConsolidatorPlugin, "initialize", interrupted_initialize)
+            elif phase == "read_page":
+                patch.setattr(source, "read_page", interrupted_read)
+            elif phase == "consolidate":
+                patch.setattr(OntologyProjectionConsolidatorPlugin, "consolidate", interrupted_consolidate)
+            else:
+                patch.setattr(sink, "save", interrupted_save)
+            with pytest.raises(TimeoutError) as caught:
+                await backfill_ontology_memory(**args, resume=first)
+        assert any(f"phase={phase};" in note for note in caught.value.__notes__)
+        assert first.cursor == "2" and first.processed_claims == 2
+        if phase != "save_checkpoint":
+            assert sink.checkpoints == [first]
+        # Replaying the last acknowledged checkpoint is safe even when the
+        # failed operation had already persisted projections/checkpoints.
+        final = await backfill_ontology_memory(**args, resume=first)
+        assert final.completed and final.processed_claims == 5
+        found = await args["store"].search(
+            "Alice knows", SCOPE, ontology_id=SCHEMA.ontology_id,
+            ontology_version=SCHEMA.version, at_time=NOW, limit=8, max_scan=64,
+        )
+        assert {match.item.id for match in found}.__len__() == 5
+    asyncio.run(scenario())
+
+
+def test_host_timeout_still_caps_explicit_phase_budget(tmp_path, monkeypatch):
+    from agent_memory.ontology_memory import OntologyProjectionConsolidatorPlugin
+
+    async def scenario():
+        source, sink = Source([claim(1)]), Sink()
+        args = options(tmp_path, source, sink)
+        # Isolate timer behavior from disk/worker scheduling and initialization.
+        async def initialized(plugin, context):
+            return None
+
+        cancelled = asyncio.Event()
+        async def blocked_read(*a, **kw):
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+
+        args["context"] = PluginContext(SCOPE, PluginResourceLimits(max_batch_size=2, timeout_ms=20))
+        with monkeypatch.context() as patch:
+            patch.setattr(OntologyProjectionConsolidatorPlugin, "initialize", initialized)
+            patch.setattr(source, "read_page", blocked_read)
+            with pytest.raises(TimeoutError) as caught:
+                await backfill_ontology_memory(**args)
+        assert cancelled.is_set()
+        assert sink.checkpoints == []
+        assert any("phase=read_page; timeout_ms=20;" in note for note in caught.value.__notes__)
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("budget", [True, 0, -1, 300_001, 1.5])
+def test_invalid_phase_timeout_rejected_before_io(tmp_path, budget):
+    async def scenario():
+        source, sink = Source([claim(1)]), Sink()
+        args = options(tmp_path, source, sink)
+        args["phase_timeout_ms"] = budget
+        with pytest.raises(ValueError, match="phase_timeout_ms"):
+            await backfill_ontology_memory(**args)
+        assert source.calls == [] and sink.checkpoints == []
     asyncio.run(scenario())
