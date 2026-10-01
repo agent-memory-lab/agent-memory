@@ -6,13 +6,13 @@ import json
 from pathlib import Path
 import sqlite3
 
-from .capture_api import submit_capture
-from .capture_policy import CaptureSanitizer
-from .capture_sink import DirectCaptureSink
+from .capture.api import submit_capture
+from .capture.policy import CaptureSanitizer
+from .capture.sink import DirectCaptureSink
 from .composition import build_local_kernel
 from .domain import ForgetMode, ForgetRequest, MemoryQuery
 from .providers import GeneratedTrajectoryClaimExtractor
-from .recovery_operations import RecoveryOperations
+from .context.operations import RecoveryOperations
 
 
 class PendingMemoryDeletion(RuntimeError):
@@ -27,7 +27,7 @@ class _ExactExtractor:
         drafts = await self.extractor.extract(event)
         if any(event.scope.project(d.scope_level) != event.scope for d in drafts):
             raise ValueError("unified capture requires exact-scope generated claims")
-        from .recovery import _extracted_event
+        from .context.recovery import _extracted_event
         _extracted_event.set(event.id)
         return drafts
 
@@ -116,7 +116,7 @@ class UnifiedMemory(RecoveryOperations):
             if recovery.scope != scope or "__recovery_v1" in self.targets:
                 raise ValueError("recovery scope mismatch or reserved deletion target")
             self.targets["__recovery_v1"] = recovery
-            from .context_compression import CompressionCoordinator
+            from .context.compression import CompressionCoordinator
             self._compression = CompressionCoordinator(recovery, compressor=compressor,
                 validator=compression_validator, counter=token_counter, strategy_registry=strategy_registry)
         elif any(value is not None for value in (compressor, compression_validator, token_counter, strategy_registry)):
@@ -127,7 +127,7 @@ class UnifiedMemory(RecoveryOperations):
             raise TypeError("every deletion target must implement forget_sources")
         self.sink = DirectCaptureSink(provider, sanitizer or CaptureSanitizer())
         if recovery is not None:
-            from .recovery import RecoveryCaptureSink
+            from .context.recovery import RecoveryCaptureSink
             self.sink = RecoveryCaptureSink(provider, self.sink.sanitizer, recovery)
         self._lock = asyncio.Lock()
 
@@ -142,10 +142,10 @@ class UnifiedMemory(RecoveryOperations):
         if recovery_path is not None or recovery_store is not None:
             if str(path) == ":memory:":
                 raise ValueError("recovery requires persistent source evidence")
-            from .recovery import RecoveryMemory, RepositoryEvidenceVerifier
-            from .recovery_store import SQLiteRecoveryStore
+            from .context.recovery import RecoveryMemory, RepositoryEvidenceVerifier
+            from .context.store import SQLiteRecoveryStore
             from .sqlite import SQLiteMemoryRepository
-            from .recovery_operations import LocalRetrievalReadinessProbe
+            from .context.operations import LocalRetrievalReadinessProbe
             evidence_repository = SQLiteMemoryRepository(path)
             evidence = RepositoryEvidenceVerifier(evidence_repository)
             recovery = RecoveryMemory(scope, recovery_store if recovery_store is not None else SQLiteRecoveryStore(recovery_path),

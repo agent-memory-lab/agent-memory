@@ -7,7 +7,7 @@ No framework dependency or background service is required.
 
 from datetime import datetime, timezone
 
-from agent_memory.capture_queue import SQLiteCaptureQueue
+from agent_memory.capture.queue import SQLiteCaptureQueue
 from agent_memory.lifecycle import LifecycleEvent, LifecycleEventType, LifecycleOrigin
 from agent_memory.mcp import MCPRequestContext
 from agent_memory.ports import MemoryProvider

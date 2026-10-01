@@ -76,9 +76,9 @@ def main() -> None:
             )
     ontology = None
     if args.ontology_id:
-        from agent_memory.ontology_api import OntologyAPI
-        from agent_memory.ontology_config import OntologyStoreConfig
-        from agent_memory.ontology_registry import SQLiteOntologyRegistry
+        from agent_memory.ontology.api import OntologyAPI
+        from agent_memory.ontology.config import OntologyStoreConfig
+        from agent_memory.ontology.registry import SQLiteOntologyRegistry
         store = OntologyStoreConfig(args.ontology_backend, args.ontology_database,
             args.ontology_dsn_env, args.ontology_namespace).create_store()
         registry = SQLiteOntologyRegistry(args.ontology_registry)

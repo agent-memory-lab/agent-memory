@@ -61,7 +61,7 @@ from .ports import (
 )
 
 if TYPE_CHECKING:
-    from .plugin_protocol import ConsolidationResult
+    from .extensions.protocol import ConsolidationResult
 
 
 def _canonical_value(value: Any) -> str:

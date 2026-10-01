@@ -17,7 +17,7 @@ def test_raw_comparison_protocol_uses_real_local_store_and_external_contract_dou
         def __init__(self):
             self.items = []
             self.received = []
-        def add(self, messages, *, user_id, timestamp, infer):
+        def add(self, messages, *, user_id, infer):
             assert infer is True
             self.received.append(messages[0]["content"])
             self.items.append(dict(id=str(len(self.items)), memory=messages[0]["content"]))
@@ -31,6 +31,7 @@ def test_raw_comparison_protocol_uses_real_local_store_and_external_contract_dou
         def __init__(self):
             self.items = {}
             self.received = []
+            self.driver = self
         async def add_episode(self, **kwargs):
             self.received.append(kwargs["episode_body"])
             episode_id = str(len(self.items))
@@ -39,10 +40,14 @@ def test_raw_comparison_protocol_uses_real_local_store_and_external_contract_dou
         async def search(self, query, *, group_ids, num_results):
             assert group_ids[0].startswith("memory-eval-")
             return [SimpleNamespace(uuid=k, fact=v) for k,v in self.items.items()][:num_results]
-        async def remove_episode(self, episode_id):
-            del self.items[episode_id]
+    class Node:
+        @staticmethod
+        async def delete_by_group_id(driver, group_id):
+            assert group_id.startswith("memory-eval-")
+            driver.items.clear()
 
-    monkeypatch.setitem(sys.modules, "graphiti_core.nodes", SimpleNamespace(EpisodeType=SimpleNamespace(text="text")))
+    monkeypatch.setitem(sys.modules, "graphiti_core.nodes", SimpleNamespace(
+        EpisodeType=SimpleNamespace(text="text"), Node=Node))
     async def scenario():
         memory = UnifiedMemory.local(tmp_path / "core.db", MemoryScope("comparison", session_id="test"))
         await memory.initialize()

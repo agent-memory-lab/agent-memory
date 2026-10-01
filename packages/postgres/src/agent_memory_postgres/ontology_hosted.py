@@ -17,13 +17,17 @@ import psycopg
 from psycopg import sql
 from psycopg.rows import dict_row
 
-from agent_memory.ontology_acceptance import OntologyIndexAcceptance
-from agent_memory.ontology_backfill import OntologyClaimPage, OntologyBackfillCheckpoint, backfill_ontology_memory
-from agent_memory.ontology_live import OntologySyncPending
-from agent_memory.ontology_memory import project_claim_to_ontology
-from agent_memory.ontology_registry import SQLiteOntologyRegistry
-from agent_memory.ontology_runtime import open_active_ontology_memory
-from agent_memory.ontology_schema import ontology_schema_digest
+from agent_memory.ontology.acceptance import OntologyIndexAcceptance
+from agent_memory.ontology.backfill import (
+    OntologyClaimPage,
+    OntologyBackfillCheckpoint,
+    backfill_ontology_memory,
+)
+from agent_memory.ontology.live import OntologySyncPending
+from agent_memory.ontology.model import project_claim_to_ontology
+from agent_memory.ontology.registry import SQLiteOntologyRegistry
+from agent_memory.ontology.runtime import open_active_ontology_memory
+from agent_memory.ontology.schema import ontology_schema_digest
 
 from .ontology import PostgresOntologyStore
 from .ontology_source import PostgresOntologySource

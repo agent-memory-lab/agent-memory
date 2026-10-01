@@ -31,11 +31,11 @@ from .domain import (
     OutcomeStatus,
     RewardSignal,
 )
-from .plugins import PluginRegistry
-from .plugin_loader import LoadedPlugin
-from .plugin_protocol import RetrievalCandidate
-from .plugins import PluginKind
-from .governed_recall import RecallPipeline
+from .extensions.registry import PluginRegistry
+from .extensions.loader import LoadedPlugin
+from .extensions.protocol import RetrievalCandidate
+from .extensions.registry import PluginKind
+from .retrieval.governed import RecallPipeline
 from .ports import ClaimExtractor, EmbeddingProvider, MemoryPolicy, MemoryProvider, Reranker
 
 

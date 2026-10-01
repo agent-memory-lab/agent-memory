@@ -12,7 +12,7 @@ from uuid import uuid4
 import psycopg
 from psycopg import sql
 
-from agent_memory.ontology_source import SQLiteOntologySnapshot, database
+from agent_memory.ontology.source import SQLiteOntologySnapshot, database
 
 
 class PostgresOntologySource:

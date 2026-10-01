@@ -12,7 +12,7 @@ import psycopg
 from psycopg import sql
 from psycopg.rows import dict_row
 
-from agent_memory.ontology_memory import SQLiteOntologyStore
+from agent_memory.ontology.store import SQLiteOntologyStore
 
 
 class _Connection:

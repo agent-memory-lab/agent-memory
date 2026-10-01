@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from agent_memory.domain import Episode, MemoryScope
-from agent_memory.plugin_protocol import ConsolidationRequest
-from agent_memory.procedure_induction import (
+from agent_memory.extensions.protocol import ConsolidationRequest
+from agent_memory.consolidation.procedures import (
     ProcedureInductionLimits,
     induce_procedure_candidates,
 )

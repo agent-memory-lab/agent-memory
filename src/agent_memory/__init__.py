@@ -1,5 +1,5 @@
 from .adapters import AgentLifecycleContext, AgentMemoryAdapter
-from .benchmark_harness import (
+from .evaluation.benchmark import (
     BenchmarkSkip,
     CallableMemoryBenchmarkArm,
     MemoryArmMetrics,
@@ -20,7 +20,7 @@ from .benchmark_harness import (
     run_memory_benchmark,
 )
 from .composition import build_local_kernel
-from .capture_policy import (
+from .capture.policy import (
     CapturePlan,
     CaptureArtifactStore,
     CaptureLimits,
@@ -29,8 +29,8 @@ from .capture_policy import (
     CaptureSanitizer,
     DefaultCaptureRedactor,
 )
-from .capture_artifacts import CaptureArtifactError, FileCaptureArtifactStore
-from .capture_queue import (
+from .capture.artifacts import CaptureArtifactError, FileCaptureArtifactStore
+from .capture.queue import (
     CaptureLease,
     CaptureQueueError,
     CaptureQueueLimits,
@@ -81,13 +81,13 @@ from .domain import (
     ScopeLevel,
     StateDelta,
 )
-from .episode_segmentation import (
+from .consolidation.episodes import (
     DeterministicEpisodeSegmenter,
     EpisodeSegmentationError,
     EpisodeSegmentationLimits,
     segment_episode_proposals,
 )
-from .claim_consolidation import (
+from .consolidation.claims import (
     ClaimConsolidationError,
     ClaimConsolidationLimits,
     ClaimConsolidationPlan,
@@ -95,7 +95,7 @@ from .claim_consolidation import (
     EvidenceTrust,
     consolidate_claim_proposals,
 )
-from .procedure_induction import (
+from .consolidation.procedures import (
     DeterministicProcedureInducer,
     ProcedureInductionError,
     ProcedureInductionLimits,
@@ -111,7 +111,7 @@ from .lifecycle import (
     LifecycleOrigin,
 )
 from .mcp import MCPMemoryTools, MCPRequestContext, MCPToolError
-from .deletion_audit import (
+from .operations.deletion_audit import (
     DeletionAuditError,
     DeletionAuditReceipt,
     DeletionAuditReport,
@@ -120,7 +120,7 @@ from .deletion_audit import (
     DeletionAuditStatus,
     SQLiteDeletionAuditSink,
 )
-from .memory_doctor import (
+from .operations.doctor import (
     MemoryDoctorCode,
     MemoryDoctorFinding,
     MemoryDoctorLimits,
@@ -133,7 +133,7 @@ from .memory_doctor import (
     SQLiteMemoryDoctor,
     build_memory_repair_plan,
 )
-from .ontology_memory import (
+from .ontology.model import (
     CallableOntologyEvidenceVerifier,
     OntologyAssertion,
     OntologyAssertionStatus,
@@ -143,22 +143,21 @@ from .ontology_memory import (
     OntologyEvidenceVerifier,
     OntologyMatch,
     OntologyProjection,
-    OntologyProjectionConsolidatorPlugin,
     OntologyProperty,
-    OntologyRetrieverPlugin,
     OntologySchema,
     OntologyStore,
     OntologyValidationError,
-    SQLiteOntologyStore,
     project_claim_to_ontology,
 )
-from .ontology_plugin import (
+from .ontology.plugins import OntologyProjectionConsolidatorPlugin, OntologyRetrieverPlugin
+from .ontology.store import SQLiteOntologyStore
+from .ontology.plugin import (
     LoadedOntologyMemory,
     OntologyCandidateGovernance,
     load_ontology_memory,
     register_ontology_memory,
 )
-from .ontology_registry import (
+from .ontology.registry import (
     OntologyActivation,
     OntologyRegistryConflict,
     OntologySwitchAudit,
@@ -166,40 +165,40 @@ from .ontology_registry import (
     OntologySwitchRequest,
     SQLiteOntologyRegistry,
 )
-from .ontology_upgrade import (
+from .ontology.upgrade import (
     OntologyUpgradeAuthorizer,
     OntologyUpgradeReceipt,
     OntologyUpgradeRequest,
     register_ontology_upgrade,
 )
-from .ontology_config import OntologyStoreConfig
-from .ontology_api import OntologyAPI
-from .ontology_queries import OntologyGraphResult, traverse_ontology
-from .ontology_workspace import OntologyWorkspace
-from .ontology_source import SQLiteOntologySource, SQLiteOntologySnapshot
-from .ontology_acceptance import OntologyIndexAcceptance, validate_ontology_index
-from .ontology_live import LiveOntologyMemory, OntologySyncPending
-from .ontology_readiness import (
+from .ontology.config import OntologyStoreConfig
+from .ontology.api import OntologyAPI
+from .ontology.queries import OntologyGraphResult, traverse_ontology
+from .ontology.workspace import OntologyWorkspace
+from .ontology.source import SQLiteOntologySource, SQLiteOntologySnapshot
+from .ontology.acceptance import OntologyIndexAcceptance, validate_ontology_index
+from .ontology.live import LiveOntologyMemory, OntologySyncPending
+from .ontology.readiness import (
     BackfillGatedOntologyAuthorizer,
     OntologyCheckpointReader,
 )
-from .ontology_checkpoint import (
+from .ontology.checkpoint import (
     OntologyCheckpointConflict,
     SQLiteOntologyCheckpointSink,
 )
-from .ontology_backfill import (
+from .ontology.backfill import (
     OntologyBackfillCheckpoint,
     OntologyCheckpointSink,
     OntologyClaimPage,
     OntologyClaimSnapshot,
     backfill_ontology_memory,
 )
-from .ontology_runtime import (
+from .ontology.runtime import (
     ActiveOntologyCatalog,
     ActiveOntologyMemory,
     open_active_ontology_memory,
 )
-from .ontology_schema import (
+from .ontology.schema import (
     ONTOLOGY_SCHEMA_FORMAT,
     OntologyChangeSeverity,
     OntologyMigrationPlan,
@@ -212,7 +211,7 @@ from .ontology_schema import (
     plan_ontology_migration,
     serialize_ontology_schema,
 )
-from .plugins import (
+from .extensions.registry import (
     INTEGRATION_GROUP,
     PLUGIN_API_VERSION,
     PROVIDER_GROUP,
@@ -226,7 +225,7 @@ from .plugins import (
     PluginRegistry,
     PluginResourceLimits,
 )
-from .plugin_protocol import (
+from .extensions.protocol import (
     CaptureAdapterPlugin,
     ConsolidationRequest,
     ConsolidationResult,
@@ -248,7 +247,7 @@ from .plugin_protocol import (
     StorageProviderPlugin,
     SystemPluginClock,
 )
-from .plugin_loader import (
+from .extensions.loader import (
     PLUGIN_ENTRY_POINT_GROUPS,
     LoadedPlugin,
     PluginCandidateReference,
@@ -257,14 +256,14 @@ from .plugin_loader import (
     installed_core_version,
     version_satisfies,
 )
-from .plugin_testing import (
+from .extensions.testing import (
     PluginContractError,
     PluginContractFailure,
     PluginContractReport,
     assert_plugin_contract,
     verify_plugin_contract,
 )
-from .reference_plugins import (
+from .extensions.reference import (
     ReferenceCaptureAdapter,
     ReferenceConsolidator,
     ReferenceEvaluator,
@@ -293,7 +292,7 @@ from .providers import (
     build_trajectory_extractor,
 )
 from .runtime import AgentMemory, MemoryLimits
-from .resource_evaluation import (
+from .evaluation.resources import (
     ProcessResourceProbe,
     ResourceComparisonReport,
     ResourceEvaluationPlan,
@@ -315,7 +314,7 @@ from .resource_evaluation import (
     detect_resource_hardware,
     run_resource_evaluation,
 )
-from .release_acceptance import (
+from .evaluation.release import (
     ReleaseAcceptancePlan,
     ReleaseAcceptanceReport,
     ReleaseAcceptanceStatus,
@@ -330,7 +329,7 @@ from .release_acceptance import (
     run_release_checks,
     run_sensitive_information_check,
 )
-from .snapshot_replay import (
+from .evaluation.replay import (
     SNAPSHOT_FORMAT_VERSION,
     SnapshotDataLicense,
     SnapshotDeletionImpact,
@@ -654,3 +653,11 @@ __all__ = [
     "version_satisfies",
     "segment_episode_proposals",
 ]
+
+
+# Install legacy imports only after the public API has finished initializing.
+from ._compat import install_legacy_aliases as _install_legacy_aliases
+import sys as _sys
+
+_install_legacy_aliases(_sys.modules[__name__])
+del _install_legacy_aliases, _sys

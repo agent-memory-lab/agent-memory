@@ -427,7 +427,15 @@ python -m twine check dist/*
 
 ~~~text
 agent-memory/
-├── src/agent_memory/          # 零依赖核心
+├── src/agent_memory/          # 零依赖核心；稳定契约与装配入口
+│   ├── capture/              # 采集
+│   ├── consolidation/        # 归并与归纳
+│   ├── retrieval/            # 检索与候选治理
+│   ├── ontology/             # 本体模型、存储与运营
+│   ├── context/              # 恢复与压缩
+│   ├── extensions/           # 插件契约与加载
+│   ├── operations/           # 审计、诊断与后台任务
+│   └── evaluation/           # 评测、比较与回放
 ├── packages/
 │   ├── postgres/              # PostgreSQL Provider
 │   ├── mcp-server/            # MCP 通信层
@@ -439,6 +447,8 @@ agent-memory/
 ├── docs/                      # 架构、计划和安全文档
 └── setup.sh                   # 本地安装入口
 ~~~
+
+模块职责、拆分原则和旧导入兼容方式见[代码架构说明](docs/ARCHITECTURE.md)。
 
 ## 当前边界
 

@@ -946,8 +946,8 @@ class SQLiteMemoryRepository:
         from datetime import datetime
 
         from .domain import MemoryChannel, MemoryItem, MemoryKind
-        from .lexical_retrieval import EvidenceItem
-        from .scoped_lexical_retrieval import ScopedEvidenceItem
+        from .retrieval.lexical import EvidenceItem
+        from .retrieval.scoped_lexical import ScopedEvidenceItem
 
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 512:
             raise ValueError("limit must be between 1 and 512")

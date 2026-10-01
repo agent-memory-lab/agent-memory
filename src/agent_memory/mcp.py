@@ -23,10 +23,10 @@ from .domain import (
     RewardSignal,
     ScopeLevel,
 )
-from .deletion_audit import DeletionAuditError, DeletionAuditService
-from .memory_doctor import MemoryDoctorProvider, build_memory_repair_plan
+from .operations.deletion_audit import DeletionAuditError, DeletionAuditService
+from .operations.doctor import MemoryDoctorProvider, build_memory_repair_plan
 from .ports import MemoryProvider
-from .plugins import PluginError, PluginErrorCode
+from .extensions.registry import PluginError, PluginErrorCode
 from .serialization import to_jsonable
 
 MCP_ERROR_PREFIX = "agent-memory-error:"

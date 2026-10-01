@@ -1,0 +1,4 @@
+# Python 3.13 sandbox pilot; direct comparison SDK versions used in report.
+mem0ai==2.2.1
+graphiti-core[falkordblite]==0.30.2
+ollama==0.6.2

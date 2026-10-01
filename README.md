@@ -540,7 +540,15 @@ the outstanding live PostgreSQL requirement.
 
 ~~~text
 agent-memory/
-├── src/agent_memory/          # zero-dependency core
+├── src/agent_memory/          # zero-dependency core; stable contracts and entry points
+│   ├── capture/              # capture
+│   ├── consolidation/        # consolidation and induction
+│   ├── retrieval/            # retrieval and candidate governance
+│   ├── ontology/             # ontology model, persistence and operations
+│   ├── context/              # recovery and compression
+│   ├── extensions/           # plugin contracts and loading
+│   ├── operations/           # audit, diagnostics and workers
+│   └── evaluation/           # evaluation, comparison and replay
 ├── packages/
 │   ├── postgres/              # PostgreSQL provider
 │   ├── mcp-server/            # MCP transport
@@ -552,6 +560,8 @@ agent-memory/
 ├── docs/                      # architecture, plan, and security
 └── setup.sh                   # local setup entry point
 ~~~
+
+See [architecture boundaries and import compatibility](docs/ARCHITECTURE.md).
 
 ## Current Boundaries
 

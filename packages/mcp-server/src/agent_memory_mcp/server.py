@@ -6,11 +6,11 @@ from mcp.server import MCPServer
 from mcp.server.mcpserver import Context
 from mcp.server.mcpserver.exceptions import ToolError
 
-from agent_memory.capture_api import submit_capture
-from agent_memory.capture_sink import CaptureError, CaptureSink
-from agent_memory.deletion_audit import DeletionAuditService
+from agent_memory.capture.api import submit_capture
+from agent_memory.capture.sink import CaptureError, CaptureSink
+from agent_memory.operations.deletion_audit import DeletionAuditService
 from agent_memory.lifecycle import LifecycleEventError
-from agent_memory.memory_doctor import MemoryDoctorProvider
+from agent_memory.operations.doctor import MemoryDoctorProvider
 from agent_memory.mcp import MCPMemoryTools, MCPToolError
 from agent_memory.ports import MemoryProvider
 from agent_memory.serialization import to_jsonable

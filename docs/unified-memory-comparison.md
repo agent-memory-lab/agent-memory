@@ -93,12 +93,17 @@ Cloud. Consult the actual pinned SDK before running:
 - https://github.com/mem0ai/mem0/blob/main/mem0/memory/main.py
 - https://github.com/getzep/graphiti/blob/main/graphiti_core/graphiti.py
 
-This runner is an initial behavioral probe, not a scored scientific benchmark.
-It has no automated answer judge, token/cost instrumentation, SDK version lock,
-hard call deadline, repetitions or confidence intervals yet. Failure is recorded,
-not replaced with fabricated results. Failed runs may require cleanup, particularly
-if ingestion committed before a network error. Graphiti deletion tracks episode
-receipts only within this adapter process; it does not prove full graph erasure.
-Mem0 whole-user deletion is not a per-source deletion capability. API success
-alone is not proof of deletion: inspect the recorded post-deletion queries.
-Use only approved test data and authorized model budgets.
+The Ollama smoke runner, evaluation definition, and direct SDK pins are in
+`examples/ollama_memory_comparison.py`, `docs/LOCAL_MEMORY_COMPARISON_EVAL.md`,
+and `examples/ollama-memory-comparison-requirements.txt`. The first sandbox
+smoke results are recorded in `../acceptance-reports/2026-09-27-ollama-memory-comparison/REPORT.md`.
+For benchmark scoring, use the official cleaned LongMemEval-S dataset and the
+resumable runner documented in `docs/LONGMEMEVAL_COMPARISON.md`.
+This remains a small behavioral pilot: one run, four scored questions, substring
+grading, no confidence intervals, manual answer review, or token/cost accounting.
+Failure is recorded, not replaced with fabricated results. Failed runs may require
+cleanup, particularly if ingestion committed before a model error. Graphiti uses a
+fresh group ID per arm and deletes the isolated group after each run. Post-deletion
+queries check observable API state; they do not certify physical erasure from database
+files or backups. Mem0 whole-user deletion is not a per-source deletion capability.
+Use synthetic or otherwise approved test data and authorized model budgets.

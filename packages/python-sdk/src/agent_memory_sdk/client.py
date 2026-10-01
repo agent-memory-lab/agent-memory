@@ -6,9 +6,9 @@ import math
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Protocol, Self
 
-from agent_memory.capture_api import submit_capture
-from agent_memory.capture_sink import CaptureError, CaptureSink
-from agent_memory.deletion_audit import DeletionAuditService
+from agent_memory.capture.api import submit_capture
+from agent_memory.capture.sink import CaptureError, CaptureSink
+from agent_memory.operations.deletion_audit import DeletionAuditService
 from agent_memory.lifecycle import LifecycleEventError
 from agent_memory.mcp import MCPMemoryTools, MCPRequestContext, MCPToolError, decode_mcp_error
 from agent_memory.ports import MemoryProvider

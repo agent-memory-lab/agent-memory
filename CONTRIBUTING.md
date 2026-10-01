@@ -26,6 +26,11 @@ point tests at a production database.
 
 ## Architecture rules
 
+- Follow [the subsystem layout and dependency boundaries](docs/ARCHITECTURE.md).
+  Group code by capability, then split by responsibility; avoid both one-file-per-class
+  fragmentation and generic all-purpose service modules.
+- Import concrete subsystem owners in new code. Legacy flat imports remain supported
+  for consumers, but do not add new entries to the compatibility table.
 - Keep `agent-memory` free of third-party runtime dependencies.
 - Depend on `MemoryProvider`, not a concrete database or framework.
 - Keep optional imports inside independently installable packages.
@@ -34,4 +39,3 @@ point tests at a production database.
 - Domain and protocol changes require a schema/version compatibility note.
 
 Submit focused pull requests with tests and update `CHANGELOG.md` for user-visible changes.
-
