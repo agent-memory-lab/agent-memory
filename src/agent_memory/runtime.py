@@ -195,8 +195,15 @@ class AgentMemory:
         *,
         limit: int | None = None,
         token_budget: int | None = None,
+        valid_at: datetime | None = None,
+        known_at: datetime | None = None,
     ) -> MemoryBundle:
         self._require_initialized()
+        if (
+            (valid_at is not None or known_at is not None)
+            and not self._provider.manifest().capabilities.bitemporal_claims
+        ):
+            raise NotImplementedError("provider does not support bitemporal claims")
         bounded_limit = min(limit or self.limits.max_recall_items, self.limits.max_recall_items)
         bounded_tokens = min(
             token_budget or self.limits.max_context_tokens,
@@ -207,8 +214,10 @@ class AgentMemory:
             text=text,
             limit=max(1, bounded_limit),
             token_budget=max(64, bounded_tokens),
+            valid_at=valid_at,
+            known_at=known_at,
         )
-        if self._recall_pipeline is None:
+        if self._recall_pipeline is None or valid_at is not None or known_at is not None:
             return await self._provider.retrieve(query)
         current_state = await self._provider.get_state(self.scope)
         return await self._recall_pipeline.retrieve(

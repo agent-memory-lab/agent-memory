@@ -42,6 +42,8 @@ from agent_memory.domain import (
     utc_now,
 )
 from agent_memory.serialization import to_jsonable
+from agent_memory.retrieval.temporal_history import temporal_candidates
+from .temporal_history import PostgresClaimHistory
 
 
 def _json(value: Any) -> str:
@@ -315,6 +317,10 @@ class PostgresMemoryUnitOfWork:
         row = await cursor.fetchone()
         return self._repository._claim_from_row(row) if row else None
 
+    async def claim_is_effective(self, claim: Claim, valid_at: datetime) -> bool:
+        claims = await PostgresClaimHistory(self._repository).read(self.connection, claim.scope, valid_at, utc_now())
+        return any(current.id == claim.id for current in claims)
+
     async def save_claim(self, claim: Claim) -> None:
         await self._repository._insert_claim(self.connection, claim)
 
@@ -325,7 +331,7 @@ class PostgresMemoryUnitOfWork:
             SET status = 'superseded', valid_to = %s, superseded_by = %s
             WHERE id = %s AND status = 'active' AND version = %s
             """,
-            (current.valid_from, current.id, previous.id, previous.version),
+            (current.valid_from if current.valid_from > previous.valid_from else previous.valid_to, current.id, previous.id, previous.version),
         )
         if cursor.rowcount != 1:
             raise RuntimeError("claim update conflict")
@@ -355,6 +361,7 @@ class PostgresMemoryUnitOfWork:
             "UPDATE agent_memory_claims SET provenance_json = %s::jsonb WHERE id = %s",
             (_json(updated), claim_id),
         )
+        await PostgresClaimHistory(self._repository).refresh_evidence(self.connection, claim_id)
 
     async def save_state_delta(self, delta: StateDelta) -> None:
         await self.connection.execute(
@@ -593,6 +600,7 @@ class PostgresMemoryRepository:
                     await connection.execute(
                         migration.read_text(encoding="utf-8"), prepare=False
                     )
+                await PostgresClaimHistory(self).initialize(connection)
 
     async def close(self) -> None:
         await self.pool.close()
@@ -600,18 +608,15 @@ class PostgresMemoryRepository:
     def unit_of_work(self) -> PostgresMemoryUnitOfWork:
         return PostgresMemoryUnitOfWork(self)
 
-    async def current_claims(self, scope: MemoryScope) -> Sequence[Claim]:
-        where, params = self._visible_scope_clause(scope)
+    async def claims_at(self, scope, *, valid_at, known_at):
         async with self.pool.connection() as connection:
-            cursor = await connection.execute(
-                f"""
-                SELECT * FROM agent_memory_claims
-                WHERE {where} AND status = 'active' AND archived_at IS NULL
-                ORDER BY importance DESC, confidence DESC, created_at DESC
-                """,
-                params,
-            )
-            return tuple(self._claim_from_row(row) for row in await cursor.fetchall())
+            async with connection.transaction():
+                await connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+                return await PostgresClaimHistory(self).read(connection, scope, valid_at, known_at)
+
+    async def current_claims(self, scope: MemoryScope) -> Sequence[Claim]:
+        now = utc_now()
+        return await self.claims_at(scope, valid_at=now, known_at=now)
 
     async def list_feedback(
         self,
@@ -655,35 +660,39 @@ class PostgresMemoryRepository:
         return tuple(self._feedback_from_row(row) for row in rows)
 
     async def search(self, query: MemoryQuery, limit: int) -> Sequence[MemoryItem]:
+        if query.valid_at is not None or query.known_at is not None:
+            now = utc_now()
+            claims = await self.claims_at(query.scope, valid_at=query.valid_at or now, known_at=query.known_at or now)
+            return temporal_candidates(claims, query.text, limit) if MemoryChannel.SEMANTIC in query.channels else ()
         where, params = self._visible_scope_clause(query.scope)
         text = query.text.strip()
         candidates: list[MemoryItem] = []
+        current_claims = (
+            await self.current_claims(query.scope)
+            if MemoryChannel.SEMANTIC in query.channels else ()
+        )
+        canonical = {
+            item.id: item
+            for item in temporal_candidates(current_claims, text, len(current_claims))
+        }
         async with self.pool.connection() as connection:
             if MemoryChannel.SEMANTIC in query.channels:
+                # Resolve effective IDs before acquiring this connection so even
+                # a pool of size one can search. Keep PostgreSQL full-text ranking.
                 claims = await self._search_rows(
                     connection,
                     "agent_memory_claims",
-                    where + " AND status = 'active' AND archived_at IS NULL",
-                    params,
+                    where + " AND archived_at IS NULL AND id = ANY(%s)",
+                    (*params, list(canonical)),
                     text,
                     limit,
                 )
                 for row in claims:
-                    provenance = _provenance(row["provenance_json"])
                     candidates.append(
-                        MemoryItem(
-                            id=row["id"],
-                            kind=MemoryKind.CLAIM,
-                            text=row["text"],
-                            score=float(row["rank"])
-                            + 0.25 * row["importance"]
+                        replace(
+                            canonical[row["id"]],
+                            score=float(row["rank"]) + 0.25 * row["importance"]
                             + 0.20 * row["confidence"],
-                            occurred_at=row["created_at"],
-                            metadata={
-                                "channel": MemoryChannel.SEMANTIC,
-                                "key": row["claim_key"],
-                                "source_event_ids": provenance.source_event_ids,
-                            },
                         )
                     )
                 events = await self._search_rows(
@@ -965,6 +974,7 @@ class PostgresMemoryRepository:
                         if not rows:
                             break
                         for row in rows:
+                            await PostgresClaimHistory(self).scrub_sources(connection, row["id"], target_event_ids)
                             provenance = _provenance(row["provenance_json"])
                             remaining = tuple(event_id for event_id in provenance.source_event_ids
                                               if event_id not in target_event_ids)
@@ -1125,6 +1135,8 @@ class PostgresMemoryRepository:
                 claim.superseded_by,
             ),
         )
+        await PostgresClaimHistory(self).record(connection, claim)
+
 
     async def _insert_artifact(
         self,

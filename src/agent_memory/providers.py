@@ -3,10 +3,21 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
+from datetime import datetime
 from math import isfinite, sqrt
 
 from .domain import ClaimDraft, MemoryEvent, MemoryItem, MemoryQuery, Provenance, ScopeLevel
 from .ports import ClaimExtractor, ClaimGenerator, EmbeddingProvider, Reranker
+
+
+def _claim_time(value: object, fallback=None):
+    if value is None:
+        return fallback
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value)
+    if not isinstance(value, datetime) or value.utcoffset() is None:
+        raise ValueError("claim times must include a timezone")
+    return value
 
 
 class MetadataClaimExtractor:
@@ -34,7 +45,9 @@ class MetadataClaimExtractor:
                         confidence=float(raw.get("confidence", 1.0)),
                         importance=float(raw.get("importance", 0.5)),
                         scope_level=ScopeLevel(str(raw.get("scope", ScopeLevel.SESSION))),
-                        valid_from=event.occurred_at,
+                        valid_from=_claim_time(raw.get("valid_from")),
+                        valid_to=_claim_time(raw.get("valid_to")),
+                        corrects_id=raw.get("corrects_id"),
                     )
                 )
             except (TypeError, ValueError):

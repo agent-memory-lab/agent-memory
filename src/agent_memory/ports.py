@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from types import TracebackType
+from datetime import datetime
 from typing import Protocol
 
 from .domain import (
@@ -234,3 +235,19 @@ class MemoryProvider(Protocol):
     ) -> FeedbackPage: ...
 
     def manifest(self) -> ProviderManifest: ...
+
+
+class BitemporalMemoryRepository(Protocol):
+    """Optional Claim history port; advertised by bitemporal_claims capability."""
+
+    async def claims_at(
+        self, scope: MemoryScope, *, valid_at: datetime, known_at: datetime
+    ) -> Sequence[Claim]: ...
+
+
+class BitemporalMemoryProvider(Protocol):
+    """Optional provider state query over both independent time axes."""
+
+    async def get_state_at(
+        self, scope: MemoryScope, *, valid_at: datetime, known_at: datetime
+    ) -> tuple[Claim, ...]: ...

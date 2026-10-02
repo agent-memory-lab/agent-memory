@@ -1,3 +1,5 @@
+from .retrieval.temporal_history import TemporalHistoryUnavailable
+
 from .adapters import AgentLifecycleContext, AgentMemoryAdapter
 from .evaluation.benchmark import (
     BenchmarkSkip,
@@ -272,6 +274,8 @@ from .extensions.reference import (
     ReferenceStorageProvider,
 )
 from .ports import (
+    BitemporalMemoryRepository,
+    BitemporalMemoryProvider,
     ClaimExtractor,
     ClaimGenerator,
     ConsolidationScheduler,
@@ -350,6 +354,7 @@ from .evaluation.replay import (
 )
 
 __all__ = [
+    "TemporalHistoryUnavailable",
     "CallableOntologyEvidenceVerifier",
     "OntologyAssertion",
     "OntologyAssertionStatus",
@@ -577,6 +582,8 @@ __all__ = [
     "MemoryUsage",
     "MemoryPolicy",
     "MemoryProposal",
+    "BitemporalMemoryRepository",
+    "BitemporalMemoryProvider",
     "MemoryProvider",
     "MemoryQuery",
     "MemoryRepository",

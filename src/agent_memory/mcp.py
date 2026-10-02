@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 import json
 from typing import Any
 
@@ -28,6 +29,7 @@ from .operations.doctor import MemoryDoctorProvider, build_memory_repair_plan
 from .ports import MemoryProvider
 from .extensions.registry import PluginError, PluginErrorCode
 from .serialization import to_jsonable
+from .retrieval.temporal_history import TemporalHistoryUnavailable
 
 MCP_ERROR_PREFIX = "agent-memory-error:"
 
@@ -138,6 +140,14 @@ class MCPMemoryTools:
                     "text": {"type": "string"},
                     "limit": {"type": "integer", "minimum": 1, "maximum": 100},
                     "token_budget": {"type": "integer", "minimum": 64},
+                    "valid_at": {
+                        "type": "string", "format": "date-time",
+                        "description": "Real-world effective time (timezone required).",
+                    },
+                    "known_at": {
+                        "type": "string", "format": "date-time",
+                        "description": "System knowledge cutoff (timezone required).",
+                    },
                     "channels": {
                         "type": "array",
                         "items": {"enum": [channel.value for channel in MemoryChannel]},
@@ -344,6 +354,11 @@ class MCPMemoryTools:
             tools += self._ontology.tools()
         capabilities = self._provider.manifest().capabilities
         enabled = list(tools)
+        if not capabilities.bitemporal_claims:
+            for tool in enabled:
+                if tool["name"] == "memory_retrieve":
+                    tool["inputSchema"]["properties"].pop("valid_at", None)
+                    tool["inputSchema"]["properties"].pop("known_at", None)
         if not capabilities.memory_blocks:
             enabled = [
                 tool for tool in enabled if not tool["name"].startswith("memory_block_")
@@ -371,6 +386,8 @@ class MCPMemoryTools:
             return await self._call_tool(name, arguments, context)
         except MCPToolError:
             raise
+        except TemporalHistoryUnavailable as error:
+            raise MCPToolError(str(error), code="temporal_history_unavailable") from error
         except PluginError as error:
             raise MCPToolError.from_plugin_error(error) from error
         except DeletionAuditError as error:
@@ -409,6 +426,13 @@ class MCPMemoryTools:
             return to_jsonable(result)
 
         if name == "memory_retrieve":
+            if (
+                (arguments.get("valid_at") is not None or arguments.get("known_at") is not None)
+                and not self._provider.manifest().capabilities.bitemporal_claims
+            ):
+                raise MCPToolError(
+                    "provider does not support bitemporal claims", code="unsupported_capability"
+                )
             raw_channels = arguments.get("channels")
             channels = (
                 tuple(MemoryChannel(str(channel)) for channel in raw_channels)
@@ -422,6 +446,8 @@ class MCPMemoryTools:
                     limit=int(arguments.get("limit", 8)),
                     token_budget=int(arguments.get("token_budget", 1200)),
                     channels=channels,
+                    valid_at=self._query_time(arguments, "valid_at"),
+                    known_at=self._query_time(arguments, "known_at"),
                 )
             )
             return to_jsonable(result)
@@ -674,6 +700,19 @@ class MCPMemoryTools:
             "mode": receipt.mode.value,
             "audit": to_jsonable(receipt),
         }
+
+    @staticmethod
+    def _query_time(arguments, name):
+        raw = arguments.get(name)
+        if raw is None:
+            return None
+        try:
+            value = datetime.fromisoformat(raw)
+        except (TypeError, ValueError) as exc:
+            raise MCPToolError(f"{name} must be an ISO-8601 timestamp") from exc
+        if value.utcoffset() is None:
+            raise MCPToolError(f"{name} must include a timezone")
+        return value
 
     @staticmethod
     def _tool(

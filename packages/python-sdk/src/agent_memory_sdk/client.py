@@ -134,10 +134,15 @@ class _Operations(RecoveryClientOperations):
         limit: int = 8,
         token_budget: int = 1200,
         channels: list[str] | None = None,
+        valid_at: str | None = None,
+        known_at: str | None = None,
     ) -> dict[str, Any]:
         arguments: dict[str, Any] = {"text": text, "limit": limit, "token_budget": token_budget}
         if channels is not None:
             arguments["channels"] = channels
+        for name, value in (("valid_at", valid_at), ("known_at", known_at)):
+            if value is not None:
+                arguments[name] = value
         return await self._call("memory_retrieve", arguments)
 
     async def get_state(self) -> dict[str, Any]:

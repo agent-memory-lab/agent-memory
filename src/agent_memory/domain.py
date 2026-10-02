@@ -192,8 +192,21 @@ class ClaimDraft:
     scope_level: ScopeLevel = ScopeLevel.SESSION
     valid_from: datetime | None = None
     provenance: Provenance | None = None
+    valid_to: datetime | None = None
+    corrects_id: str | None = None
 
     def __post_init__(self) -> None:
+        for name in ("valid_from", "valid_to"):
+            value = getattr(self, name)
+            if value is not None and (not isinstance(value, datetime) or value.utcoffset() is None):
+                raise ValueError(f"{name} must include a timezone")
+        if self.valid_from is not None and self.valid_to is not None:
+            if self.valid_to <= self.valid_from:
+                raise ValueError("valid_to must be after valid_from")
+        if self.corrects_id is not None and (
+            not isinstance(self.corrects_id, str) or not 1 <= len(self.corrects_id) <= 128
+        ):
+            raise ValueError("corrects_id must be a bounded claim ID")
         if not self.key.strip() or not self.text.strip():
             raise ValueError("claim key and text must not be empty")
         if not 0.0 <= self.confidence <= 1.0:
@@ -219,6 +232,9 @@ class Claim:
     valid_to: datetime | None = None
     supersedes: str | None = None
     superseded_by: str | None = None
+    corrects_id: str | None = None
+    system_from: datetime | None = None
+    system_to: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -292,7 +308,7 @@ class Procedure:
             ("evidence_start_at", self.evidence_start_at),
             ("evidence_end_at", self.evidence_end_at),
         ):
-            if value is not None and value.utcoffset() is None:
+            if value is not None and (not isinstance(value, datetime) or value.utcoffset() is None):
                 raise ValueError(f"procedure {field_name} must include a timezone")
         if (
             self.evidence_start_at is not None
@@ -576,8 +592,14 @@ class MemoryQuery:
     run_id: str | None = None
     policy_version: str = "state-first-rrf-v1"
     trace_enabled: bool = True
+    valid_at: datetime | None = None
+    known_at: datetime | None = None
 
     def __post_init__(self) -> None:
+        for name in ("valid_at", "known_at"):
+            value = getattr(self, name)
+            if value is not None and (not isinstance(value, datetime) or value.utcoffset() is None):
+                raise ValueError(f"{name} must be a timezone-aware datetime")
         if not 1 <= self.limit <= 100:
             raise ValueError("limit must be between 1 and 100")
         if self.token_budget < 64:
@@ -623,6 +645,7 @@ class MemoryCapabilities:
     learned_policy: bool = False
     policy_joint_training: bool = False
     test_time_learning: bool = False
+    bitemporal_claims: bool = False
 
 
 @dataclass(frozen=True, slots=True)

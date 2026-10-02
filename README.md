@@ -627,3 +627,18 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Architectu
 ## License
 
 Licensed under the [Apache License 2.0](LICENSE).
+
+### Bitemporal Claim memory
+
+SQLite and PostgreSQL can now query Claim facts with independent `valid_at`
+(real-world effective time) and `known_at` (system knowledge time) parameters.
+Claim metadata accepts `valid_from`, `valid_to`, and explicit `corrects_id` for
+retroactive corrections. Earlier knowledge snapshots retain their original
+interpretation and evidence. SDK/MCP retrieval accepts timezone-aware ISO-8601
+parameters; ordinary recall remains available without them.
+
+See [the bitemporal contract and examples](docs/BITEMPORAL_MEMORY.md) for
+migration limits and historical retrieval scope, and
+[the extraction architecture analysis](docs/MEMORY_EXTRACTION_DESIGN.md) for
+L0–L3 layering and alternative extraction methods. Historical retrieval currently
+covers Claims; derived scene/persona summaries are not historical evidence.

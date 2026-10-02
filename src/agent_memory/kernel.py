@@ -51,6 +51,7 @@ from .domain import (
     canonical_json,
     utc_now,
 )
+from .retrieval.temporal_history import temporal_candidates
 from .ports import (
     ClaimExtractor,
     ConsolidationScheduler,
@@ -165,7 +166,10 @@ class MemoryKernel:
             version=provider_version,
             protocol_version=PROTOCOL_VERSION,
             schema_version=SCHEMA_VERSION,
-            capabilities=capabilities or MemoryCapabilities(),
+            capabilities=replace(
+                capabilities or MemoryCapabilities(),
+                bitemporal_claims=callable(getattr(repository, "claims_at", None)),
+            ),
         )
 
     async def initialize(self) -> None:
@@ -258,7 +262,19 @@ class MemoryKernel:
     ) -> tuple[Claim, StateDelta | None, str | None]:
         claim_scope = event.scope.project(draft.scope_level)
         previous = await uow.find_current_claim(claim_scope, draft.key)
-        if previous and _canonical_value(previous.value) == _canonical_value(draft.value):
+        corroborates = bool(
+            previous
+            and _canonical_value(previous.value) == _canonical_value(draft.value)
+            and draft.corrects_id is None
+            and draft.valid_to is None
+            and draft.valid_from is None
+            and previous.valid_to is None
+            and previous.valid_from <= event.occurred_at
+        )
+        effective_check = getattr(uow, "claim_is_effective", None)
+        if corroborates and callable(effective_check):
+            corroborates = await effective_check(previous, event.occurred_at)
+        if corroborates:
             await uow.add_claim_source(previous.id, event.id)
             return previous, None, None
 
@@ -284,6 +300,8 @@ class MemoryKernel:
             provenance=provenance,
             valid_from=draft.valid_from or event.occurred_at,
             created_at=now,
+            valid_to=draft.valid_to,
+            corrects_id=draft.corrects_id,
             version=(previous.version + 1) if previous else 1,
             supersedes=previous.id if previous else None,
         )
@@ -308,13 +326,39 @@ class MemoryKernel:
     async def get_state(self, scope: MemoryScope) -> tuple[Claim, ...]:
         return tuple(await self._repository.current_claims(scope))
 
+    async def get_state_at(
+        self, scope: MemoryScope, *, valid_at: datetime, known_at: datetime
+    ) -> tuple[Claim, ...]:
+        reader = getattr(self._repository, "claims_at", None)
+        if not callable(reader):
+            raise NotImplementedError("provider does not support bitemporal claims")
+        return tuple(await reader(scope, valid_at=valid_at, known_at=known_at))
+
     async def retrieve(self, query: MemoryQuery) -> MemoryBundle:
-        current = (
-            tuple(await self._repository.current_claims(query.scope))
-            if query.include_current_state
-            else ()
-        )
-        candidates = await self._repository.search(query, query.limit * 6)
+        if query.valid_at is not None or query.known_at is not None:
+            now = utc_now()
+            # Resolve both axes once so state and candidates use the same snapshot.
+            query = replace(query, valid_at=query.valid_at or now, known_at=query.known_at or now)
+            historical_state = await self.get_state_at(
+                query.scope, valid_at=query.valid_at, known_at=query.known_at
+            )
+        else:
+            historical_state = None
+        current = ()
+        if query.include_current_state:
+            current = (
+                historical_state
+                if historical_state is not None
+                else tuple(await self._repository.current_claims(query.scope))
+            )
+        if historical_state is None:
+            candidates = await self._repository.search(query, query.limit * 6)
+        else:
+            candidates = (
+                temporal_candidates(historical_state, query.text, query.limit * 6)
+                if MemoryChannel.SEMANTIC in query.channels
+                else ()
+            )
         ranked = await self._reranker.rerank(query, candidates)
 
         selected_state: list[Claim] = []
@@ -377,6 +421,14 @@ class MemoryKernel:
                 "state_count": len(selected_state),
                 "strategy": "state_first_rrf",
                 "protocol_version": PROTOCOL_VERSION,
+                **(
+                    {
+                        "valid_at": query.valid_at.isoformat(),
+                        "known_at": query.known_at.isoformat(),
+                        "temporal_kind": "claim",
+                    }
+                    if historical_state is not None else {}
+                ),
             },
             capability_snapshot=self._manifest.capabilities,
             bundle_id=bundle_id,

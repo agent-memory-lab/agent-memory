@@ -14,6 +14,8 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any
 
+from .retrieval.temporal_history import SQLiteClaimHistory, temporal_candidates
+
 from .domain import (
     ArtifactStatus,
     Claim,
@@ -304,6 +306,10 @@ class SQLiteMemoryUnitOfWork:
         ).fetchone()
         return self._repository._claim_from_row(row) if row else None
 
+    async def claim_is_effective(self, claim: Claim, valid_at: datetime) -> bool:
+        claims = SQLiteClaimHistory(self._repository).read(self.connection, claim.scope, valid_at, utc_now())
+        return any(current.id == claim.id for current in claims)
+
     async def save_claim(self, claim: Claim) -> None:
         self._repository._insert_claim(self.connection, claim)
 
@@ -315,7 +321,7 @@ class SQLiteMemoryUnitOfWork:
             """,
             (
                 ClaimStatus.SUPERSEDED,
-                _iso(current.valid_from),
+                _iso(current.valid_from) if current.valid_from > previous.valid_from else (_iso(previous.valid_to) if previous.valid_to else None),
                 current.id,
                 previous.id,
                 ClaimStatus.ACTIVE,
@@ -352,6 +358,8 @@ class SQLiteMemoryUnitOfWork:
             "INSERT OR IGNORE INTO claim_sources (claim_id, event_id) VALUES (?, ?)",
             (claim_id, event_id),
         )
+
+        SQLiteClaimHistory(self._repository).refresh_evidence(self.connection, claim_id)
 
     async def save_state_delta(self, delta: StateDelta) -> None:
         self.connection.execute(
@@ -747,6 +755,7 @@ class SQLiteMemoryRepository:
             self._migrate_claim_sources(connection)
             self._migrate_evolution_records(connection)
             self._ensure_current_claim_index(connection)
+            SQLiteClaimHistory(self).initialize(connection)
 
     def _enable_wal(self) -> None:
         for attempt in range(8):
@@ -989,6 +998,14 @@ class SQLiteMemoryRepository:
             for row in rows
         )
 
+    async def claims_at(self, scope, *, valid_at, known_at):
+        return await asyncio.to_thread(self._claims_at_sync, scope, valid_at, known_at)
+
+    def _claims_at_sync(self, scope, valid_at, known_at):
+        with self._connection() as connection:
+            connection.execute("BEGIN")
+            return SQLiteClaimHistory(self).read(connection, scope, valid_at, known_at)
+
     async def current_claims(self, scope: MemoryScope) -> Sequence[Claim]:
         return await asyncio.to_thread(self._current_claims_sync, scope)
 
@@ -1039,30 +1056,20 @@ class SQLiteMemoryRepository:
         return tuple(self._feedback_from_row(row) for row in rows)
 
     def _current_claims_sync(self, scope: MemoryScope) -> Sequence[Claim]:
-        where, params = self._visible_scope_clause(scope)
-        with self._connection() as connection:
-            rows = connection.execute(
-                f"""
-                SELECT * FROM claims
-                WHERE {where} AND status = ? AND archived_at IS NULL
-                ORDER BY importance DESC, confidence DESC, created_at DESC
-                """,
-                (*params, ClaimStatus.ACTIVE),
-            ).fetchall()
-        return tuple(self._claim_from_row(row) for row in rows)
+        now = utc_now()
+        return self._claims_at_sync(scope, now, now)
 
     async def search(self, query: MemoryQuery, limit: int) -> Sequence[MemoryItem]:
         return await asyncio.to_thread(self._search_sync, query, limit)
 
     def _search_sync(self, query: MemoryQuery, limit: int) -> Sequence[MemoryItem]:
+        if query.valid_at is not None or query.known_at is not None:
+            now = utc_now()
+            claims = self._claims_at_sync(query.scope, query.valid_at or now, query.known_at or now)
+            return (temporal_candidates(claims, query.text, limit)
+                    if MemoryChannel.SEMANTIC in query.channels else ())
         where, params = self._visible_scope_clause(query.scope)
         with self._connection() as connection:
-            claim_rows = connection.execute(
-                f"SELECT * FROM claims WHERE {where} "
-                "AND status = ? AND archived_at IS NULL "
-                "ORDER BY created_at DESC, id DESC",
-                (*params, ClaimStatus.ACTIVE),
-            ).fetchall()
             event_rows = connection.execute(
                 f"SELECT * FROM events WHERE {where} "
                 "AND archived_at IS NULL ORDER BY occurred_at DESC, id DESC",
@@ -1077,26 +1084,8 @@ class SQLiteMemoryRepository:
         query_tokens = _tokens(query.text)
         candidates: list[MemoryItem] = []
         if MemoryChannel.SEMANTIC in query.channels:
-            for row in claim_rows:
-                overlap = self._overlap(
-                    query_tokens, f"{row['claim_key']} {row['text']} {row['value_json']}"
-                )
-                candidates.append(
-                    MemoryItem(
-                        id=row["id"],
-                        kind=MemoryKind.CLAIM,
-                        text=row["text"],
-                        score=0.55 * overlap + 0.25 * row["importance"] + 0.20 * row["confidence"],
-                        occurred_at=_datetime(row["created_at"]) or utc_now(),
-                        metadata={
-                            "channel": MemoryChannel.SEMANTIC,
-                            "key": row["claim_key"],
-                            "source_event_ids": _provenance(
-                                row["provenance_json"]
-                            ).source_event_ids,
-                        },
-                    )
-                )
+            now = utc_now()
+            candidates.extend(temporal_candidates(self._claims_at_sync(query.scope, now, now), query.text, limit))
             for row in event_rows:
                 overlap = self._overlap(query_tokens, row["content"])
                 if query_tokens and overlap == 0:
@@ -1368,6 +1357,7 @@ class SQLiteMemoryRepository:
                     (_provenance_json(updated), claim_id),
                 )
                 self._sync_claim_source_json(connection, claim_id)
+                SQLiteClaimHistory(self).scrub_sources(connection, claim_id, target_event_set)
 
             changed_block_ids: set[str] = set()
             blocks_to_drop: set[str] = set()
@@ -1669,6 +1659,7 @@ class SQLiteMemoryRepository:
                 claim.superseded_by,
             ),
         )
+        SQLiteClaimHistory(self).record(connection, claim)
         for source_event_id in claim.provenance.source_event_ids:
             connection.execute(
                 "INSERT OR IGNORE INTO claim_sources (claim_id, event_id) VALUES (?, ?)",

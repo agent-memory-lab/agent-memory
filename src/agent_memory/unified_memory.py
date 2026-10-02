@@ -187,12 +187,12 @@ class UnifiedMemory(RecoveryOperations):
             await self._ready()
             return result
 
-    async def recall(self, text, *, token_budget=1024, limit=8, include_current_state=True):
+    async def recall(self, text, *, token_budget=1024, limit=8, include_current_state=True, valid_at=None, known_at=None):
         async with self._lock:
             await self._ready()
             result = await self.provider.retrieve(MemoryQuery(
                 self.scope, text, limit=limit, token_budget=token_budget,
-                include_current_state=include_current_state,
+                include_current_state=include_current_state, valid_at=valid_at, known_at=known_at,
             ))
             await self._ready()
             return result
