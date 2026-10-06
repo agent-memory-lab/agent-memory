@@ -349,6 +349,21 @@ class PostgresMemoryUnitOfWork:
 
         return await delivery.count(self.connection, scope, kind)
 
+    async def refresh_get(self, scope, kind, identity):
+        from . import refresh
+
+        return await refresh.get(self.connection, scope, kind, identity)
+
+    async def refresh_put(self, scope, kind, identity, payload):
+        from . import refresh
+
+        return await refresh.put(self.connection, scope, kind, identity, payload)
+
+    async def refresh_records(self, scope, kind):
+        from . import refresh
+
+        return await refresh.records(self.connection, scope, kind)
+
     async def index_job_get(self, scope, channel, epoch, token_id):
         from . import index
         return await index.job_get(self.connection, scope, channel, epoch, token_id)

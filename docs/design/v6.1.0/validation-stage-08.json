@@ -1,0 +1,96 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "date": "2026-10-07",
+  "ledger_revision": 12,
+  "design": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "base_commit": "950676229fad2d5efe4181aa3bd7965a42be8e5d",
+  "enabled_scope": "host-owned exact-scope local resource refresh with immutable retained-source unit dependencies, finite receipts, fenced/coalesced execution, atomic output/coverage and successor scheduling; not model/Observation/view activation",
+  "full_test_run": false,
+  "test_scope_reason": "User requested partial tests only; targeted new refresh behavior and affected worker/index/reprocessing/retention/deletion/source revision/migration/SDK/MCP/architecture contracts.",
+  "tests": {
+    "runner": "pytest",
+    "targets": [
+      "tests/test_resource_refresh.py",
+      "tests/test_worker_runtime.py",
+      "tests/test_durable_indexing.py",
+      "tests/test_reprocessing_readiness.py",
+      "tests/test_durable_retention.py",
+      "tests/test_durable_purge.py",
+      "tests/test_source_revisions.py",
+      "tests/test_architecture.py::test_resource_refresh_orchestration_does_not_import_storage_adapters",
+      "tests/test_architecture.py::test_domain_contracts_do_not_depend_on_implementation",
+      "tests/test_architecture.py::test_production_code_uses_owners_instead_of_compatibility_modules",
+      "packages/postgres/tests/test_live_contract.py::test_live_postgres_additive_v1_to_v2_migration",
+      "packages/python-sdk/tests/test_embedded_contract.py",
+      "packages/mcp-server/tests/test_capture_contract.py"
+    ],
+    "unique_targeted_cases": 267,
+    "passed": 267,
+    "skipped": 0,
+    "duration_seconds": 10.794,
+    "new_behavior_cases": 64,
+    "new_architecture_cases": 1,
+    "backends": [
+      "SQLite",
+      "PostgreSQL 17"
+    ],
+    "real_crash": "4 new refresh SIGKILL cases before/after output+coverage commit on both backends; 4 existing index SIGKILL cases also rerun; database server not killed",
+    "repeat_note": "Incremental subsets and repeated runs are not added to the final 267 unique cases."
+  },
+  "example": "examples/resource_refresh.py passed: running new work retained for successor; fixed receipts; existing Block output version 2",
+  "lint": {
+    "changed_python_files": "F,I passed",
+    "refresh_modules_new_tests_example_crash_fixture_and_worker_contracts": "full configured rules passed"
+  },
+  "wheels": [
+    {
+      "file": "agent_memory-0.1.0-py3-none-any.whl",
+      "sha256": "9647d5f329eeabdf13eadbdab8ba56a49b730f3099c9827f7254594842ec5c72"
+    },
+    {
+      "file": "agent_memory_postgres-0.1.0-py3-none-any.whl",
+      "sha256": "0265a54c8b34adb02207a57c3525dae107ba06ef2f12a7ae3b634b9781a29169"
+    }
+  ],
+  "wheel_sources_match_final_files": true,
+  "postgres_migration_packaged": "012_resource_refresh.sql",
+  "source_files_sha256": {
+    "packages/postgres/src/agent_memory_postgres/repository.py": "b241f4608e17ac90a34cc85a4948c94be3c4a2ed72199687afa3b19938393144",
+    "packages/postgres/src/agent_memory_postgres/retention.py": "cee4ca433c39d32476f978a9876f7c8f6b33e05ca6edc5bf4e7f7a223c133768",
+    "src/agent_memory/operations/sqlite_retention.py": "fdfbfb3ac2e75456dfb08fb4dbe928a822d67f8da51af0d3d49f0305c31386ad",
+    "src/agent_memory/operations/worker_runtime.py": "c1ea7d4a67edf2fbdc1fcf3c344e308f6c5851ec9e951914325f66d647ef0cda",
+    "src/agent_memory/operations/worker_tasks.py": "4ad91acf4e58c4891ee8dd68bd66ed1becd7d5c1a2a4189e6f42b61d5bf5e79d",
+    "src/agent_memory/ports.py": "543d262d486bece1ca48ab44b9f0d1187720fc721898db6e780c2ddf019e8b7e",
+    "src/agent_memory/sqlite.py": "c41647ce283c1f75b8737f20952456b5c022faad40ab8f5a982c95a904e8a1cb",
+    "tests/fixtures/durable_crash_child.py": "61a650645f51d2f6ccc6b0a151579e81dd1b88691fc97709e495ac1fd7021c22",
+    "tests/test_architecture.py": "a1ec184e926c5b7d8f06ae39abba59df5972cc8f1c651a9171036f60cf23d313",
+    "examples/resource_refresh.py": "698c3a1b09a5ad397fa0a2be8d52bb65b2df872851a2ed7083520dab6b9ca61f",
+    "packages/postgres/migrations/012_resource_refresh.sql": "9a428a3bf63a64c91103b59b0836a5ed1d700fc5fcb3f1891ea2fb52201f6d86",
+    "packages/postgres/src/agent_memory_postgres/refresh.py": "bb729c11a9e6e7cec4d03306692fdccf7cfed220b793ce1c707c3b5826a8d993",
+    "src/agent_memory/operations/resource_refresh.py": "862c3b33c7ad2eaaa9df17393b63daf8ab9604fbe3550088ea725acc9926f772",
+    "src/agent_memory/operations/sqlite_refresh.py": "ea2643f78ca23aa080130dcfb4247675160d9b76da4dacd7d3fde2e7bb113ce4",
+    "tests/test_resource_refresh.py": "f9bbe61aa170204a432697c5c28c5d8d9e24bd82c5eb58363475f795a01fd24b"
+  },
+  "doc_validation": {
+    "frozen_design_hashes": "passed",
+    "task_links": "passed",
+    "task_count": 44,
+    "acceptance_rows": 66,
+    "statuses": {
+      "DONE": 1,
+      "IN_PROGRESS": 24,
+      "TODO": 19
+    }
+  },
+  "remaining": [
+    "explicit repair/stream rollover for terminal candidate index prefix gaps",
+    "authoritative latest deletion log replay over restored backup",
+    "multiple physical L1 publications in one processing request",
+    "resource definition migration and cross-scope global quotas/history compaction/scale tuning",
+    "generic refresh target object deletion mapping and generated-output actual input/ACL/qualification contracts remain host responsibility",
+    "public derived readiness/Observation/view and external model activation not claimed",
+    "real domain gold/calibration and external/derived index contracts",
+    "no full-suite regression claim for revision 12"
+  ]
+}

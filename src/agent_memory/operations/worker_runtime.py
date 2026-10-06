@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping
 
 from .worker_tasks import (
+    WorkerExecutionQueue,
+    WorkerFailureDisposition,
     WorkerLease,
     WorkerLimits,
-    WorkerExecutionQueue,
     WorkerQueueError,
     WorkerTaskHandler,
     validate_handlers,
@@ -23,6 +24,7 @@ class WorkerBatchResult:
     failed: int
     idle: bool
     cancelled: int = 0
+    deferred: int = 0
 
 
 class BoundedWorker:
@@ -57,7 +59,7 @@ class BoundedWorker:
 
     async def run_once(self) -> bool:
         result = await self.run_batch(max_tasks=1)
-        return result.completed + result.failed > 0
+        return result.completed + result.failed + result.deferred > 0
 
     async def run_batch(self, *, max_tasks: int | None = None) -> WorkerBatchResult:
         if self.paused:
@@ -102,12 +104,14 @@ class BoundedWorker:
                     if isinstance(error, (KeyboardInterrupt, SystemExit)):
                         raise
                     try:
-                        await self._queue.fail(lease, error)
+                        disposition = await self._queue.fail(lease, error)
                     except WorkerQueueError as queue_error:
                         if queue_error.code == "stale_lease":
                             return "cancelled"
                         raise
-                    return "failed"
+                    return (
+                        "deferred" if disposition == WorkerFailureDisposition.DEFERRED else "failed"
+                    )
 
         outcomes = await asyncio.gather(*(execute(lease) for lease in leases))
         completed = outcomes.count("completed")
@@ -118,6 +122,7 @@ class BoundedWorker:
             failed=outcomes.count("failed"),
             idle=False,
             cancelled=cancelled,
+            deferred=outcomes.count("deferred"),
         )
 
     async def run_forever(

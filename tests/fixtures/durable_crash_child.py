@@ -61,6 +61,29 @@ async def main(config):
             unit_type.producer_put = before_commit
         await producer.append(event, session, sequence=1, actor="alice")
         await pause()
+    elif phase.startswith("refresh_"):
+        from agent_memory.operations.resource_refresh import ResourceRefreshQueue
+
+        queue = ResourceRefreshQueue(repository, scope, clock=lambda: now)
+        lease = await queue.claim("crashed-refresh-worker", lease_seconds=5)
+        if phase == "refresh_before_commit":
+            original = unit_type.refresh_put
+
+            async def before_commit(uow, scope, kind, identity, row):
+                await original(uow, scope, kind, identity, row)
+                if kind == "resource" and row["completed_through"]:
+                    await pause()
+
+            unit_type.refresh_put = before_commit
+
+        async def output(uow, task):
+            await uow.delivery_insert(
+                scope, "target", "refresh-crash-output", {"units": task.payload["claimed_through"]}
+            )
+            return task.payload["claimed_through"]
+
+        await queue.commit(lease.task, output)
+        await pause()
     elif phase.startswith("index_"):
         from agent_memory.operations.indexing import CandidateIndexChannel, CandidateIndexQueue
 

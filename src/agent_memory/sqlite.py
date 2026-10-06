@@ -349,6 +349,21 @@ class SQLiteMemoryUnitOfWork:
 
         return sqlite_delivery.count(self.connection, scope, kind)
 
+    async def refresh_get(self, scope, kind, identity):
+        from .operations import sqlite_refresh
+
+        return sqlite_refresh.get(self.connection, scope, kind, identity)
+
+    async def refresh_put(self, scope, kind, identity, payload):
+        from .operations import sqlite_refresh
+
+        return sqlite_refresh.put(self.connection, scope, kind, identity, payload)
+
+    async def refresh_records(self, scope, kind):
+        from .operations import sqlite_refresh
+
+        return sqlite_refresh.records(self.connection, scope, kind)
+
     async def index_job_get(self, scope, channel, epoch, token_id):
         from .operations import sqlite_index
         return sqlite_index.job_get(self.connection, scope, channel, epoch, token_id)

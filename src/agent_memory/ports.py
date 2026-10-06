@@ -277,6 +277,22 @@ class CandidateIndexUnitOfWork(RetentionUnitOfWork, Protocol):
     ) -> tuple[dict[str, Any], ...]: ...
 
 
+class ResourceRefreshUnitOfWork(RetentionUnitOfWork, Protocol):
+    """Optional resource queue, receipts and progress sharing output transactions."""
+
+    async def refresh_get(
+        self, scope: MemoryScope, kind: str, identity: str
+    ) -> dict[str, Any] | None: ...
+
+    async def refresh_put(
+        self, scope: MemoryScope, kind: str, identity: str, payload: dict[str, Any]
+    ) -> None: ...
+
+    async def refresh_records(
+        self, scope: MemoryScope, kind: str
+    ) -> tuple[dict[str, Any], ...]: ...
+
+
 class ClaimExtractor(Protocol):
     async def extract(self, event: MemoryEvent) -> Sequence[ClaimDraft]: ...
 

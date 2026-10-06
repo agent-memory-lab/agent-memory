@@ -3,9 +3,11 @@
 import json
 
 from ..domain import canonical_json
-from . import sqlite_delivery, sqlite_index, sqlite_purge
+from . import sqlite_delivery, sqlite_index, sqlite_purge, sqlite_refresh
 
-SCHEMA = sqlite_index.SCHEMA + sqlite_delivery.SCHEMA + sqlite_purge.SCHEMA + """
+SCHEMA = (
+    sqlite_refresh.SCHEMA + sqlite_index.SCHEMA + sqlite_delivery.SCHEMA + sqlite_purge.SCHEMA
+    + """
 CREATE TABLE IF NOT EXISTS retention_heads (
     partition_key TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('document','interpretation')),
     identity TEXT NOT NULL, generation INTEGER NOT NULL, payload_json TEXT NOT NULL,
@@ -35,6 +37,7 @@ ON retention_entries(partition_key, idempotency_key) WHERE kind = 'ticket';
 CREATE INDEX IF NOT EXISTS retention_pending_idx
 ON retention_entries(partition_key, kind, status);
 """
+)
 
 
 def kind(value):
@@ -104,6 +107,7 @@ def forget(connection, request):
         )
     elif not request.memory_ids:
         return
+    sqlite_refresh.forget(connection, request)
     sqlite_index.forget(connection, request)
     sqlite_purge.record(connection, request, epoch(connection, request.scope))
     condition = "partition_key=?"

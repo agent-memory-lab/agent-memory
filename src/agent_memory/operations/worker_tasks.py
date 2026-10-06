@@ -6,9 +6,13 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Protocol, Sequence
+from typing import Any, Protocol
 
 from ..domain import ForgetRequest, MemoryScope
+
+
+class WorkerFailureDisposition(StrEnum):
+    DEFERRED = "deferred"
 
 
 class WorkerTaskStatus(StrEnum):
@@ -97,7 +101,9 @@ class WorkerExecutionQueue(Protocol):
     async def claim(self, worker_id: str, *, lease_seconds: int) -> WorkerLease | None: ...
     async def checkpoint(self, lease: WorkerLease, value: Mapping[str, Any]) -> None: ...
     async def complete(self, lease: WorkerLease) -> None: ...
-    async def fail(self, lease: WorkerLease, error: BaseException) -> None: ...
+    async def fail(
+        self, lease: WorkerLease, error: BaseException
+    ) -> WorkerFailureDisposition | None: ...
 
 
 class WorkerQueue(WorkerExecutionQueue, Protocol):
@@ -119,7 +125,9 @@ class WorkerQueue(WorkerExecutionQueue, Protocol):
 
     async def complete(self, lease: WorkerLease) -> None: ...
 
-    async def fail(self, lease: WorkerLease, error: BaseException) -> None: ...
+    async def fail(
+        self, lease: WorkerLease, error: BaseException
+    ) -> WorkerFailureDisposition | None: ...
 
     async def cancel(self, task_id: str, scope: MemoryScope) -> bool: ...
 
