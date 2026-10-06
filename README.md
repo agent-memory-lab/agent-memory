@@ -582,6 +582,10 @@ agent-memory/
 
 See [architecture boundaries and import compatibility](docs/ARCHITECTURE.md).
 
+The versioned target architecture is [Agent Memory Design v5.0.0](docs/design/AGENT_MEMORY_DESIGN_V5.0.0.md).
+See the [design version index](docs/design/README.md) for status, history and versioning rules.
+The design distinguishes implemented capabilities from planned work.
+
 ## Current Boundaries
 
 The MVP intentionally does not claim to provide:

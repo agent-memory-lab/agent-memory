@@ -1,0 +1,36 @@
+{
+  "manifest_schema_version": 1,
+  "document_id": "AM-DESIGN",
+  "current_design_version": "5.0.0",
+  "versioning_scope": "architecture_design_only",
+  "versions": [
+    {
+      "version": "5.0.0",
+      "date": "2026-10-06",
+      "status": "PROPOSED_BASELINE",
+      "file": "AGENT_MEMORY_DESIGN_V5.0.0.md",
+      "sha256": "83330a5c8e7921aa56ea76afbb9e8a9b255a5a22732ae4f7c20816deaf25517f",
+      "predecessor_design": "V4 plugin architecture and 2026-10-05 admission proposal",
+      "implementation_baseline_commit": "5cff9f47b7061351fd725c3b8e0a89bf5cb51517",
+      "hindsight_reference_commit": "d9d086e505373121a110f2c94bf137273549e827",
+      "research_sources": [
+        {
+          "name": "调研报告.md",
+          "sha256": "8ff01c30e1b031d399226e1df345ac6c5187d687fb73e65bbde519d2738dbca7"
+        },
+        {
+          "name": "提取与入库源码笔记.md",
+          "sha256": "43e8f7a715c9635e237388157ebbbd1b7f26bc39fbc1e18bebaa367541314387"
+        },
+        {
+          "name": "检索与反思源码笔记.md",
+          "sha256": "92351a1014cb3321c584e3b6d060b272755972b561c355835b36d40acd4f833d"
+        },
+        {
+          "name": "整理与演化源码笔记.md",
+          "sha256": "8cb45018958ef920939257990071961e86f9b64a2e8ef67161428f6883b1dacc"
+        }
+      ]
+    }
+  ]
+}
