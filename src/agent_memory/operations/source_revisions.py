@@ -99,7 +99,7 @@ async def withdraw_revision(uow, source, request_id):
         row = {
             k: v
             for k, v in row.items()
-            if k not in {"prepared", "result", "input_manifest", "lease_token"}
+            if k not in {"prepared", "result", "input_manifest", "lease_token", "publication_manifest"}
         }
         row.update(status="superseded", superseded_by=request_id)
         await uow.retention_update(source.scope, row["request_id"], row)

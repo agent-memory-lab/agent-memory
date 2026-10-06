@@ -332,6 +332,9 @@ class DurableReceiver:
                 received_at=now.isoformat(),
                 schema=RETAIN_SCHEMA,
             )
+            from .readiness import begin
+
+            begin(source.scope, request)
             await uow.retention_insert(source.scope, "request", ticket.request_id, request)
             if _revision is None:
                 from .source_revisions import document_head

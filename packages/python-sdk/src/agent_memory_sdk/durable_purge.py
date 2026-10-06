@@ -14,7 +14,7 @@ def purge_rows(connection, rows):
             "INSERT OR IGNORE INTO durable_purged_ids VALUES (?)", (identity_hash(event_id),)
         )
         connection.execute(
-            "UPDATE durable_pending SET acknowledged=1,event_json='null',revision_json=NULL "
+            "UPDATE durable_pending SET acknowledged=1,event_json='null',revision_json=NULL,purged=1 "
             "WHERE session_key=? AND sequence=?",
             (key, sequence),
         )

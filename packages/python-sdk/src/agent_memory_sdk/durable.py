@@ -7,14 +7,17 @@ from hashlib import sha256
 
 from agent_memory.serialization import to_jsonable
 
+from .durable_dispositions import settle
 from .durable_purge import identity_hash, purge_session, synchronize
 
 
 class DurableOutbox:
-    def __init__(self, path, session, *, sync_purges=False):
+    def __init__(self, path, session, *, sync_purges=False, settle_purges=False):
         if type(sync_purges) is not bool:
             raise ValueError("sync_purges must be boolean")
-        self.sync_purges = sync_purges
+        if type(settle_purges) is not bool or (settle_purges and not sync_purges):
+            raise ValueError("settle_purges requires purge synchronization")
+        self.sync_purges, self.settle_purges = sync_purges, settle_purges
         self.path = str(path)
         self.session = to_jsonable(session)
         self.session_key = sha256(json.dumps(self.session, sort_keys=True).encode()).hexdigest()
@@ -32,7 +35,9 @@ class DurableOutbox:
                 );
             """)
             conn.execute("BEGIN IMMEDIATE")
-            session_columns = {row[1] for row in conn.execute("PRAGMA table_info(durable_sessions)")}
+            session_columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(durable_sessions)")
+            }
             for name, declaration in (
                 ("purge_cursor", "INTEGER NOT NULL DEFAULT 0"),
                 ("scope_key", "TEXT"),
@@ -41,6 +46,11 @@ class DurableOutbox:
                 if name not in session_columns:
                     conn.execute(f"ALTER TABLE durable_sessions ADD COLUMN {name} {declaration}")
             columns = {row[1] for row in conn.execute("PRAGMA table_info(durable_pending)")}
+            for name in ("purged", "cancel_confirmed"):
+                if name not in columns:
+                    conn.execute(
+                        f"ALTER TABLE durable_pending ADD COLUMN {name} INTEGER NOT NULL DEFAULT 0"
+                    )
             if "operation" not in columns:
                 conn.execute(
                     "ALTER TABLE durable_pending "
@@ -139,6 +149,8 @@ class DurableOutbox:
     async def flush_one(self, client):
         if self.sync_purges:
             await self.synchronize_purges(client)
+        if self.settle_purges:
+            await settle(self, client)
         with self._connection() as conn:
             self._check_live(conn)
             row = conn.execute(

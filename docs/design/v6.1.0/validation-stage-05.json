@@ -1,0 +1,128 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "date": "2026-10-06",
+  "ledger_revision": 9,
+  "design": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "base_commit": "ab1bedb7caaffac7f2691bcb672ce52e6fc07a82",
+  "enabled_scope": "trusted exact-scope capture targets; explicit paired opt-in sequence disposition; atomic publication per request; no index readiness",
+  "full_test_run": false,
+  "test_scope_reason": "User requested only partial tests after feature implementation.",
+  "tests": {
+    "runner": "pytest",
+    "targets": [
+      "tests/test_durable_dispositions.py",
+      "tests/test_durable_readiness.py",
+      "tests/test_durable_producer.py",
+      "tests/test_durable_execution.py",
+      "tests/test_durable_transport.py",
+      "tests/test_durable_purge.py",
+      "tests/test_durable_retention.py",
+      "tests/test_durable_process_recovery.py",
+      "tests/test_source_revisions.py",
+      "tests/test_reprocessing.py",
+      "tests/test_architecture.py::test_delivery_contracts_do_not_import_database_adapters",
+      "tests/test_architecture.py::test_production_code_uses_owners_instead_of_compatibility_modules",
+      "tests/test_architecture.py::test_domain_contracts_do_not_depend_on_implementation",
+      "packages/python-sdk/tests/test_embedded_contract.py",
+      "packages/mcp-server/tests/test_capture_contract.py"
+    ],
+    "results": {
+      "targeted": {
+        "passed": 190,
+        "skipped": 0,
+        "duration_seconds": 8.863
+      },
+      "crash": {
+        "passed": 14,
+        "skipped": 0,
+        "duration_seconds": 3.151
+      },
+      "readiness": {
+        "passed": 22,
+        "skipped": 0,
+        "duration_seconds": 1.35
+      }
+    },
+    "unique_targeted_cases": 190,
+    "repeated_cases_note": "crash 14 and readiness 22 are subsets of targeted 190; rerun after extending assertions and wait bound",
+    "new_behavior_cases": 40,
+    "new_architecture_cases": 1,
+    "backends": [
+      "SQLite",
+      "PostgreSQL 17"
+    ],
+    "real_crash": "SIGKILL application processes; manifest closure checked before/after publication recovery; database server not killed"
+  },
+  "example": "examples/durable_readiness.py passed: received 1, cancelled 1, settled through 2, finite L1 target reached",
+  "lint": {
+    "changed_python_files": "F,I passed",
+    "new_modules_tests_example": "full configured rules passed"
+  },
+  "wheels": [
+    {
+      "file": "agent_memory-0.1.0-py3-none-any.whl",
+      "sha256": "487699d06ee773df58ab8c9a4b877f120e8cee52d833aa3910060a8144d19df2"
+    },
+    {
+      "file": "agent_memory_postgres-0.1.0-py3-none-any.whl",
+      "sha256": "7f2a69da2988c39e7eddae790d5684315a19847e7ec472d7a9e02610a7bdc2e8"
+    },
+    {
+      "file": "agent_memory_sdk-0.1.0-py3-none-any.whl",
+      "sha256": "249bc05330bfcac04a7f3da3357a9448b7eaa1cccd8898bcb24146e7bb159ab8"
+    }
+  ],
+  "wheel_sources_match_final_files": true,
+  "postgres_migration_packaged": true,
+  "source_files_sha256": {
+    "packages/postgres/src/agent_memory_postgres/repository.py": "7f566a07e16bb2cf70aa46dfbd7d5e1affe7d77b9e873a2ece53c3d5f9ff374b",
+    "packages/postgres/src/agent_memory_postgres/retention.py": "9b9faf115de2157c26de9af8d7861c1f347f594eca10c0d49afa1625ffd71ad2",
+    "packages/python-sdk/src/agent_memory_sdk/client.py": "70c928cd95b2c004a5aaad34f70be9c4c09549ecbb8fcb77e4f7413a435ba5d4",
+    "packages/python-sdk/src/agent_memory_sdk/durable.py": "1f089dcd838a3454b72e68d09379a503c258a2eb692a4dc4b632db578486aa03",
+    "packages/python-sdk/src/agent_memory_sdk/durable_purge.py": "53f864f212afa8508ed75333705931a774d231980f496a080868cd8c3239e834",
+    "src/agent_memory/capture/durable_api.py": "2262c2b6be3a1837f4222cfd4424fca1f25808fc9c8bf364d75aebc6bf1d667e",
+    "src/agent_memory/capture/producer.py": "3898d0cc9632ebc1c074c87621c84293156f8d4bfe42ac6cd536836702c074c9",
+    "src/agent_memory/operations/extraction_worker.py": "9277aa34818c66b4cea3b9c9fa762b682498a2e13beb977f808f5f31a16856f3",
+    "src/agent_memory/operations/reprocessing.py": "d5fb31c1e85f86028790a962203f1ac57b8b7f22b57e85b5a388cc79ef7ee4fd",
+    "src/agent_memory/operations/retention.py": "c0c2778096bd99b3d74a9991e4cdd87b232e7dd5d5f443637ceb0fe4e12c2d0c",
+    "src/agent_memory/operations/source_revisions.py": "0f97967e938ccff6fae02604a843c5d4f0a83c9847c76e26a7f5f28c16363e06",
+    "src/agent_memory/operations/sqlite_retention.py": "649d7d2b099bcb68f18767fe7ea6365fb3983c1578e7423dfd8ec7c6266f5c2a",
+    "src/agent_memory/ports.py": "0edb0eb4d45ea413803d63e1c92355bd5dcf47d1e73491fc1d331f77e0a927bf",
+    "src/agent_memory/sqlite.py": "eec49a00f77489b3664e9464ca1a76da3bfd6b438b4f01d86a98e63fed830a9a",
+    "tests/test_architecture.py": "0aa981684709d2b2714669ff4d10e5a1191df660e44d73b51db79cf734c13f56",
+    "tests/test_durable_process_recovery.py": "6fcfdb99328e6a676c5a4f46e32b448aa384af58970a9482f8d6abe1ef240acb",
+    "examples/durable_readiness.py": "70dc24090669ee019f59d621ea05a111032c1fcc6b46d68316ffe9b7d8568cb3",
+    "packages/postgres/migrations/010_delivery_contracts.sql": "e05449009303bae2941c8536313efdbe3f890fe14a9d89203ff3f34be291ffac",
+    "packages/postgres/src/agent_memory_postgres/delivery.py": "debcfd6a9a476fbed07de84ee3fcf6bb5ffb19bf800b3f8e837f4d9179799468",
+    "packages/python-sdk/src/agent_memory_sdk/durable_dispositions.py": "13ed898b76f5fe299d92939fdcf3fa8a79e4849c9d6a6c8c7b2f34fb4ce089f8",
+    "packages/python-sdk/src/agent_memory_sdk/durable_readiness.py": "d6f30b4c77f74424274c73af0da4d4c900c5077cc5fad22cb8e4e5001f797cf0",
+    "src/agent_memory/capture/dispositions.py": "aad930181a8b803f1f6e9aec1585162f2e5f4ef27a36efa9d098f38bd38335a1",
+    "src/agent_memory/operations/readiness.py": "a94f827b39daf90425d7dc49189efe284cb91f1f5237681be240aee2f3a6c033",
+    "src/agent_memory/operations/sqlite_delivery.py": "c65e06c7f5b829314b0cf7c2532f4ba3a27247e2a1870d056690fa59eaef7ae2",
+    "tests/test_durable_dispositions.py": "83ffcf0c6b428c2b27c6bff851fe0f74960931dccd8d45b6d360892b6a487917",
+    "tests/test_durable_readiness.py": "3f65e340b09704f88f290ce1b411925b9a9aa0ca5532faed42a76edfe54f8131"
+  },
+  "doc_validation": {
+    "frozen_design_hashes": "passed",
+    "task_links": "passed",
+    "task_count": 44,
+    "acceptance_rows": 66,
+    "statuses": {
+      "DONE": 1,
+      "IN_PROGRESS": 24,
+      "TODO": 19
+    }
+  },
+  "remaining": [
+    "index outbox and complete / continuous publication coverage",
+    "multiple physical publications within one processing request",
+    "explicit reprocess target entry point",
+    "general resource refresh / running new work / stream rollover",
+    "historical local purge metadata and pre-upgrade manifest reconstruction are not guessed",
+    "full backup restoration with latest external deletion log replay",
+    "dynamic external ACL, model dispatch and derived stage readiness",
+    "real domain gold and calibration",
+    "no full-suite regression claim for this revision"
+  ]
+}

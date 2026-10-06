@@ -3,9 +3,9 @@
 import json
 
 from ..domain import canonical_json
-from . import sqlite_purge
+from . import sqlite_delivery, sqlite_purge
 
-SCHEMA = sqlite_purge.SCHEMA + """
+SCHEMA = sqlite_delivery.SCHEMA + sqlite_purge.SCHEMA + """
 CREATE TABLE IF NOT EXISTS retention_heads (
     partition_key TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('document','interpretation')),
     identity TEXT NOT NULL, generation INTEGER NOT NULL, payload_json TEXT NOT NULL,
@@ -116,7 +116,7 @@ def forget(connection, request):
     ).fetchall()
     for row in rows:
         payload = json.loads(row["payload_json"])
-        for field in ("prepared", "result", "input_manifest", "lease_token"):
+        for field in ("prepared", "result", "input_manifest", "lease_token", "publication_manifest"):
             payload.pop(field, None)
         status = "revoked" if row["kind"] == "ticket" else "cancelled"
         payload["revoked" if row["kind"] == "ticket" else "status"] = (

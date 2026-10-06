@@ -96,7 +96,7 @@ async def forget(connection, request):
     )
     for row in await cursor.fetchall():
         payload = row["payload_json"]
-        for field in ("prepared", "result", "input_manifest", "lease_token"):
+        for field in ("prepared", "result", "input_manifest", "lease_token", "publication_manifest"):
             payload.pop(field, None)
         status = "revoked" if row["kind"] == "ticket" else "cancelled"
         payload["revoked" if row["kind"] == "ticket" else "status"] = (

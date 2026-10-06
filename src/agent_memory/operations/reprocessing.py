@@ -154,5 +154,8 @@ class ReprocessingService:
                 "reprocessing_fingerprint": fingerprint,
                 "base_versions": {r["id"]: r["version"] for r in records},
             }
+            from .readiness import begin
+
+            begin(scope, row)
             await uow.retention_insert(scope, "request", request_id, row)
             return self.receiver._receipt(row)

@@ -110,7 +110,7 @@ class ExtractionQueue:
                     row = {
                         k: v
                         for k, v in row.items()
-                        if k not in {"prepared", "result", "input_manifest"}
+                        if k not in {"prepared", "result", "input_manifest", "publication_manifest"}
                     }
                     row["status"] = "cancelled"
                     await uow.retention_update(self.scope, row["request_id"], row)
@@ -364,6 +364,9 @@ class DurableAtomHandler:
                 publication_id="publication:" + task.id,
                 completed_at=_time(self.queue.clock()).isoformat(),
             )
+            from .readiness import close
+
+            close(task.scope, row, receipt, interpretation)
             # The stage is no longer needed. Identity-only provenance remains.
             row.pop("prepared", None)
             await uow.retention_update(task.scope, task.id, row)

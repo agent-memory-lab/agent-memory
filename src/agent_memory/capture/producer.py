@@ -30,10 +30,21 @@ class DurableProducer:
             raise ValueError("max_gap must be between 1 and 10000")
         self.receiver, self.max_gap = receiver, max_gap
 
-    async def open(self, scope, *, producer_id, actor, configuration_sha256, sync_purges=False):
+    async def open(
+        self,
+        scope,
+        *,
+        producer_id,
+        actor,
+        configuration_sha256,
+        sync_purges=False,
+        sequence_dispositions=False,
+    ):
         """Trusted host setup, never a model-callable registration operation."""
-        if type(sync_purges) is not bool:
-            raise ValueError("sync_purges must be boolean")
+        if type(sync_purges) is not bool or type(sequence_dispositions) is not bool:
+            raise ValueError("producer options must be boolean")
+        if sequence_dispositions and not sync_purges:
+            raise ValueError("sequence dispositions require purge synchronization")
         _identity(producer_id)
         _identity(actor)
         _hash(configuration_sha256)
@@ -44,7 +55,11 @@ class DurableProducer:
             if row is None:
                 purge_head = getattr(uow, "purge_head", None)
                 if sync_purges and not callable(purge_head):
-                    raise NotImplementedError("producer purge synchronization requires purge storage")
+                    raise NotImplementedError(
+                        "producer purge synchronization requires purge storage"
+                    )
+                if sequence_dispositions and not callable(getattr(uow, "delivery_get", None)):
+                    raise RetentionError("sequence_dispositions_unsupported")
                 row = dict(
                     producer_id=producer_id,
                     epoch=epoch,
@@ -54,6 +69,7 @@ class DurableProducer:
                     acked_through=0,
                     received=[],
                     sync_purges=sync_purges,
+                    sequence_dispositions=sequence_dispositions,
                     purged_through=await purge_head(scope) if callable(purge_head) else 0,
                 )
                 await uow.producer_put(scope, producer_id, row)
@@ -63,6 +79,7 @@ class DurableProducer:
                 row["actor"] != actor
                 or row["configuration_sha256"] != configuration_sha256
                 or row.get("sync_purges", False) != sync_purges
+                or row.get("sequence_dispositions", False) != sequence_dispositions
             ):
                 raise RetentionError("producer_configuration_conflict")
             return ProducerSession(
@@ -100,8 +117,19 @@ class DurableProducer:
                     raise RetentionError("purge_history_unavailable")
                 if row.get("purged_through", 0) < head:
                     raise RetentionError("producer_purge_required")
-            if sequence > row["acked_through"] + self.max_gap:
+            floor = (
+                row.get("settled_through", 0)
+                if row.get("sequence_dispositions")
+                else row["acked_through"]
+            )
+            if sequence > floor + self.max_gap:
                 raise RetentionError("producer_gap_limit")
+            if row.get("sequence_dispositions"):
+                disposition = await uow.delivery_get(event.scope, "sequence", key)
+                if disposition and disposition["disposition"] == "cancelled":
+                    raise RetentionError("sequence_cancelled")
+                if disposition is None and sequence <= floor:
+                    raise RetentionError("sequence_history_unavailable")
             if _revision is not None:
                 receipt = await self.receiver.revise(
                     event,
@@ -134,6 +162,15 @@ class DurableProducer:
                     configuration_sha256=session.configuration_sha256,
                     _unit_of_work=uow,
                 )
+            if row.get("sequence_dispositions"):
+                from .dispositions import cursor, record
+
+                await record(self, uow, event.scope, session, row, sequence, event.id, "received")
+                return {
+                    "receipt": to_jsonable(receipt),
+                    "sequence": sequence,
+                    "cursor": cursor(row),
+                }
             received = set(row["received"])
             if sequence > row["acked_through"]:
                 received.add(sequence)
@@ -161,7 +198,50 @@ class DurableProducer:
     async def cursor(self, scope, session, *, actor):
         async with self.receiver.repository.unit_of_work() as uow:
             row = await self._check(uow, scope, session, actor)
+            if row.get("sequence_dispositions"):
+                from .dispositions import cursor
+
+                return cursor(row)
             return {"acked_through": row["acked_through"], "received_after_gap": row["received"]}
+
+    async def contracts(self, scope, session, *, actor):
+        async with self.receiver.repository.unit_of_work() as uow:
+            row = await self._check(uow, scope, session, actor)
+            supported = callable(getattr(uow, "delivery_get", None))
+            return {
+                "schema": "durable-contracts/1",
+                "staged_readiness": supported,
+                "producer_id": session.producer_id,
+                "epoch": session.epoch,
+                "scope_key": scope.partition_key(),
+                "supported_stages": ["source_persisted", "l1_decided"] if supported else [],
+                "index_visible": "unsupported",
+                "target_limit": 128,
+                "sync_purges": row.get("sync_purges", False),
+                "sequence_dispositions": row.get("sequence_dispositions", False),
+                "cursor_schema": "producer-disposition/1"
+                if row.get("sequence_dispositions")
+                else "legacy",
+            }
+
+    async def cancel_sequence(self, scope, session, *, sequence, source_event_id, actor):
+        from .dispositions import cancel
+
+        return await cancel(
+            self, scope, session, sequence=sequence, source_event_id=source_event_id, actor=actor
+        )
+
+    async def freeze_target(self, scope, session, *, sequences, actor):
+        from ..operations.readiness import DurableReadiness
+
+        return await DurableReadiness(self).freeze(scope, session, sequences=sequences, actor=actor)
+
+    async def readiness(self, scope, session, *, target_id, stage, actor):
+        from ..operations.readiness import DurableReadiness
+
+        return await DurableReadiness(self).status(
+            scope, session, target_id=target_id, stage=stage, actor=actor
+        )
 
     async def purge_sync(self, scope, session, *, actor, after=0, limit=128):
         from .purge import synchronize

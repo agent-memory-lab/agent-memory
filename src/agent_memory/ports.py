@@ -212,6 +212,16 @@ class RetentionUnitOfWork(AdmissionUnitOfWork, Protocol):
 
     async def producer_put(self, scope: MemoryScope, producer_id: str, payload: dict[str, Any]) -> None: ...
 
+    async def delivery_get(
+        self, scope: MemoryScope, kind: str, identity: str,
+    ) -> dict[str, Any] | None: ...
+
+    async def delivery_insert(
+        self, scope: MemoryScope, kind: str, identity: str, payload: dict[str, Any],
+    ) -> None: ...
+
+    async def delivery_count(self, scope: MemoryScope, kind: str) -> int: ...
+
     async def purge_head(self, scope: MemoryScope) -> int: ...
 
     async def purge_page(

@@ -121,6 +121,27 @@ class _Operations(RecoveryClientOperations):
         return await self._call("memory_durable", {"operation": "purge_ack", "payload": {
             "session": to_jsonable(session), "through": through}})
 
+    async def durable_contracts(self, session):
+        return await self._call("memory_durable", {"operation": "contracts", "payload": {
+            "session": to_jsonable(session)}})
+
+    async def durable_cancel_sequence(self, session, sequence, source_event_id):
+        return await self._call("memory_durable", {"operation": "cancel_sequence", "payload": {
+            "session": to_jsonable(session), "sequence": sequence, "source_event_id": source_event_id}})
+
+    async def durable_freeze_target(self, session, sequences):
+        return await self._call("memory_durable", {"operation": "freeze_target", "payload": {
+            "session": to_jsonable(session), "sequences": list(sequences)}})
+
+    async def durable_readiness(self, session, target_id, *, stage="l1_decided"):
+        return await self._call("memory_durable", {"operation": "readiness", "payload": {
+            "session": to_jsonable(session), "target_id": target_id, "stage": stage}})
+
+    async def durable_wait_until(self, session, target_id, *, stage="l1_decided", timeout=30, poll_interval=0.1):
+        from .durable_readiness import wait_until
+
+        return await wait_until(self, session, target_id, stage=stage, timeout=timeout, poll_interval=poll_interval)
+
     async def durable_cursor(self, session):
         return await self._call("memory_durable", {"operation": "cursor", "payload": {
             "session": to_jsonable(session)}})

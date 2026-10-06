@@ -30,14 +30,45 @@ class DurableCaptureAPI:
         if not isinstance(payload, dict):
             raise RetentionError("invalid_durable_payload")
         session = ProducerSession(**payload["session"])
+        if operation == "contracts":
+            return await self.producer.contracts(context.scope, session, actor=context.actor)
+        if operation == "cancel_sequence":
+            return await self.producer.cancel_sequence(
+                context.scope,
+                session,
+                sequence=payload["sequence"],
+                source_event_id=payload["source_event_id"],
+                actor=context.actor,
+            )
+        if operation == "freeze_target":
+            return await self.producer.freeze_target(
+                context.scope,
+                session,
+                sequences=payload["sequences"],
+                actor=context.actor,
+            )
+        if operation == "readiness":
+            return await self.producer.readiness(
+                context.scope,
+                session,
+                target_id=payload["target_id"],
+                stage=payload["stage"],
+                actor=context.actor,
+            )
         if operation == "purge_sync":
             return await self.producer.purge_sync(
-                context.scope, session, actor=context.actor,
-                after=payload.get("after", 0), limit=payload.get("limit", 128),
+                context.scope,
+                session,
+                actor=context.actor,
+                after=payload.get("after", 0),
+                limit=payload.get("limit", 128),
             )
         if operation == "purge_ack":
             return await self.producer.purge_ack(
-                context.scope, session, actor=context.actor, through=payload["through"],
+                context.scope,
+                session,
+                actor=context.actor,
+                through=payload["through"],
             )
         if operation == "cursor":
             return await self.producer.cursor(context.scope, session, actor=context.actor)

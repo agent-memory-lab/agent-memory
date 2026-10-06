@@ -106,6 +106,10 @@ def test_real_worker_kill_recovers_saved_stage_without_duplicate_publication(
             assert bool(rows) == published
             status = await queue.status("one")
             assert status["l1_decided"] == published
+            async with engine.repository.unit_of_work() as uow:
+                saved = await uow.retention_get(scope, "request", "one")
+                assert saved["publication_manifest"]["closed"] == published
+                assert bool(saved["publication_manifest"]["publication_commit_tokens"]) == published
             if published:
                 assert await queue.claim("recovered", lease_seconds=60) is None
                 assert len(status["result"]["claim_ids"]) == 1
@@ -118,6 +122,10 @@ def test_real_worker_kill_recovers_saved_stage_without_duplicate_publication(
                 await queue.complete(lease)
                 status = await queue.status("one")
                 assert status["l1_decided"]
+            async with engine.repository.unit_of_work() as uow:
+                saved = await uow.retention_get(scope, "request", "one")
+                assert saved["publication_manifest"]["closed"]
+                assert len(saved["publication_manifest"]["publication_commit_tokens"]) == 1
             assert generator.calls == int(phase == "worker_after_claim")
             assert len(await engine.repository.admission_records(scope)) == 1
             claims, _ = await engine.state(scope, valid_at=base.at(2), known_at=base.at(30))

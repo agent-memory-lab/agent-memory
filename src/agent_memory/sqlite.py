@@ -334,6 +334,21 @@ class SQLiteMemoryUnitOfWork:
     async def retention_active(self, scope):
         return sqlite_retention.active(self.connection, scope)
 
+    async def delivery_get(self, scope, kind, identity):
+        from .operations import sqlite_delivery
+
+        return sqlite_delivery.get(self.connection, scope, kind, identity)
+
+    async def delivery_insert(self, scope, kind, identity, payload):
+        from .operations import sqlite_delivery
+
+        return sqlite_delivery.insert(self.connection, scope, kind, identity, payload)
+
+    async def delivery_count(self, scope, kind):
+        from .operations import sqlite_delivery
+
+        return sqlite_delivery.count(self.connection, scope, kind)
+
     async def purge_head(self, scope):
         from .operations import sqlite_purge
 
