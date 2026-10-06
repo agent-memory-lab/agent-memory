@@ -6,7 +6,7 @@
 | 规范依据 | [完整设计 v6.1.0](../AGENT_MEMORY_DESIGN_V6.1.0.md)；设计规定语义，本文件安排实施 |
 | 设计 SHA-256 | `ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b` |
 | 实现基线 | `5cff9f47b7061351fd725c3b8e0a89bf5cb51517` |
-| 台账版本 | revision 6；2026-10-06；可随实施更新 |
+| 台账版本 | revision 7；2026-10-06；可随实施更新 |
 | 当前状态 | DONE 1 项；IN_PROGRESS 24 项；TODO 19 项；本地持久 L1、宿主恢复与事实资格切片已验证，M0/M1 未整体验收 |
 | 范围 | P0–P6 能力阶段；基础能力与可选扩展分别发布 |
 
@@ -130,6 +130,7 @@
 ### AM61-T10 — 双时态与状态终止依据
 
 - [ ] 状态/阶段：IN_PROGRESS / P1。依赖：T07、T09。
+- revision 7 证据：独立 end/start 支持、前值终止、新值撤证不回填、显式连续性更正及其证据擦除已贯通双后端；复杂状态/起点迁移仍待扩展。见 [stage-03](stage-03.md)。
 - revision 6 证据：支持域与候选现实区间相交；到期不复活；来源修订 known_at 可见性及当前擦除守卫已测；完整 TransitionDecision 待第三步。 见 [stage-02](stage-02.md)。
 - revision 4 证据：独立来源终止与 valid/known 快照、不恢复旧值；独立贡献幸存及 transition 更正仍待实现。 详见 [batch-03-05](batch-03-05.md)。
 - 已有落点：`consolidation/claims.py`、`retrieval/atom_state.py`、`retrieval/temporal.py`、`retrieval/temporal_history.py`、`sqlite.py`、`packages/postgres/src/agent_memory_postgres/admission.py`。
@@ -149,6 +150,7 @@
 ### AM61-T12 — 同槽更正与可选跨槽纠错
 
 - [ ] 状态/阶段：IN_PROGRESS / P1。依赖：T09、T10、T11；持久并发验收复用 T16 的 UoW 合同。
+- revision 7 证据：同槽贡献更正/撤回、独立 E2 幸存、完整槽 CAS、幂等、并发竞争和发布后回滚已测；跨槽保持明确拒绝，条件/合成贡献未启用。见 [stage-03](stage-03.md)。
 - revision 4 证据：同槽独立证据终止已接宿主 API；既有 correction 回归通过；跨槽及贡献级对账未启用。 详见 [batch-03-05](batch-03-05.md)。
 - 已有落点：`consolidation/admission_runtime.py`、`consolidation/claims.py`、`sqlite.py`、`packages/postgres/src/agent_memory_postgres/admission.py`。
 - 交付：显式区分 correction/retract/change/conflict；更正只影响被选证据贡献；可选跨槽纠错按稳定锁序原子退出旧贡献、发布新贡献、记录关联及失效；不支持跨隔离域事务时整项拒绝。
@@ -497,10 +499,10 @@
 | N08-03 | 抽取达标但最终召回/任务退化 | AM61-T38 | T03/T05/T34/T39 | 未执行 |
 | R05-01 | 部分字段/时间核验 | AM61-T09 | T10/T19/T29 | 部分：必要字段/限定完整性、点证据不延长、跨来源时间 AND/OR 已测；部分字段独立持久发布未启用 |
 | R05-02 | 联合证据不同业务版本、OR时段不重合、AND无共同区间、撤项 | AM61-T09 | T10/T19/T29 | 部分：辅助 OR 分支擦除幸存、AND 缺项失效、业务版本与来源族核验已测；完整异步核验待补 |
-| R06-01 | A被B替换，撤回B支持但结束A依据幸存 | AM61-T10 | T09/T12 | 未执行 |
-| R06-02 | 明确纠正错误transition及其起点 | AM61-T10 | T09/T12 | 未执行 |
-| R07-01 | E1误提家庭地址，E2独立支持家庭地址；更正E1为工作地址 | AM61-T12 | T09/T16/T24 | 未执行 |
-| R07-02 | 一个贡献或槽版本变化、目标越权、隔离域不支持 | AM61-T12 | T09/T16/T24 | 未执行 |
+| R06-01 | A被B替换，撤回B支持但结束A依据幸存 | AM61-T10 | T09/T12 | 已测同 scope 单值：独立终止依据、B 撤证、终止证据丢失均不复活 A |
+| R06-02 | 明确纠正错误transition及其起点 | AM61-T10 | T09/T12 | 部分：新证据显式延长/取消错误终止、历史及撤证已测；移动起点未启用 |
+| R07-01 | E1误提家庭地址，E2独立支持家庭地址；更正E1为工作地址 | AM61-T12 | T09/T16/T24 | 跨槽未启用且整项拒绝已测；同槽 E1 更正保留 E2 的对应切片通过 |
+| R07-02 | 一个贡献或槽版本变化、目标越权、隔离域不支持 | AM61-T12 | T09/T16/T24 | 同槽 CAS/新增贡献/竞争/越权/失败回滚已测；跨槽明确拒绝 |
 | R08-01 | 首次订阅前、查询中、发布检查后分别新增阻塞 | AM61-T26 | T25/T29/T31 | 未执行 |
 | R08-02 | 查询截断、删除成员、无写入时间边界 | AM61-T26 | T25/T29/T31 | 未执行 |
 | R09-01 | K20更正A1后查询K15历史派生 | AM61-T28 | T23/T25/T29 | 未执行 |

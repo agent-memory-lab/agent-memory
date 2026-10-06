@@ -7,6 +7,7 @@ from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
+from ..contribution_state import waived_barriers, withdrawal_barrier
 from ..domain import Claim, ClaimStatus, MemoryScope, Provenance
 
 
@@ -49,7 +50,18 @@ def project_records(
         ):
             context_required.append(key)
             continue
-        accepted = [r for r in rows if r["payload"]["action"] == "ACCEPT"]
+        barriers = [(r, withdrawal_barrier(r["payload"])) for r in rows]
+        waivers = {r["id"]: waived_barriers(r["payload"]) for r in rows}
+        suppressed = {
+            identity
+            for r, ids in barriers
+            if ids and _time(r["payload"]["valid_from"]) <= at
+            for identity in ids
+            if r["id"] not in waivers.get(identity, ())
+        }
+        accepted = [
+            r for r in rows if r["payload"]["action"] == "ACCEPT" and r["id"] not in suppressed
+        ]
         corrected = {r["payload"].get("corrects") for r in accepted}
         accepted = [r for r in accepted if r["id"] not in corrected]
         replacement_starts = [
@@ -132,6 +144,13 @@ def project_records(
             for r in disputes
             if _time(r["payload"]["valid_from"]) > at
         ]
+        boundaries += [
+            _time(r["payload"]["valid_from"])
+            for r, ids in barriers
+            if base["id"] in ids
+            and _time(r["payload"]["valid_from"]) > at
+            and r["id"] not in waivers.get(base["id"], ())
+        ]
         ends = [value for value in [claim.valid_to, *boundaries] if value is not None]
         knowledge_starts = [_time(r["recorded_at"]) for r in rows if r["recorded_at"]]
         knowledge_ends = [_time(r["_next_recorded_at"]) for r in rows if r.get("_next_recorded_at")]
@@ -157,6 +176,7 @@ def project_records(
             "evidence": applicable,
             "basis": "source_assertion" if applicable else "assumed_continuity",
             **({"termination": payload["termination"]} if payload.get("termination") else {}),
+            **({"transitions": payload["transitions"]} if payload.get("transitions") else {}),
         }
     return tuple(claims), {
         "conflicts": conflicts,

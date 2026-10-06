@@ -375,6 +375,12 @@ class SQLiteMemoryUnitOfWork:
             self.connection, scope, slot_key=slot_key, exact=True
         )
 
+    async def list_admission_barriers(self, scope: MemoryScope, slot_key: str):
+        rows = self._repository._read_admission_records(
+            self.connection, scope, slot_key=slot_key, exact=True, barriers=True
+        )
+        return tuple(r for r in rows if "contribution_barrier" in r["payload"])
+
     async def save_admission_record(
         self,
         scope: MemoryScope,
@@ -1232,6 +1238,7 @@ class SQLiteMemoryRepository:
         *,
         slot_key: str | None = None,
         exact: bool = False,
+        barriers: bool = False,
     ) -> tuple[dict[str, Any], ...]:
         if exact:
             where, params = "partition_key = ?", (scope.partition_key(),)
@@ -1240,15 +1247,24 @@ class SQLiteMemoryRepository:
         if slot_key is not None:
             where += " AND slot_key = ?"
             params = (*params, slot_key)
+        visibility = "COALESCE(json_extract(payload_json, '$.deleted'), 0) = 0"
+        if barriers:
+            visibility += " OR json_type(payload_json, '$.contribution_barrier') = 'array'"
         rows = connection.execute(
-            f"SELECT * FROM admission_records WHERE {where} "
-            "AND COALESCE(json_extract(payload_json, '$.deleted'), 0) = 0 "
+            f"SELECT * FROM admission_records WHERE {where} AND ({visibility}) "
             "ORDER BY record_id LIMIT 1025",
             params,
         ).fetchall()
         if len(rows) > 1024:
             raise ValueError("admission record limit exceeded; narrow the requested slot")
-        return tuple(self._admission_from_row(row) for row in rows)
+        return tuple(
+            self._admission_from_row(row) or {
+                "id": row["record_id"], "event_id": row["event_id"],
+                "slot_key": row["slot_key"], "scope": json.loads(row["scope_json"]),
+                "payload": json.loads(row["payload_json"]), "version": row["version"],
+                "recorded_at": row["recorded_at"],
+            } for row in rows
+        )
 
     async def admission_records(
         self, scope: MemoryScope, *, slot_key: str | None = None
@@ -1263,7 +1279,7 @@ class SQLiteMemoryRepository:
         def read():
             with self._connection() as connection:
                 connection.execute("BEGIN")
-                records = self._read_admission_records(connection, scope)
+                records = self._read_admission_records(connection, scope, barriers=True)
                 if not records:
                     return ()
                 ids = tuple(record["id"] for record in records)
@@ -1661,22 +1677,29 @@ class SQLiteMemoryRepository:
                  AND COALESCE(json_extract(payload_json, '$.deleted'), 0) = 0""",
             (request.scope.tenant_id, request.scope.namespace),
         ).fetchall()
+        from .contribution_state import erased_payload, scrub_transitions
         from .evidence_support import scrub_support
+
+        def scrub(payload):
+            first = scrub_support(payload, event_ids)
+            return scrub_transitions(payload, event_ids) or first
 
         cleaned_rows = []
         scrubbed_at = None
         for original in rows:
             row = dict(original)
             payload = json.loads(row["payload_json"])
-            if payload.get("qualification") and row["event_id"] not in event_ids:
+            if (payload.get("qualification") or payload.get("transitions")) and (
+                row["event_id"] not in event_ids
+            ):
                 versions = connection.execute(
                     "SELECT version,payload_json FROM admission_versions WHERE record_id=?",
                     (row["record_id"],),
                 ).fetchall()
-                changed = scrub_support(payload, event_ids)
+                changed = scrub(payload)
                 for version in versions:
                     past = json.loads(version["payload_json"])
-                    if scrub_support(past, event_ids):
+                    if scrub(past):
                         changed = True
                         connection.execute(
                             "UPDATE admission_versions SET payload_json=? "
@@ -1745,12 +1768,14 @@ class SQLiteMemoryRepository:
                     invalidated.add(row["record_id"])
                     # Without rebuilding from independent evidence, removing a later
                     # update must not silently resurrect an older value in this slot.
-                    invalidated_slots.add(slot)
+                    if not json.loads(row["payload_json"]).get("contribution"):
+                        invalidated_slots.add(slot)
                     claim_ids.update(published)
                     changed = True
         deleted_at = (
             self._admission_publication_time(connection, request.scope) if invalidated else None
         )
+        payload_by_id = {r["record_id"]: json.loads(r["payload_json"]) for r in rows}
         for record_id in invalidated:
             # Keep only terminal identity metadata so a stale worker cannot recreate this ID.
             connection.execute(
@@ -1758,9 +1783,9 @@ class SQLiteMemoryRepository:
             )
             connection.execute(
                 """UPDATE admission_records
-                   SET payload_json = '{"deleted":true}', version = version + 1, recorded_at = ?
+                   SET payload_json = ?, version = version + 1, recorded_at = ?
                    WHERE record_id = ?""",
-                (deleted_at, record_id),
+                (canonical_json(erased_payload(payload_by_id[record_id])), deleted_at, record_id),
             )
         return claim_ids
 

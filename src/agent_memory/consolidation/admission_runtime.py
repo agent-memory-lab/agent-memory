@@ -90,13 +90,19 @@ class AdmissionEngine:
         rows = await self.repository.admission_snapshot(scope)
         selected = []
         for row in rows:
+            if "contribution_barrier" in row["payload"]:
+                selected.append(row)
+                continue
             versions = row["versions"]
             visible = [v for v in versions if _time(v["recorded_at"]) <= known_at]
             future = [v["recorded_at"] for v in versions if _time(v["recorded_at"]) > known_at]
             next_time = min(future, key=_time) if future else None
             if visible:
                 version = max(visible, key=lambda v: v["version"])
-                selected.append({**row, **version, "_next_recorded_at": next_time})
+                selected.append({
+                    **row, **version, "_next_recorded_at": next_time,
+                    "_snapshot_version": row["version"],
+                })
             elif future:
                 selected.append(
                     {
@@ -156,6 +162,7 @@ class AdmissionEngine:
         _unit_of_work=None,
         _retained: bool = False,
         _publication_id: str | None = None,
+        _contribution_write: bool = False,
     ) -> AdmissionReceipt:
         if _publication_id is not None and (not _retained or not isinstance(_publication_id, str)):
             raise ValueError("publication identity requires retained source admission")
@@ -276,6 +283,12 @@ class AdmissionEngine:
                 key = slot_key(event.scope, draft)
                 if key not in existing:
                     existing[key] = list(await uow.list_admission_records(scope, key))
+                barrier_reader = getattr(uow, "list_admission_barriers", None)
+                barriers = await barrier_reader(scope, key) if callable(barrier_reader) else ()
+                if not _contribution_write and (barriers or any(
+                    r["payload"].get("contribution") for r in existing[key]
+                )):
+                    raise ValueError("managed slot requires versioned contribution operations")
                 action, reasons = policy.evaluate(event, draft, authority)
                 payload: dict[str, Any] = {
                     "draft": draft_to_payload(draft),
@@ -575,6 +588,8 @@ class AdmissionEngine:
             previous_action = payload["action"]
             if payload["action"] not in PENDING_ACTIONS:
                 raise ValueError("only pending or contested candidates can be resolved")
+            if payload.get("contribution"):
+                raise ValueError("managed slot requires versioned contribution operations")
             if payload.get("qualification"):
                 raise ValueError("contextual candidates require versioned field qualification")
             original = draft_from_payload(payload["draft"])

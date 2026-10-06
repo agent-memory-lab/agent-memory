@@ -369,6 +369,12 @@ class PostgresMemoryUnitOfWork:
             self.connection, scope, visible=False, slot_key=slot_key
         )
 
+    async def list_admission_barriers(self, scope: MemoryScope, slot_key: str):
+        rows = await admission.read_records(
+            self.connection, scope, visible=False, slot_key=slot_key, barriers=True
+        )
+        return tuple(r for r in rows if "contribution_barrier" in r["payload"])
+
     async def save_admission_record(
         self, scope: MemoryScope, record_id: str, event_id: str, slot_key: str,
         payload: dict[str, Any], expected_version: int,

@@ -73,6 +73,8 @@ async def retract(
         if row is None or row["version"] != expected_version:
             raise ValueError("candidate version changed or was deleted")
         payload = row["payload"]
+        if payload.get("contribution"):
+            raise ValueError("managed slot requires an explicit contribution transition")
         if payload["action"] != "ACCEPT" or payload["draft"]["change_kind"] == "temporary_override":
             raise ValueError("retraction requires an accepted ordinary state")
         if valid_to <= datetime.fromisoformat(payload["valid_from"]):

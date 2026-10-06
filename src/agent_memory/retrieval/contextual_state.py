@@ -61,12 +61,17 @@ async def query(service, context, *, predicate, policy):
     if not isinstance(policy, ProjectionPolicy) or context.purpose != policy.purpose:
         raise ValueError("query purpose does not match host policy")
     rows = await service.engine.records_at(service.scope, context.known_at)
+    all_rows = rows
     rows = [
         r
         for r in rows
         if r["scope"] == to_jsonable(service.scope)
         and r["payload"].get("draft", {}).get("subject_id") == context.subject_id
         and r["payload"]["draft"]["predicate"] == predicate
+    ]
+    keys = {r["slot_key"] for r in rows}
+    rows += [
+        r for r in all_rows if r["slot_key"] in keys and "contribution_barrier" in r["payload"]
     ]
     items = []
     inputs = [
@@ -80,12 +85,32 @@ async def query(service, context, *, predicate, policy):
     ]
     async with service.engine.repository.unit_of_work() as uow:
         await uow.lock_admission_scope(service.scope)
+        barrier_reader = getattr(uow, "list_admission_barriers", None)
+        if callable(barrier_reader):
+            for key in keys:
+                expected = {
+                    r["id"]: r["version"]
+                    for r in rows
+                    if r["slot_key"] == key and "contribution_barrier" in r["payload"]
+                }
+                current = await barrier_reader(service.scope, key)
+                if expected != {r["id"]: r["version"] for r in current}:
+                    raise ValueError(
+                        "query snapshot invalidated by deletion; retry with a new context"
+                    )
         # Validate the selected versions against current deletion state. This is
         # also the linearization point for all source guards in this response.
         for row in rows:
+            if "contribution_barrier" in row["payload"]:
+                continue
             current = await uow.get_admission_record(service.scope, row["id"])
-            if current is None:
-                raise ValueError("query snapshot invalidated by deletion; retry with a new context")
+            if current is None or (
+                (row["payload"].get("contribution") or current["payload"].get("contribution"))
+                and current["version"] != row.get("_snapshot_version")
+            ):
+                raise ValueError(
+                    "query snapshot invalidated by deletion or change; retry with a new context"
+                )
         ordinary = [r for r in rows if not r["payload"].get("qualification")]
         claims, information = project_records(ordinary, context.valid_at)
         for claim in claims:

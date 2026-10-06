@@ -27,6 +27,7 @@ async def checked_records(uow, scope, source_id, expected_generation, versions=N
             or payload["draft"]["change_kind"] != "replace"
             or payload.get("termination")
             or payload.get("qualification")
+            or payload.get("contribution")
         ):
             raise RetentionError("interpretation_capability_unsupported")
         records.append(row)

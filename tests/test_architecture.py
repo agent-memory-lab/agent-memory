@@ -48,7 +48,7 @@ def test_production_code_uses_owners_instead_of_compatibility_modules():
         assert not (set(dependencies) & legacy), path
 
 
-@pytest.mark.parametrize("name", ["domain.py", "ports.py", "fact_qualification.py", "conditions.py", "evidence_support.py", "ontology/model.py"])
+@pytest.mark.parametrize("name", ["domain.py", "ports.py", "fact_qualification.py", "conditions.py", "evidence_support.py", "contribution_state.py", "ontology/model.py"])
 def test_domain_contracts_do_not_depend_on_implementation(name):
     allowed = {"agent_memory.domain", "agent_memory.serialization", "agent_memory.fact_qualification", "agent_memory.conditions"}
     for module in imports(SOURCE / name):
@@ -107,3 +107,14 @@ for package in ('psycopg', 'tiktoken', 'graphiti_core', 'mem0', 'langgraph', 'mc
         [sys.executable, "-c", script], capture_output=True, text=True, timeout=20
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_contribution_operations_depend_on_ports_not_database_adapters():
+    dependencies = {
+        dependency for name in ("contributions.py", "transitions.py")
+        for dependency in imports(SOURCE / "consolidation" / name)
+    }
+    assert not any(
+        name.startswith(("sqlite3", "psycopg", "agent_memory.sqlite", "agent_memory_postgres"))
+        for name in dependencies
+    )

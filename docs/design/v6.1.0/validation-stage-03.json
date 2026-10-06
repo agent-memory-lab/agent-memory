@@ -1,0 +1,72 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "date": "2026-10-06",
+  "ledger_revision": 7,
+  "design": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "base_commit": "02c74fbbccea74cd60ce50191baf5ad1e1a02ca6",
+  "tests": {
+    "command": "pytest tests packages --junitxml=/tmp/agent-memory-v61-stage3-full.xml",
+    "passed": 1081,
+    "skipped": 5,
+    "skip_reason": "optional tiktoken unavailable",
+    "backends": [
+      "SQLite",
+      "PostgreSQL 17"
+    ],
+    "new_behavior_cases": 40,
+    "new_architecture_cases": 2
+  },
+  "example": "examples/contribution_memory.py passed: before boundary Hangzhou; after erasing successor unknown",
+  "lint": {
+    "changed_python_files": "F,I passed",
+    "new_core_modules_and_example": "full configured rules passed"
+  },
+  "wheels": [
+    {
+      "file": "agent_memory-0.1.0-py3-none-any.whl",
+      "sha256": "e7d2045a12d83f0bc9a3a19665fe4f5a159aa892ff92f1276934788675cbd978"
+    },
+    {
+      "file": "agent_memory_postgres-0.1.0-py3-none-any.whl",
+      "sha256": "1776f1a4b5bb308a6c0aa8a3464e41f23b15aa163ca3ee8a0e893d5679c2b9fd"
+    }
+  ],
+  "wheel_sources_match_final_files": true,
+  "source_files_sha256": {
+    "packages/postgres/src/agent_memory_postgres/admission.py": "47a73354836313a24628b5152dcc98e388cbb12f205222b06f5e37a879c65647",
+    "packages/postgres/src/agent_memory_postgres/repository.py": "36c3996faab831c699b7a3f2ce6a694a93c18cbf29fc49785c734bc9fe863276",
+    "src/agent_memory/consolidation/admission_runtime.py": "02d0aa5448d39be70900c9bfb01f79d95c34fa0e4e912b0557b11919d3522697",
+    "src/agent_memory/consolidation/retraction.py": "96ac1264a73c477e7beb4581fac1c3988796b6a825a301e7973bdb6867bab758",
+    "src/agent_memory/operations/reprocessing.py": "5d1013a7df2470c52cf07b5d5e19271ba1ec89e7bb802525c3b98147e423e703",
+    "src/agent_memory/ports.py": "afa0f4316c85310ebbd3dc10856a00a290c7254c66c6d2ce7e405371bce5de6f",
+    "src/agent_memory/retrieval/atom_state.py": "877664b328cb12e8d0755f24d1124c4740a0962f6b1526b99575aae20e8468fa",
+    "src/agent_memory/retrieval/contextual_state.py": "38ca76e703d772e0dc3090b48f5327e413652e42283406ac5b4b079d7d24642c",
+    "src/agent_memory/sqlite.py": "456a44ed2b5d7763dc2b6d1b8bfcb38e382523c208f15584caabf69d15455449",
+    "tests/test_architecture.py": "55e719095703da28feb4ff096db01a25db386932d2e6e37bdfa816d0de9389b8",
+    "examples/contribution_memory.py": "38022fd43d7b2dca751ee96d7d25c635e106e9f56995ec9e0de395d33a3b7a24",
+    "src/agent_memory/consolidation/contributions.py": "7ff1ca43efc77c9010b5ca7292ae4378a6fa213ccd8064feb8fe3a88c708b9a5",
+    "src/agent_memory/consolidation/transitions.py": "ddab4265c07ba36a3529ac6d3388287d22c2d089e7675bf45f52762763100292",
+    "src/agent_memory/contribution_state.py": "c7f5e0030dd7e5b0b1f09e49dd6bb8d9d449a96c69fb01520db648aa3ed1938d",
+    "tests/test_contribution_lifecycle.py": "13c79d5a3fda71825e052d4abea28db0382ffa25c7e4556ab9130411241f1508"
+  },
+  "doc_validation": {
+    "frozen_design_hashes": "passed",
+    "task_links": "passed",
+    "task_count": 44,
+    "acceptance_rows": 66,
+    "statuses": {
+      "DONE": 1,
+      "IN_PROGRESS": 24,
+      "TODO": 19
+    }
+  },
+  "remaining": [
+    "cross-slot / cross-scope atomic correction",
+    "conditional or composite-source contribution operations",
+    "moving transition start, generalized policy and authority history",
+    "reinitializing fully erased managed slots",
+    "real process kill recovery, multi-device purge and producer competition",
+    "real domain calibration and external verification"
+  ]
+}

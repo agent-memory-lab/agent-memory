@@ -147,6 +147,10 @@ class AdmissionUnitOfWork(MemoryUnitOfWork, Protocol):
         self, scope: MemoryScope, slot_key: str | None = None,
     ) -> tuple[dict[str, Any], ...]: ...
 
+    async def list_admission_barriers(
+        self, scope: MemoryScope, slot_key: str,
+    ) -> tuple[dict[str, Any], ...]: ...
+
     async def save_admission_record(
         self, scope: MemoryScope, record_id: str, event_id: str, slot_key: str,
         payload: dict[str, Any], expected_version: int,

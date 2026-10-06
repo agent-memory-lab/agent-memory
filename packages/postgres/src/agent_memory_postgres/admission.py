@@ -86,15 +86,19 @@ async def read_records(
     visible: bool,
     record_id: str | None = None,
     slot_key: str | None = None,
+    barriers: bool = False,
 ):
     where, params = _scope_clause(scope, visible=visible)
     for column, value in (("record_id", record_id), ("slot_key", slot_key)):
         if value is not None:
             where += f" AND r.{column} = %s"
             params += (value,)
+    visibility = "NOT r.payload_json @> '{\"deleted\": true}'::jsonb"
+    if barriers:
+        visibility += " OR r.payload_json ? 'contribution_barrier'"
     cursor = await connection.execute(
         f"""SELECT r.* FROM agent_memory_admission_records r WHERE {where}
-            AND NOT r.payload_json @> '{{"deleted": true}}'::jsonb
+            AND ({visibility})
             ORDER BY r.record_id LIMIT 1025""",
         params,
     )
@@ -128,7 +132,7 @@ async def read_versions(connection: Any, scope: MemoryScope, record_id: str):
 
 async def read_snapshot(connection: Any, scope: MemoryScope) -> tuple[dict[str, Any], ...]:
     """Caller holds a REPEATABLE READ transaction for all current and historical rows."""
-    records = await read_records(connection, scope, visible=True)
+    records = await read_records(connection, scope, visible=True, barriers=True)
     if not records:
         return ()
     ids = [record["id"] for record in records]
@@ -210,6 +214,13 @@ def _source_ids(payload: dict[str, Any]) -> set[str]:
             if not isinstance(event_id, str) or not event_id:
                 raise ValueError("admission evidence source must be a nonempty string")
             result.add(event_id)
+    for transition in payload.get("transitions", []):
+        for role in ("end_support", "start_support"):
+            support = transition.get(role)
+            if support:
+                result.add(support["source_event_id"])
+        if transition.get("correction"):
+            result.add(transition["correction"]["evidence"]["source_event_id"])
     return result
 
 
@@ -383,12 +394,19 @@ async def forget_records(connection: Any, request: Any) -> tuple[set[str], int]:
                 (row["record_id"],),
             )
             versions = await cursor.fetchall()
+            from agent_memory.contribution_state import erased_payload, scrub_transitions
             from agent_memory.evidence_support import scrub_support
 
-            if row["payload_json"].get("qualification") and row["event_id"] not in source_ids:
-                changed = scrub_support(row["payload_json"], source_ids)
+            def scrub(payload):
+                first = scrub_support(payload, source_ids)
+                return scrub_transitions(payload, source_ids) or first
+
+            if (
+                row["payload_json"].get("qualification") or row["payload_json"].get("transitions")
+            ) and row["event_id"] not in source_ids:
+                changed = scrub(row["payload_json"])
                 for version in versions:
-                    if scrub_support(version["payload_json"], source_ids):
+                    if scrub(version["payload_json"]):
                         changed = True
                         await connection.execute(
                             "UPDATE agent_memory_admission_versions SET payload_json=%s::jsonb "
@@ -437,7 +455,8 @@ async def forget_records(connection: Any, request: Any) -> tuple[set[str], int]:
             scan_changed = True
             # Withdrawing a newer assertion must not resurrect an older value.
             # Until a fresh source rebuilds it, withdraw the whole typed timeline.
-            withdrawn_slots.add(slot)
+            if not row["payload_json"].get("contribution"):
+                withdrawn_slots.add(slot)
             dependent_claim_ids.update(claim_ids)
             if deleted_at is None:
                 deleted_at = await publication_time(connection, request.scope)
@@ -447,10 +466,10 @@ async def forget_records(connection: Any, request: Any) -> tuple[set[str], int]:
             )
             await connection.execute(
                 """UPDATE agent_memory_admission_records
-                    SET payload_json='{"deleted": true}'::jsonb, version=version+1,
+                    SET payload_json=%s::jsonb, version=version+1,
                         recorded_at=%s
                     WHERE record_id=%s""",
-                (deleted_at, row["record_id"]),
+                (_json(erased_payload(row["payload_json"])), deleted_at, row["record_id"]),
             )
         after_id = rows[-1]["record_id"]
     extra_ids = dependent_claim_ids - direct_claim_ids
