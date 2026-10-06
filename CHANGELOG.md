@@ -7,6 +7,9 @@ the first stable release.
 
 ### Added
 
+- Explicit typed Atom admission with source authority, pending verification,
+  conflict review, temporal evidence and bitemporal state projection.
+- SQLite/PostgreSQL admission snapshots, compare-and-swap reviews and deletion fences.
 - Framework-neutral memory domain and `MemoryProvider` contract.
 - SQLite provider with state-first retrieval, citations, supersession, and forgetting.
 - Zero-config bounded `AgentMemory.local()` facade.
@@ -19,7 +22,9 @@ the first stable release.
 
 ### Security
 
+- Governed Atom sources and derived audit events cannot bypass admission through recall.
+- Generated trajectory claims require an explicit valid confidence value;
+  missing model scores no longer default to certainty.
 - Scope is derived from trusted host context rather than model arguments.
 - Remote identity headers require HMAC verification by default.
 - Active Procedure promotion cannot bypass offline, shadow, canary, and approval gates.
-

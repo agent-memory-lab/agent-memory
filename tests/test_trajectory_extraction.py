@@ -143,3 +143,46 @@ def test_generator_failure_does_not_block_event_ingestion(tmp_path) -> None:
         assert await kernel.get_state(context.scope) == ()
 
     run(scenario())
+
+
+def test_unknown_model_confidence_is_not_defaulted_but_explicit_sdk_stays_compatible(tmp_path):
+    class MixedScoresGenerator:
+        async def generate_claims(self, event):
+            missing = {"key": "generated.missing", "value": "x", "text": "Missing score."}
+            scored = [
+                {
+                    "key": f"generated.{label}",
+                    "value": "x",
+                    "text": f"Model score is {label}.",
+                    "confidence": score,
+                }
+                for label, score in (
+                    ("null", None),
+                    ("boolean", True),
+                    ("nan", float("nan")),
+                    ("infinite", float("inf")),
+                    ("string", "0.99"),
+                    ("valid", 0.95),
+                )
+            ]
+            return (missing, *scored)
+
+    async def scenario():
+        scope = MemoryScope("tenant", session_id="session")
+        async with AgentMemory.local(
+            tmp_path / "scores.db",
+            scope=scope,
+            extractor=build_trajectory_extractor(MixedScoresGenerator()),
+        ) as memory:
+            result = await memory.remember(
+                "Explicitly remember the SDK value.",
+                event_type="user.message",
+                claims=({"key": "explicit.sdk", "value": "x", "text": "Explicit SDK value."},),
+            )
+            assert len(result.claim_ids) == 2
+            state = await memory.state()
+            assert {claim.key for claim in state} == {"explicit.sdk", "generated.valid"}
+            explicit = next(claim for claim in state if claim.key == "explicit.sdk")
+            assert explicit.confidence == 1.0
+
+    run(scenario())

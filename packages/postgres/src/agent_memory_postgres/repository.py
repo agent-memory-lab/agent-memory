@@ -41,8 +41,10 @@ from agent_memory.domain import (
     StateDelta,
     utc_now,
 )
-from agent_memory.serialization import to_jsonable
 from agent_memory.retrieval.temporal_history import temporal_candidates
+from agent_memory.serialization import to_jsonable
+
+from . import admission
 from .temporal_history import PostgresClaimHistory
 
 
@@ -87,12 +89,14 @@ class PostgresMemoryUnitOfWork:
         self._connection_context: Any = None
         self._transaction_context: Any = None
         self.connection: Any = None
+        self._admission_batch_times: dict[tuple[str, str], datetime] = {}
 
     async def __aenter__(self) -> PostgresMemoryUnitOfWork:
         self._connection_context = self._repository.pool.connection()
         self.connection = await self._connection_context.__aenter__()
         self._transaction_context = self.connection.transaction()
         await self._transaction_context.__aenter__()
+        self._admission_batch_times = {}
         return self
 
     async def __aexit__(
@@ -110,6 +114,8 @@ class PostgresMemoryUnitOfWork:
     async def find_event_by_idempotency(
         self, scope: MemoryScope, idempotency_key: str
     ) -> MemoryEvent | None:
+        await self.lock_admission_scope(scope)
+        await admission.check_event_identity(self.connection, scope, None, idempotency_key)
         partition_key = scope.partition_key()
         await self._lock_idempotency("event", partition_key, idempotency_key)
         cursor = await self.connection.execute(
@@ -271,6 +277,10 @@ class PostgresMemoryUnitOfWork:
         )
 
     async def append_event(self, event: MemoryEvent) -> None:
+        await self.lock_admission_scope(event.scope)
+        await admission.check_event_identity(
+            self.connection, event.scope, event.id, event.idempotency_key
+        )
         await self.connection.execute(
             """
             INSERT INTO agent_memory_events (
@@ -301,7 +311,37 @@ class PostgresMemoryUnitOfWork:
             ),
         )
 
+    async def lock_admission_scope(self, scope: MemoryScope) -> None:
+        await admission.lock_scope(self.connection, scope)
+
+    async def get_admission_record(self, scope: MemoryScope, record_id: str):
+        rows = await admission.read_records(
+            self.connection, scope, visible=False, record_id=record_id
+        )
+        return rows[0] if rows else None
+
+    async def list_admission_records(self, scope: MemoryScope, slot_key: str | None = None):
+        return await admission.read_records(
+            self.connection, scope, visible=False, slot_key=slot_key
+        )
+
+    async def save_admission_record(
+        self, scope: MemoryScope, record_id: str, event_id: str, slot_key: str,
+        payload: dict[str, Any], expected_version: int,
+    ) -> int:
+        namespace = (scope.tenant_id, scope.namespace)
+        if namespace not in self._admission_batch_times:
+            self._admission_batch_times[namespace] = await admission.publication_time(
+                self.connection, scope
+            )
+        return await admission.save_record(
+            self.connection, scope, record_id, event_id, slot_key, payload, expected_version,
+            recorded_at=self._admission_batch_times[namespace],
+        )
+
     async def find_current_claim(self, scope: MemoryScope, key: str) -> Claim | None:
+        # Match ingest and deletion: namespace lock must precede Claim locks.
+        await self.lock_admission_scope(scope)
         partition_key = scope.partition_key()
         await self._lock_idempotency("claim", partition_key, key)
         cursor = await self.connection.execute(
@@ -608,6 +648,33 @@ class PostgresMemoryRepository:
     def unit_of_work(self) -> PostgresMemoryUnitOfWork:
         return PostgresMemoryUnitOfWork(self)
 
+    async def admission_records(self, scope: MemoryScope, *, slot_key: str | None = None):
+        async with self.pool.connection() as connection:
+            return await admission.read_records(connection, scope, visible=True, slot_key=slot_key)
+
+    async def admission_snapshot(self, scope: MemoryScope) -> tuple[dict[str, Any], ...]:
+        async with self.pool.connection() as connection:
+            async with connection.transaction():
+                await connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+                return await admission.read_snapshot(connection, scope)
+
+    async def admission_record(self, scope: MemoryScope, record_id: str):
+        async with self.pool.connection() as connection:
+            rows = await admission.read_records(
+                connection, scope, visible=True, record_id=record_id
+            )
+            return rows[0] if rows else None
+
+    async def admission_record_versions(self, scope: MemoryScope, record_id: str):
+        async with self.pool.connection() as connection:
+            return await admission.read_versions(connection, scope, record_id)
+
+    async def admission_protected_sources(self, scope: MemoryScope) -> tuple[str, ...]:
+        async with self.pool.connection() as connection:
+            async with connection.transaction():
+                await connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+                return await admission.protected_sources(connection, scope)
+
     async def claims_at(self, scope, *, valid_at, known_at):
         async with self.pool.connection() as connection:
             async with connection.transaction():
@@ -812,6 +879,9 @@ class PostgresMemoryRepository:
         )
         async with self.pool.connection() as connection:
             async with connection.transaction():
+                admission_claim_ids, extra_admission_claims = await admission.forget_records(
+                    connection, request
+                )
                 if request.all_in_scope:
                     where = "partition_key = %s"
                     params: tuple[Any, ...] = (request.scope.partition_key(),)
@@ -825,7 +895,7 @@ class PostgresMemoryRepository:
                     )
                     counts[table] = (await cursor.fetchone())["count"]
 
-                impacted_memory_ids = set(request.memory_ids)
+                impacted_memory_ids = set(request.memory_ids) | admission_claim_ids
                 if request.all_in_scope:
                     target_event_ids: set[str] = set()
                 else:
@@ -1004,7 +1074,7 @@ class PostgresMemoryRepository:
                 )
                 return ForgetResult(
                     affected_events=counts["agent_memory_events"],
-                    affected_claims=counts["agent_memory_claims"],
+                    affected_claims=counts["agent_memory_claims"] + extra_admission_claims,
                     affected_artifacts=(
                         counts["agent_memory_artifacts"]
                         + len(changed_block_ids - set(request.memory_ids))

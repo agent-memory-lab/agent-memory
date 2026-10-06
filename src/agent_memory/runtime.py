@@ -10,7 +10,10 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any, Self
 
+from .consolidation.admission import AdmissionPolicy
 from .domain import (
+    AdmissionReceipt,
+    AtomDraft,
     Claim,
     DecisionRecord,
     EvaluationRecord,
@@ -30,13 +33,13 @@ from .domain import (
     OutcomeEvent,
     OutcomeStatus,
     RewardSignal,
+    SourceAuthority,
 )
-from .extensions.registry import PluginRegistry
 from .extensions.loader import LoadedPlugin
 from .extensions.protocol import RetrievalCandidate
-from .extensions.registry import PluginKind
-from .retrieval.governed import RecallPipeline
+from .extensions.registry import PluginKind, PluginRegistry
 from .ports import ClaimExtractor, EmbeddingProvider, MemoryPolicy, MemoryProvider, Reranker
+from .retrieval.governed import RecallPipeline
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,10 +223,70 @@ class AgentMemory:
         if self._recall_pipeline is None or valid_at is not None or known_at is not None:
             return await self._provider.retrieve(query)
         current_state = await self._provider.get_state(self.scope)
-        return await self._recall_pipeline.retrieve(
+        bundle = await self._recall_pipeline.retrieve(
             query,
             tuple(current_state[: self.limits.max_state_claims]),
         )
+        guard = getattr(self._provider, "guard_admission_bundle", None)
+        return await guard(self.scope, bundle) if callable(guard) else bundle
+
+    async def remember_atoms(
+        self, content: str, atoms: Sequence[AtomDraft], *, authority: SourceAuthority,
+        policy: AdmissionPolicy, idempotency_key: str | None = None,
+        occurred_at: datetime | None = None, source_uri: str | None = None, actor: str = "user",
+    ) -> AdmissionReceipt:
+        """Admit explicit typed candidates under host-authenticated source authority."""
+        self._require_initialized()
+        if len(content) > self.limits.max_event_characters:
+            raise ValueError("event exceeds max_event_characters")
+        if len(atoms) > self.limits.max_claims_per_event:
+            raise ValueError("event exceeds max_claims_per_event")
+        admit = getattr(self._provider, "admit_event", None)
+        if not callable(admit):
+            raise NotImplementedError("provider does not support typed atom admission")
+        event = MemoryEvent(
+            scope=self.scope, event_type="memory.atom", content=content,
+            metadata={"atom_implicit_observation": occurred_at is None},
+            idempotency_key=idempotency_key, source_uri=source_uri, actor=actor,
+            **({"occurred_at": occurred_at} if occurred_at is not None else {}),
+        )
+        return await admit(event, atoms, authority=authority, policy=policy)
+
+    async def resolve_atom(
+        self, candidate_id: str, content: str, *, authority: SourceAuthority,
+        policy: AdmissionPolicy, expected_version: int, accept: bool, source_quote: str,
+        support_from: datetime | None = None, support_to: datetime | None = None,
+        occurred_at: datetime | None = None,
+    ) -> AdmissionReceipt:
+        self._require_initialized()
+        if len(content) > self.limits.max_event_characters:
+            raise ValueError("event exceeds max_event_characters")
+        resolve = getattr(self._provider, "resolve_atom", None)
+        if not callable(resolve):
+            raise NotImplementedError("provider does not support typed atom admission")
+        event = MemoryEvent(
+            scope=self.scope, event_type="memory.atom.verification", content=content,
+            **({"occurred_at": occurred_at} if occurred_at is not None else {}),
+        )
+        return await resolve(
+            self.scope, candidate_id, event=event, authority=authority, policy=policy,
+            expected_version=expected_version, accept=accept, source_quote=source_quote,
+            support_from=support_from, support_to=support_to,
+        )
+
+    async def atom_status(self, candidate_id: str) -> dict[str, Any] | None:
+        self._require_initialized()
+        reader = getattr(self._provider, "admission_status", None)
+        if not callable(reader):
+            raise NotImplementedError("provider does not support typed atom admission")
+        return await reader(self.scope, candidate_id)
+
+    async def atom_history(self, candidate_id: str) -> tuple[dict[str, Any], ...]:
+        self._require_initialized()
+        reader = getattr(self._provider, "admission_history", None)
+        if not callable(reader):
+            raise NotImplementedError("provider does not support typed atom admission")
+        return tuple(await reader(self.scope, candidate_id))
 
     async def retrieve_candidates(
         self,

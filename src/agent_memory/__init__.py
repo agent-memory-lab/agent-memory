@@ -40,6 +40,12 @@ from .capture.queue import (
     SQLiteCaptureQueue,
 )
 from .domain import (
+    AdmissionReceipt,
+    AtomDecision,
+    AtomDraft,
+    EvidenceSupport,
+    PredicateSpec,
+    SourceAuthority,
     PROTOCOL_VERSION,
     SCHEMA_VERSION,
     ArtifactStatus,
@@ -83,6 +89,7 @@ from .domain import (
     ScopeLevel,
     StateDelta,
 )
+from .consolidation.admission import AdmissionPolicy
 from .consolidation.episodes import (
     DeterministicEpisodeSegmenter,
     EpisodeSegmentationError,
@@ -274,6 +281,8 @@ from .extensions.reference import (
     ReferenceStorageProvider,
 )
 from .ports import (
+    AdmissionRepository,
+    AdmissionUnitOfWork,
     BitemporalMemoryRepository,
     BitemporalMemoryProvider,
     ClaimExtractor,
@@ -354,6 +363,15 @@ from .evaluation.replay import (
 )
 
 __all__ = [
+    "AdmissionRepository",
+    "AdmissionUnitOfWork",
+    "AdmissionPolicy",
+    "AdmissionReceipt",
+    "AtomDecision",
+    "AtomDraft",
+    "EvidenceSupport",
+    "PredicateSpec",
+    "SourceAuthority",
     "TemporalHistoryUnavailable",
     "CallableOntologyEvidenceVerifier",
     "OntologyAssertion",

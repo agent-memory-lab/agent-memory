@@ -9,9 +9,13 @@ from json import dumps
 from typing import TYPE_CHECKING, Any
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
+from .consolidation.admission import AdmissionPolicy
+from .consolidation.admission_runtime import ATOM_EVENT_TYPES, ATOM_PREFIX, AdmissionEngine
 from .domain import (
     PROTOCOL_VERSION,
     SCHEMA_VERSION,
+    AdmissionReceipt,
+    AtomDraft,
     Citation,
     Claim,
     ClaimDraft,
@@ -47,11 +51,11 @@ from .domain import (
     RetrievalTrace,
     RewardSignal,
     ScopeLevel,
+    SourceAuthority,
     StateDelta,
     canonical_json,
     utc_now,
 )
-from .retrieval.temporal_history import temporal_candidates
 from .ports import (
     ClaimExtractor,
     ConsolidationScheduler,
@@ -60,6 +64,7 @@ from .ports import (
     MemoryUnitOfWork,
     Reranker,
 )
+from .retrieval.temporal_history import temporal_candidates
 
 if TYPE_CHECKING:
     from .extensions.protocol import ConsolidationResult
@@ -183,6 +188,8 @@ class MemoryKernel:
                 await result
 
     async def ingest_event(self, event: MemoryEvent) -> IngestResult:
+        if event.event_type in ATOM_EVENT_TYPES:
+            raise ValueError("typed atom events require admit_event or resolve_atom")
         if event.idempotency_key:
             async with self._repository.unit_of_work() as uow:
                 stored = await uow.find_event_by_idempotency(event.scope, event.idempotency_key)
@@ -260,6 +267,8 @@ class MemoryKernel:
         event: MemoryEvent,
         draft: ClaimDraft,
     ) -> tuple[Claim, StateDelta | None, str | None]:
+        if draft.key.startswith(ATOM_PREFIX):
+            raise ValueError("atom keys are reserved for typed admission")
         claim_scope = event.scope.project(draft.scope_level)
         previous = await uow.find_current_claim(claim_scope, draft.key)
         corroborates = bool(
@@ -324,7 +333,85 @@ class MemoryKernel:
         return claim, delta, previous.id if previous else None
 
     async def get_state(self, scope: MemoryScope) -> tuple[Claim, ...]:
-        return tuple(await self._repository.current_claims(scope))
+        now = utc_now()
+        atoms, _ = await AdmissionEngine(self._repository).state(scope, valid_at=now, known_at=now)
+        legacy = await self._repository.current_claims(scope)
+        return (await self._legacy_state(scope, legacy)) + atoms
+
+    async def admit_event(
+        self, event: MemoryEvent, drafts: Sequence[AtomDraft], *,
+        authority: SourceAuthority, policy: AdmissionPolicy,
+    ) -> AdmissionReceipt:
+        return await AdmissionEngine(self._repository).admit(
+            event, drafts, authority=authority, policy=policy,
+        )
+
+    async def resolve_atom(
+        self, scope: MemoryScope, candidate_id: str, **review: Any,
+    ) -> AdmissionReceipt:
+        return await AdmissionEngine(self._repository).resolve(scope, candidate_id, **review)
+
+    async def admission_status(
+        self, scope: MemoryScope, candidate_id: str,
+    ) -> dict[str, Any] | None:
+        AdmissionEngine(self._repository)._require_support()
+        return await self._repository.admission_record(scope, candidate_id)
+
+    async def admission_history(
+        self, scope: MemoryScope, candidate_id: str,
+    ) -> tuple[dict[str, Any], ...]:
+        AdmissionEngine(self._repository)._require_support()
+        return await self._repository.admission_record_versions(scope, candidate_id)
+
+    async def _protected_atom_sources(self, scope: MemoryScope) -> set[str]:
+        reader = getattr(self._repository, "admission_protected_sources", None)
+        return set(await reader(scope)) if callable(reader) else set()
+
+    async def _legacy_state(self, scope: MemoryScope, claims: Sequence[Claim]) -> tuple[Claim, ...]:
+        protected = await self._protected_atom_sources(scope)
+        return tuple(c for c in claims if not c.key.startswith(ATOM_PREFIX)
+                     and not c.id.startswith("atom-claim:")
+                     and not protected.intersection(c.provenance.source_event_ids))
+
+    async def _guard_atom_candidates(
+        self, scope: MemoryScope, candidates: Sequence[MemoryItem],
+    ) -> tuple[MemoryItem, ...]:
+        reader = getattr(self._repository, "admission_records", None)
+        rows = await reader(scope) if callable(reader) else ()
+        sources = await self._protected_atom_sources(scope)
+        claim_ids = {row["payload"].get("claim_id") for row in rows}
+        return tuple(item for item in candidates
+                     if item.id not in sources and item.id not in claim_ids
+                     and not item.id.startswith("atom-claim:")
+                     and not str(item.metadata.get("key", "")).startswith(ATOM_PREFIX)
+                     and item.metadata.get("event_type") not in ATOM_EVENT_TYPES
+                     and not sources.intersection(item.metadata.get("source_event_ids", ())))
+
+    async def guard_admission_bundle(
+        self, scope: MemoryScope, bundle: MemoryBundle,
+    ) -> MemoryBundle:
+        """Apply native admission to custom retrieval pipeline results as a final gate."""
+        now = utc_now()
+        atoms, info = await AdmissionEngine(self._repository).state(
+            scope, valid_at=now, known_at=now,
+        )
+        atom_by_id = {c.id: c for c in atoms}
+        legacy = await self._legacy_state(scope, bundle.current_state)
+        current = legacy + tuple(atom_by_id[c.id] for c in bundle.current_state
+                                 if c.id in atom_by_id)
+        memories = await self._guard_atom_candidates(scope, bundle.relevant_memories)
+        episodes = await self._guard_atom_candidates(scope, bundle.episodes)
+        procedures = await self._guard_atom_candidates(scope, bundle.procedures)
+        ids = {c.id for c in [*current, *memories, *episodes, *procedures]}
+        return replace(bundle, current_state=current, relevant_memories=memories,
+                       episodes=episodes, procedures=procedures,
+                       citations=tuple(c for c in bundle.citations if c.memory_id in ids),
+                       retrieval_metadata={**bundle.retrieval_metadata, **info,
+                                           "atom_support": {key: value for key, value in
+                                                            info["atom_support"].items()
+                                                            if key in ids}},
+                       token_estimate=sum(_token_estimate(c.text)
+                                          for c in [*current, *memories, *episodes, *procedures]))
 
     async def get_state_at(
         self, scope: MemoryScope, *, valid_at: datetime, known_at: datetime
@@ -332,16 +419,25 @@ class MemoryKernel:
         reader = getattr(self._repository, "claims_at", None)
         if not callable(reader):
             raise NotImplementedError("provider does not support bitemporal claims")
-        return tuple(await reader(scope, valid_at=valid_at, known_at=known_at))
+        atoms, _ = await AdmissionEngine(self._repository).state(
+            scope, valid_at=valid_at, known_at=known_at,
+        )
+        legacy = await reader(scope, valid_at=valid_at, known_at=known_at)
+        return (await self._legacy_state(scope, legacy)) + atoms
 
     async def retrieve(self, query: MemoryQuery) -> MemoryBundle:
+        now = utc_now()
+        atoms, atom_info = await AdmissionEngine(self._repository).state(
+            query.scope, valid_at=query.valid_at or now, known_at=query.known_at or now,
+        )
         if query.valid_at is not None or query.known_at is not None:
-            now = utc_now()
             # Resolve both axes once so state and candidates use the same snapshot.
             query = replace(query, valid_at=query.valid_at or now, known_at=query.known_at or now)
-            historical_state = await self.get_state_at(
-                query.scope, valid_at=query.valid_at, known_at=query.known_at
-            )
+            reader = getattr(self._repository, "claims_at", None)
+            if not callable(reader):
+                raise NotImplementedError("provider does not support bitemporal claims")
+            legacy = await reader(query.scope, valid_at=query.valid_at, known_at=query.known_at)
+            historical_state = (await self._legacy_state(query.scope, legacy)) + atoms
         else:
             historical_state = None
         current = ()
@@ -349,10 +445,16 @@ class MemoryKernel:
             current = (
                 historical_state
                 if historical_state is not None
-                else tuple(await self._repository.current_claims(query.scope))
+                else await self._legacy_state(
+                    query.scope, await self._repository.current_claims(query.scope),
+                ) + atoms
             )
         if historical_state is None:
-            candidates = await self._repository.search(query, query.limit * 6)
+            candidates = await self._guard_atom_candidates(
+                query.scope, await self._repository.search(query, query.limit * 6),
+            )
+            if MemoryChannel.SEMANTIC in query.channels:
+                candidates += tuple(temporal_candidates(atoms, query.text, query.limit * 6))
         else:
             candidates = (
                 temporal_candidates(historical_state, query.text, query.limit * 6)
@@ -421,6 +523,11 @@ class MemoryKernel:
                 "state_count": len(selected_state),
                 "strategy": "state_first_rrf",
                 "protocol_version": PROTOCOL_VERSION,
+                **atom_info,
+                "atom_support": {
+                    key: value for key, value in atom_info["atom_support"].items()
+                    if key in {c.id for c in [*selected_state, *selected]}
+                },
                 **(
                     {
                         "valid_at": query.valid_at.isoformat(),
@@ -474,6 +581,8 @@ class MemoryKernel:
         uow: MemoryUnitOfWork,
         proposal: MemoryProposal,
     ) -> ProposalResult:
+        if proposal.key.startswith(ATOM_PREFIX):
+            raise ValueError("atom keys are reserved for typed admission")
         claim_scope = proposal.scope.project(proposal.scope_level)
         existing = await uow.find_proposal_result(proposal.id)
         if existing:

@@ -721,3 +721,158 @@ class ForgetResult:
     affected_claims: int
     affected_artifacts: int
     mode: ForgetMode
+
+
+def _atom_string(value: Any, name: str, limit: int, *, allow_empty: bool = False) -> None:
+    if not isinstance(value, str) or len(value) > limit or (
+        not allow_empty and not value.strip()
+    ):
+        raise ValueError(f"{name} must be a bounded {'optional ' if allow_empty else ''}string")
+
+
+def _atom_time(value: datetime | None, name: str) -> datetime | None:
+    if value is None:
+        return None
+    if not isinstance(value, datetime) or value.utcoffset() is None:
+        raise ValueError(f"{name} must include a timezone")
+    return value.astimezone(UTC)
+
+
+@dataclass(frozen=True, slots=True)
+class AtomDraft:
+    """Explicit single-state candidate; a source quote is a locator, not a truth proof."""
+
+    subject_id: str
+    predicate: str
+    value: Any
+    text: str
+    source_quote: str
+    scope_level: ScopeLevel = ScopeLevel.SESSION
+    kind: str = "fact"
+    modality: str = "asserted"
+    valid_from: datetime | None = None
+    valid_to: datetime | None = None
+    change_kind: str = "replace"
+    corrects_id: str | None = None
+
+    def __post_init__(self) -> None:
+        _atom_string(self.subject_id, "subject_id", 256)
+        _atom_string(self.predicate, "predicate", 128)
+        _atom_string(self.text, "text", 16_384)
+        _atom_string(self.source_quote, "source_quote", 16_384, allow_empty=True)
+        _atom_string(self.kind, "kind", 64)
+        _atom_string(self.modality, "modality", 64)
+        if self.value is not None and type(self.value) not in (str, int, float, bool):
+            raise ValueError("value must be a JSON scalar for single-state admission")
+        if isinstance(self.value, str) and len(self.value) > 16_384:
+            raise ValueError("value exceeds the single-state string limit")
+        if type(self.value) is int and self.value.bit_length() > 4096:
+            raise ValueError("value exceeds the single-state integer limit")
+        if type(self.value) is float and not (-float("inf") < self.value < float("inf")):
+            raise ValueError("value must be finite")
+        try:
+            object.__setattr__(self, "scope_level", ScopeLevel(self.scope_level))
+        except (TypeError, ValueError) as error:
+            raise ValueError("scope_level must be a supported scope") from error
+        for name in ("valid_from", "valid_to"):
+            object.__setattr__(self, name, _atom_time(getattr(self, name), name))
+        if self.valid_from is not None and self.valid_to is not None:
+            if self.valid_to <= self.valid_from:
+                raise ValueError("valid_to must be after valid_from")
+        if self.change_kind not in {"replace", "temporary_override", "correct"}:
+            raise ValueError("change_kind must be replace, temporary_override or correct")
+        if self.corrects_id is not None:
+            _atom_string(self.corrects_id, "corrects_id", 128)
+        if (self.change_kind == "correct") != (self.corrects_id is not None):
+            raise ValueError("correct requires corrects_id, reserved for corrections")
+        if self.change_kind == "temporary_override" and self.valid_to is None:
+            raise ValueError("temporary_override requires valid_to")
+
+
+@dataclass(frozen=True, slots=True)
+class SourceAuthority:
+    """Host-supplied authority; never derive this envelope from event metadata."""
+
+    source_id: str
+    kind: str = "self_report"
+    subjects: tuple[str, ...] = ()
+    predicates: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        _atom_string(self.source_id, "source_id", 256)
+        _atom_string(self.kind, "kind", 64)
+        for name, limit in (("subjects", 256), ("predicates", 128)):
+            values = getattr(self, name)
+            if not isinstance(values, (tuple, list)) or len(values) > 256:
+                raise ValueError(f"{name} must be a bounded sequence")
+            for value in values:
+                _atom_string(value, name, limit)
+            object.__setattr__(self, name, tuple(sorted(set(values))))
+
+
+@dataclass(frozen=True, slots=True)
+class PredicateSpec:
+    predicate: str
+    value_type: str = "string"
+    allow_self_report: bool = True
+
+    def __post_init__(self) -> None:
+        _atom_string(self.predicate, "predicate", 128)
+        _atom_string(self.value_type, "value_type", 64)
+        if type(self.allow_self_report) is not bool:
+            raise ValueError("allow_self_report must be a boolean")
+
+
+@dataclass(frozen=True, slots=True)
+class AtomDecision:
+    candidate_id: str
+    action: str
+    reasons: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class AdmissionReceipt:
+    event_id: str
+    candidate_ids: tuple[str, ...]
+    claim_ids: tuple[str, ...]
+    decisions: tuple[AtomDecision, ...]
+    pending_ids: tuple[str, ...] = ()
+    duplicate: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceSupport:
+    """Time-bounded support/refutation; source attribution is not universal truth."""
+
+    source_event_id: str
+    authority_kind: str
+    relation: str = "supports"
+    support_kind: str = "point"
+    support_at: datetime | None = None
+    support_from: datetime | None = None
+    support_to: datetime | None = None
+    recorded_at: datetime = field(default_factory=utc_now)
+
+    def __post_init__(self) -> None:
+        _atom_string(self.source_event_id, "source_event_id", 256)
+        _atom_string(self.authority_kind, "authority_kind", 64)
+        if self.relation not in {"supports", "refutes"}:
+            raise ValueError("relation must be supports or refutes")
+        for name in ("support_at", "support_from", "support_to", "recorded_at"):
+            object.__setattr__(self, name, _atom_time(getattr(self, name), name))
+        if self.recorded_at is None:
+            raise ValueError("recorded_at is required")
+        if self.support_kind == "point":
+            if (
+                self.support_at is None
+                or self.support_from is not None
+                or self.support_to is not None
+            ):
+                raise ValueError("point evidence requires only support_at")
+        elif self.support_kind == "interval":
+            if self.support_from is None or self.support_at is not None:
+                raise ValueError("interval evidence requires support_from and no support_at")
+            if self.support_to is not None and self.support_to <= self.support_from:
+                raise ValueError("support_to must be after support_from")
+        else:
+            raise ValueError("support_kind must be point or interval")

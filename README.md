@@ -132,6 +132,14 @@ asyncio.run(main())
 
 **AgentMemory.local()** creates a ready-to-use runtime with conservative limits. No vector database, external service, model key, or background worker is required.
 
+### Explicit atom admission
+
+`remember_atoms()` accepts host-supplied subjects, registered predicates, source authority,
+and evidence quotes. It returns per-candidate decisions, preserves pending or contested
+inputs, and supports bitemporal state changes and explicit review with `resolve_atom()`.
+The existing `remember()` API remains compatible. See the [Atom admission guide](docs/ATOM_ADMISSION.md)
+for examples, correction IDs, evidence-time semantics, and the first-release limitations.
+
 ### Automatic trajectory extraction
 
 Automatic extraction is optional and model-vendor neutral. Implement the small
@@ -152,6 +160,8 @@ The generator receives trusted lifecycle events, including user messages and too
 Its structured output is schema-validated, confidence-gated, scope-checked, capped per event,
 and bound to source evidence. Explicit host claims take priority. Generator failures degrade
 to event-only ingestion and do not block the agent.
+Generated claims must now include a valid numeric `confidence`; missing scores are skipped
+instead of being defaulted to `1.0`. This score is not a proof of factual correctness.
 
 ## Core Model
 

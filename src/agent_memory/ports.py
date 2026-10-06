@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from types import TracebackType
 from datetime import datetime
-from typing import Protocol
+from types import TracebackType
+from typing import Any, Protocol
 
 from .domain import (
     Claim,
@@ -130,6 +130,54 @@ class MemoryRepository(Protocol):
         limit: int,
         after_id: str | None = None,
     ) -> Sequence[Mapping[str, object]]: ...
+
+
+class AdmissionUnitOfWork(MemoryUnitOfWork, Protocol):
+    """Optional typed-admission extension; all writes share the event transaction."""
+
+    async def lock_admission_scope(self, scope: MemoryScope) -> None: ...
+
+    async def get_admission_record(
+        self, scope: MemoryScope, record_id: str,
+    ) -> dict[str, Any] | None: ...
+
+    async def list_admission_records(
+        self, scope: MemoryScope, slot_key: str | None = None,
+    ) -> tuple[dict[str, Any], ...]: ...
+
+    async def save_admission_record(
+        self, scope: MemoryScope, record_id: str, event_id: str, slot_key: str,
+        payload: dict[str, Any], expected_version: int,
+    ) -> int: ...
+
+
+class AdmissionRepository(MemoryRepository, Protocol):
+    """Optional snapshot and deletion-fence contracts for admission providers.
+
+    Current records include id, event_id, slot_key, scope, payload, version,
+    recorded_at. Version rows include payload, version and recorded_at. Times
+    are timezone-aware ISO strings; deleted records never expose their bodies.
+    """
+
+    def unit_of_work(self) -> AdmissionUnitOfWork: ...
+
+    async def admission_records(
+        self, scope: MemoryScope, *, slot_key: str | None = None,
+    ) -> tuple[dict[str, Any], ...]: ...
+
+    async def admission_record(
+        self, scope: MemoryScope, record_id: str,
+    ) -> dict[str, Any] | None: ...
+
+    async def admission_record_versions(
+        self, scope: MemoryScope, record_id: str,
+    ) -> tuple[dict[str, Any], ...]: ...
+
+    async def admission_protected_sources(self, scope: MemoryScope) -> tuple[str, ...]: ...
+
+    async def admission_snapshot(self, scope: MemoryScope) -> tuple[dict[str, Any], ...]:
+        """Read visible records plus their versions within one database snapshot."""
+        ...
 
 
 class ClaimExtractor(Protocol):

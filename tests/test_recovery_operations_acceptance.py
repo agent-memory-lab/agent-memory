@@ -165,7 +165,8 @@ def test_default_probe_confirms_real_claim_recall(tmp_path):
     class Generator:
         async def generate_claims(self, event):
             return [{"key": "report.constraint", "value": "do-not-publish",
-                     "text": "Do not publish the report", "scope_level": "session"}]
+                     "text": "Do not publish the report", "scope_level": "session",
+                     "confidence": 0.95}]
 
     async def scenario():
         memory = memory_at(tmp_path, generator=Generator())

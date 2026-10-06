@@ -450,7 +450,10 @@ def test_unified_facade_forwards_both_time_axes(tmp_path, monkeypatch):
 
         class Generator:
             async def generate_claims(self, event):
-                return [{"key": "city", "value": event.content, "text": event.content}]
+                return [{
+                    "key": "city", "value": event.content, "text": event.content,
+                    "confidence": 0.95,
+                }]
 
         memory = UnifiedMemory.local(
             tmp_path / "unified.db",

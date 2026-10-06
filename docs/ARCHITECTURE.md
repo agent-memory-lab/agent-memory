@@ -11,8 +11,8 @@
 | 根目录 `kernel.py`、`providers.py`、`sqlite.py` | 核心记忆流程、默认策略、本地事务存储 | 本体运营、上下文恢复、外部 SDK |
 | 根目录 `composition.py`、`runtime.py`、`unified_memory.py`、`adapters.py`、`mcp.py` | 装配、宿主入口与协议接入 | 新的检索算法或领域规则 |
 | `capture/` | 采集策略、工件、队列、提交接口 | 恢复状态和检索排序 |
-| `consolidation/` | Claim 合并、Episode 分段、Procedure 归纳 | 插件发现与数据库适配 |
-| `retrieval/` | 检索器、候选融合、权限过滤、多样性和预算打包 | 本体版本运营和模型评测 |
+| `consolidation/` | Atom 接纳与核验编排、Claim 合并、Episode 分段、Procedure 归纳 | 插件发现与数据库适配 |
+| `retrieval/` | 双时态状态投影、检索器、候选融合、权限过滤、多样性和预算打包 | 本体版本运营和模型评测 |
 | `ontology/` | 本体模型、投影、图查询、存储、版本与索引运营 | 通用采集和上下文恢复 |
 | `context/` | 恢复状态、分区、压缩、预算反馈及恢复传输 | 长期记忆检索算法 |
 | `extensions/` | 插件契约、发现、注册、生命周期和契约验证 | 具体业务算法 |
@@ -41,7 +41,12 @@
 
 记忆提取、事实接纳与 L0–L3 派生的目标设计见
 [Agent Memory 目标架构与实施方案](AGENT_MEMORY_ARCHITECTURE_PLAN.md)；该文档是提案，
-不代表相关模块已经实现。
+首期已实现的范围见 [Atom 接纳接口](ATOM_ADMISSION.md)。
+
+首期接纳沿用这些边界：`domain.py` 定义候选、来源权限和证据，
+`consolidation/admission.py` 处理纯接纳规则，`admission_runtime.py` 编排事务与核验，
+`retrieval/atom_state.py` 从候选版本投影双时态状态。`kernel.py` 只连接入口和检索守卫；
+SQLite/PostgreSQL 适配器负责批次原子性、版本比较和删除屏障，不判断事实语义。
 
 ## 拆分与合并标准
 

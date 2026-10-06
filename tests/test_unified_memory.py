@@ -57,7 +57,8 @@ def test_raw_capture_redacts_before_generator_and_rejects_scope_promotion(tmp_pa
             await capture(memory, content="contact demo@example.com")
             assert "demo@example.com" not in generator.events[0].content
             async def promoted(event):
-                return [{"key": "bad", "value": "bad", "text": "bad", "scope": "tenant"}]
+                return [{"key": "bad", "value": "bad", "text": "bad", "scope": "tenant",
+                         "confidence": 0.95}]
             generator.generate_claims = promoted
             with pytest.raises(ValueError):
                 await capture(memory, "two")

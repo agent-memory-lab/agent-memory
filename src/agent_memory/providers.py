@@ -123,7 +123,16 @@ class GeneratedTrajectoryClaimExtractor:
         if not isinstance(generated, Sequence) or isinstance(generated, (str, bytes)):
             return ()
 
-        generated_event = replace(event, metadata={"claims": list(generated[: self._max_claims])})
+        # Model output must supply its score explicitly. The metadata extractor's
+        # default remains reserved for the existing explicit SDK input contract.
+        scored = [
+            raw
+            for raw in generated[: self._max_claims]
+            if isinstance(raw, Mapping)
+            and type(raw.get("confidence")) in (int, float)
+            and 0.0 <= raw["confidence"] <= 1.0
+        ]
+        generated_event = replace(event, metadata={"claims": scored})
         parsed = await MetadataClaimExtractor().extract(generated_event)
         accepted: list[ClaimDraft] = []
         for draft in parsed:

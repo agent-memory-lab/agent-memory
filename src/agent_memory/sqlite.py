@@ -5,16 +5,16 @@ import json
 import re
 import sqlite3
 import time
+from collections import deque
 from collections.abc import Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
+from itertools import product
 from pathlib import Path
 from types import TracebackType
 from typing import Any
-
-from .retrieval.temporal_history import SQLiteClaimHistory, temporal_candidates
 
 from .domain import (
     ArtifactStatus,
@@ -42,10 +42,12 @@ from .domain import (
     Provenance,
     RetrievalTrace,
     RewardSignal,
+    ScopeLevel,
     StateDelta,
     canonical_json,
     utc_now,
 )
+from .retrieval.temporal_history import SQLiteClaimHistory, temporal_candidates
 
 
 def _iso(value: datetime) -> str:
@@ -91,12 +93,14 @@ class SQLiteMemoryUnitOfWork:
     def __init__(self, repository: SQLiteMemoryRepository) -> None:
         self._repository = repository
         self._connection: sqlite3.Connection | None = None
+        self._admission_batch_times: dict[tuple[str, str], str] = {}
 
     async def __aenter__(self) -> SQLiteMemoryUnitOfWork:
         await self._repository._write_lock.acquire()
         try:
             self._connection = self._repository._connect()
             self._connection.execute("BEGIN IMMEDIATE")
+            self._admission_batch_times = {}
             return self
         except BaseException:
             self._repository._write_lock.release()
@@ -128,6 +132,11 @@ class SQLiteMemoryUnitOfWork:
     async def find_event_by_idempotency(
         self, scope: MemoryScope, idempotency_key: str
     ) -> MemoryEvent | None:
+        if self.connection.execute(
+            "SELECT 1 FROM admission_tombstones WHERE partition_key = ? AND idempotency_key = ?",
+            (scope.partition_key(), idempotency_key),
+        ).fetchone():
+            raise ValueError("event was forgotten and cannot be replayed")
         row = self.connection.execute(
             "SELECT * FROM events WHERE partition_key = ? AND idempotency_key = ?",
             (scope.partition_key(), idempotency_key),
@@ -268,6 +277,14 @@ class SQLiteMemoryUnitOfWork:
         )
 
     async def append_event(self, event: MemoryEvent) -> None:
+        deleted = self.connection.execute(
+            """SELECT 1 FROM admission_tombstones
+               WHERE event_id = ? OR (partition_key = ? AND idempotency_key = ?)
+               LIMIT 1""",
+            (event.id, event.scope.partition_key(), event.idempotency_key),
+        ).fetchone()
+        if deleted:
+            raise ValueError("event was forgotten and cannot be replayed")
         self.connection.execute(
             """
             INSERT INTO events (
@@ -295,6 +312,120 @@ class SQLiteMemoryUnitOfWork:
             ),
         )
 
+    async def lock_admission_scope(self, scope: MemoryScope) -> None:
+        # BEGIN IMMEDIATE already serializes publication and deletion across connections.
+        _ = self.connection
+
+    async def get_admission_record(
+        self, scope: MemoryScope, record_id: str
+    ) -> dict[str, Any] | None:
+        row = self.connection.execute(
+            "SELECT * FROM admission_records WHERE partition_key = ? AND record_id = ?",
+            (scope.partition_key(), record_id),
+        ).fetchone()
+        return self._repository._admission_from_row(row) if row else None
+
+    async def list_admission_records(
+        self, scope: MemoryScope, slot_key: str | None = None
+    ) -> tuple[dict[str, Any], ...]:
+        return self._repository._read_admission_records(
+            self.connection, scope, slot_key=slot_key, exact=True
+        )
+
+    async def save_admission_record(
+        self,
+        scope: MemoryScope,
+        record_id: str,
+        event_id: str,
+        slot_key: str,
+        payload: dict[str, Any],
+        expected_version: int,
+    ) -> int:
+        if type(expected_version) is not int or expected_version < 0:
+            raise ValueError("expected_version must be a non-negative integer")
+        if not record_id or not event_id or not slot_key or not isinstance(payload, dict):
+            raise ValueError("admission identity and dictionary payload are required")
+        if payload.get("deleted"):
+            raise ValueError("admission tombstones are reserved for deletion")
+        claim_id = payload.get("claim_id")
+        if claim_id is not None:
+            claim = self.connection.execute(
+                "SELECT 1 FROM claims WHERE id = ? AND partition_key = ? AND archived_at IS NULL",
+                (claim_id, scope.partition_key()),
+            ).fetchone()
+            if claim is None:
+                raise ValueError("published admission claim is missing or outside the scope")
+        event_ids = self._repository._admission_source_ids(payload) | {event_id}
+        for source_id in event_ids:
+            event = self.connection.execute(
+                "SELECT * FROM events WHERE id = ? AND archived_at IS NULL", (source_id,)
+            ).fetchone()
+            if event is None:
+                raise ValueError("admission source is missing or archived")
+            source_scope = self._repository._scope_from_row(event)
+            allowed = {source_scope}
+            for level in ScopeLevel:
+                try:
+                    allowed.add(source_scope.project(level))
+                except ValueError:
+                    continue
+            if scope not in allowed:
+                raise ValueError("admission source cannot publish into this scope")
+            if self.connection.execute(
+                "SELECT 1 FROM admission_tombstones WHERE event_id = ? LIMIT 1",
+                (source_id,),
+            ).fetchone():
+                raise ValueError("admission source was forgotten")
+        existing = self.connection.execute(
+            "SELECT * FROM admission_records WHERE record_id = ?", (record_id,)
+        ).fetchone()
+        if existing is not None:
+            if (
+                existing["partition_key"] != scope.partition_key()
+                or existing["event_id"] != event_id
+                or existing["slot_key"] != slot_key
+                or existing["version"] != expected_version
+                or json.loads(existing["payload_json"]).get("deleted")
+            ):
+                raise ValueError("admission update conflict or deleted record")
+        elif expected_version != 0:
+            raise ValueError("admission update conflict")
+        version = expected_version + 1
+        namespace = (scope.tenant_id, scope.namespace)
+        if namespace not in self._admission_batch_times:
+            self._admission_batch_times[namespace] = self._repository._admission_publication_time(
+                self.connection, scope
+            )
+        recorded_at = self._admission_batch_times[namespace]
+        if existing is not None and recorded_at < existing["recorded_at"]:
+            raise ValueError("admission publication time precedes an existing version")
+        payload_json = canonical_json(payload)
+        if existing is None:
+            self.connection.execute(
+                """INSERT INTO admission_records
+                   (record_id, partition_key, event_id, slot_key, scope_json,
+                    payload_json, version, recorded_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (record_id, scope.partition_key(), event_id, slot_key,
+                 canonical_json(asdict(scope)), payload_json, version, recorded_at),
+            )
+        else:
+            changed = self.connection.execute(
+                """UPDATE admission_records SET payload_json = ?, version = ?, recorded_at = ?
+                   WHERE record_id = ? AND partition_key = ? AND version = ?""",
+                (payload_json, version, recorded_at, record_id,
+                 scope.partition_key(), expected_version),
+            ).rowcount
+            if changed != 1:
+                raise ValueError("admission update conflict")
+        self.connection.execute(
+            """INSERT INTO admission_versions
+               (record_id, version, partition_key, payload_json, recorded_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (record_id, version, scope.partition_key(), payload_json, recorded_at),
+        )
+        return version
+
     async def find_current_claim(self, scope: MemoryScope, key: str) -> Claim | None:
         row = self.connection.execute(
             """
@@ -307,7 +438,9 @@ class SQLiteMemoryUnitOfWork:
         return self._repository._claim_from_row(row) if row else None
 
     async def claim_is_effective(self, claim: Claim, valid_at: datetime) -> bool:
-        claims = SQLiteClaimHistory(self._repository).read(self.connection, claim.scope, valid_at, utc_now())
+        claims = SQLiteClaimHistory(self._repository).read(
+            self.connection, claim.scope, valid_at, utc_now()
+        )
         return any(current.id == claim.id for current in claims)
 
     async def save_claim(self, claim: Claim) -> None:
@@ -321,7 +454,11 @@ class SQLiteMemoryUnitOfWork:
             """,
             (
                 ClaimStatus.SUPERSEDED,
-                _iso(current.valid_from) if current.valid_from > previous.valid_from else (_iso(previous.valid_to) if previous.valid_to else None),
+                (
+                    _iso(current.valid_from)
+                    if current.valid_from > previous.valid_from
+                    else (_iso(previous.valid_to) if previous.valid_to else None)
+                ),
                 current.id,
                 previous.id,
                 ClaimStatus.ACTIVE,
@@ -662,6 +799,41 @@ class SQLiteMemoryRepository:
                 CREATE INDEX IF NOT EXISTS claim_sources_event_idx
                 ON claim_sources(event_id);
 
+                CREATE TABLE IF NOT EXISTS admission_records (
+                    record_id TEXT PRIMARY KEY,
+                    partition_key TEXT NOT NULL,
+                    event_id TEXT NOT NULL,
+                    slot_key TEXT NOT NULL,
+                    scope_json TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    version INTEGER NOT NULL CHECK(version > 0),
+                    recorded_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS admission_records_scope_slot_idx
+                ON admission_records(partition_key, slot_key, record_id);
+                CREATE INDEX IF NOT EXISTS admission_records_event_idx
+                ON admission_records(event_id);
+                CREATE TABLE IF NOT EXISTS admission_versions (
+                    record_id TEXT NOT NULL
+                        REFERENCES admission_records(record_id) ON DELETE CASCADE,
+                    version INTEGER NOT NULL,
+                    partition_key TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    recorded_at TEXT NOT NULL,
+                    PRIMARY KEY(record_id, version)
+                );
+                CREATE TABLE IF NOT EXISTS admission_tombstones (
+                    partition_key TEXT NOT NULL,
+                    event_id TEXT NOT NULL,
+                    idempotency_key TEXT,
+                    PRIMARY KEY(partition_key, event_id)
+                );
+                CREATE INDEX IF NOT EXISTS admission_tombstones_event_idx
+                ON admission_tombstones(event_id);
+                CREATE INDEX IF NOT EXISTS admission_tombstones_idempotency_idx
+                ON admission_tombstones(partition_key, idempotency_key)
+                WHERE idempotency_key IS NOT NULL;
+
                 CREATE TABLE IF NOT EXISTS state_deltas (
                     id TEXT PRIMARY KEY,
                     partition_key TEXT NOT NULL,
@@ -946,6 +1118,219 @@ class SQLiteMemoryRepository:
     def unit_of_work(self) -> SQLiteMemoryUnitOfWork:
         return SQLiteMemoryUnitOfWork(self)
 
+    @staticmethod
+    def _admission_publication_time(
+        connection: sqlite3.Connection, scope: MemoryScope
+    ) -> str:
+        row = connection.execute(
+            """SELECT MAX(recorded_at) AS last FROM admission_records
+               WHERE json_extract(scope_json, '$.tenant_id') = ?
+                 AND json_extract(scope_json, '$.namespace') = ?""",
+            (scope.tenant_id, scope.namespace),
+        ).fetchone()
+        now = utc_now()
+        if row["last"] is not None:
+            now = max(now, datetime.fromisoformat(row["last"]) + timedelta(microseconds=1))
+        return _iso(now)
+
+    @staticmethod
+    def _admission_from_row(row: sqlite3.Row) -> dict[str, Any] | None:
+        payload = json.loads(row["payload_json"])
+        if payload.get("deleted"):
+            return None
+        return {
+            "id": row["record_id"],
+            "event_id": row["event_id"],
+            "slot_key": row["slot_key"],
+            "scope": json.loads(row["scope_json"]),
+            "payload": payload,
+            "version": row["version"],
+            "recorded_at": row["recorded_at"],
+        }
+
+    @staticmethod
+    def _admission_source_ids(payload: dict[str, Any]) -> set[str]:
+        sources: set[str] = set()
+
+        def visit(value: Any) -> None:
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    if key == "source_event_id" and isinstance(item, str):
+                        sources.add(item)
+                    elif key == "source_event_ids" and isinstance(item, (list, tuple)):
+                        sources.update(source for source in item if isinstance(source, str))
+                    elif isinstance(item, (dict, list, tuple)):
+                        visit(item)
+            elif isinstance(value, (list, tuple)):
+                for item in value:
+                    visit(item)
+
+        visit(payload)
+        return sources
+
+    @staticmethod
+    def _admission_scope_clause(scope: MemoryScope) -> tuple[str, tuple[Any, ...]]:
+        clauses = ["json_extract(scope_json, '$.tenant_id') = ?",
+                   "json_extract(scope_json, '$.namespace') = ?"]
+        params: list[Any] = [scope.tenant_id, scope.namespace]
+        for key in ("user_id", "agent_id", "workspace_id", "session_id"):
+            clauses.append(
+                f"(json_extract(scope_json, '$.{key}') IS NULL "
+                f"OR json_extract(scope_json, '$.{key}') = ?)"
+            )
+            params.append(getattr(scope, key))
+        return " AND ".join(clauses), tuple(params)
+
+    def _read_admission_records(
+        self,
+        connection: sqlite3.Connection,
+        scope: MemoryScope,
+        *,
+        slot_key: str | None = None,
+        exact: bool = False,
+    ) -> tuple[dict[str, Any], ...]:
+        if exact:
+            where, params = "partition_key = ?", (scope.partition_key(),)
+        else:
+            where, params = self._admission_scope_clause(scope)
+        if slot_key is not None:
+            where += " AND slot_key = ?"
+            params = (*params, slot_key)
+        rows = connection.execute(
+            f"SELECT * FROM admission_records WHERE {where} "
+            "AND COALESCE(json_extract(payload_json, '$.deleted'), 0) = 0 "
+            "ORDER BY record_id LIMIT 1025",
+            params,
+        ).fetchall()
+        if len(rows) > 1024:
+            raise ValueError("admission record limit exceeded; narrow the requested slot")
+        return tuple(self._admission_from_row(row) for row in rows)
+
+    async def admission_records(
+        self, scope: MemoryScope, *, slot_key: str | None = None
+    ) -> tuple[dict[str, Any], ...]:
+        def read():
+            with self._connection() as connection:
+                return self._read_admission_records(connection, scope, slot_key=slot_key)
+        return await asyncio.to_thread(read)
+
+    async def admission_snapshot(self, scope: MemoryScope) -> tuple[dict[str, Any], ...]:
+        """Read visible records and their versions from one database snapshot."""
+        def read():
+            with self._connection() as connection:
+                connection.execute("BEGIN")
+                records = self._read_admission_records(connection, scope)
+                if not records:
+                    return ()
+                ids = tuple(record["id"] for record in records)
+                placeholders = ",".join("?" for _ in ids)
+                versions = connection.execute(
+                    "SELECT record_id, version, payload_json, recorded_at FROM admission_versions "
+                    f"WHERE record_id IN ({placeholders}) ORDER BY record_id, version", ids,
+                ).fetchall()
+                by_id: dict[str, list[dict[str, Any]]] = {identity: [] for identity in ids}
+                for version in versions:
+                    by_id[version["record_id"]].append({
+                        "version": version["version"],
+                        "payload": json.loads(version["payload_json"]),
+                        "recorded_at": version["recorded_at"],
+                    })
+                return tuple({**record, "versions": by_id[record["id"]]} for record in records)
+        return await asyncio.to_thread(read)
+
+    async def admission_record(
+        self, scope: MemoryScope, record_id: str
+    ) -> dict[str, Any] | None:
+        def read():
+            where, params = self._admission_scope_clause(scope)
+            with self._connection() as connection:
+                row = connection.execute(
+                    f"SELECT * FROM admission_records WHERE {where} AND record_id = ?",
+                    (*params, record_id),
+                ).fetchone()
+                return self._admission_from_row(row) if row else None
+        return await asyncio.to_thread(read)
+
+    async def admission_record_versions(
+        self, scope: MemoryScope, record_id: str
+    ) -> tuple[dict[str, Any], ...]:
+        def read():
+            where, params = self._admission_scope_clause(scope)
+            with self._connection() as connection:
+                connection.execute("BEGIN")
+                row = connection.execute(
+                    f"SELECT * FROM admission_records WHERE {where} AND record_id = ?",
+                    (*params, record_id),
+                ).fetchone()
+                if row is None or self._admission_from_row(row) is None:
+                    return ()
+                rows = connection.execute(
+                    "SELECT * FROM admission_versions WHERE record_id = ? ORDER BY version",
+                    (record_id,),
+                ).fetchall()
+                return tuple({
+                    "id": item["record_id"],
+                    "version": item["version"],
+                    "payload": json.loads(item["payload_json"]),
+                    "recorded_at": item["recorded_at"],
+                } for item in rows)
+        return await asyncio.to_thread(read)
+
+    async def admission_protected_sources(self, scope: MemoryScope) -> tuple[str, ...]:
+        """Return all governed source IDs, including terminal records and erased events.
+
+        No content leaves this boundary, and no limit may silently omit IDs from
+        the final retrieval guard. Ancestor partitions follow ordinary visibility.
+        """
+        choices = [(None,) if value is None else (None, value) for value in (
+            scope.user_id, scope.agent_id, scope.workspace_id, scope.session_id
+        )]
+        partitions = tuple(sorted({
+            MemoryScope(scope.tenant_id, scope.namespace, *values).partition_key()
+            for values in product(*choices)
+        }))
+
+        def read():
+            placeholders = ",".join("?" for _ in partitions)
+            with self._connection() as connection:
+                connection.execute("BEGIN")
+                rows = connection.execute(
+                    "SELECT id FROM events "
+                    f"WHERE partition_key IN ({placeholders}) "
+                    "AND event_type IN ('memory.atom', 'memory.atom.verification') "
+                    "UNION SELECT event_id AS id FROM admission_tombstones "
+                    f"WHERE partition_key IN ({placeholders}) "
+                    "UNION SELECT event_id AS id FROM admission_records "
+                    f"WHERE partition_key IN ({placeholders})",
+                    (*partitions, *partitions, *partitions),
+                ).fetchall()
+                protected = {row["id"] for row in rows}
+                records = connection.execute(
+                    "SELECT payload_json FROM admission_records "
+                    f"WHERE partition_key IN ({placeholders})", partitions,
+                ).fetchall()
+                for record in records:
+                    protected.update(self._admission_source_ids(json.loads(record["payload_json"])))
+                references = connection.execute(
+                    "SELECT id, metadata_json FROM events "
+                    f"WHERE partition_key IN ({placeholders}) "
+                    "AND json_type(metadata_json, '$.source_event_ids') = 'array'",
+                    partitions,
+                ).fetchall()
+                dependents: dict[str, set[str]] = {}
+                for reference in references:
+                    for source_id in json.loads(reference["metadata_json"])["source_event_ids"]:
+                        if isinstance(source_id, str):
+                            dependents.setdefault(source_id, set()).add(reference["id"])
+                pending = deque(protected)
+                while pending:
+                    for dependent in dependents.get(pending.popleft(), ()):
+                        if dependent not in protected:
+                            protected.add(dependent)
+                            pending.append(dependent)
+                return tuple(sorted(protected))
+        return await asyncio.to_thread(read)
+
     def load_recent_event_evidence(self, scope: MemoryScope, *, limit: int):
         """Read a bounded, exact-scope window of source events for lexical ranking.
 
@@ -1085,7 +1470,9 @@ class SQLiteMemoryRepository:
         candidates: list[MemoryItem] = []
         if MemoryChannel.SEMANTIC in query.channels:
             now = utc_now()
-            candidates.extend(temporal_candidates(self._claims_at_sync(query.scope, now, now), query.text, limit))
+            candidates.extend(temporal_candidates(
+                self._claims_at_sync(query.scope, now, now), query.text, limit
+            ))
             for row in event_rows:
                 overlap = self._overlap(query_tokens, row["content"])
                 if query_tokens and overlap == 0:
@@ -1202,8 +1589,97 @@ class SQLiteMemoryRepository:
         async with self._write_lock:
             return await asyncio.to_thread(self._forget_sync, request)
 
+    def _forget_admission_records(
+        self, connection: sqlite3.Connection, request: ForgetRequest
+    ) -> set[str]:
+        where = "partition_key = ?"
+        params: tuple[Any, ...] = (request.scope.partition_key(),)
+        if not request.all_in_scope:
+            placeholders = ",".join("?" for _ in request.memory_ids)
+            where += f" AND id IN ({placeholders})"
+            params = (*params, *request.memory_ids)
+        events = connection.execute(
+            f"SELECT id, partition_key, idempotency_key FROM events WHERE {where}", params
+        ).fetchall()
+        event_ids = {row["id"] for row in events}
+        connection.executemany(
+            """INSERT OR IGNORE INTO admission_tombstones
+               (partition_key, event_id, idempotency_key) VALUES (?, ?, ?)""",
+            ((row["partition_key"], row["id"], row["idempotency_key"]) for row in events),
+        )
+        claim_ids = {row["id"] for row in connection.execute(
+            f"SELECT id FROM claims WHERE {where}", params
+        ).fetchall()}
+        rows = connection.execute(
+            """SELECT * FROM admission_records
+               WHERE json_extract(scope_json, '$.tenant_id') = ?
+                 AND json_extract(scope_json, '$.namespace') = ?
+                 AND COALESCE(json_extract(payload_json, '$.deleted'), 0) = 0""",
+            (request.scope.tenant_id, request.scope.namespace),
+        ).fetchall()
+        dependencies = {}
+        for row in rows:
+            snapshots = [json.loads(row["payload_json"])]
+            snapshots.extend(json.loads(version["payload_json"]) for version in connection.execute(
+                "SELECT payload_json FROM admission_versions WHERE record_id = ?",
+                (row["record_id"],),
+            ).fetchall())
+            sources = {row["event_id"]}
+            published = set()
+            for snapshot in snapshots:
+                sources.update(self._admission_source_ids(snapshot))
+                if isinstance(snapshot.get("claim_id"), str):
+                    published.add(snapshot["claim_id"])
+            dependencies[row["record_id"]] = (sources, published)
+        invalidated: set[str] = set()
+        invalidated_slots: set[tuple[str, str]] = set()
+        changed = True
+        while changed:
+            changed = False
+            for row in rows:
+                if row["record_id"] in invalidated:
+                    continue
+                sources, published = dependencies[row["record_id"]]
+                targeted = row["partition_key"] == request.scope.partition_key() and (
+                    request.all_in_scope or row["record_id"] in request.memory_ids
+                )
+                slot = (row["partition_key"], row["slot_key"])
+                if (
+                    targeted or sources & event_ids or published & claim_ids
+                    or slot in invalidated_slots
+                ):
+                    invalidated.add(row["record_id"])
+                    # Without rebuilding from independent evidence, removing a later
+                    # update must not silently resurrect an older value in this slot.
+                    invalidated_slots.add(slot)
+                    claim_ids.update(published)
+                    changed = True
+        deleted_at = (
+            self._admission_publication_time(connection, request.scope) if invalidated else None
+        )
+        for record_id in invalidated:
+            # Keep only terminal identity metadata so a stale worker cannot recreate this ID.
+            connection.execute(
+                "DELETE FROM admission_versions WHERE record_id = ?", (record_id,)
+            )
+            connection.execute(
+                """UPDATE admission_records
+                   SET payload_json = '{"deleted":true}', version = version + 1, recorded_at = ?
+                   WHERE record_id = ?""",
+                (deleted_at, record_id),
+            )
+        return claim_ids
+
     def _forget_sync(self, request: ForgetRequest) -> ForgetResult:
         with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            dependent_claim_ids = self._forget_admission_records(connection, request)
+
+            def finish(result: ForgetResult) -> ForgetResult:
+                return self._finish_admission_forget(
+                    connection, request, dependent_claim_ids, result
+                )
+
             if request.all_in_scope:
                 where = "partition_key = ?"
                 params: tuple[Any, ...] = (request.scope.partition_key(),)
@@ -1245,15 +1721,15 @@ class SQLiteMemoryRepository:
                     connection.execute(f"DELETE FROM artifacts WHERE {where}", params)
                     connection.execute(f"DELETE FROM claims WHERE {where}", params)
                     connection.execute(f"DELETE FROM events WHERE {where}", params)
-                return ForgetResult(
+                return finish(ForgetResult(
                     affected_events=counts["events"],
                     affected_claims=counts["claims"],
                     affected_artifacts=counts["artifacts"],
                     mode=request.mode,
-                )
+                ))
 
             if not request.memory_ids:
-                return ForgetResult(0, 0, 0, request.mode)
+                return finish(ForgetResult(0, 0, 0, request.mode))
 
             placeholders = ",".join("?" for _ in request.memory_ids)
             where = f"partition_key = ? AND id IN ({placeholders})"
@@ -1289,7 +1765,7 @@ class SQLiteMemoryRepository:
                     set(request.memory_ids),
                     erase=request.mode == ForgetMode.ERASE,
                 )
-                return ForgetResult(0, counts["claims"], counts["artifacts"], request.mode)
+                return finish(ForgetResult(0, counts["claims"], counts["artifacts"], request.mode))
 
             target_event_set = set(target_event_ids)
             event_placeholders = ",".join("?" for _ in target_event_ids)
@@ -1529,7 +2005,7 @@ class SQLiteMemoryRepository:
                         # already counted by claims WHERE ... in counts["claims"]
                         continue
                     affected_claims += 1
-            return ForgetResult(
+            return finish(ForgetResult(
                 affected_events=counts["events"],
                 affected_claims=affected_claims,
                 affected_artifacts=(
@@ -1537,7 +2013,38 @@ class SQLiteMemoryRepository:
                     + len(changed_block_ids - partition_artifact_ids)
                 ),
                 mode=request.mode,
+            ))
+
+
+    def _finish_admission_forget(
+        self,
+        connection: sqlite3.Connection,
+        request: ForgetRequest,
+        dependent_claim_ids: set[str],
+        result: ForgetResult,
+    ) -> ForgetResult:
+        extra_claims = 0
+        for claim_id in dependent_claim_ids:
+            row = connection.execute(
+                "SELECT partition_key, archived_at FROM claims WHERE id = ?", (claim_id,)
+            ).fetchone()
+            if row is None:
+                continue
+            if request.mode == ForgetMode.ARCHIVE:
+                if row["archived_at"] is None:
+                    extra_claims += 1
+                connection.execute(
+                    "UPDATE claims SET archived_at = ?, status = ? WHERE id = ?",
+                    (_iso(utc_now()), ClaimStatus.ARCHIVED, claim_id),
+                )
+            else:
+                extra_claims += 1
+                self._delete_claim_rows(connection, {claim_id})
+            self._invalidate_feedback(
+                connection, row["partition_key"], {claim_id},
+                erase=request.mode == ForgetMode.ERASE,
             )
+        return replace(result, affected_claims=result.affected_claims + extra_claims)
 
     @staticmethod
     def _invalidate_feedback(
