@@ -9,7 +9,7 @@ from typing import Mapping
 from .worker_tasks import (
     WorkerLease,
     WorkerLimits,
-    WorkerQueue,
+    WorkerExecutionQueue,
     WorkerQueueError,
     WorkerTaskHandler,
     validate_handlers,
@@ -30,7 +30,7 @@ class BoundedWorker:
 
     def __init__(
         self,
-        queue: WorkerQueue,
+        queue: WorkerExecutionQueue,
         handlers: Mapping[str, WorkerTaskHandler],
         *,
         worker_id: str,

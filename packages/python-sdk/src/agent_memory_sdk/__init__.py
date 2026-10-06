@@ -1,3 +1,4 @@
+from .durable import DurableOutbox
 from .client import (
     CaptureClient,
     EmbeddedMemoryClient,
@@ -14,4 +15,4 @@ from agent_memory.capture.sink import (
     QueuedCaptureSink,
 )
 
-__all__ = ["CaptureClient", "CaptureError", "CaptureSink", "CaptureSubmission", "DirectCaptureSink", "EmbeddedMemoryClient", "LangGraphCaptureAdapter", "MCPMemoryClient", "MemoryClient", "MemoryClientError", "QueuedCaptureSink"]
+__all__ = ["DurableOutbox", "CaptureClient", "CaptureError", "CaptureSink", "CaptureSubmission", "DirectCaptureSink", "EmbeddedMemoryClient", "LangGraphCaptureAdapter", "MCPMemoryClient", "MemoryClient", "MemoryClientError", "QueuedCaptureSink"]

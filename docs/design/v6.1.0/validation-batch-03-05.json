@@ -1,0 +1,138 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "date": "2026-10-06",
+  "ledger_revision": 4,
+  "design": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "base_commit": "7a382d92920032433df32194573ccd3d5802c460",
+  "mode": "local-single-source-exact-scope; opt-in; partial B03/B04/B05",
+  "test_command": "AGENT_MEMORY_TEST_POSTGRES_DSN=<isolated-test-dsn> AGENT_MEMORY_ONTOLOGY_TEST_DSN=<isolated-test-dsn> python -m pytest tests packages",
+  "tests": {
+    "passed": 973,
+    "failed": 0,
+    "skipped": 5,
+    "skip_reasons": {
+      "could not import 'tiktoken': No module named 'tiktoken'": 5
+    }
+  },
+  "runtime": {
+    "python": "3.13.5",
+    "sqlite": "3.45.3",
+    "postgres": "postgres (PostgreSQL) 17.11 (Homebrew)"
+  },
+  "fault_injection": "controlled exceptions, lease clock advancement, reopen persistent outbox; no SIGKILL or power-loss test",
+  "external_model_calls": false,
+  "hindsight_executed": false,
+  "example": "python examples/durable_memory.py: completed/source_persisted/l1_decided and one claim",
+  "ruff": {
+    "status": "passed",
+    "files": [
+      "examples/durable_memory.py",
+      "packages/postgres/src/agent_memory_postgres/retention.py",
+      "packages/python-sdk/src/agent_memory_sdk/durable.py",
+      "src/agent_memory/capture/durable_api.py",
+      "src/agent_memory/capture/producer.py",
+      "src/agent_memory/capture/profile.py",
+      "src/agent_memory/consolidation/retraction.py",
+      "src/agent_memory/evaluation/acceptance.py",
+      "src/agent_memory/evaluation/evidence.py",
+      "src/agent_memory/fact_qualification.py",
+      "src/agent_memory/operations/extraction_worker.py",
+      "src/agent_memory/operations/retention.py",
+      "src/agent_memory/operations/sqlite_retention.py",
+      "tests/test_capture_profile.py",
+      "tests/test_durable_execution.py",
+      "tests/test_durable_producer.py",
+      "tests/test_durable_retention.py",
+      "tests/test_durable_transport.py",
+      "tests/test_evidence_evaluation.py",
+      "tests/test_fact_qualification.py",
+      "tests/test_memory_v61_fixtures.py",
+      "tools/evaluate_memory_evidence.py",
+      "src/agent_memory/consolidation/atom_extraction.py",
+      "src/agent_memory/consolidation/admission.py"
+    ]
+  },
+  "wheels": [
+    {
+      "file": "agent_memory-0.1.0-py3-none-any.whl",
+      "sha256": "e04cecd8c311cdd56d2e961eefdd27a92486d4dd2e3aca2fbad5435d3914edc6"
+    },
+    {
+      "file": "agent_memory_mcp-0.1.0-py3-none-any.whl",
+      "sha256": "84301964d16e72d85f24c6aaf2fa20a88122e2f698d0abc1d904452838b9a204"
+    },
+    {
+      "file": "agent_memory_postgres-0.1.0-py3-none-any.whl",
+      "sha256": "60e11444377d4d8aba1d7bd214bff2419cd4b4786d7c963a4ac6374128674264"
+    },
+    {
+      "file": "agent_memory_sdk-0.1.0-py3-none-any.whl",
+      "sha256": "292f8b7d6c235cec9301389c50fd79caf5835cd04cf03a49c601f64d68911823"
+    }
+  ],
+  "doc_validation": {
+    "frozen_design_hashes": "passed",
+    "local_design_links": "passed",
+    "task_count": 44,
+    "acceptance_rows": 66,
+    "statuses": {
+      "DONE": 1,
+      "IN_PROGRESS": 22,
+      "TODO": 21
+    }
+  },
+  "source_files_sha256": {
+    "examples/durable_memory.py": "fa25a152bd8f5665205b77a4e060136bf15c3db60396c6af246e24798a5418c2",
+    "packages/mcp-server/src/agent_memory_mcp/server.py": "781cafa69a71c91902d23893418abce94f7cc96728a797a3dba7a4468c96b1fe",
+    "packages/postgres/migrations/006_retention.sql": "cf8395443b7c221bca02b62f6420826e9e68d81a6d678fbcfc0c96797c64f152",
+    "packages/postgres/migrations/007_producers.sql": "900891ab170788723ea4033f5b6f1771e359d2cd0c39e03e223e082f7a2eea5d",
+    "packages/postgres/src/agent_memory_postgres/repository.py": "021faabcf064f12df22b8ac4055805ac19a9a5405c27a2260e4b0207c9145ca1",
+    "packages/postgres/src/agent_memory_postgres/retention.py": "24f12d9e00cb146212754ce6fa610ea1f1c82bb823dd98bd2e15d829811d4bac",
+    "packages/python-sdk/src/agent_memory_sdk/__init__.py": "8aa47d6874713894094d07dfe10a208a82f42fb836ffb44cb48033110f8f0979",
+    "packages/python-sdk/src/agent_memory_sdk/client.py": "f65f883ec665b4b4eebf74d2b51bf9a3b18d38e6396315feadfa581426e13f84",
+    "packages/python-sdk/src/agent_memory_sdk/durable.py": "e1fabaaa18afc34e681cf7234a1ec5f008dea00b0a9500d2abbf64fbd786257f",
+    "src/agent_memory/capture/api.py": "b6c5b4d21632aa690ea25d2bb8fc6666950db603a1bcba94ddd5ae63ceb0f4d0",
+    "src/agent_memory/capture/durable_api.py": "dfc7b2f2f01a92b321f434fdd47067f3da6cffbb32a51cb17d291df7a831d3ad",
+    "src/agent_memory/capture/producer.py": "e712038649c82667a3fc67ffeb66dd4e28b535f460310363c9c6acd823772295",
+    "src/agent_memory/capture/profile.py": "8b96d1a4e8dbe21625a1757bae73182db8f1786033c778f5ce03590c8032a37a",
+    "src/agent_memory/consolidation/admission.py": "e01b561ba24f121a7fd4cd2b42e0622ea829a078130d9dcc3fd48be07497b31c",
+    "src/agent_memory/consolidation/admission_runtime.py": "7d91b1f48726185e3cb62fbeafdec8250a673e21b3517a85962ef9298346c386",
+    "src/agent_memory/consolidation/atom_extraction.py": "96d616ca82fdeacee1b87f782f7b58199ee85581969a88fec857bad4662e403b",
+    "src/agent_memory/consolidation/retraction.py": "ed2d34a3c031becf8b530bd225a90c0d797e1f44aa64aa49bdde2cb529e9dfa1",
+    "src/agent_memory/domain.py": "018ec78d00394634f6d39af3acbfd2cbdb63eafb31301d87243d178f7a5124f6",
+    "src/agent_memory/evaluation/acceptance.py": "fb9f75bfff1f830dc27adbae582984a6505976b1a37d8093b863f683505a796b",
+    "src/agent_memory/evaluation/evidence.py": "146e09284ee8d5e665e1b5f8798ad33b45ab7e098f3b5ac1894bd9dddbdcab6b",
+    "src/agent_memory/fact_qualification.py": "6f662dc4a8a68f1d5bf0166491f9845924900b109f243921c6c50b669dc2b2e6",
+    "src/agent_memory/kernel.py": "f4aed05c1e83637f9da0d43f38718072031f8c2e9148767e8229d693b19f618c",
+    "src/agent_memory/lifecycle.py": "ce04601667245ed6e18152258da29c0545d4113461f9a2f85a031c054758a5be",
+    "src/agent_memory/operations/extraction_worker.py": "607a155aa574ed868eed1e9cc00a86a4d629c2c0c175e6d2f0c59536622c404a",
+    "src/agent_memory/operations/retention.py": "c86e319a45c4c688007d27af5aae83f12e2a34d69ab144b3b186d3d5f98b6c1f",
+    "src/agent_memory/operations/sqlite_retention.py": "9836d3d3b8d3ab2d54173e720aae26a2f1bffcfe2a7e8526444877540500da44",
+    "src/agent_memory/operations/worker_runtime.py": "97970f6f149fa49b81e120f59c94839ccbc1aa419bdbcac8b8071e7efa0512be",
+    "src/agent_memory/operations/worker_tasks.py": "aef707196e41aed947623e6126daa6e85f63218875692b7a75f4d253f33bccb1",
+    "src/agent_memory/ports.py": "09818cc33ae834e745310d549d320ddb7a8768837b5fe8b472fab5a635e3c94a",
+    "src/agent_memory/retrieval/atom_state.py": "9aba240587f587c712461512aba2a52c764616f35e0d04f5f885a31003a9dd44",
+    "src/agent_memory/runtime.py": "0ba27c27ff1babae0c111b49262aa26a596fea9338ba6b059ea58baf102159bb",
+    "src/agent_memory/sqlite.py": "6437a79dd3acfbdaf33c215bdab923677f3b185492c2b55273594523e71ff8c8",
+    "tests/test_architecture.py": "bfdd6acc5ef15cf099558fdea7bd32dc029c8abe97328acebb04f62020fb73d5",
+    "tests/test_capture_profile.py": "0c3e7adda8dda62173b73062fbc65508073f8bc1f37431c613e079b6aa07ec98",
+    "tests/test_durable_execution.py": "27e3651f305d2e25dc368caa0ac03124a855ce399c3f3280452453fb8d6d459a",
+    "tests/test_durable_producer.py": "372b78b33ca97e13baf4b78ab666497d2a38c1fd43287d5529faea982514347c",
+    "tests/test_durable_retention.py": "165b9fdaa0226ffdd1bddf135799b37da86745882391b802f1e70b525cdc451e",
+    "tests/test_durable_transport.py": "7a255fdd2892876c3edb45090a5339888a4a8dc22039b5760326aad6d6406dd9",
+    "tests/test_evidence_evaluation.py": "6c09e579154c2c14811d4f30f333b9827aa58a8034de6db592538b3e73bd5494",
+    "tests/test_fact_qualification.py": "08869e245f527cf08ef4a2f956b01ca9b496cbcbfce2e2b2a9bb1fc9512b1e89",
+    "tests/test_memory_v61_fixtures.py": "8d6e768957f63847a49c669dce89cee855ff2ec4eb2ccf7d035c430ed6a599d0",
+    "tools/evaluate_memory_evidence.py": "0541009f669c09080d5ea1b31776f911298beeb8646e15841b2724eb7e3e6048"
+  },
+  "remaining": [
+    "source revise and explicit reprocessing/contribution reconciliation",
+    "conditional state projection",
+    "cross-source temporal AND/OR and independent contribution withdrawal",
+    "multi-device purge coordination",
+    "index/view readiness",
+    "external dispatch/budget governance",
+    "real-domain extraction calibration"
+  ]
+}

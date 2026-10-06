@@ -285,6 +285,21 @@ class AgentMemory:
         )
         return await admit(event, atoms, authority=authority, policy=policy)
 
+    async def retract_atom(self, candidate_id: str, content: str, *, authority: SourceAuthority,
+                           policy: AdmissionPolicy, expected_version: int, valid_to: datetime,
+                           source_quote: str, occurred_at: datetime, idempotency_key: str):
+        self._require_initialized()
+        if len(content) > self.limits.max_event_characters:
+            raise ValueError("event exceeds max_event_characters")
+        operation = getattr(self._provider, "retract_atom", None)
+        if not callable(operation):
+            raise NotImplementedError("provider does not support atom retraction")
+        event = MemoryEvent(self.scope, "memory.atom.verification", content,
+                            occurred_at=occurred_at, idempotency_key=idempotency_key)
+        return await operation(self.scope, candidate_id, event=event, authority=authority,
+                               policy=policy, expected_version=expected_version,
+                               valid_to=valid_to, source_quote=source_quote)
+
     async def resolve_atom(
         self, candidate_id: str, content: str, *, authority: SourceAuthority,
         policy: AdmissionPolicy, expected_version: int, accept: bool, source_quote: str,

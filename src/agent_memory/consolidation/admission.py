@@ -15,6 +15,7 @@ from json import dumps
 from typing import Any
 
 from ..domain import AtomDraft, MemoryEvent, MemoryScope, PredicateSpec, SourceAuthority
+from ..fact_qualification import qualification_reasons
 
 
 def _canonical(payload: Any) -> str:
@@ -23,6 +24,10 @@ def _canonical(payload: Any) -> str:
 
 def draft_to_payload(draft: AtomDraft) -> dict[str, Any]:
     payload = asdict(draft)
+    # Preserve legacy candidate identity when the new qualification is absent.
+    for name in ("conditions", "exceptions", "negated", "field_evidence"):
+        if not payload[name]:
+            payload.pop(name)
     payload["scope_level"] = draft.scope_level.value
     for name in ("valid_from", "valid_to"):
         value = getattr(draft, name)
@@ -80,9 +85,13 @@ class AdmissionPolicy:
             self._predicates[spec.predicate] = spec
 
     def config_payload(self) -> dict[str, Any]:
+        specs = [asdict(self._predicates[key]) for key in sorted(self._predicates)]
+        for spec in specs:
+            if not spec["required_evidence_fields"]:
+                spec.pop("required_evidence_fields")
         return {
             "version": self.version,
-            "predicates": [asdict(self._predicates[key]) for key in sorted(self._predicates)],
+            "predicates": specs,
         }
 
     def evaluate(
@@ -128,6 +137,9 @@ class AdmissionPolicy:
             reasons.append("invalid_observation_time")
         elif draft.valid_to is not None and draft.valid_to <= effective_from:
             reasons.append("invalid_effective_interval")
+        reasons.extend(
+            qualification_reasons(event, draft, spec.required_evidence_fields if spec else ())
+        )
         if reasons:
             return "PENDING_VERIFICATION", tuple(reasons)
         if draft.modality != "asserted":

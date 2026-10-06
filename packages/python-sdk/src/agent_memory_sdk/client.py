@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
 import math
+from collections.abc import Mapping
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Protocol, Self
 
 from agent_memory.capture.api import submit_capture
 from agent_memory.capture.sink import CaptureError, CaptureSink
-from agent_memory.operations.deletion_audit import DeletionAuditService
 from agent_memory.lifecycle import LifecycleEventError
 from agent_memory.mcp import MCPMemoryTools, MCPRequestContext, MCPToolError, decode_mcp_error
+from agent_memory.operations.deletion_audit import DeletionAuditService
+from agent_memory.operations.retention import RetentionError
 from agent_memory.ports import MemoryProvider
 from agent_memory.serialization import to_jsonable
+
 from .recovery import RecoveryClientOperations
 
 if TYPE_CHECKING:
@@ -88,6 +90,18 @@ class CaptureClient(Protocol):
 
 
 class _Operations(RecoveryClientOperations):
+    async def durable_append(self, event, session, sequence):
+        return await self._call("memory_durable", {"operation": "append", "payload": {
+            "event": to_jsonable(event), "session": to_jsonable(session), "sequence": sequence}})
+
+    async def durable_status(self, session, sequence):
+        return await self._call("memory_durable", {"operation": "status", "payload": {
+            "session": to_jsonable(session), "sequence": sequence}})
+
+    async def durable_cursor(self, session):
+        return await self._call("memory_durable", {"operation": "cursor", "payload": {
+            "session": to_jsonable(session)}})
+
     async def ontology_status(self):
         return await self._call("memory_ontology_status", {})
 
@@ -310,9 +324,15 @@ class EmbeddedMemoryClient(_Operations):
         deletion_auditor: DeletionAuditService | None = None,
         ontology=None,
         recovery_tools=None,
+        durable_capture=None,
     ) -> None:
-        if recovery_tools is not None and (capture_sink is not None or recovery_tools.memory.provider is not provider):
+        if recovery_tools is not None and (
+            capture_sink is not None
+            or durable_capture is not None
+            or recovery_tools.memory.provider is not provider
+        ):
             raise ValueError("recovery requires its own provider and capture gate")
+        self._durable_capture = durable_capture
         self._recovery_tools = recovery_tools
         self._provider = provider
         self._tools = MCPMemoryTools(provider, deletion_auditor=deletion_auditor, ontology=ontology)
@@ -328,6 +348,14 @@ class EmbeddedMemoryClient(_Operations):
 
     async def _call(self, name: str, arguments: Mapping[str, Any]) -> dict[str, Any]:
         try:
+            if name == "memory_durable":
+                if self._durable_capture is None:
+                    raise MCPToolError("durable capture is not enabled", code="durable_disabled")
+                try:
+                    return await self._durable_capture.call(arguments["operation"],
+                        arguments["payload"], self._context)
+                except RetentionError as error:
+                    raise MCPToolError(error.code, code=error.code) from None
             if name == "memory_recovery":
                 if self._recovery_tools is None:
                     raise MCPToolError("recovery is not enabled", code="recovery_disabled")

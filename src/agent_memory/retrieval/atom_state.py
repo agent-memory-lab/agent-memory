@@ -149,5 +149,6 @@ def project_records(
             "candidate_id": chosen["id"],
             "evidence": applicable,
             "basis": "source_assertion" if applicable else "assumed_continuity",
+            **({"termination": payload["termination"]} if payload.get("termination") else {}),
         }
     return tuple(claims), {"conflicts": conflicts, "atom_support": support}

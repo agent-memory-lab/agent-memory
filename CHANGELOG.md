@@ -7,6 +7,14 @@ the first stable release.
 
 ### Added
 
+- Opt-in durable local extraction with immutable sources, resumable stages, fenced leases,
+  and transactional publication on SQLite and PostgreSQL.
+- Shared Embedded/MCP producer sessions, contiguous acknowledgments, status queries,
+  and a persistent SDK outbox for lost-confirmation recovery.
+- Preserved fact conditions/exceptions/negation, required field evidence with bounded
+  AND/OR source spans, and host-authorized bitemporal state termination.
+- Versioned v6.1 design, execution ledger, evidence evaluation and explicit remaining scope.
+
 - Opt-in automatic Atom extraction with separate source-faithfulness and retention reviews,
   host-controlled admission, persisted diagnostics and first-result idempotent replay.
 - Bounded Chinese/English reference rules, injectable generation/review protocols,

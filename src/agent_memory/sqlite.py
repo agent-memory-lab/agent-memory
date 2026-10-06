@@ -47,6 +47,7 @@ from .domain import (
     canonical_json,
     utc_now,
 )
+from .operations import sqlite_retention
 from .retrieval.temporal_history import SQLiteClaimHistory, temporal_candidates
 
 
@@ -311,6 +312,33 @@ class SQLiteMemoryUnitOfWork:
                 event.content_hash,
             ),
         )
+
+    async def retention_update(self, scope, request_id, payload):
+        return sqlite_retention.update(self.connection, scope, request_id, payload)
+
+    async def retention_active(self, scope):
+        return sqlite_retention.active(self.connection, scope)
+
+    async def producer_get(self, scope, producer_id):
+        return sqlite_retention.producer_get(self.connection, scope, producer_id)
+
+    async def producer_put(self, scope, producer_id, payload):
+        return sqlite_retention.producer_put(self.connection, scope, producer_id, payload)
+
+    async def retention_epoch(self, scope):
+        return sqlite_retention.epoch(self.connection, scope)
+
+    async def retention_get(self, scope, kind, request_id):
+        return sqlite_retention.get(self.connection, scope, kind, request_id)
+
+    async def retention_insert(self, scope, kind, request_id, payload):
+        sqlite_retention.insert(self.connection, scope, kind, request_id, payload)
+
+    async def retention_count(self, scope, kind):
+        return sqlite_retention.count(self.connection, scope, kind)
+
+    async def retention_identity_owner(self, scope, event_id, idempotency_key):
+        return sqlite_retention.identity_owner(self.connection, scope, event_id, idempotency_key)
 
     async def lock_admission_scope(self, scope: MemoryScope) -> None:
         # BEGIN IMMEDIATE already serializes publication and deletion across connections.
@@ -723,6 +751,7 @@ class SQLiteMemoryRepository:
     def _initialize_sync(self) -> None:
         self._enable_wal()
         with self._connection() as connection:
+            connection.executescript(sqlite_retention.SCHEMA)
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS memory_schema (
@@ -1673,6 +1702,7 @@ class SQLiteMemoryRepository:
     def _forget_sync(self, request: ForgetRequest) -> ForgetResult:
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            sqlite_retention.forget(connection, request)
             dependent_claim_ids = self._forget_admission_records(connection, request)
 
             def finish(result: ForgetResult) -> ForgetResult:

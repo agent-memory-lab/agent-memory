@@ -1,0 +1,108 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "batch": "AM61-B01",
+  "date": "2026-10-06",
+  "ledger_revision": 2,
+  "design_version": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "base_commit": "7a382d92920032433df32194573ccd3d5802c460",
+  "implementation_state": "uncommitted working tree; exact implementation and fixture hashes below",
+  "environment": {
+    "python": "3.13.5",
+    "platform": "Darwin",
+    "sqlite": "standard-library SQLite",
+    "postgres": "pg_ctl (PostgreSQL) 17.11 (Homebrew)",
+    "database": "isolated temporary Unix socket cluster; both PostgreSQL test DSN variables configured; no production DB"
+  },
+  "pytest": {
+    "command": ".venv/bin/python -m pytest -o \"addopts=-W error::pytest.PytestUnraisableExceptionWarning -W error::ResourceWarning\" -q -rs --junitxml=/tmp/agent-memory-v61-tests.xml tests packages/evolution/tests packages/langgraph/tests packages/python-sdk/tests packages/mcp-server/tests packages/postgres/tests",
+    "environment_variables": [
+      "AGENT_MEMORY_TEST_POSTGRES_DSN",
+      "AGENT_MEMORY_ONTOLOGY_TEST_DSN"
+    ],
+    "collected": 913,
+    "passed": 908,
+    "skipped": [
+      {
+        "test": "tests.test_recovery_specialized_acceptance::test_real_tokenizer_exact_count_and_overhead[hello world]",
+        "reason": "could not import 'tiktoken': No module named 'tiktoken'"
+      },
+      {
+        "test": "tests.test_recovery_specialized_acceptance::test_real_tokenizer_exact_count_and_overhead[\\u4f60\\u597d\\uff0c\\u8bb0\\u5fc6]",
+        "reason": "could not import 'tiktoken': No module named 'tiktoken'"
+      },
+      {
+        "test": "tests.test_recovery_specialized_acceptance::test_real_tokenizer_exact_count_and_overhead[a\\n\\tb]",
+        "reason": "could not import 'tiktoken': No module named 'tiktoken'"
+      },
+      {
+        "test": "tests.test_recovery_specialized_acceptance::test_real_tokenizer_exact_count_and_overhead[<|endoftext|>]",
+        "reason": "could not import 'tiktoken': No module named 'tiktoken'"
+      },
+      {
+        "test": "tests.test_recovery_specialized_acceptance::test_tokenizer_template_rendering_and_identity",
+        "reason": "could not import 'tiktoken': No module named 'tiktoken'"
+      }
+    ],
+    "failed": 0,
+    "errors": 0,
+    "log_sha256": "1c07b88c120d704d3b667984eb86ba24c63621ff25cf2c31c2ad470c0d36c4ea",
+    "junit_sha256": "131e21d531533d8a7bd6aa874994f4486d1d619da7bbdddd205fb66dc2b02f9b",
+    "new_tests_passed": {
+      "tests.test_capture_profile": 15,
+      "tests.test_evidence_evaluation": 27,
+      "tests.test_memory_v61_fixtures": 2
+    }
+  },
+  "static_checks": {
+    "ruff_new_files": "all configured rules passed",
+    "ruff_modified_existing_files": "E9,F63,F7,F82 passed",
+    "git_diff_check": "passed",
+    "frozen_designs": "v5.0.0/v6.0.0/v6.1.0 unchanged",
+    "task_ledger": "44 tasks / 66 acceptance rows / DONE 1 / IN_PROGRESS 8 / TODO 35"
+  },
+  "build": {
+    "command": ".venv/bin/python -m build --wheel --outdir /tmp/agent-memory-v61-build",
+    "status": "passed",
+    "wheel_name": "agent_memory-0.1.0-py3-none-any.whl",
+    "wheel_sha256": "d379c345c48d37fd82bd2d8eba85755c37a24439c36557d759326a4007c1c0bc",
+    "new_modules_match_source": true
+  },
+  "fixture_scoring": {
+    "status": "passed",
+    "dataset_sha256": "5d8052dfa5a49ee9ec003a4469c1cc548b13714fd98721e58d357eafeea76bea",
+    "scorer_version": "evidence-support/1",
+    "semantics_cases": 19,
+    "answerable_cases": 17,
+    "diagnostic_cases": 1,
+    "observations": "hand-authored scorer test oracle, not runtime output"
+  },
+  "source_sha256": {
+    "src/agent_memory/capture/api.py": "b6c5b4d21632aa690ea25d2bb8fc6666950db603a1bcba94ddd5ae63ceb0f4d0",
+    "src/agent_memory/capture/profile.py": "8b96d1a4e8dbe21625a1757bae73182db8f1786033c778f5ce03590c8032a37a",
+    "src/agent_memory/lifecycle.py": "ce04601667245ed6e18152258da29c0545d4113461f9a2f85a031c054758a5be",
+    "src/agent_memory/kernel.py": "a8fefb2cb3a30efae1bb7c61b4a43b1e7cf954d41424645a9049ce155f62974a",
+    "src/agent_memory/consolidation/admission_runtime.py": "512613335f17d13f6d58a10fcbb3ed3dc6d5e2e64fb17de180e5b3b2fe6ca6fb",
+    "src/agent_memory/consolidation/atom_extraction.py": "00511137a78bde3d9646bd535f3c502ce31b477880b15963350d988eadc97d67",
+    "src/agent_memory/evaluation/acceptance.py": "fb9f75bfff1f830dc27adbae582984a6505976b1a37d8093b863f683505a796b",
+    "src/agent_memory/evaluation/evidence.py": "146e09284ee8d5e665e1b5f8798ad33b45ab7e098f3b5ac1894bd9dddbdcab6b",
+    "tools/evaluate_memory_evidence.py": "0541009f669c09080d5ea1b31776f911298beeb8646e15841b2724eb7e3e6048",
+    "tests/test_capture_profile.py": "0c3e7adda8dda62173b73062fbc65508073f8bc1f37431c613e079b6aa07ec98",
+    "tests/test_evidence_evaluation.py": "6c09e579154c2c14811d4f30f333b9827aa58a8034de6db592538b3e73bd5494",
+    "tests/test_memory_v61_fixtures.py": "8d6e768957f63847a49c669dce89cee855ff2ec4eb2ccf7d035c430ed6a599d0",
+    "tests/fixtures/memory_v61/README.md": "e01942ca4999e2951b78607c26139a41e00ce93cad57d523d8ab0a3183619870",
+    "tests/fixtures/memory_v61/aurora_dataset.json": "aa50f144752b88c4d584cb163c1af7c7e21e53b76571507d4ac93c4dc63831f8",
+    "tests/fixtures/memory_v61/aurora_study.json": "63c8aa247d3a589a75eeaef0411256d438d77ef869308f874a3eaab4f13b5190",
+    "tests/fixtures/memory_v61/scorer_configuration.json": "3336345d529a986d3b91f1e518ea2ac838503fa1a0ffe077583a376f57cff950",
+    "tests/fixtures/memory_v61/scorer_observations.json": "718a819b7405891e3b0cb24fe004088c2da5298de1f95dd790d87c61d56127ab"
+  },
+  "not_verified": [
+    "real model extraction or independent model judge",
+    "Hindsight comparative experiment",
+    "runtime 17-event end-to-end replay",
+    "new epoch/dispatch/processing-lineage/atomic-retain protocols",
+    "production quality/cost/latency calibration",
+    "optional tiktoken integration"
+  ],
+  "production_ready": false
+}

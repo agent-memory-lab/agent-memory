@@ -44,7 +44,7 @@ from agent_memory.domain import (
 from agent_memory.retrieval.temporal_history import temporal_candidates
 from agent_memory.serialization import to_jsonable
 
-from . import admission
+from . import admission, retention
 from .temporal_history import PostgresClaimHistory
 
 
@@ -310,6 +310,33 @@ class PostgresMemoryUnitOfWork:
                 event.content_hash,
             ),
         )
+
+    async def retention_update(self, scope, request_id, payload):
+        return await retention.update(self.connection, scope, request_id, payload)
+
+    async def retention_active(self, scope):
+        return await retention.active(self.connection, scope)
+
+    async def producer_get(self, scope, producer_id):
+        return await retention.producer_get(self.connection, scope, producer_id)
+
+    async def producer_put(self, scope, producer_id, payload):
+        return await retention.producer_put(self.connection, scope, producer_id, payload)
+
+    async def retention_epoch(self, scope):
+        return await retention.epoch(self.connection, scope)
+
+    async def retention_get(self, scope, kind, request_id):
+        return await retention.get(self.connection, scope, kind, request_id)
+
+    async def retention_insert(self, scope, kind, request_id, payload):
+        await retention.insert(self.connection, scope, kind, request_id, payload)
+
+    async def retention_count(self, scope, kind):
+        return await retention.count(self.connection, scope, kind)
+
+    async def retention_identity_owner(self, scope, event_id, idempotency_key):
+        return await retention.identity_owner(self.connection, scope, event_id, idempotency_key)
 
     async def lock_admission_scope(self, scope: MemoryScope) -> None:
         await admission.lock_scope(self.connection, scope)
@@ -879,6 +906,8 @@ class PostgresMemoryRepository:
         )
         async with self.pool.connection() as connection:
             async with connection.transaction():
+                await admission.lock_scope(connection, request.scope)
+                await retention.forget(connection, request)
                 admission_claim_ids, extra_admission_claims = await admission.forget_records(
                     connection, request
                 )

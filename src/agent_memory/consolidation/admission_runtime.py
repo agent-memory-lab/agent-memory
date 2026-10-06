@@ -7,6 +7,7 @@ is a compatibility/index projection; it must never bypass admission on reads.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from contextlib import nullcontext
 from dataclasses import replace
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -26,6 +27,7 @@ from ..domain import (
     canonical_json,
     utc_now,
 )
+from ..lifecycle import CAPTURE_METADATA_KEY, capture_annotation, is_memory_context
 from ..ports import AdmissionRepository, AdmissionUnitOfWork
 from ..retrieval.atom_state import project_records
 from ..serialization import to_jsonable
@@ -151,8 +153,12 @@ class AdmissionEngine:
         authority: SourceAuthority,
         policy: AdmissionPolicy,
         _extraction_audit: dict[str, Any] | None = None,
+        _unit_of_work=None,
+        _retained: bool = False,
     ) -> AdmissionReceipt:
         self._require_support()
+        if is_memory_context(event):
+            raise ValueError("memory context cannot be admitted as independent evidence")
         if not (0 if _extraction_audit is not None else 1) <= len(drafts) <= 64:
             raise ValueError("admission requires between 1 and 64 atoms")
         if len(event.content) > 32_000:
@@ -162,6 +168,9 @@ class AdmissionEngine:
         event = replace(event, occurred_at=event.occurred_at.astimezone(UTC))
         # An unavailable scope cannot provide a stable identity; fail atomically.
         scopes = [event.scope.project(d.scope_level) for d in drafts]
+        capture = capture_annotation(event)
+        if capture is not None and len(canonical_json(capture).encode()) > 32_768:
+            raise ValueError("capture annotation exceeds metadata budget")
         fingerprint = sha256(
             canonical_json(
                 {
@@ -171,6 +180,7 @@ class AdmissionEngine:
                     "policy": policy.config_payload(),
                     "source_uri": event.source_uri,
                     "actor": event.actor,
+                    **({"capture_annotation": capture} if capture is not None else {}),
                     "occurred_at": (
                         None
                         if event.metadata.get("atom_implicit_observation") is True
@@ -180,6 +190,8 @@ class AdmissionEngine:
             ).encode()
         ).hexdigest()
         metadata = {"atom_fingerprint": fingerprint}
+        if capture is not None:
+            metadata["lifecycle"] = {"payload": {CAPTURE_METADATA_KEY: capture}}
         if _extraction_audit is not None:
             metadata["atom_extraction"] = {
                 **_extraction_audit,
@@ -195,14 +207,28 @@ class AdmissionEngine:
             metadata=metadata,
             content_hash="",
         )
-        async with self.repository.unit_of_work() as uow:
+        if _retained and (_unit_of_work is None or _extraction_audit is None):
+            raise ValueError("retained publication requires an enclosing transaction and stage")
+        context = (
+            nullcontext(_unit_of_work)
+            if _unit_of_work is not None
+            else self.repository.unit_of_work()
+        )
+        async with context as uow:
             for scope in sorted(
                 {s.partition_key(): s for s in [event.scope, *scopes]}.values(),
                 key=lambda s: s.partition_key(),
             ):
                 await uow.lock_admission_scope(scope)
             stored = await uow.find_event_by_idempotency(event.scope, event.idempotency_key)
-            if stored:
+            if _retained:
+                if (
+                    stored is None or stored.id != event.id or "_retention" not in stored.metadata
+                    or stored.content != event.content
+                    or not await uow.events_exist(event.scope, (event.id,))
+                ):
+                    raise ValueError("retained source is unavailable or changed")
+            elif stored:
                 if _extraction_audit is not None:
                     receipt, _ = await self._extraction_receipt(
                         uow, stored, _extraction_audit["input_fingerprint"], duplicate=True,
@@ -218,7 +244,8 @@ class AdmissionEngine:
                     if row["id"] not in {r["id"] for r in rows}:
                         rows.append(row)
                 return self.receipt(stored.id, rows, duplicate=True)
-            await uow.append_event(event)
+            if not _retained:
+                await uow.append_event(event)
             rows: list[dict[str, Any]] = []
             existing: dict[str, list[dict[str, Any]]] = {}
             for draft, scope in zip(drafts, scopes, strict=True):
@@ -457,6 +484,11 @@ class AdmissionEngine:
         else:
             await uow.save_claim(claim)
         payload.update(claim_id=claim.id, claim=to_jsonable(claim))
+
+    async def retract(self, scope, identity, **options):
+        from .retraction import retract
+
+        return await retract(self, scope, identity, **options)
 
     async def resolve(
         self,

@@ -13,6 +13,28 @@ from typing import Any
 from .domain import MemoryEvent, MemoryScope
 
 LIFECYCLE_SCHEMA_VERSION = 1
+CAPTURE_METADATA_KEY = "_agent_memory_capture"
+
+
+def capture_annotation(event: MemoryEvent) -> Mapping[str, Any] | None:
+    """Read capture provenance for audit, never as admission authority."""
+    lifecycle = event.metadata.get("lifecycle")
+    payload = lifecycle.get("payload") if isinstance(lifecycle, Mapping) else None
+    value = payload.get(CAPTURE_METADATA_KEY) if isinstance(payload, Mapping) else None
+    return value if isinstance(value, Mapping) else None
+
+
+def is_memory_context(event: MemoryEvent) -> bool:
+    """Restrictive marker only: it never grants source or processing authority."""
+    if event.event_type == "agent.memory.context":
+        return True
+    metadata = capture_annotation(event)
+    if metadata is None:
+        return False
+    observation = metadata.get("observation")
+    return isinstance(observation, Mapping) and (
+        observation.get("memory_injection") is True or bool(observation.get("parent_revision_ids"))
+    )
 
 
 class LifecycleEventType(StrEnum):
@@ -219,6 +241,12 @@ class LifecycleEvent:
             }.get(self.origin, "agent.message.received")
         else:
             event_type = f"agent.{self.event_type.value}"
+        capture = self.payload.get(CAPTURE_METADATA_KEY)
+        observation = capture.get("observation") if isinstance(capture, Mapping) else None
+        if isinstance(observation, Mapping) and (
+            observation.get("memory_injection") is True or observation.get("parent_revision_ids")
+        ):
+            event_type = "agent.memory.context"
         return MemoryEvent(
             scope=self.scope,
             event_type=event_type,

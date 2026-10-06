@@ -1,0 +1,6 @@
+{
+  "purpose": "synthetic scorer regression only",
+  "adapter": "hand-authored observations",
+  "scorer": "evidence-support/1",
+  "annotation_version": "manual-gold-v1"
+}

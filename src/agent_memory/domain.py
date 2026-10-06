@@ -9,6 +9,8 @@ from json import dumps
 from typing import Any
 from uuid import uuid4
 
+from .fact_qualification import EVIDENCE_FIELDS, FieldEvidence, normalize_qualifiers
+
 PROTOCOL_VERSION = "0.1"
 SCHEMA_VERSION = 2
 
@@ -754,8 +756,13 @@ class AtomDraft:
     valid_to: datetime | None = None
     change_kind: str = "replace"
     corrects_id: str | None = None
+    conditions: tuple[str, ...] = ()
+    exceptions: tuple[str, ...] = ()
+    negated: bool = False
+    field_evidence: tuple[FieldEvidence, ...] = ()
 
     def __post_init__(self) -> None:
+        normalize_qualifiers(self)
         _atom_string(self.subject_id, "subject_id", 256)
         _atom_string(self.predicate, "predicate", 128)
         _atom_string(self.text, "text", 16_384)
@@ -815,9 +822,19 @@ class PredicateSpec:
     predicate: str
     value_type: str = "string"
     allow_self_report: bool = True
+    required_evidence_fields: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _atom_string(self.predicate, "predicate", 128)
+        if (
+            not isinstance(self.required_evidence_fields, (tuple, list))
+            or len(self.required_evidence_fields) > len(EVIDENCE_FIELDS)
+            or any(f not in EVIDENCE_FIELDS for f in self.required_evidence_fields)
+        ):
+            raise ValueError("invalid required evidence fields")
+        object.__setattr__(
+            self, "required_evidence_fields", tuple(sorted(set(self.required_evidence_fields)))
+        )
         _atom_string(self.value_type, "value_type", 64)
         if type(self.allow_self_report) is not bool:
             raise ValueError("allow_self_report must be a boolean")

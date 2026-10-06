@@ -29,6 +29,7 @@ from ..domain import (
     SourceAuthority,
     canonical_json,
 )
+from ..lifecycle import capture_annotation, is_memory_context
 from ..ports import AdmissionRepository, AtomGenerator, AtomReviewer
 from .admission import AdmissionPolicy, authority_to_payload, draft_to_payload
 from .admission_runtime import AdmissionEngine
@@ -50,6 +51,25 @@ def _parse(raw: Any, event: MemoryEvent, scope_level: ScopeLevel) -> ExtractedAt
         raise _InvalidCandidate("generated_scope_override")
     if raw.get("change_kind", "replace") != "replace" or raw.get("corrects_id") is not None:
         raise _InvalidCandidate("automatic_correction_requires_host_review")
+    allowed = required | {
+        "scope",
+        "scope_level",
+        "change_kind",
+        "corrects_id",
+        "text",
+        "confidence",
+        "authority",
+        "valid_from",
+        "valid_to",
+        "source_start",
+        "source_end",
+        "conditions",
+        "exceptions",
+        "negated",
+        "field_evidence",
+    }
+    if set(raw) - allowed:
+        raise _InvalidCandidate("unsupported_candidate_fields")
     try:
         times = {
             name: datetime.fromisoformat(raw[name]) if raw.get(name) is not None else None
@@ -65,6 +85,10 @@ def _parse(raw: Any, event: MemoryEvent, scope_level: ScopeLevel) -> ExtractedAt
             scope_level=scope_level,
             kind=raw["kind"],
             modality=raw["modality"],
+            conditions=raw.get("conditions", ()),
+            exceptions=raw.get("exceptions", ()),
+            negated=raw.get("negated", False),
+            field_evidence=raw.get("field_evidence", ()),
             **times,
         )
         start, end = raw.get("source_start"), raw.get("source_end")
@@ -197,20 +221,20 @@ class AtomExtractionPipeline:
             "timeout_seconds": self.timeout_seconds,
         }
 
-    async def process(
-        self,
-        repository: AdmissionRepository,
-        event: MemoryEvent,
-        *,
-        authority: SourceAuthority,
-        policy: AdmissionPolicy,
-    ) -> AtomExtractionReceipt:
+    def input_fingerprint(
+        self, event: MemoryEvent, *, authority: SourceAuthority, policy: AdmissionPolicy
+    ) -> str:
+        if is_memory_context(event):
+            raise ValueError("memory context requires its original evidence before extraction")
         if len(event.content) > 32_000:
             raise ValueError("event exceeds extraction content limit")
         if not isinstance(event.occurred_at, datetime) or event.occurred_at.utcoffset() is None:
             raise ValueError("event occurred_at must include a timezone")
         event.scope.project(self.scope_level)
         config = self.config_payload()
+        capture = capture_annotation(event)
+        if capture is not None and len(canonical_json(capture).encode()) > 32_768:
+            raise ValueError("capture annotation exceeds metadata budget")
         fingerprint = sha256(
             canonical_json(
                 {
@@ -218,6 +242,7 @@ class AtomExtractionPipeline:
                     "content": event.content,
                     "source_uri": event.source_uri,
                     "actor": event.actor,
+                    **({"capture_annotation": capture} if capture is not None else {}),
                     "authority": authority_to_payload(authority),
                     "admission": policy.config_payload(),
                     "extraction": config,
@@ -229,16 +254,14 @@ class AtomExtractionPipeline:
                 }
             ).encode()
         ).hexdigest()
-        key = event.idempotency_key or event.id
-        engine = AdmissionEngine(repository)
-        cached = await engine.extraction_status(
-            event.scope,
-            key,
-            input_fingerprint=fingerprint,
-            duplicate=True,
-        )
-        if cached is not None:
-            return extraction_receipt(*cached)
+        return fingerprint
+
+    async def prepare(
+        self, event: MemoryEvent, *, authority: SourceAuthority, policy: AdmissionPolicy
+    ) -> dict[str, Any]:
+        """Run generation/review outside storage transactions; return serializable data."""
+        config = self.config_payload()
+        fingerprint = self.input_fingerprint(event, authority=authority, policy=policy)
         started = perf_counter()
         failures: list[str] = []
         reports: list[dict[str, Any]] = []
@@ -338,23 +361,69 @@ class AtomExtractionPipeline:
             "review_calls": review_calls,
             "elapsed_ms": round((perf_counter() - started) * 1000, 3),
         }
-        reviewed_policy = _ReviewedPolicy(
+        return {
+            "drafts": [draft_to_payload(c.draft) for c in candidates],
+            "gates": gates,
+            "audit": audit,
+        }
+
+    async def publish_prepared(
+        self, repository, event, prepared, *, authority, policy, unit_of_work=None, retained=False
+    ):
+        """Publish saved stage data; caller may provide the transaction-B UoW."""
+        from .admission import draft_from_payload
+
+        drafts = tuple(draft_from_payload(value) for value in prepared["drafts"])
+        audit = prepared["audit"]
+        if audit["input_fingerprint"] != self.input_fingerprint(
+            event, authority=authority, policy=policy
+        ):
+            raise ValueError("prepared extraction input changed")
+        reviewed = _ReviewedPolicy(
             policy,
-            gates,
+            prepared["gates"],
             {
-                "generator_version": config["generator_version"],
-                "reviewer_version": config["reviewer_version"],
+                "generator_version": self.generator.version,
+                "reviewer_version": self.reviewer.version,
             },
         )
-        admitted = await engine.admit(
+        return await AdmissionEngine(repository).admit(
             event,
-            tuple(c.draft for c in candidates),
+            drafts,
             authority=authority,
-            policy=reviewed_policy,
+            policy=reviewed,
             _extraction_audit=audit,
+            _unit_of_work=unit_of_work,
+            _retained=retained,
         )
-        # Recover the committed winner, including a concurrent first writer's
-        # generated batch. Never report this caller's losing model output.
+
+    async def process(
+        self,
+        repository: AdmissionRepository,
+        event: MemoryEvent,
+        *,
+        authority: SourceAuthority,
+        policy: AdmissionPolicy,
+    ) -> AtomExtractionReceipt:
+        fingerprint = self.input_fingerprint(event, authority=authority, policy=policy)
+        key = event.idempotency_key or event.id
+        engine = AdmissionEngine(repository)
+        cached = await engine.extraction_status(
+            event.scope,
+            key,
+            input_fingerprint=fingerprint,
+            duplicate=True,
+        )
+        if cached is not None:
+            return extraction_receipt(*cached)
+        prepared = await self.prepare(event, authority=authority, policy=policy)
+        admitted = await self.publish_prepared(
+            repository,
+            event,
+            prepared,
+            authority=authority,
+            policy=policy,
+        )
         stored = await engine.extraction_status(
             event.scope,
             key,

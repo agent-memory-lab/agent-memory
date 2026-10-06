@@ -58,6 +58,7 @@ from .domain import (
     canonical_json,
     utc_now,
 )
+from .lifecycle import is_memory_context
 from .ports import (
     ClaimExtractor,
     ConsolidationScheduler,
@@ -201,7 +202,7 @@ class MemoryKernel:
                     return IngestResult(stored.id, claim_ids, (), True, ())
 
         drafts: Sequence[ClaimDraft] = ()
-        if await self._policy.should_extract(event):
+        if not is_memory_context(event) and await self._policy.should_extract(event):
             extracted = await self._extractor.extract(event)
             accepted: list[ClaimDraft] = []
             seen_drafts: set[tuple[ScopeLevel, str]] = set()
@@ -242,7 +243,7 @@ class MemoryKernel:
                 duplicate=False,
                 superseded_claim_ids=tuple(superseded_ids),
             )
-        if self._consolidation_scheduler:
+        if self._consolidation_scheduler and not is_memory_context(event):
             await self._consolidation_scheduler.enqueue_event(event, result)
         return result
 
@@ -359,6 +360,9 @@ class MemoryKernel:
         return await AdmissionEngine(self._repository).admit(
             event, drafts, authority=authority, policy=policy,
         )
+
+    async def retract_atom(self, scope: MemoryScope, candidate_id: str, **termination: Any):
+        return await AdmissionEngine(self._repository).retract(scope, candidate_id, **termination)
 
     async def resolve_atom(
         self, scope: MemoryScope, candidate_id: str, **review: Any,

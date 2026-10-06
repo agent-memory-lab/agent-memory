@@ -91,7 +91,16 @@ class WorkerQueueError(RuntimeError):
         self.code = code
 
 
-class WorkerQueue(Protocol):
+class WorkerExecutionQueue(Protocol):
+    """Minimal lease contract consumed by BoundedWorker, independent of submission."""
+
+    async def claim(self, worker_id: str, *, lease_seconds: int) -> WorkerLease | None: ...
+    async def checkpoint(self, lease: WorkerLease, value: Mapping[str, Any]) -> None: ...
+    async def complete(self, lease: WorkerLease) -> None: ...
+    async def fail(self, lease: WorkerLease, error: BaseException) -> None: ...
+
+
+class WorkerQueue(WorkerExecutionQueue, Protocol):
     async def initialize(self) -> None: ...
 
     async def enqueue(

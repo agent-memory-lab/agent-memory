@@ -1,9 +1,147 @@
 {
   "manifest_schema_version": 1,
   "document_id": "AM-DESIGN",
-  "current_design_version": "5.0.0",
+  "current_design_version": "6.1.0",
   "versioning_scope": "architecture_design_only",
   "versions": [
+    {
+      "version": "6.1.0",
+      "date": "2026-10-06",
+      "status": "PROPOSED_BASELINE",
+      "file": "AGENT_MEMORY_DESIGN_V6.1.0.md",
+      "sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+      "predecessor_design": "6.0.0",
+      "implementation_baseline_commit": "5cff9f47b7061351fd725c3b8e0a89bf5cb51517",
+      "hindsight_reference_commit": "b89ce287464fe10790d67ba86bfabe29d8926253",
+      "previous_hindsight_reference_commits": [
+        "d9d086e505373121a110f2c94bf137273549e827"
+      ],
+      "research_source_directory": "Hindsight_全面调研_2026-10-06",
+      "research_sources": [
+        {
+          "name": "学习报告.md",
+          "sha256": "b01ba7e732494af91788ac8f3ab4bc0dd553837f8a747af341f549498af5029d"
+        },
+        {
+          "name": "学习案例.jsonl",
+          "sha256": "c84a001ad6db4f9487f1c8a6fc43fa9863a69b77ed4531304a3d9d7ad84e7f50"
+        },
+        {
+          "name": "实验说明.md",
+          "sha256": "c5f1646c54d41b1eb625bbe74657d39e84f9dffbdae4f867afdd24d9ea1ea5e3"
+        },
+        {
+          "name": "提取与接入专题.md",
+          "sha256": "282f5911a154fc20e382fe6bfb6439de8cbe6f28d8136f3e5793b533fc439f09"
+        },
+        {
+          "name": "整理与生命周期专题.md",
+          "sha256": "00b9780128aa79b4a082ecb0b15088d1930432c5ab17f4e0897e5f74a73e8e3a"
+        },
+        {
+          "name": "检索与评测专题.md",
+          "sha256": "4f4129955fb72a2a23a2844d5d4a1cca93ba045604c75229b8dc5a4bc62e0b1b"
+        },
+        {
+          "name": "源码核验清单.json",
+          "sha256": "c958067b20a0afdaf49f93e4514fdd5338833af06e613c8a12768f9382336855"
+        },
+        {
+          "name": "验收问题.json",
+          "sha256": "9d50120ab72ca9ddef486aa8c7a5b6cb267285555c6ab6250ba3b1c9c63eae3e"
+        }
+      ],
+      "change_level": "minor",
+      "change_reason": "Compatible capture, task, refresh, readiness, retrieval and evaluation contracts; preserves V6 core temporal, identity and permission semantics and published API behavior.",
+      "review_reference": "reviews/AGENT_MEMORY_DESIGN_V5.0.0_REVIEW_2026-10-06.md",
+      "borrowing_review_reference": "reviews/HINDSIGHT_2026-10-06_V6_BORROWING_REVIEW.md",
+      "specified_review_items": [
+        "R01",
+        "R02",
+        "R03",
+        "R04",
+        "R05",
+        "R06",
+        "R07",
+        "R08",
+        "R09",
+        "R10",
+        "R11",
+        "R12",
+        "R13"
+      ],
+      "pending_review_items": [],
+      "integrated_borrowing_items": [
+        "N01",
+        "N02",
+        "N03",
+        "N04",
+        "N05",
+        "N06",
+        "N07",
+        "N08"
+      ],
+      "implementation_status": "partial_local_durable_l1_ledger_revision_4",
+      "required_acceptance_cases": 66,
+      "deployment_calibration_pending": [
+        "predicate_and_source_authority_policies",
+        "models_tokenizers_and_score_calibration",
+        "retention_cost_and_latency_limits",
+        "quality_thresholds_and_dataset_sufficiency"
+      ],
+      "external_benchmarks_executed": false,
+      "implementation_record": "v6.1.0/batch-03-05.md"
+    },
+    {
+      "version": "6.0.0",
+      "date": "2026-10-06",
+      "status": "PROPOSED_BASELINE",
+      "file": "AGENT_MEMORY_DESIGN_V6.0.0.md",
+      "sha256": "f16f0a3fb1da497b6ef73c96851de04b0cc42ac9353fa9f4278b26122dfe39d0",
+      "predecessor_design": "5.0.0",
+      "implementation_baseline_commit": "5cff9f47b7061351fd725c3b8e0a89bf5cb51517",
+      "hindsight_reference_commit": "d9d086e505373121a110f2c94bf137273549e827",
+      "research_sources": [
+        {
+          "name": "调研报告.md",
+          "sha256": "8ff01c30e1b031d399226e1df345ac6c5187d687fb73e65bbde519d2738dbca7"
+        },
+        {
+          "name": "提取与入库源码笔记.md",
+          "sha256": "43e8f7a715c9635e237388157ebbbd1b7f26bc39fbc1e18bebaa367541314387"
+        },
+        {
+          "name": "检索与反思源码笔记.md",
+          "sha256": "92351a1014cb3321c584e3b6d060b272755972b561c355835b36d40acd4f833d"
+        },
+        {
+          "name": "整理与演化源码笔记.md",
+          "sha256": "8cb45018958ef920939257990071961e86f9b64a2e8ef67161428f6883b1dacc"
+        }
+      ],
+      "change_level": "major",
+      "change_reason": "Core derived permission contract propagates all actual generation inputs; defines cross-scope composition, interpretation replacement, and guarded model dispatch/delivery.",
+      "review_reference": "reviews/AGENT_MEMORY_DESIGN_V5.0.0_REVIEW_2026-10-06.md",
+      "specified_review_items": [
+        "R01",
+        "R02",
+        "R03",
+        "R04"
+      ],
+      "pending_review_items": [
+        "R05",
+        "R06",
+        "R07",
+        "R08",
+        "R09",
+        "R10",
+        "R11",
+        "R12",
+        "R13"
+      ],
+      "implementation_status": "contract_specified_implementation_pending",
+      "required_acceptance_cases": 24
+    },
     {
       "version": "5.0.0",
       "date": "2026-10-06",

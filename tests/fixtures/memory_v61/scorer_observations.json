@@ -1,0 +1,202 @@
+{
+  "Q01": {
+    "evidence_ids": [
+      "Q01:preferences@2:21:32"
+    ],
+    "status": "answered",
+    "answer_correct": true,
+    "tokens": 16,
+    "cost": 0,
+    "latency_ms": 0
+  },
+  "Q02": {
+    "evidence_ids": [
+      "Q02:preferences@2:32:57"
+    ],
+    "status": "answered",
+    "answer_correct": true,
+    "tokens": 16,
+    "cost": 0,
+    "latency_ms": 0
+  },
+  "Q03": {
+    "evidence_ids": [
+      "Q03:database-decision@3:0:43"
+    ],
+    "status": "answered",
+    "answer_correct": true,
+    "tokens": 16,
+    "cost": 0,
+    "latency_ms": 0
+  },
+  "Q04": {
+    "evidence_ids": [
+      "Q04:release-plan-v2@5:0:73"
+    ],
+    "status": "answered",
+    "answer_correct": true,
+    "tokens": 16,
+    "cost": 0,
+    "latency_ms": 0
+  },
+  "Q05": {
+    "evidence_ids": [
+      "Q05:release-plan-v1@4:0:37",
+      "Q05:release-plan-v2@5:0:73"
+    ],
+    "status": "answered",
+    "answer_correct": true,
+    "tokens": 16,
+    "cost": 0,
+    "latency_ms": 0
+  },
+  "Q06": {
+    "evidence_ids": [
+      "Q06:release-plan-v2@5:59:73"
+    ],
+    "status": "answered",
+    "answer_correct": true,
+    "tokens": 16,
+    "cost": 0,
+    "latency_ms": 0
+  },
+  "Q07": {
+    "evidence_ids": [
+      "Q07:agent-claim@6:0:68",
+      "Q07:test-execution@7:0:136"
+    ],
+    "status": "answered",
+    "answer_correct": true,
+    "tokens": 16,
+    "cost": 0,
+    "latency_ms": 0
+  },
+  "Q08": {
+    "evidence_ids": [
+      "Q08:identity@1:0:49",
+      "Q08:other-chenyu@8:0:86"
+    ],
+    "status": "answered",
+    "answer_correct": true,
+    "tokens": 16,
+    "cost": 0,
+    "latency_ms": 0
+  },
+  "Q09": {
+    "evidence_ids": [],
+    "status": "abstained",
+    "answer_correct": null,
+    "tokens": 0,
+    "cost": 0,
+    "latency_ms": 0
+  },
+  "Q10": {
+    "evidence_ids": [
+      "Q10:database-decision@3:0:64"
+    ],
+    "status": "answered",
+    "answer_correct": true,
+    "tokens": 16,
+    "cost": 0,
+    "latency_ms": 0
+  },
+  "Q11": {
+    "evidence_ids": [
+      "Q11:cost-record@11:0:24"
+    ],
+    "status": "answered",
+    "answer_correct": true,
+    "tokens": 16,
+    "cost": 0,
+    "latency_ms": 0
+  },
+  "Q12": {
+    "evidence_ids": [
+      "Q12:cost-record@15:0:46"
+    ],
+    "status": "answered",
+    "answer_correct": true,
+    "tokens": 16,
+    "cost": 0,
+    "latency_ms": 0
+  },
+  "Q13": {
+    "evidence_ids": [
+      "Q13:maintenance-original@13:0:41",
+      "Q13:maintenance-copy@14:0:53"
+    ],
+    "status": "answered",
+    "answer_correct": true,
+    "tokens": 16,
+    "cost": 0,
+    "latency_ms": 0
+  },
+  "Q14": {
+    "evidence_ids": [
+      "Q14:temporary-endpoint@12:0:56"
+    ],
+    "status": "answered",
+    "answer_correct": true,
+    "tokens": 16,
+    "cost": 0,
+    "latency_ms": 0
+  },
+  "Q15": {
+    "evidence_ids": [],
+    "status": "abstained",
+    "answer_correct": null,
+    "tokens": 0,
+    "cost": 0,
+    "latency_ms": 0
+  },
+  "Q16": {
+    "evidence_ids": [
+      "Q16:maintenance-copy@14:0:53"
+    ],
+    "status": "answered",
+    "answer_correct": true,
+    "tokens": 16,
+    "cost": 0,
+    "latency_ms": 0
+  },
+  "Q17": {
+    "evidence_ids": [
+      "Q17:release-plan-v2@5:0:59"
+    ],
+    "status": "answered",
+    "answer_correct": true,
+    "tokens": 16,
+    "cost": 0,
+    "latency_ms": 0
+  },
+  "Q18": {
+    "evidence_ids": [
+      "Q18:database-decision@3:0:43"
+    ],
+    "status": "answered",
+    "answer_correct": true,
+    "tokens": 16,
+    "cost": 0,
+    "latency_ms": 0
+  },
+  "Q19": {
+    "evidence_ids": [
+      "Q19:test-execution@7:90:136"
+    ],
+    "status": "answered",
+    "answer_correct": true,
+    "tokens": 16,
+    "cost": 0,
+    "latency_ms": 0
+  },
+  "Q20": {
+    "evidence_ids": [
+      "Q20:database-decision@3:0:64"
+    ],
+    "status": "abstained",
+    "answer_correct": null,
+    "tokens": 16,
+    "cost": 0,
+    "latency_ms": 0
+  }
+}

@@ -8,10 +8,11 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 from agent_memory.capture.api import submit_capture
 from agent_memory.capture.sink import CaptureError, CaptureSink
-from agent_memory.operations.deletion_audit import DeletionAuditService
 from agent_memory.lifecycle import LifecycleEventError
-from agent_memory.operations.doctor import MemoryDoctorProvider
 from agent_memory.mcp import MCPMemoryTools, MCPToolError
+from agent_memory.operations.deletion_audit import DeletionAuditService
+from agent_memory.operations.doctor import MemoryDoctorProvider
+from agent_memory.operations.retention import RetentionError
 from agent_memory.ports import MemoryProvider
 from agent_memory.serialization import to_jsonable
 
@@ -28,10 +29,15 @@ def create_server(
     deletion_auditor: DeletionAuditService | None = None,
     ontology=None,
     recovery_tools=None,
+    durable_capture=None,
 ) -> MCPServer:
     """Create an MCP v2 server while retaining one core business contract."""
     server = MCPServer(name)
-    if recovery_tools is not None and (capture_sink is not None or recovery_tools.memory.provider is not provider):
+    if recovery_tools is not None and (
+        capture_sink is not None
+        or durable_capture is not None
+        or recovery_tools.memory.provider is not provider
+    ):
         raise ValueError("recovery requires its own provider and capture gate")
     tools = MCPMemoryTools(
         provider,
@@ -209,6 +215,16 @@ def create_server(
         if view != "manifest":
             raise ValueError("capability resource view must be 'manifest'")
         return await call(ctx, "memory_capabilities", {})
+
+    if durable_capture is not None:
+        @server.tool()
+        async def memory_durable(ctx: Context, operation: str, payload: dict[str, Any]) -> dict[str, Any]:
+            """Append, query status, or read a cursor using a host-issued producer session."""
+            identity = await identity_resolver.resolve(ctx)
+            try:
+                return await durable_capture.call(operation, payload, identity)
+            except RetentionError as error:
+                raise ToolError(MCPToolError(error.code, code=error.code).to_transport()) from None
 
     if capture_sink is not None:
         @server.tool()

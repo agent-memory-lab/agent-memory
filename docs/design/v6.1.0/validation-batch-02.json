@@ -1,0 +1,93 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "batch": "AM61-B02",
+  "date": "2026-10-06",
+  "ledger_revision": 3,
+  "base_commit": "7a382d92920032433df32194573ccd3d5802c460",
+  "implementation_state": "uncommitted working tree; exact source hashes recorded",
+  "design_version": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "environment": {
+    "python": "3.13.5",
+    "postgres": "pg_ctl (PostgreSQL) 17.11 (Homebrew)",
+    "database": "new isolated Unix-socket test cluster; both PostgreSQL DSN variables configured"
+  },
+  "enabled_slice": "host-only durable-receive/1; no worker or model execution; no L1 publication",
+  "pytest": {
+    "command": ".venv/bin/python -m pytest -o \"addopts=-W error::pytest.PytestUnraisableExceptionWarning -W error::ResourceWarning\" -q -rs -x --junitxml=/tmp/agent-memory-v61-b02-tests.xml tests packages/evolution/tests packages/langgraph/tests packages/python-sdk/tests packages/mcp-server/tests packages/postgres/tests",
+    "environment_variables": [
+      "AGENT_MEMORY_TEST_POSTGRES_DSN",
+      "AGENT_MEMORY_ONTOLOGY_TEST_DSN"
+    ],
+    "passed": 940,
+    "skipped": [
+      {
+        "test": "tests.test_recovery_specialized_acceptance::test_real_tokenizer_exact_count_and_overhead[hello world]",
+        "reason": "could not import 'tiktoken': No module named 'tiktoken'"
+      },
+      {
+        "test": "tests.test_recovery_specialized_acceptance::test_real_tokenizer_exact_count_and_overhead[\\u4f60\\u597d\\uff0c\\u8bb0\\u5fc6]",
+        "reason": "could not import 'tiktoken': No module named 'tiktoken'"
+      },
+      {
+        "test": "tests.test_recovery_specialized_acceptance::test_real_tokenizer_exact_count_and_overhead[a\\n\\tb]",
+        "reason": "could not import 'tiktoken': No module named 'tiktoken'"
+      },
+      {
+        "test": "tests.test_recovery_specialized_acceptance::test_real_tokenizer_exact_count_and_overhead[<|endoftext|>]",
+        "reason": "could not import 'tiktoken': No module named 'tiktoken'"
+      },
+      {
+        "test": "tests.test_recovery_specialized_acceptance::test_tokenizer_template_rendering_and_identity",
+        "reason": "could not import 'tiktoken': No module named 'tiktoken'"
+      }
+    ],
+    "failed": 0,
+    "errors": 0,
+    "new_shared_contract_tests": 32,
+    "log_sha256": "098bc0c4a9599edf2f2fba2314a5d3dba45dad5425f78bd03466d2dfb9cf13ce",
+    "junit_sha256": "3de409b3a3e0b0b9c6ee42ba55b4c74d0ba93b59d0a4ae0afbddfe27fb8c7a21"
+  },
+  "builds": [
+    {
+      "package": "core",
+      "wheel": "agent_memory-0.1.0-py3-none-any.whl",
+      "sha256": "2e29fa7e317ae6b747101fe2f32a1753a39d8bb2c270aaea0d596ff037391ae8",
+      "source_matches": true,
+      "status": "passed"
+    },
+    {
+      "package": "postgres",
+      "wheel": "agent_memory_postgres-0.1.0-py3-none-any.whl",
+      "sha256": "10228addf773cfa53293192e00f3b5b55a5a0601dd6152d4c1993f9865f34040",
+      "source_matches": true,
+      "status": "passed"
+    }
+  ],
+  "static_checks": {
+    "new_files": "all configured Ruff rules passed",
+    "existing_modified_files": "E9,F63,F7,F82 passed",
+    "diff_whitespace": "passed"
+  },
+  "source_sha256": {
+    "src/agent_memory/operations/retention.py": "acfc1cddbea39b240f23128102575ff97cc2f153bc12fe5780cb9c2f6225c0b8",
+    "src/agent_memory/operations/sqlite_retention.py": "2ee21ce44035ee590e5eef5b92beb16e896f466366a6bc14cbff662cc5258c44",
+    "src/agent_memory/ports.py": "9ccf945b64ad3e136d37cc9019587ed221947be068a8dee39236d3e402c34753",
+    "src/agent_memory/sqlite.py": "398730216c66c590206f8d652eafe234f3ddbede85d9a24146b140b649c385a7",
+    "packages/postgres/src/agent_memory_postgres/retention.py": "a9ef3f16ddeec16b9c38c4e54bbec2282543347ec7f20ab15acc76f9ddd3bf75",
+    "packages/postgres/src/agent_memory_postgres/repository.py": "ef4c97f71c5394129cda63855c6cd5d26ca1ad5175adbd577fd9eeac498cd955",
+    "packages/postgres/migrations/006_retention.sql": "cf8395443b7c221bca02b62f6420826e9e68d81a6d678fbcfc0c96797c64f152",
+    "tests/test_durable_retention.py": "165b9fdaa0226ffdd1bddf135799b37da86745882391b802f1e70b525cdc451e"
+  },
+  "failure_injection": "async cancellation before/after request insertion, inside reception transaction; not an OS kill or power failure",
+  "not_implemented": [
+    "request worker consumption and lease fencing",
+    "stage artifact persistence and atomic publication transaction B",
+    "processing-input and external dispatch authorization",
+    "producer epoch/sequence/continuous acknowledgments",
+    "hierarchical/external ACL epochs",
+    "SDK/MCP durable-receive projection",
+    "production quality calibration"
+  ],
+  "production_ready": false
+}

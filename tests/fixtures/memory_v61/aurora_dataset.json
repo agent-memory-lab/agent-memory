@@ -1,0 +1,1214 @@
+{
+  "dataset_id": "aurora-memory-v61",
+  "version": "1",
+  "cases": [
+    {
+      "case_id": "Q01",
+      "scope": {
+        "tenant_id": "synthetic-memory-v61",
+        "namespace": "study-aurora",
+        "user_id": "user-aurora-01",
+        "agent_id": null,
+        "workspace_id": null,
+        "session_id": null
+      },
+      "query": "陈雨 user-aurora-01 希望普通交流怎么回答？",
+      "valid_at": "2026-10-05T05:06:00+00:00",
+      "known_at": "2026-10-05T05:06:00+00:00",
+      "answerable": true,
+      "evidence": [
+        {
+          "evidence_id": "Q01:preferences@2:21:32",
+          "source_revision_id": "preferences@2",
+          "source_family": "preferences",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 21,
+          "end": 32,
+          "quote_sha256": "cb5840db330f2db9f8aad1253f5acb66b5d5928de8e5d088ef2b596a5b28581e",
+          "fields": [
+            "language",
+            "ordinary_style"
+          ],
+          "valid_from": "2026-10-01T01:05:00+00:00",
+          "known_from": "2026-10-01T01:05:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        }
+      ],
+      "alternatives": [
+        {
+          "evidence_ids": [
+            "Q01:preferences@2:21:32"
+          ],
+          "minimum_source_families": 1
+        }
+      ],
+      "required_fields": [
+        "language",
+        "ordinary_style"
+      ],
+      "forbidden_evidence_ids": [],
+      "diagnostic_only": false
+    },
+    {
+      "case_id": "Q02",
+      "scope": {
+        "tenant_id": "synthetic-memory-v61",
+        "namespace": "study-aurora",
+        "user_id": "user-aurora-01",
+        "agent_id": null,
+        "workspace_id": null,
+        "session_id": null
+      },
+      "query": "给 user-aurora-01 分析论文时，应详细还是简短？",
+      "valid_at": "2026-10-05T05:06:00+00:00",
+      "known_at": "2026-10-05T05:06:00+00:00",
+      "answerable": true,
+      "evidence": [
+        {
+          "evidence_id": "Q02:preferences@2:32:57",
+          "source_revision_id": "preferences@2",
+          "source_family": "preferences",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 32,
+          "end": 57,
+          "quote_sha256": "425b3f3e0c11be1bef0ed354dc72134127b3957e9dbba45046569432aaef193c",
+          "fields": [
+            "condition",
+            "research_style"
+          ],
+          "valid_from": "2026-10-01T01:05:00+00:00",
+          "known_from": "2026-10-01T01:05:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        }
+      ],
+      "alternatives": [
+        {
+          "evidence_ids": [
+            "Q02:preferences@2:32:57"
+          ],
+          "minimum_source_families": 1
+        }
+      ],
+      "required_fields": [
+        "condition",
+        "research_style"
+      ],
+      "forbidden_evidence_ids": [],
+      "diagnostic_only": false
+    },
+    {
+      "case_id": "Q03",
+      "scope": {
+        "tenant_id": "synthetic-memory-v61",
+        "namespace": "study-aurora",
+        "user_id": "user-aurora-01",
+        "agent_id": null,
+        "workspace_id": null,
+        "session_id": null
+      },
+      "query": "Aurora 为什么采用 PostgreSQL？",
+      "valid_at": "2026-10-05T05:06:00+00:00",
+      "known_at": "2026-10-05T05:06:00+00:00",
+      "answerable": true,
+      "evidence": [
+        {
+          "evidence_id": "Q03:database-decision@3:0:43",
+          "source_revision_id": "database-decision@3",
+          "source_family": "database-decision",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 0,
+          "end": 43,
+          "quote_sha256": "03d466936a3f70cca5f55b0fe67abfd49422d0e7966ce016e5a489b5182f69b6",
+          "fields": [
+            "database",
+            "reason_sql",
+            "reason_staff"
+          ],
+          "valid_from": "2026-10-02T02:00:00+00:00",
+          "known_from": "2026-10-02T02:00:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        }
+      ],
+      "alternatives": [
+        {
+          "evidence_ids": [
+            "Q03:database-decision@3:0:43"
+          ],
+          "minimum_source_families": 1
+        }
+      ],
+      "required_fields": [
+        "database",
+        "reason_sql",
+        "reason_staff"
+      ],
+      "forbidden_evidence_ids": [],
+      "diagnostic_only": false
+    },
+    {
+      "case_id": "Q04",
+      "scope": {
+        "tenant_id": "synthetic-memory-v61",
+        "namespace": "study-aurora",
+        "user_id": "user-aurora-01",
+        "agent_id": null,
+        "workspace_id": null,
+        "session_id": null
+      },
+      "query": "Aurora 当前计划何时发布？",
+      "valid_at": "2026-10-05T05:06:00+00:00",
+      "known_at": "2026-10-05T05:06:00+00:00",
+      "answerable": true,
+      "evidence": [
+        {
+          "evidence_id": "Q04:release-plan-v2@5:0:73",
+          "source_revision_id": "release-plan-v2@5",
+          "source_family": "release-plan-v2",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 0,
+          "end": 73,
+          "quote_sha256": "97bce4214c7e1a1362e708f2b4eb8a33acc77ba82d72cdf597475289b876f132",
+          "fields": [
+            "current_planned_date",
+            "modality_plan"
+          ],
+          "valid_from": "2026-10-05T00:00:00+00:00",
+          "known_from": "2026-10-05T00:00:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        }
+      ],
+      "alternatives": [
+        {
+          "evidence_ids": [
+            "Q04:release-plan-v2@5:0:73"
+          ],
+          "minimum_source_families": 1
+        }
+      ],
+      "required_fields": [
+        "current_planned_date",
+        "modality_plan"
+      ],
+      "forbidden_evidence_ids": [],
+      "diagnostic_only": false
+    },
+    {
+      "case_id": "Q05",
+      "scope": {
+        "tenant_id": "synthetic-memory-v61",
+        "namespace": "study-aurora",
+        "user_id": "user-aurora-01",
+        "agent_id": null,
+        "workspace_id": null,
+        "session_id": null
+      },
+      "query": "Aurora 原计划何时发布，后来为什么改期？",
+      "valid_at": "2026-10-05T05:06:00+00:00",
+      "known_at": "2026-10-05T05:06:00+00:00",
+      "answerable": true,
+      "evidence": [
+        {
+          "evidence_id": "Q05:release-plan-v1@4:0:37",
+          "source_revision_id": "release-plan-v1@4",
+          "source_family": "release-plan-v1",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 0,
+          "end": 37,
+          "quote_sha256": "aed06c0f2397f07e7f64429626fae7ff8d1c268837faa28217973015314594d3",
+          "fields": [
+            "old_planned_date"
+          ],
+          "valid_from": "2026-10-03T03:00:00+00:00",
+          "known_from": "2026-10-03T03:00:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        },
+        {
+          "evidence_id": "Q05:release-plan-v2@5:0:73",
+          "source_revision_id": "release-plan-v2@5",
+          "source_family": "release-plan-v2",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 0,
+          "end": 73,
+          "quote_sha256": "97bce4214c7e1a1362e708f2b4eb8a33acc77ba82d72cdf597475289b876f132",
+          "fields": [
+            "current_planned_date",
+            "change_reason"
+          ],
+          "valid_from": "2026-10-05T00:00:00+00:00",
+          "known_from": "2026-10-05T00:00:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        }
+      ],
+      "alternatives": [
+        {
+          "evidence_ids": [
+            "Q05:release-plan-v1@4:0:37",
+            "Q05:release-plan-v2@5:0:73"
+          ],
+          "minimum_source_families": 1
+        }
+      ],
+      "required_fields": [
+        "change_reason",
+        "current_planned_date",
+        "old_planned_date"
+      ],
+      "forbidden_evidence_ids": [],
+      "diagnostic_only": false
+    },
+    {
+      "case_id": "Q06",
+      "scope": {
+        "tenant_id": "synthetic-memory-v61",
+        "namespace": "study-aurora",
+        "user_id": "user-aurora-01",
+        "agent_id": null,
+        "workspace_id": null,
+        "session_id": null
+      },
+      "query": "Aurora 已经发布了吗？",
+      "valid_at": "2026-10-05T05:06:00+00:00",
+      "known_at": "2026-10-05T05:06:00+00:00",
+      "answerable": true,
+      "evidence": [
+        {
+          "evidence_id": "Q06:release-plan-v2@5:59:73",
+          "source_revision_id": "release-plan-v2@5",
+          "source_family": "release-plan-v2",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 59,
+          "end": 73,
+          "quote_sha256": "4336f1feba418774cef077458a5ecd67880b0c181b7ceb86fba920a97884b7a0",
+          "fields": [
+            "not_released_as_of_record"
+          ],
+          "valid_from": "2026-10-05T00:00:00+00:00",
+          "known_from": "2026-10-05T00:00:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        }
+      ],
+      "alternatives": [
+        {
+          "evidence_ids": [
+            "Q06:release-plan-v2@5:59:73"
+          ],
+          "minimum_source_families": 1
+        }
+      ],
+      "required_fields": [
+        "not_released_as_of_record"
+      ],
+      "forbidden_evidence_ids": [],
+      "diagnostic_only": false
+    },
+    {
+      "case_id": "Q07",
+      "scope": {
+        "tenant_id": "synthetic-memory-v61",
+        "namespace": "study-aurora",
+        "user_id": "user-aurora-01",
+        "agent_id": null,
+        "workspace_id": null,
+        "session_id": null
+      },
+      "query": "demo-abc123 的测试是否全部通过？",
+      "valid_at": "2026-10-05T05:06:00+00:00",
+      "known_at": "2026-10-05T05:06:00+00:00",
+      "answerable": true,
+      "evidence": [
+        {
+          "evidence_id": "Q07:agent-claim@6:0:68",
+          "source_revision_id": "agent-claim@6",
+          "source_family": "agent-claim",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 0,
+          "end": 68,
+          "quote_sha256": "62cf5ced91b1f0538913e6156f2b67c8ae9aa8fb3755ea8806dc20a15dbc08b2",
+          "fields": [
+            "assistant_claim"
+          ],
+          "valid_from": "2026-10-05T01:00:00+00:00",
+          "known_from": "2026-10-05T01:00:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        },
+        {
+          "evidence_id": "Q07:test-execution@7:0:136",
+          "source_revision_id": "test-execution@7",
+          "source_family": "test-execution",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 0,
+          "end": 136,
+          "quote_sha256": "83bdb15a7d3ed13f9909c09f99e17df504793fb992083376ffe9e68f261fa2b3",
+          "fields": [
+            "exit_code",
+            "passed",
+            "failed"
+          ],
+          "valid_from": "2026-10-05T01:10:00+00:00",
+          "known_from": "2026-10-05T01:10:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        }
+      ],
+      "alternatives": [
+        {
+          "evidence_ids": [
+            "Q07:agent-claim@6:0:68",
+            "Q07:test-execution@7:0:136"
+          ],
+          "minimum_source_families": 1
+        }
+      ],
+      "required_fields": [
+        "assistant_claim",
+        "exit_code",
+        "failed",
+        "passed"
+      ],
+      "forbidden_evidence_ids": [],
+      "diagnostic_only": false
+    },
+    {
+      "case_id": "Q08",
+      "scope": {
+        "tenant_id": "synthetic-memory-v61",
+        "namespace": "study-aurora",
+        "user_id": "user-aurora-01",
+        "agent_id": null,
+        "workspace_id": null,
+        "session_id": null
+      },
+      "query": "海岸设计组的陈雨参与 Aurora 吗？",
+      "valid_at": "2026-10-05T05:06:00+00:00",
+      "known_at": "2026-10-05T05:06:00+00:00",
+      "answerable": true,
+      "evidence": [
+        {
+          "evidence_id": "Q08:identity@1:0:49",
+          "source_revision_id": "identity@1",
+          "source_family": "identity",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 0,
+          "end": 49,
+          "quote_sha256": "9128a2ccc19df11a749b67da45f510e253165c5bb18bc0f143c66efeea246ffe",
+          "fields": [
+            "aurora_identity"
+          ],
+          "valid_from": "2026-10-01T01:00:00+00:00",
+          "known_from": "2026-10-01T01:00:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        },
+        {
+          "evidence_id": "Q08:other-chenyu@8:0:86",
+          "source_revision_id": "other-chenyu@8",
+          "source_family": "other-chenyu",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 0,
+          "end": 86,
+          "quote_sha256": "016cb4ca4b8b32d134132514fb82f9296a8877698b50bc4656bdb01119c09747",
+          "fields": [
+            "distinct_identity",
+            "not_aurora_member"
+          ],
+          "valid_from": "2026-10-05T02:00:00+00:00",
+          "known_from": "2026-10-05T02:00:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        }
+      ],
+      "alternatives": [
+        {
+          "evidence_ids": [
+            "Q08:identity@1:0:49",
+            "Q08:other-chenyu@8:0:86"
+          ],
+          "minimum_source_families": 1
+        }
+      ],
+      "required_fields": [
+        "aurora_identity",
+        "distinct_identity",
+        "not_aurora_member"
+      ],
+      "forbidden_evidence_ids": [],
+      "diagnostic_only": false
+    },
+    {
+      "case_id": "Q09",
+      "scope": {
+        "tenant_id": "synthetic-memory-v61",
+        "namespace": "study-aurora",
+        "user_id": "user-aurora-01",
+        "agent_id": null,
+        "workspace_id": null,
+        "session_id": null
+      },
+      "query": "Borealis 的内部评审代号是什么？",
+      "valid_at": "2026-10-05T05:06:00+00:00",
+      "known_at": "2026-10-05T05:06:00+00:00",
+      "answerable": false,
+      "evidence": [
+        {
+          "evidence_id": "Q09:private-other@9:0:43",
+          "source_revision_id": "private-other@9",
+          "source_family": "private-other",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-other",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 0,
+          "end": 43,
+          "quote_sha256": "c5d36df78909e13b377692896ccfbd45dd75690e36fc737760462f9431bbe6a4",
+          "fields": [
+            "private_code"
+          ],
+          "valid_from": "2026-10-05T02:05:00+00:00",
+          "known_from": "2026-10-05T02:05:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        }
+      ],
+      "alternatives": [],
+      "required_fields": [],
+      "forbidden_evidence_ids": [
+        "Q09:private-other@9:0:43"
+      ],
+      "diagnostic_only": false
+    },
+    {
+      "case_id": "Q10",
+      "scope": {
+        "tenant_id": "synthetic-memory-v61",
+        "namespace": "study-aurora",
+        "user_id": "user-aurora-01",
+        "agent_id": null,
+        "workspace_id": null,
+        "session_id": null
+      },
+      "query": "Aurora 的主要持久数据库是什么？",
+      "valid_at": "2026-10-05T05:06:00+00:00",
+      "known_at": "2026-10-05T05:06:00+00:00",
+      "answerable": true,
+      "evidence": [
+        {
+          "evidence_id": "Q10:database-decision@3:0:64",
+          "source_revision_id": "database-decision@3",
+          "source_family": "database-decision",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 0,
+          "end": 64,
+          "quote_sha256": "828a861e579e272335cb4ce206fcd78a3d783b639505a521bedcde3b64f09fcd",
+          "fields": [
+            "database",
+            "cache_only"
+          ],
+          "valid_from": "2026-10-02T02:00:00+00:00",
+          "known_from": "2026-10-02T02:00:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        }
+      ],
+      "alternatives": [
+        {
+          "evidence_ids": [
+            "Q10:database-decision@3:0:64"
+          ],
+          "minimum_source_families": 1
+        }
+      ],
+      "required_fields": [
+        "cache_only",
+        "database"
+      ],
+      "forbidden_evidence_ids": [],
+      "diagnostic_only": false
+    },
+    {
+      "case_id": "Q11",
+      "scope": {
+        "tenant_id": "synthetic-memory-v61",
+        "namespace": "study-aurora",
+        "user_id": "user-aurora-01",
+        "agent_id": null,
+        "workspace_id": null,
+        "session_id": null
+      },
+      "query": "Aurora 本周测试任务花费多少？",
+      "valid_at": "2026-10-05T05:06:00+00:00",
+      "known_at": "2026-10-05T05:06:00+00:00",
+      "answerable": true,
+      "evidence": [
+        {
+          "evidence_id": "Q11:cost-record@11:0:24",
+          "source_revision_id": "cost-record@11",
+          "source_family": "cost-record",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 0,
+          "end": 24,
+          "quote_sha256": "4e5a2fcea6fd1007537f83d51b1ece9ef0f497b3f64e7615b700461391a9c4c3",
+          "fields": [
+            "amount",
+            "currency"
+          ],
+          "valid_from": "2026-10-05T03:10:00+00:00",
+          "known_from": "2026-10-05T03:10:00+00:00",
+          "valid_to": null,
+          "known_to": "2026-10-05T06:00:00+00:00",
+          "readable": true
+        }
+      ],
+      "alternatives": [
+        {
+          "evidence_ids": [
+            "Q11:cost-record@11:0:24"
+          ],
+          "minimum_source_families": 1
+        }
+      ],
+      "required_fields": [
+        "amount",
+        "currency"
+      ],
+      "forbidden_evidence_ids": [],
+      "diagnostic_only": false
+    },
+    {
+      "case_id": "Q12",
+      "scope": {
+        "tenant_id": "synthetic-memory-v61",
+        "namespace": "study-aurora",
+        "user_id": "user-aurora-01",
+        "agent_id": null,
+        "workspace_id": null,
+        "session_id": null
+      },
+      "query": "Aurora 本周测试任务实际花费多少？",
+      "valid_at": "2026-10-05T06:01:00+00:00",
+      "known_at": "2026-10-05T06:01:00+00:00",
+      "answerable": true,
+      "evidence": [
+        {
+          "evidence_id": "Q12:cost-record@15:0:46",
+          "source_revision_id": "cost-record@15",
+          "source_family": "cost-record",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 0,
+          "end": 46,
+          "quote_sha256": "44d2bb52e2a433424fc9f3c275944ffea47e4ee0fe1211799f0922980c042827",
+          "fields": [
+            "amount",
+            "currency",
+            "correction"
+          ],
+          "valid_from": "2026-10-05T03:10:00+00:00",
+          "known_from": "2026-10-05T06:00:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        }
+      ],
+      "alternatives": [
+        {
+          "evidence_ids": [
+            "Q12:cost-record@15:0:46"
+          ],
+          "minimum_source_families": 1
+        }
+      ],
+      "required_fields": [
+        "amount",
+        "correction",
+        "currency"
+      ],
+      "forbidden_evidence_ids": [],
+      "diagnostic_only": false
+    },
+    {
+      "case_id": "Q13",
+      "scope": {
+        "tenant_id": "synthetic-memory-v61",
+        "namespace": "study-aurora",
+        "user_id": "user-aurora-01",
+        "agent_id": null,
+        "workspace_id": null,
+        "session_id": null
+      },
+      "query": "维护窗口的两条记忆代表两个独立来源验证吗？",
+      "valid_at": "2026-10-05T05:06:00+00:00",
+      "known_at": "2026-10-05T05:06:00+00:00",
+      "answerable": true,
+      "evidence": [
+        {
+          "evidence_id": "Q13:maintenance-original@13:0:41",
+          "source_revision_id": "maintenance-original@13",
+          "source_family": "MAINT-01",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 0,
+          "end": 41,
+          "quote_sha256": "954f3dbc532e7112ce87a46cc2c709e7b1a2d2ac75d4b70a80485c77eaf51c94",
+          "fields": [
+            "original_notice"
+          ],
+          "valid_from": "2026-10-05T05:00:00+00:00",
+          "known_from": "2026-10-05T05:00:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        },
+        {
+          "evidence_id": "Q13:maintenance-copy@14:0:53",
+          "source_revision_id": "maintenance-copy@14",
+          "source_family": "MAINT-01",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 0,
+          "end": 53,
+          "quote_sha256": "9dbc825113e0ae95b3a5ab2d04030ad9abffe50566bb2323ca24d44c69a284dc",
+          "fields": [
+            "same_source_family",
+            "repost_not_independent"
+          ],
+          "valid_from": "2026-10-05T05:05:00+00:00",
+          "known_from": "2026-10-05T05:05:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        }
+      ],
+      "alternatives": [
+        {
+          "evidence_ids": [
+            "Q13:maintenance-original@13:0:41",
+            "Q13:maintenance-copy@14:0:53"
+          ],
+          "minimum_source_families": 1
+        }
+      ],
+      "required_fields": [
+        "original_notice",
+        "repost_not_independent",
+        "same_source_family"
+      ],
+      "forbidden_evidence_ids": [],
+      "diagnostic_only": false
+    },
+    {
+      "case_id": "Q14",
+      "scope": {
+        "tenant_id": "synthetic-memory-v61",
+        "namespace": "study-aurora",
+        "user_id": "user-aurora-01",
+        "agent_id": null,
+        "workspace_id": null,
+        "session_id": null
+      },
+      "query": "Aurora 临时测试端点是什么？",
+      "valid_at": "2026-10-05T05:06:00+00:00",
+      "known_at": "2026-10-05T05:06:00+00:00",
+      "answerable": true,
+      "evidence": [
+        {
+          "evidence_id": "Q14:temporary-endpoint@12:0:56",
+          "source_revision_id": "temporary-endpoint@12",
+          "source_family": "temporary-endpoint",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 0,
+          "end": 56,
+          "quote_sha256": "196fcd24b10dcce175ac0646bbefaa3d17e3ff38f8ae9c6602668930ffbb9575",
+          "fields": [
+            "endpoint"
+          ],
+          "valid_from": "2026-10-05T04:00:00+00:00",
+          "known_from": "2026-10-05T04:00:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        }
+      ],
+      "alternatives": [
+        {
+          "evidence_ids": [
+            "Q14:temporary-endpoint@12:0:56"
+          ],
+          "minimum_source_families": 1
+        }
+      ],
+      "required_fields": [
+        "endpoint"
+      ],
+      "forbidden_evidence_ids": [],
+      "diagnostic_only": false
+    },
+    {
+      "case_id": "Q15",
+      "scope": {
+        "tenant_id": "synthetic-memory-v61",
+        "namespace": "study-aurora",
+        "user_id": "user-aurora-01",
+        "agent_id": null,
+        "workspace_id": null,
+        "session_id": null
+      },
+      "query": "Aurora 临时测试端点是什么？",
+      "valid_at": "2026-10-05T06:10:00+00:00",
+      "known_at": "2026-10-05T06:10:00+00:00",
+      "answerable": false,
+      "evidence": [
+        {
+          "evidence_id": "Q15:temporary-endpoint@12:0:56",
+          "source_revision_id": "temporary-endpoint@12",
+          "source_family": "temporary-endpoint",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 0,
+          "end": 56,
+          "quote_sha256": "196fcd24b10dcce175ac0646bbefaa3d17e3ff38f8ae9c6602668930ffbb9575",
+          "fields": [
+            "endpoint"
+          ],
+          "valid_from": "2026-10-05T04:00:00+00:00",
+          "known_from": "2026-10-05T04:00:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": false
+        }
+      ],
+      "alternatives": [],
+      "required_fields": [],
+      "forbidden_evidence_ids": [
+        "Q15:temporary-endpoint@12:0:56"
+      ],
+      "diagnostic_only": false
+    },
+    {
+      "case_id": "Q16",
+      "scope": {
+        "tenant_id": "synthetic-memory-v61",
+        "namespace": "study-aurora",
+        "user_id": "user-aurora-01",
+        "agent_id": null,
+        "workspace_id": null,
+        "session_id": null
+      },
+      "query": "Aurora 维护窗口何时？请说明现在可用来源。",
+      "valid_at": "2026-10-05T06:05:00+00:00",
+      "known_at": "2026-10-05T06:05:00+00:00",
+      "answerable": true,
+      "evidence": [
+        {
+          "evidence_id": "Q16:maintenance-copy@14:0:53",
+          "source_revision_id": "maintenance-copy@14",
+          "source_family": "MAINT-01",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 0,
+          "end": 53,
+          "quote_sha256": "9dbc825113e0ae95b3a5ab2d04030ad9abffe50566bb2323ca24d44c69a284dc",
+          "fields": [
+            "maintenance_window",
+            "repost_not_independent"
+          ],
+          "valid_from": "2026-10-05T05:05:00+00:00",
+          "known_from": "2026-10-05T05:05:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        }
+      ],
+      "alternatives": [
+        {
+          "evidence_ids": [
+            "Q16:maintenance-copy@14:0:53"
+          ],
+          "minimum_source_families": 1
+        }
+      ],
+      "required_fields": [
+        "maintenance_window",
+        "repost_not_independent"
+      ],
+      "forbidden_evidence_ids": [],
+      "diagnostic_only": false
+    },
+    {
+      "case_id": "Q17",
+      "scope": {
+        "tenant_id": "synthetic-memory-v61",
+        "namespace": "study-aurora",
+        "user_id": "user-aurora-01",
+        "agent_id": null,
+        "workspace_id": null,
+        "session_id": null
+      },
+      "query": "发布改期决定是哪天作出的？",
+      "valid_at": "2026-10-05T05:06:00+00:00",
+      "known_at": "2026-10-05T05:06:00+00:00",
+      "answerable": true,
+      "evidence": [
+        {
+          "evidence_id": "Q17:release-plan-v2@5:0:59",
+          "source_revision_id": "release-plan-v2@5",
+          "source_family": "release-plan-v2",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 0,
+          "end": 59,
+          "quote_sha256": "31b83ea76b43abfb75bb1ee25547378c971fad264ec00a13dfb1c44474a026b8",
+          "fields": [
+            "decision_date"
+          ],
+          "valid_from": "2026-10-05T00:00:00+00:00",
+          "known_from": "2026-10-05T00:00:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        }
+      ],
+      "alternatives": [
+        {
+          "evidence_ids": [
+            "Q17:release-plan-v2@5:0:59"
+          ],
+          "minimum_source_families": 1
+        }
+      ],
+      "required_fields": [
+        "decision_date"
+      ],
+      "forbidden_evidence_ids": [],
+      "diagnostic_only": false
+    },
+    {
+      "case_id": "Q18",
+      "scope": {
+        "tenant_id": "synthetic-memory-v61",
+        "namespace": "study-aurora",
+        "user_id": "user-aurora-01",
+        "agent_id": null,
+        "workspace_id": null,
+        "session_id": null
+      },
+      "query": "Which database did Aurora choose, and why?",
+      "valid_at": "2026-10-05T05:06:00+00:00",
+      "known_at": "2026-10-05T05:06:00+00:00",
+      "answerable": true,
+      "evidence": [
+        {
+          "evidence_id": "Q18:database-decision@3:0:43",
+          "source_revision_id": "database-decision@3",
+          "source_family": "database-decision",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 0,
+          "end": 43,
+          "quote_sha256": "03d466936a3f70cca5f55b0fe67abfd49422d0e7966ce016e5a489b5182f69b6",
+          "fields": [
+            "database",
+            "reason_sql",
+            "reason_staff"
+          ],
+          "valid_from": "2026-10-02T02:00:00+00:00",
+          "known_from": "2026-10-02T02:00:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        }
+      ],
+      "alternatives": [
+        {
+          "evidence_ids": [
+            "Q18:database-decision@3:0:43"
+          ],
+          "minimum_source_families": 1
+        }
+      ],
+      "required_fields": [
+        "database",
+        "reason_sql",
+        "reason_staff"
+      ],
+      "forbidden_evidence_ids": [],
+      "diagnostic_only": false
+    },
+    {
+      "case_id": "Q19",
+      "scope": {
+        "tenant_id": "synthetic-memory-v61",
+        "namespace": "study-aurora",
+        "user_id": "user-aurora-01",
+        "agent_id": null,
+        "workspace_id": null,
+        "session_id": null
+      },
+      "query": "两个失败测试分别叫什么？",
+      "valid_at": "2026-10-05T05:06:00+00:00",
+      "known_at": "2026-10-05T05:06:00+00:00",
+      "answerable": true,
+      "evidence": [
+        {
+          "evidence_id": "Q19:test-execution@7:90:136",
+          "source_revision_id": "test-execution@7",
+          "source_family": "test-execution",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 90,
+          "end": 136,
+          "quote_sha256": "51c10e692afb8372a3cb287c56d4ff8dce99f01d0dcaf772747b3df1177405c5",
+          "fields": [
+            "failed_test_names"
+          ],
+          "valid_from": "2026-10-05T01:10:00+00:00",
+          "known_from": "2026-10-05T01:10:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        }
+      ],
+      "alternatives": [
+        {
+          "evidence_ids": [
+            "Q19:test-execution@7:90:136"
+          ],
+          "minimum_source_families": 1
+        }
+      ],
+      "required_fields": [
+        "failed_test_names"
+      ],
+      "forbidden_evidence_ids": [],
+      "diagnostic_only": false
+    },
+    {
+      "case_id": "Q20",
+      "scope": {
+        "tenant_id": "synthetic-memory-v61",
+        "namespace": "study-aurora",
+        "user_id": "user-aurora-01",
+        "agent_id": null,
+        "workspace_id": null,
+        "session_id": null
+      },
+      "query": "用极小facts预算检索数据库选型时，证据如何被裁剪？",
+      "valid_at": "2026-10-05T05:06:00+00:00",
+      "known_at": "2026-10-05T05:06:00+00:00",
+      "answerable": true,
+      "evidence": [
+        {
+          "evidence_id": "Q20:database-decision@3:0:64",
+          "source_revision_id": "database-decision@3",
+          "source_family": "database-decision",
+          "scope": {
+            "tenant_id": "synthetic-memory-v61",
+            "namespace": "study-aurora",
+            "user_id": "user-aurora-01",
+            "agent_id": null,
+            "workspace_id": null,
+            "session_id": null
+          },
+          "start": 0,
+          "end": 64,
+          "quote_sha256": "828a861e579e272335cb4ce206fcd78a3d783b639505a521bedcde3b64f09fcd",
+          "fields": [
+            "database",
+            "reasons"
+          ],
+          "valid_from": "2026-10-02T02:00:00+00:00",
+          "known_from": "2026-10-02T02:00:00+00:00",
+          "valid_to": null,
+          "known_to": null,
+          "readable": true
+        }
+      ],
+      "alternatives": [
+        {
+          "evidence_ids": [
+            "Q20:database-decision@3:0:64"
+          ],
+          "minimum_source_families": 1
+        }
+      ],
+      "required_fields": [
+        "database",
+        "reasons"
+      ],
+      "forbidden_evidence_ids": [],
+      "diagnostic_only": true
+    }
+  ],
+  "annotation_version": "manual-gold-v1",
+  "synthetic": true
+}
