@@ -11,11 +11,13 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from .consolidation.admission import AdmissionPolicy
 from .consolidation.admission_runtime import ATOM_EVENT_TYPES, ATOM_PREFIX, AdmissionEngine
+from .consolidation.atom_extraction import AtomExtractionPipeline, extraction_receipt
 from .domain import (
     PROTOCOL_VERSION,
     SCHEMA_VERSION,
     AdmissionReceipt,
     AtomDraft,
+    AtomExtractionReceipt,
     Citation,
     Claim,
     ClaimDraft,
@@ -337,6 +339,18 @@ class MemoryKernel:
         atoms, _ = await AdmissionEngine(self._repository).state(scope, valid_at=now, known_at=now)
         legacy = await self._repository.current_claims(scope)
         return (await self._legacy_state(scope, legacy)) + atoms
+
+    async def extract_event(
+        self, event: MemoryEvent, *, pipeline: AtomExtractionPipeline,
+        authority: SourceAuthority, policy: AdmissionPolicy,
+    ) -> AtomExtractionReceipt:
+        return await pipeline.process(self._repository, event, authority=authority, policy=policy)
+
+    async def extraction_status(
+        self, scope: MemoryScope, idempotency_key: str,
+    ) -> AtomExtractionReceipt | None:
+        stored = await AdmissionEngine(self._repository).extraction_status(scope, idempotency_key)
+        return extraction_receipt(*stored) if stored is not None else None
 
     async def admit_event(
         self, event: MemoryEvent, drafts: Sequence[AtomDraft], *,

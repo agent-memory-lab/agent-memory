@@ -11,9 +11,11 @@ from types import TracebackType
 from typing import Any, Self
 
 from .consolidation.admission import AdmissionPolicy
+from .consolidation.atom_extraction import AtomExtractionPipeline
 from .domain import (
     AdmissionReceipt,
     AtomDraft,
+    AtomExtractionReceipt,
     Claim,
     DecisionRecord,
     EvaluationRecord,
@@ -229,6 +231,37 @@ class AgentMemory:
         )
         guard = getattr(self._provider, "guard_admission_bundle", None)
         return await guard(self.scope, bundle) if callable(guard) else bundle
+
+    async def extract_atoms(
+        self, content: str, *, pipeline: AtomExtractionPipeline,
+        authority: SourceAuthority, policy: AdmissionPolicy,
+        idempotency_key: str | None = None, occurred_at: datetime | None = None,
+        source_uri: str | None = None, actor: str = "user",
+    ) -> AtomExtractionReceipt:
+        """Generate, review and admit candidates; acknowledge only after commit."""
+        self._require_initialized()
+        if len(content) > self.limits.max_event_characters:
+            raise ValueError("event exceeds max_event_characters")
+        if pipeline.max_candidates > self.limits.max_claims_per_event:
+            raise ValueError("pipeline exceeds max_claims_per_event")
+        extract = getattr(self._provider, "extract_event", None)
+        if not callable(extract):
+            raise NotImplementedError("provider does not support automatic atom extraction")
+        event = MemoryEvent(
+            scope=self.scope, event_type="memory.atom", content=content,
+            metadata={"atom_implicit_observation": occurred_at is None},
+            idempotency_key=idempotency_key, source_uri=source_uri, actor=actor,
+            **({"occurred_at": occurred_at} if occurred_at is not None else {}),
+        )
+        return await extract(event, pipeline=pipeline, authority=authority, policy=policy)
+
+    async def extraction_status(self, idempotency_key: str) -> AtomExtractionReceipt | None:
+        """Read the immutable initial extraction result; never call a model."""
+        self._require_initialized()
+        reader = getattr(self._provider, "extraction_status", None)
+        if not callable(reader):
+            raise NotImplementedError("provider does not support automatic atom extraction")
+        return await reader(self.scope, idempotency_key)
 
     async def remember_atoms(
         self, content: str, atoms: Sequence[AtomDraft], *, authority: SourceAuthority,

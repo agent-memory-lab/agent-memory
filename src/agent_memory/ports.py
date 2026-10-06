@@ -6,11 +6,13 @@ from types import TracebackType
 from typing import Any, Protocol
 
 from .domain import (
+    AtomReview,
     Claim,
     ClaimDraft,
     DecisionRecord,
     Episode,
     EvaluationRecord,
+    ExtractedAtom,
     FeedbackPage,
     FeedbackReceipt,
     ForgetMode,
@@ -190,6 +192,28 @@ class ClaimGenerator(Protocol):
     async def generate_claims(
         self, event: MemoryEvent
     ) -> Sequence[Mapping[str, object]]: ...
+
+
+class AtomGenerator(Protocol):
+    """Generate candidates only; version identifies immutable model/prompt/config."""
+
+    version: str
+
+    async def generate_atoms(self, event: MemoryEvent) -> Sequence[Mapping[str, Any]]: ...
+
+
+class AtomReviewer(Protocol):
+    """Review full source and every semantic field; never authenticate the source.
+
+    Return one explicitly indexed verdict per candidate. Model-backed reviewers
+    remain fallible; source-specific evidence admission still runs afterwards.
+    """
+
+    version: str
+
+    async def review_atoms(
+        self, event: MemoryEvent, candidates: Sequence[ExtractedAtom],
+    ) -> Sequence[AtomReview]: ...
 
 
 class MemoryPolicy(Protocol):

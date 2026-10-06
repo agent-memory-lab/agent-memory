@@ -7,6 +7,11 @@ the first stable release.
 
 ### Added
 
+- Opt-in automatic Atom extraction with separate source-faithfulness and retention reviews,
+  host-controlled admission, persisted diagnostics and first-result idempotent replay.
+- Bounded Chinese/English reference rules, injectable generation/review protocols,
+  and authored evaluation measuring useful recall as well as false acceptance.
+
 - Explicit typed Atom admission with source authority, pending verification,
   conflict review, temporal evidence and bitemporal state projection.
 - SQLite/PostgreSQL admission snapshots, compare-and-swap reviews and deletion fences.

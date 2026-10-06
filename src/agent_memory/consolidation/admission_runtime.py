@@ -150,9 +150,10 @@ class AdmissionEngine:
         *,
         authority: SourceAuthority,
         policy: AdmissionPolicy,
+        _extraction_audit: dict[str, Any] | None = None,
     ) -> AdmissionReceipt:
         self._require_support()
-        if not 1 <= len(drafts) <= 64:
+        if not (0 if _extraction_audit is not None else 1) <= len(drafts) <= 64:
             raise ValueError("admission requires between 1 and 64 atoms")
         if len(event.content) > 32_000:
             raise ValueError("event exceeds admission content limit")
@@ -178,11 +179,20 @@ class AdmissionEngine:
                 }
             ).encode()
         ).hexdigest()
+        metadata = {"atom_fingerprint": fingerprint}
+        if _extraction_audit is not None:
+            metadata["atom_extraction"] = {
+                **_extraction_audit,
+                "candidates": [{"id": candidate_id(event, draft), "scope": to_jsonable(scope)}
+                               for draft, scope in zip(drafts, scopes, strict=True)],
+            }
+            if len(canonical_json(metadata).encode()) > 128_000:
+                raise ValueError("extraction audit exceeds metadata budget")
         event = replace(
             event,
             event_type="memory.atom",
             idempotency_key=event.idempotency_key or event.id,
-            metadata={"atom_fingerprint": fingerprint},
+            metadata=metadata,
             content_hash="",
         )
         async with self.repository.unit_of_work() as uow:
@@ -193,6 +203,11 @@ class AdmissionEngine:
                 await uow.lock_admission_scope(scope)
             stored = await uow.find_event_by_idempotency(event.scope, event.idempotency_key)
             if stored:
+                if _extraction_audit is not None:
+                    receipt, _ = await self._extraction_receipt(
+                        uow, stored, _extraction_audit["input_fingerprint"], duplicate=True,
+                    )
+                    return receipt
                 if stored.metadata.get("atom_fingerprint") != fingerprint:
                     raise ValueError("idempotency key reused with different atom input")
                 rows = []
@@ -231,6 +246,16 @@ class AdmissionEngine:
                     "base_candidate_id": None,
                     "valid_time_basis": "explicit" if draft.valid_from else "observation",
                 }
+                if _extraction_audit is not None:
+                    matching_indexes = {
+                        i for i, item in enumerate(drafts) if candidate_id(event, item) == identity
+                    }
+                    payload["extraction"] = {
+                        "generator_version": _extraction_audit["generator_version"],
+                        "reviewer_version": _extraction_audit["reviewer_version"],
+                        "reports": [report for report in _extraction_audit["reports"]
+                                    if report["draft_index"] in matching_indexes],
+                    }
                 rows.append(
                     {
                         "id": identity,
@@ -276,6 +301,39 @@ class AdmissionEngine:
                     MemoryScope(**row["scope"]), row["id"], event.id, row["slot_key"], payload, 0
                 )
             return self.receipt(event.id, rows)
+
+    async def extraction_status(
+        self, scope: MemoryScope, idempotency_key: str, *,
+        input_fingerprint: str | None = None, duplicate: bool = False,
+    ) -> tuple[AdmissionReceipt, dict[str, Any]] | None:
+        """Read the saved first result without rerunning an external generator."""
+        self._require_support()
+        async with self.repository.unit_of_work() as uow:
+            await uow.lock_admission_scope(scope)
+            stored = await uow.find_event_by_idempotency(scope, idempotency_key)
+            if stored is None:
+                return None
+            return await self._extraction_receipt(
+                uow, stored, input_fingerprint, duplicate=duplicate,
+            )
+
+    async def _extraction_receipt(
+        self, uow: AdmissionUnitOfWork, stored: MemoryEvent,
+        input_fingerprint: str | None, *, duplicate: bool,
+    ) -> tuple[AdmissionReceipt, dict[str, Any]]:
+        audit = stored.metadata.get("atom_extraction")
+        if not isinstance(audit, dict) or (
+            input_fingerprint is not None and audit["input_fingerprint"] != input_fingerprint
+        ):
+            raise ValueError("idempotency key reused with different extraction input")
+        rows = []
+        for reference in audit["candidates"]:
+            row = await uow.get_admission_record(MemoryScope(**reference["scope"]), reference["id"])
+            if row is None:
+                raise ValueError("extraction candidate was deleted or is incomplete")
+            if row["id"] not in {r["id"] for r in rows}:
+                rows.append(row)
+        return self.receipt(stored.id, rows, duplicate=duplicate), audit
 
     @staticmethod
     def _decision(payload: dict[str, Any], policy: AdmissionPolicy) -> None:

@@ -140,6 +140,15 @@ inputs, and supports bitemporal state changes and explicit review with `resolve_
 The existing `remember()` API remains compatible. See the [Atom admission guide](docs/ATOM_ADMISSION.md)
 for examples, correction IDs, evidence-time semantics, and the first-release limitations.
 
+### Governed automatic atom extraction
+
+`extract_atoms()` generates typed candidates, reviews source faithfulness and reuse value,
+then applies host-controlled admission and bitemporal conflict handling. It includes a
+bounded offline Chinese/English reference adapter and injectable `AtomGenerator` /
+`AtomReviewer` protocols. First results, including failures, are stored for idempotent replay.
+See [automatic Atom extraction](docs/ATOM_EXTRACTION.md) for runnable usage, supported grammar,
+transaction boundaries and authored evaluation cases.
+
 ### Automatic trajectory extraction
 
 Automatic extraction is optional and model-vendor neutral. Implement the small

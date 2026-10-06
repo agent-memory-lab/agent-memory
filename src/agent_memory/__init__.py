@@ -43,6 +43,10 @@ from .domain import (
     AdmissionReceipt,
     AtomDecision,
     AtomDraft,
+    ExtractedAtom,
+    AtomReview,
+    AtomExtractionDecision,
+    AtomExtractionReceipt,
     EvidenceSupport,
     PredicateSpec,
     SourceAuthority,
@@ -90,6 +94,8 @@ from .domain import (
     StateDelta,
 )
 from .consolidation.admission import AdmissionPolicy
+from .consolidation.atom_extraction import AtomExtractionPipeline
+from .consolidation.extraction_rules import RuleBasedAtomAdapter
 from .consolidation.episodes import (
     DeterministicEpisodeSegmenter,
     EpisodeSegmentationError,
@@ -282,6 +288,8 @@ from .extensions.reference import (
 )
 from .ports import (
     AdmissionRepository,
+    AtomGenerator,
+    AtomReviewer,
     AdmissionUnitOfWork,
     BitemporalMemoryRepository,
     BitemporalMemoryProvider,
@@ -364,6 +372,14 @@ from .evaluation.replay import (
 
 __all__ = [
     "AdmissionRepository",
+    "AtomGenerator",
+    "AtomReviewer",
+    "ExtractedAtom",
+    "AtomReview",
+    "AtomExtractionDecision",
+    "AtomExtractionReceipt",
+    "AtomExtractionPipeline",
+    "RuleBasedAtomAdapter",
     "AdmissionUnitOfWork",
     "AdmissionPolicy",
     "AdmissionReceipt",

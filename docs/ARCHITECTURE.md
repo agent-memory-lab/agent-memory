@@ -11,7 +11,7 @@
 | 根目录 `kernel.py`、`providers.py`、`sqlite.py` | 核心记忆流程、默认策略、本地事务存储 | 本体运营、上下文恢复、外部 SDK |
 | 根目录 `composition.py`、`runtime.py`、`unified_memory.py`、`adapters.py`、`mcp.py` | 装配、宿主入口与协议接入 | 新的检索算法或领域规则 |
 | `capture/` | 采集策略、工件、队列、提交接口 | 恢复状态和检索排序 |
-| `consolidation/` | Atom 接纳与核验编排、Claim 合并、Episode 分段、Procedure 归纳 | 插件发现与数据库适配 |
+| `consolidation/` | Atom 自动抽取、语义/价值判定与接纳核验、Claim 合并、Episode 分段、Procedure 归纳 | 插件发现与数据库适配 |
 | `retrieval/` | 双时态状态投影、检索器、候选融合、权限过滤、多样性和预算打包 | 本体版本运营和模型评测 |
 | `ontology/` | 本体模型、投影、图查询、存储、版本与索引运营 | 通用采集和上下文恢复 |
 | `context/` | 恢复状态、分区、压缩、预算反馈及恢复传输 | 长期记忆检索算法 |
@@ -47,6 +47,11 @@
 `consolidation/admission.py` 处理纯接纳规则，`admission_runtime.py` 编排事务与核验，
 `retrieval/atom_state.py` 从候选版本投影双时态状态。`kernel.py` 只连接入口和检索守卫；
 SQLite/PostgreSQL 适配器负责批次原子性、版本比较和删除屏障，不判断事实语义。
+
+自动抽取沿用同一事务与状态模型：`consolidation/atom_extraction.py` 在事务外调用
+生成器和审查器，完成输入、语义和复用价值判断；`extraction_rules.py` 提供有限语法参考实现。
+最终通过 `admission_runtime.py` 原子保存原文、抽取报告与候选。`runtime.py` 和 `kernel.py`
+仅新增装配入口。使用方式与失败语义见 [自动 Atom 抽取](ATOM_EXTRACTION.md)。
 
 ## 拆分与合并标准
 

@@ -841,6 +841,74 @@ class AdmissionReceipt:
 
 
 @dataclass(frozen=True, slots=True)
+class ExtractedAtom:
+    """Untrusted candidate with a locator into the full captured source."""
+
+    draft: AtomDraft
+    source_start: int | None = None
+    source_end: int | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.draft, AtomDraft):
+            raise ValueError("draft must be an AtomDraft")
+        if (self.source_start is None) != (self.source_end is None):
+            raise ValueError("source offsets must be provided together")
+        if self.source_start is not None and (
+            type(self.source_start) is not int or type(self.source_end) is not int
+            or self.source_start < 0 or self.source_end <= self.source_start
+        ):
+            raise ValueError("source offsets must describe a nonempty span")
+
+
+@dataclass(frozen=True, slots=True)
+class AtomReview:
+    """Source faithfulness and reuse judgment, separate from domain truth/authority."""
+
+    candidate_index: int
+    faithfulness: str
+    retention: str
+    reasons: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if type(self.candidate_index) is not int or not 0 <= self.candidate_index < 64:
+            raise ValueError("candidate_index must be between 0 and 63")
+        if self.faithfulness not in {"supported", "unsupported", "uncertain"}:
+            raise ValueError("unsupported faithfulness verdict")
+        if self.retention not in {"durable", "session", "transient", "uncertain"}:
+            raise ValueError("unsupported retention verdict")
+        if not isinstance(self.reasons, (tuple, list)) or not 1 <= len(self.reasons) <= 16:
+            raise ValueError("review requires between 1 and 16 reasons")
+        for reason in self.reasons:
+            _atom_string(reason, "review reason", 128)
+        object.__setattr__(self, "reasons", tuple(self.reasons))
+
+
+@dataclass(frozen=True, slots=True)
+class AtomExtractionDecision:
+    candidate_index: int
+    candidate_id: str | None
+    action: str
+    reasons: tuple[str, ...]
+    faithfulness: str = "uncertain"
+    retention: str = "uncertain"
+    source_start: int | None = None
+    source_end: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AtomExtractionReceipt:
+    admission: AdmissionReceipt
+    decisions: tuple[AtomExtractionDecision, ...]
+    processing_state: str
+    failure_codes: tuple[str, ...]
+    generator_version: str
+    reviewer_version: str
+    generation_calls: int
+    review_calls: int
+    elapsed_ms: float
+
+
+@dataclass(frozen=True, slots=True)
 class EvidenceSupport:
     """Time-bounded support/refutation; source attribution is not universal truth."""
 

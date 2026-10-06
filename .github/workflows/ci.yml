@@ -90,4 +90,4 @@ jobs:
       - run: >-
           python -m pytest -q packages/postgres/tests
           tests/test_bitemporal_claims.py tests/test_atom_admission.py tests/test_atom_temporal.py
-          tests/test_atom_edges.py
+          tests/test_atom_edges.py tests/test_atom_extraction.py
