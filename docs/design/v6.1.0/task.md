@@ -6,7 +6,7 @@
 | 规范依据 | [完整设计 v6.1.0](../AGENT_MEMORY_DESIGN_V6.1.0.md)；设计规定语义，本文件安排实施 |
 | 设计 SHA-256 | `ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b` |
 | 实现基线 | `5cff9f47b7061351fd725c3b8e0a89bf5cb51517` |
-| 台账版本 | revision 10；2026-10-06；可随实施更新 |
+| 台账版本 | revision 11；2026-10-06；可随实施更新 |
 | 当前状态 | DONE 1 项；IN_PROGRESS 24 项；TODO 19 项；本地持久 L1、宿主恢复与事实资格切片已验证，M0/M1 未整体验收 |
 | 范围 | P0–P6 能力阶段；基础能力与可选扩展分别发布 |
 
@@ -49,6 +49,7 @@
 ### AM61-T02 — 领域模型与版本化协议合同
 
 - [ ] 状态/阶段：IN_PROGRESS / P0。依赖：T01 的入口/模型盘点；可提前起草。
+- revision 11 证据：新增 durable-target/2 的 reprocessing 固定成员和 processing token；capture schema/1 身份不变，契约发现声明两种目标。见 [stage-07](stage-07.md)。
 - revision 10 证据：新增可选 candidate-locator/1 通道身份、配置指纹、有限目标通道绑定和索引阶段覆盖字段；旧协议默认不变。见 [stage-06](stage-06.md)。
 - revision 9 证据：新增明确版本的合同发现、固定 target/阶段状态、publication manifest 和 opt-in 处置游标；旧回执/游标不静默升级。见 [stage-05](stage-05.md)。
 - revision 4 证据：来源、处理 request、阶段与 publication 身份分开；新资格字段不改变旧默认身份 hash。 详见 [batch-03-05](batch-03-05.md)。
@@ -71,6 +72,7 @@
 ### AM61-T04 — 确定性回放与故障夹具
 
 - [ ] 状态/阶段：IN_PROGRESS / P0。依赖：T02 合同、T03 场景；回放框架可先搭建。
+- revision 11 证据：新增双后端所有权、合同/目标损坏、并发冻结、容量与事务回滚用例；索引合法积压与证明损坏分开判断。见 [stage-07](stage-07.md)。
 - revision 10 证据：新增索引写入/证明回滚、前缀缺口、租约/删除及真实 SIGKILL 索引事务提交前后恢复专项，双后端共同执行。见 [stage-06](stage-06.md)。
 - revision 4 证据：新增发布回滚、租约、丢确认、游标事务与终止历史测试，SQLite/真实 PG 同合同。 详见 [batch-03-05](batch-03-05.md)。
 - revision 2 证据：新增确定性评分/捕获/重试夹具及 SQLite、真实 PostgreSQL 接纳回归；新事务崩溃点、费用未知和 epoch 竞态未实现。 详见 [batch-01](batch-01.md)。
@@ -193,6 +195,7 @@
 ### AM61-T16 — L0 与处理任务原子事务
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T02、T04、T15；先支持当前有限候选类型。
+- revision 11 证据：重处理请求持久化时记录 processing token；查询复用既有事务与发布清单，无新增来源或接收序号。见 [stage-07](stage-07.md)。
 - revision 10 证据：事务 B 原子提交 L1、closed manifest 与索引 outbox；实际身份条目与证明同事务提交；容量失败一起回滚。见 [stage-06](stage-06.md)。
 - revision 9 证据：事务 A 建立未闭合清单，事务 B 原子关闭并生成 publication token；发布失败/真实强杀前后恢复专项已测，索引 outbox 未启用。见 [stage-05](stage-05.md)。
 - revision 8 证据：事务 A 与事务 B 提交前/后真实 SIGKILL、原回执恢复及阶段复用已验证；多发布/索引 outbox 仍待补。见 [stage-04](stage-04.md)。
@@ -238,6 +241,7 @@
 ### AM61-T20 — 解释替代与重处理对账
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T08–T10、T12、T16、T18。
+- revision 11 证据：显式整来源 primary 重处理可固定多个请求和各自新配置；后续解释不扩张旧目标，删除/修订仍阻断。见 [stage-07](stage-07.md)。
 - revision 5 证据：整来源 primary 的 additive/replace、旧新并集复核、保留身份、零候选、待决、独立来源幸存及 CAS 已实现；局部覆盖/复杂合成仍待扩展。 见 [stage-01](stage-01.md)。
 - 已有落点：`consolidation/atom_extraction.py`、`consolidation/admission_runtime.py`、`sqlite.py`、PostgreSQL `admission.py`/`consolidation.py`。
 - 交付：显式 additive/replace_interpretation；固定来源身份、解释 stream/head、generation 与覆盖清单；旧新并集逐项 supported/unsupported/unknown 对账；统一解释头 CAS 原子激活。
@@ -255,6 +259,7 @@
 ### AM61-T22 — 分阶段回执与有限目标就绪
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T16、T18；L1/index 切片接入相应 T19/T20 发布能力。
+- revision 11 证据：显式 reprocess 有限目标入口、SDK/MCP 阶段查询/有界等待及索引等待已测；单请求多发布与通用刷新仍待补。见 [stage-07](stage-07.md)。
 - revision 10 证据：显式本地候选索引通道的固定目标与连续覆盖已测；最大已完成序号不能越过缺口，零输出与无新 Claim 分开；全文/向量/派生、显式 reprocess 目标入口及单请求多发布仍待补。见 [stage-06](stage-06.md)。
 - revision 9 证据：1–128 个固定捕获请求、跨请求多令牌汇总、闭合零输出/待决/失败、timeout 不取消和新 generation 不漂移旧目标已测；单请求分批发布、显式 reprocess 目标入口及索引/派生阶段仍待补。见 [stage-05](stage-05.md)。
 - revision 4 证据：SDK/MCP status 提供 source_persisted/l1_decided；零候选与全部待决可区分；index_visible 明确 unsupported。 详见 [batch-03-05](batch-03-05.md)。
@@ -278,6 +283,7 @@
 ### AM61-T24 — 双后端与 SDK/MCP 纵向集成
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T14 及 T15–T23 中本次启用能力所需切片；持续接入，不等待可选扩展。
+- revision 11 证据：新增及受影响回归共 182 passed、0 skipped（SQLite/真实 PostgreSQL）；未运行全量测试。见 [stage-07](stage-07.md)。
 - revision 10 证据：本轮仅新增专项及受影响的 SQLite/真实 PostgreSQL、SDK/MCP、worker/恢复回归；未运行全量测试。见 [stage-06](stage-06.md)。
 - revision 9 证据：按用户要求仅运行新专项及相关双后端/SDK/MCP/恢复回归；未运行全量测试，不声明整体发布回归通过。见 [stage-05](stage-05.md)。
 - revision 8 证据：新增 SQLite 与 PostgreSQL 17 的真实 SIGKILL、producer 竞争及 SDK/MCP purge 测试；数据库服务器断电、外部调用与完整恢复矩阵不作通过声明。见 [stage-04](stage-04.md)。
@@ -455,6 +461,7 @@
 ### AM61-T44 — 运行手册与最终交付汇总
 
 - [ ] 状态/阶段：TODO / P6；从首个运行能力开始持续更新。依赖：拟交付子集已通过 T39；不要求 DEFERRED 扩展实现。
+- revision 11 证据：补充版本兼容、旧请求缺少 processing token 的拒绝策略、无新增 DDL 的升级说明和可运行示例。见 [stage-07](stage-07.md)。
 - 已有落点：`docs/single-host-deployment.md`、`docs/recovery-operations.md`、`docs/RESOURCE_BASELINE.md`、`operations/doctor.py`、本目录 plan/task。
 - 交付：部署/升级/备份/擦除/费用对账/队列卡住/回滚运行手册；支持矩阵和未覆盖边界；迁移预演、告警与诊断；汇总实现提交、profile、各阶段证据及可选能力决定。
 - 验收：另一操作者可按手册重现受支持闭环、定位故障并安全恢复；配置与发布能力一致；未决事项具名且不伪完成；仅在本轮声明交付范围全部验收后勾选，后续新增能力启动新台账 revision。
@@ -503,7 +510,7 @@
 | N04-02 | 零edits、补丁无效、待撤回内容 | AM61-T31 | T26/T29/T30/T33 | 未执行 |
 | N04-03 | 刷新期间新增相关成员 | AM61-T31 | T26/T29/T30/T33 | 未执行 |
 | N05-01 | 来源接收但提取未完成 | AM61-T22 | T16/T24/T33 | 通过（有限捕获请求）：source_persisted 可 reached 而 L1 清单未闭合，固定目标与原接收令牌已测 |
-| N05-02 | 全部待决、多次发布、部分索引落后 | AM61-T22 | T16/T24/T33 | 部分：闭合零输出/全部待决、跨请求多个 publication token 和部分成员完成已测；单请求分批发布与索引覆盖未启用 |
+| N05-02 | 全部待决、多次发布、部分索引落后 | AM61-T22 | T16/T24/T33 | 部分：闭合零输出/全部待决、跨请求发布汇总、本地索引连续覆盖/部分落后及显式重处理目标已测；单请求分批发布与派生/外部索引仍待补 |
 | N05-03 | 持续新增、deadline、权限撤回 | AM61-T22 | T16/T24/T33 | 部分：新输入/新 generation 不扩大旧目标、deadline 不取消及 scope/source 删除阻断已测；通用动态 ACL/外部用途守卫待补 |
 | N06-01 | gold分别在候选/精排/装包阶段丢失 | AM61-T34 | T03/T13/T35/T38 | 未执行 |
 | N06-02 | gold需要多个桥梁证据或有替代支持 | AM61-T34 | T03/T13/T35/T38 | 部分：离线 AND/OR，运行 trace 待补 |
@@ -569,3 +576,4 @@ AcceptanceProfile、scorer、实验 manifest 与结果文件：
 | 8 | 2026-10-06 | [运行恢复与离线删除同步](stage-04.md) | DONE 1；IN_PROGRESS 24；TODO 19；首个恢复切片通过，manifest/索引与备份 replay 待补 |
 | 9 | 2026-10-06 | [有限 L1 目标与删除序列取消](stage-05.md) | DONE 1；IN_PROGRESS 24；TODO 19；相关专项通过，无全量回归声明 |
 | 10 | 2026-10-06 | [本地候选索引 outbox 与连续覆盖](stage-06.md) | DONE 1；IN_PROGRESS 24；TODO 19；受影响专项通过，无全量回归声明 |
+| 11 | 2026-10-06 | [显式重处理有限目标](stage-07.md) | DONE 1；IN_PROGRESS 24；TODO 19；182 项相关测试通过，未运行全量测试 |

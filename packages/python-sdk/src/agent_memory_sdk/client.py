@@ -133,6 +133,13 @@ class _Operations(RecoveryClientOperations):
         return await self._call("memory_durable", {"operation": "freeze_target", "payload": {
             "session": to_jsonable(session), "sequences": list(sequences)}})
 
+    async def durable_freeze_reprocessing_target(self, session, request_ids):
+        """Freeze existing host-owned reprocessing requests; this does not submit work."""
+        return await self._call("memory_durable", {
+            "operation": "freeze_reprocessing_target",
+            "payload": {"session": to_jsonable(session), "request_ids": list(request_ids)},
+        })
+
     async def durable_readiness(self, session, target_id, *, stage="l1_decided"):
         return await self._call("memory_durable", {"operation": "readiness", "payload": {
             "session": to_jsonable(session), "target_id": target_id, "stage": stage}})

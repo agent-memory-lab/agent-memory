@@ -47,6 +47,10 @@ class DurableCaptureAPI:
                 sequences=payload["sequences"],
                 actor=context.actor,
             )
+        if operation == "freeze_reprocessing_target":
+            return await self.producer.freeze_reprocessing_target(
+                context.scope, session, request_ids=payload["request_ids"], actor=context.actor
+            )
         if operation == "readiness":
             return await self.producer.readiness(
                 context.scope,

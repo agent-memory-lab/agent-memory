@@ -116,18 +116,19 @@ def receipt_valid(job):
     return True
 
 
-async def verified(uow, scope, job):
-    if not receipt_valid(job):
-        return False
-    applied = job["applied"]
-    # Later publications may replace a pointer; current authority still guards lookup.
-    for item in applied:
+async def stale_candidates(uow, scope, job):
+    stale_ids = set()
+    for item in job["applied"]:
         candidate_id = item["candidate_id"]
         expected = await current_document(uow, scope, candidate_id)
         actual = await uow.index_document_get(scope, job["channel"], candidate_id)
         if actual != expected:
-            return False
-    return True
+            stale_ids.add(candidate_id)
+    return stale_ids
+
+
+async def verified(uow, scope, job):
+    return receipt_valid(job) and not await stale_candidates(uow, scope, job)
 
 
 async def coverage(uow, scope, rows, channel):
@@ -155,6 +156,24 @@ async def coverage(uow, scope, rows, channel):
     tokens = result["publication_commit_tokens"]
     missing, failed, invalid, applied = [], [], [], []
     coordinates, versions = {}, []
+    jobs = await uow.index_jobs(scope, selected.key, rows[0]["epoch"])
+    token_jobs = {j["token"]["id"]: j for j in jobs}
+    bound = max(
+        (token_jobs[t["id"]]["sequence"] for t in tokens if t["id"] in token_jobs), default=0
+    )
+    repair_ids = {
+        d["candidate_id"]
+        for j in jobs
+        if j["sequence"] <= bound and j["status"] in {"pending", "running", "retry_wait"}
+        for d in j["dispositions"]
+    }
+
+    async def repairable(job):
+        if not receipt_valid(job):
+            return False
+        stale_ids = await stale_candidates(uow, scope, job)
+        return bool(stale_ids) and stale_ids <= repair_ids
+
     by_request = {r["request_id"]: r for r in rows}
     for token in tokens:
         request = by_request[token["generation"]]
@@ -185,13 +204,17 @@ async def coverage(uow, scope, rows, channel):
             coordinates[token["id"]] = job["sequence"]
             missing.append(token["id"])
         elif not await verified(uow, scope, job):
-            invalid.append(token["id"])
+            if await repairable(job):
+                coordinates[token["id"]] = job["sequence"]
+                missing.append(token["id"])
+            else:
+                invalid.append(token["id"])
         else:
             applied.append(token["id"])
             coordinates[token["id"]] = job["sequence"]
     # Continuous visibility is reported independently of the target's exact token set.
     through, blocker = 0, None
-    for job in await uow.index_jobs(scope, selected.key, rows[0]["epoch"]):
+    for job in jobs:
         if job["sequence"] != through + 1 or not await verified(uow, scope, job):
             blocker = job
             break
@@ -208,6 +231,7 @@ async def coverage(uow, scope, rows, channel):
         blocker is not None
         and blocker["sequence"] <= target_through
         and blocker["status"] == "completed"
+        and not await repairable(blocker)
     )
     state = (
         "blocked"

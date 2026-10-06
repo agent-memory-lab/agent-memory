@@ -218,6 +218,8 @@ class DurableProducer:
             return {
                 "schema": "durable-contracts/1",
                 "staged_readiness": supported,
+                "reprocessing_targets": supported,
+                "target_schemas": ["durable-target/1", "durable-target/2"] if supported else [],
                 "producer_id": session.producer_id,
                 "epoch": session.epoch,
                 "scope_key": scope.partition_key(),
@@ -245,6 +247,13 @@ class DurableProducer:
         from ..operations.readiness import DurableReadiness
 
         return await DurableReadiness(self).freeze(scope, session, sequences=sequences, actor=actor)
+
+    async def freeze_reprocessing_target(self, scope, session, *, request_ids, actor):
+        from ..operations.readiness import DurableReadiness
+
+        return await DurableReadiness(self).freeze_reprocessing(
+            scope, session, request_ids=request_ids, actor=actor
+        )
 
     async def readiness(self, scope, session, *, target_id, stage, actor):
         from ..operations.readiness import DurableReadiness

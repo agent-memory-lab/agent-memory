@@ -7,6 +7,11 @@ from .retention import RetentionError, _hash, _identity, _time
 from .source_revisions import document_head, interpretation_head, source_is_current
 
 
+def contract_fingerprint(contract):
+    """Shared immutable request contract identity, preserving the original encoding."""
+    return sha256(json.dumps(contract, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
 async def checked_records(uow, scope, source_id, expected_generation, versions=None):
     head = await uow.retention_head_get(scope, "interpretation", source_id)
     if head is None or head["generation"] != expected_generation:
@@ -50,7 +55,8 @@ class ReprocessingService:
             raise RetentionError("interpretation_stream_unsupported")
         self.receiver, self.producer_id, self.actor = receiver, producer_id, actor
 
-    async def _source(self, uow, scope, source_id):
+    async def checked_source(self, uow, scope, source_id):
+        """Shared exact-scope owner and current-revision guard, on the caller's UoW."""
         await self.receiver._check_support(uow, scope)
         source = await uow.get_source_event(scope, source_id)
         if source is None:
@@ -64,7 +70,7 @@ class ReprocessingService:
 
     async def snapshot(self, scope, source_event_id):
         async with self.receiver.repository.unit_of_work() as uow:
-            source = await self._source(uow, scope, source_event_id)
+            source = await self.checked_source(uow, scope, source_event_id)
             head = await interpretation_head(uow, source)
             return {
                 "source_event_id": source.id,
@@ -101,7 +107,7 @@ class ReprocessingService:
         if type(allow_pending) is not bool:
             raise RetentionError("invalid_pending_policy")
         async with self.receiver.repository.unit_of_work() as uow:
-            source = await self._source(uow, scope, source_event_id)
+            source = await self.checked_source(uow, scope, source_event_id)
             complete = {
                 "start": 0,
                 "end": len(source.content),
@@ -124,9 +130,7 @@ class ReprocessingService:
                 "producer_id": self.producer_id,
                 "actor": self.actor,
             }
-            fingerprint = sha256(
-                json.dumps(contract, sort_keys=True, separators=(",", ":")).encode()
-            ).hexdigest()
+            fingerprint = contract_fingerprint(contract)
             prior = await uow.retention_get(scope, "request", request_id)
             if prior is not None:
                 if prior.get("reprocessing_fingerprint") != fingerprint:

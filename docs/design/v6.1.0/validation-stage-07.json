@@ -1,0 +1,87 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "date": "2026-10-06",
+  "ledger_revision": 11,
+  "design": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "base_commit": "2727b7438d530b916968367740c1d65efc221217",
+  "enabled_scope": "exact-scope host-owned whole-source primary reprocessing; finite durable-target/2 with typed processing tokens; SDK/MCP freeze/status/wait and optional candidate-locator/1 visibility",
+  "full_test_run": false,
+  "test_scope_reason": "User requested partial tests only; targeted new reprocessing readiness and affected durable/readiness/index/reprocessing/source revision/SDK/MCP/architecture contracts.",
+  "tests": {
+    "runner": "pytest",
+    "targets": [
+      "tests/test_reprocessing_readiness.py",
+      "tests/test_durable_readiness.py",
+      "tests/test_durable_indexing.py",
+      "tests/test_reprocessing.py",
+      "tests/test_durable_transport.py",
+      "tests/test_source_revisions.py",
+      "tests/test_architecture.py::test_delivery_contracts_do_not_import_database_adapters",
+      "tests/test_architecture.py::test_index_orchestration_does_not_import_storage_adapters",
+      "tests/test_architecture.py::test_domain_contracts_do_not_depend_on_implementation",
+      "packages/python-sdk/tests/test_embedded_contract.py",
+      "packages/mcp-server/tests/test_capture_contract.py"
+    ],
+    "unique_targeted_cases": 182,
+    "passed": 182,
+    "skipped": 0,
+    "duration_seconds": 7.51,
+    "new_behavior_cases": 58,
+    "new_architecture_cases": 0,
+    "backends": [
+      "SQLite",
+      "PostgreSQL 17"
+    ],
+    "real_crash": "4 existing SIGKILL index consumer cases rerun; no new crash cases and database server not killed",
+    "repeat_note": "Earlier incremental subsets are not added to the final 182 unique cases."
+  },
+  "example": "examples/reprocessing_readiness.py passed: new processing configuration; fixed processing/publication tokens; pending index then visible through 2; original capture cursor remains 1",
+  "lint": {
+    "changed_python_files": "F,I passed",
+    "readiness_reprocessing_indexing_new_tests_example": "full configured rules passed"
+  },
+  "wheels": [
+    {
+      "file": "agent_memory-0.1.0-py3-none-any.whl",
+      "sha256": "49ffc6007ea33ba8f48dbf4fe57c44cfda40f483f837271e0802c1b69cdec609"
+    },
+    {
+      "file": "agent_memory_sdk-0.1.0-py3-none-any.whl",
+      "sha256": "1de490b2441852d5144261ae0e7b9ae5876c0c824fe628263b680da2451cf82b"
+    }
+  ],
+  "wheel_sources_match_final_files": true,
+  "new_database_migration_required": false,
+  "source_files_sha256": {
+    "src/agent_memory/capture/durable_api.py": "6271e45d84348a2a189af5ceb2e3570ee45ea0b1a00af1d4d51c270eec1f9068",
+    "src/agent_memory/capture/producer.py": "c13239894459009352939899bab942ba4f7c97e5b9b3537bee1d0688a650eec8",
+    "src/agent_memory/operations/indexing.py": "0479e7caa6701e0657a17c254e48d3a5f4dd1f3fff8a12ebdabdbfb52269e104",
+    "src/agent_memory/operations/readiness.py": "7072995610be0a6b0a925d264caa9edd64874f47b8fb499080aa07c80fdffdfe",
+    "src/agent_memory/operations/reprocessing.py": "616ae050939f040ea459e8cb3759943d2b95ee36c6b1bafd5a371b1d0b1e72d3",
+    "packages/python-sdk/src/agent_memory_sdk/client.py": "e38025336b033b6dc041f2a0e165d2ab8fb0698b949bf13039cacb4417f818f4",
+    "tests/test_reprocessing_readiness.py": "0acd8ea8faa1a2d7d511032307f9915c4f22f13df7b6a9721c3da29ec3e0f085",
+    "examples/reprocessing_readiness.py": "1cb4f8e74ca40506b9b36e5190d250b551855ddd9c982bab94f363823e555190"
+  },
+  "doc_validation": {
+    "frozen_design_hashes": "passed",
+    "task_links": "passed",
+    "task_count": 44,
+    "acceptance_rows": 66,
+    "statuses": {
+      "DONE": 1,
+      "IN_PROGRESS": 24,
+      "TODO": 19
+    }
+  },
+  "remaining": [
+    "general resource refresh coalescing and running new work",
+    "multiple physical publications in one request",
+    "cancelled/dead prefix positions need explicit repair or stream rollover",
+    "backup restoration with authoritative latest deletion log replay",
+    "full-text/vector/external or derived index contracts",
+    "real domain gold/calibration and external ACL/model/derived contracts",
+    "legacy reprocessing requests without typed processing tokens have no guessed historical proof",
+    "no full-suite regression claim for revision 11"
+  ]
+}
