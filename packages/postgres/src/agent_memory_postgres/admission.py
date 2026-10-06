@@ -471,6 +471,9 @@ async def forget_records(connection: Any, request: Any) -> tuple[set[str], int]:
                     WHERE record_id=%s""",
                 (_json(erased_payload(row["payload_json"])), deleted_at, row["record_id"]),
             )
+            from . import index
+
+            await index.invalidate_records(connection, (row["record_id"],))
         after_id = rows[-1]["record_id"]
     extra_ids = dependent_claim_ids - direct_claim_ids
     if extra_ids:

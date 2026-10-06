@@ -349,6 +349,30 @@ class PostgresMemoryUnitOfWork:
 
         return await delivery.count(self.connection, scope, kind)
 
+    async def index_job_get(self, scope, channel, epoch, token_id):
+        from . import index
+        return await index.job_get(self.connection, scope, channel, epoch, token_id)
+
+    async def index_job_put(self, scope, row):
+        from . import index
+        return await index.job_put(self.connection, scope, row)
+
+    async def index_jobs(self, scope, channel, epoch):
+        from . import index
+        return await index.jobs(self.connection, scope, channel, epoch)
+
+    async def index_document_get(self, scope, channel, candidate_id):
+        from . import index
+        return await index.document_get(self.connection, scope, channel, candidate_id)
+
+    async def index_document_put(self, scope, channel, candidate_id, document):
+        from . import index
+        return await index.document_put(self.connection, scope, channel, candidate_id, document)
+
+    async def index_lookup(self, scope, channel, slot_key, limit):
+        from . import index
+        return await index.lookup(self.connection, scope, channel, slot_key, limit)
+
     async def purge_head(self, scope):
         from . import purge
 

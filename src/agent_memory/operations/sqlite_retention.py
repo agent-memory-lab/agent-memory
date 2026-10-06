@@ -3,9 +3,9 @@
 import json
 
 from ..domain import canonical_json
-from . import sqlite_delivery, sqlite_purge
+from . import sqlite_delivery, sqlite_index, sqlite_purge
 
-SCHEMA = sqlite_delivery.SCHEMA + sqlite_purge.SCHEMA + """
+SCHEMA = sqlite_index.SCHEMA + sqlite_delivery.SCHEMA + sqlite_purge.SCHEMA + """
 CREATE TABLE IF NOT EXISTS retention_heads (
     partition_key TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('document','interpretation')),
     identity TEXT NOT NULL, generation INTEGER NOT NULL, payload_json TEXT NOT NULL,
@@ -104,6 +104,7 @@ def forget(connection, request):
         )
     elif not request.memory_ids:
         return
+    sqlite_index.forget(connection, request)
     sqlite_purge.record(connection, request, epoch(connection, request.scope))
     condition = "partition_key=?"
     params = (key,)

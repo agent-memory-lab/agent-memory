@@ -25,9 +25,15 @@ class ProducerSession:
 
 
 class DurableProducer:
-    def __init__(self, receiver: DurableReceiver, *, max_gap=1024):
+    def __init__(self, receiver: DurableReceiver, *, max_gap=1024, index_channel=None):
         if type(max_gap) is not int or not 1 <= max_gap <= 10_000:
             raise ValueError("max_gap must be between 1 and 10000")
+        if index_channel is not None:
+            from ..operations.indexing import CandidateIndexChannel
+
+            if not isinstance(index_channel, CandidateIndexChannel):
+                raise TypeError("expected CandidateIndexChannel")
+        self.index_channel = index_channel
         self.receiver, self.max_gap = receiver, max_gap
 
     async def open(
@@ -208,14 +214,18 @@ class DurableProducer:
         async with self.receiver.repository.unit_of_work() as uow:
             row = await self._check(uow, scope, session, actor)
             supported = callable(getattr(uow, "delivery_get", None))
+            indexed = self.index_channel is not None and callable(getattr(uow, "index_job_get", None))
             return {
                 "schema": "durable-contracts/1",
                 "staged_readiness": supported,
                 "producer_id": session.producer_id,
                 "epoch": session.epoch,
                 "scope_key": scope.partition_key(),
-                "supported_stages": ["source_persisted", "l1_decided"] if supported else [],
-                "index_visible": "unsupported",
+                "supported_stages": (
+                    ["source_persisted", "l1_decided"] + (["index_visible"] if indexed else [])
+                ) if supported else [],
+                "index_visible": "candidate-locator/1" if indexed else "unsupported",
+                **({"index_channel": self.index_channel.payload()} if indexed else {}),
                 "target_limit": 128,
                 "sync_purges": row.get("sync_purges", False),
                 "sequence_dispositions": row.get("sequence_dispositions", False),

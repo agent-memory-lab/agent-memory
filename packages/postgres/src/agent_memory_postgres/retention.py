@@ -2,7 +2,7 @@
 
 from agent_memory.domain import canonical_json
 
-from . import purge
+from . import index, purge
 
 
 def kind(value):
@@ -83,6 +83,7 @@ async def forget(connection, request):
         )
     elif not request.memory_ids:
         return
+    await index.forget(connection, request)
     await purge.record(connection, request, await epoch(connection, request.scope))
     condition = "partition_key=%s"
     params = (key,)

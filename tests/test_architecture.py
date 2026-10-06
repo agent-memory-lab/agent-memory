@@ -129,3 +129,11 @@ def test_delivery_contracts_do_not_import_database_adapters():
         name.startswith(("sqlite3", "psycopg", "agent_memory.sqlite", "agent_memory_postgres"))
         for name in dependencies
     )
+
+
+def test_index_orchestration_does_not_import_storage_adapters():
+    dependencies = imports(SOURCE / "operations" / "indexing.py")
+    assert not any(
+        name.startswith(("sqlite3", "psycopg", "agent_memory.sqlite", "agent_memory_postgres"))
+        for name in dependencies
+    )

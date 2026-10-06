@@ -21,7 +21,7 @@ from .source_revisions import source_is_current
 from .worker_tasks import WorkerLease, WorkerQueueError, WorkerTask, WorkerTaskStatus
 
 
-def processing_configuration_sha256(pipeline, policy, authority):
+def processing_configuration_sha256(pipeline, policy, authority, *, index_channel=None):
     return sha256(
         json.dumps(
             {
@@ -30,6 +30,7 @@ def processing_configuration_sha256(pipeline, policy, authority):
                 "policy": policy.config_payload(),
                 "authority": authority_to_payload(authority),
                 "execution": "local-exact-scope",
+                **({"index_channel": index_channel.payload()} if index_channel else {}),
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -236,17 +237,25 @@ class ExtractionQueue:
 
 
 class DurableAtomHandler:
-    def __init__(self, queue, pipeline, policy, authority, *, local_only):
+    def __init__(self, queue, pipeline, policy, authority, *, local_only, index_channel=None):
         if local_only is not True:
             raise NotImplementedError("external dispatch authorization is not enabled")
         if queue.scope.project(pipeline.scope_level) != queue.scope:
             raise ValueError("durable extraction cannot broaden source audience")
         self.queue, self.pipeline, self.policy, self.authority = queue, pipeline, policy, authority
+        if index_channel is not None:
+            from .indexing import CandidateIndexChannel
+
+            if not isinstance(index_channel, CandidateIndexChannel):
+                raise TypeError("expected CandidateIndexChannel")
+        self.index_channel = index_channel
         self._check_config()
 
     def _check_config(self):
         if (
-            processing_configuration_sha256(self.pipeline, self.policy, self.authority)
+            processing_configuration_sha256(
+                self.pipeline, self.policy, self.authority, index_channel=self.index_channel
+            )
             != self.queue.configuration_sha256
         ):
             raise RetentionError("processing_configuration_changed")
@@ -367,6 +376,10 @@ class DurableAtomHandler:
             from .readiness import close
 
             close(task.scope, row, receipt, interpretation)
+            if self.index_channel is not None:
+                from .indexing import enqueue
+
+                await enqueue(uow, task.scope, row, self.index_channel)
             # The stage is no longer needed. Identity-only provenance remains.
             row.pop("prepared", None)
             await uow.retention_update(task.scope, task.id, row)

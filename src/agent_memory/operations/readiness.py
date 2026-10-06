@@ -205,6 +205,8 @@ class DurableReadiness:
                 "scope_key": scope.partition_key(),
                 "members": members,
             }
+            if self.producer.index_channel is not None:
+                payload["index_channel"] = self.producer.index_channel.payload()
             target_id = "target:" + sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
             if await uow.delivery_get(scope, "target", target_id) is None:
                 if await uow.delivery_count(scope, "target") >= 1000:
@@ -264,4 +266,8 @@ class DurableReadiness:
                     head is not None and head["payload"]["request_id"] == row["request_id"]
                 )
                 rows.append(row)
+            if stage == "index_visible":
+                from .indexing import coverage
+
+                return {**binding, **await coverage(uow, scope, rows, target.get("index_channel"))}
             return {**binding, **project(rows, stage)}

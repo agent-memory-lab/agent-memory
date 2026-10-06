@@ -349,6 +349,30 @@ class SQLiteMemoryUnitOfWork:
 
         return sqlite_delivery.count(self.connection, scope, kind)
 
+    async def index_job_get(self, scope, channel, epoch, token_id):
+        from .operations import sqlite_index
+        return sqlite_index.job_get(self.connection, scope, channel, epoch, token_id)
+
+    async def index_job_put(self, scope, row):
+        from .operations import sqlite_index
+        return sqlite_index.job_put(self.connection, scope, row)
+
+    async def index_jobs(self, scope, channel, epoch):
+        from .operations import sqlite_index
+        return sqlite_index.jobs(self.connection, scope, channel, epoch)
+
+    async def index_document_get(self, scope, channel, candidate_id):
+        from .operations import sqlite_index
+        return sqlite_index.document_get(self.connection, scope, channel, candidate_id)
+
+    async def index_document_put(self, scope, channel, candidate_id, document):
+        from .operations import sqlite_index
+        return sqlite_index.document_put(self.connection, scope, channel, candidate_id, document)
+
+    async def index_lookup(self, scope, channel, slot_key, limit):
+        from .operations import sqlite_index
+        return sqlite_index.lookup(self.connection, scope, channel, slot_key, limit)
+
     async def purge_head(self, scope):
         from .operations import sqlite_purge
 
@@ -1817,6 +1841,9 @@ class SQLiteMemoryRepository:
                    WHERE record_id = ?""",
                 (canonical_json(erased_payload(payload_by_id[record_id])), deleted_at, record_id),
             )
+        from .operations import sqlite_index
+
+        sqlite_index.invalidate_records(connection, invalidated)
         return claim_ids
 
     def _forget_sync(self, request: ForgetRequest) -> ForgetResult:

@@ -251,6 +251,32 @@ class RetentionRepository(MemoryRepository, Protocol):
     def unit_of_work(self) -> RetentionUnitOfWork: ...
 
 
+class CandidateIndexUnitOfWork(RetentionUnitOfWork, Protocol):
+    """Optional publication outbox and candidate locator on the same transaction."""
+
+    async def index_job_get(
+        self, scope: MemoryScope, channel: str, epoch: int, token_id: str
+    ) -> dict[str, Any] | None: ...
+
+    async def index_job_put(self, scope: MemoryScope, row: dict[str, Any]) -> None: ...
+
+    async def index_jobs(
+        self, scope: MemoryScope, channel: str, epoch: int
+    ) -> tuple[dict[str, Any], ...]: ...
+
+    async def index_document_get(
+        self, scope: MemoryScope, channel: str, candidate_id: str
+    ) -> dict[str, Any] | None: ...
+
+    async def index_document_put(
+        self, scope: MemoryScope, channel: str, candidate_id: str, document: dict[str, Any] | None
+    ) -> None: ...
+
+    async def index_lookup(
+        self, scope: MemoryScope, channel: str, slot_key: str, limit: int
+    ) -> tuple[dict[str, Any], ...]: ...
+
+
 class ClaimExtractor(Protocol):
     async def extract(self, event: MemoryEvent) -> Sequence[ClaimDraft]: ...
 

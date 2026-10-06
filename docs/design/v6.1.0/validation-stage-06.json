@@ -1,0 +1,107 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "date": "2026-10-06",
+  "ledger_revision": 10,
+  "design": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "base_commit": "269248ff8bf864991c457794ecbc5ce7dad1db1b",
+  "enabled_scope": "host-selected candidate-locator/1, exact-scope metadata index; atomic publication outbox and local projection/proof; fixed target requires continuous index prefix",
+  "full_test_run": false,
+  "test_scope_reason": "User requested partial tests only; targeted new index behavior, affected durable/worker/SDK/MCP interfaces and admission/deletion regressions.",
+  "tests": {
+    "runner": "pytest",
+    "targets": [
+      "tests/test_durable_indexing.py",
+      "tests/test_durable_readiness.py",
+      "tests/test_durable_dispositions.py",
+      "tests/test_durable_execution.py",
+      "tests/test_durable_producer.py",
+      "tests/test_durable_transport.py",
+      "tests/test_durable_purge.py",
+      "tests/test_durable_retention.py",
+      "tests/test_durable_process_recovery.py",
+      "tests/test_reprocessing.py",
+      "tests/test_source_revisions.py",
+      "tests/test_worker_runtime.py",
+      "tests/test_atom_admission.py",
+      "tests/test_contribution_lifecycle.py::test_erasure_keeps_independent_support_and_temporal_barrier",
+      "tests/test_contribution_lifecycle.py::test_erasing_same_value_duplicate_does_not_end_independent_support",
+      "tests/test_contribution_lifecycle.py::test_transition_end_basis_survives_new_support_loss_and_its_own_erasure",
+      "tests/test_architecture.py::test_index_orchestration_does_not_import_storage_adapters",
+      "tests/test_architecture.py::test_delivery_contracts_do_not_import_database_adapters",
+      "tests/test_architecture.py::test_production_code_uses_owners_instead_of_compatibility_modules",
+      "tests/test_architecture.py::test_domain_contracts_do_not_depend_on_implementation",
+      "packages/python-sdk/tests/test_embedded_contract.py",
+      "packages/mcp-server/tests/test_capture_contract.py"
+    ],
+    "unique_targeted_cases": 283,
+    "passed": 283,
+    "skipped": 0,
+    "duration_seconds": 13.629,
+    "new_behavior_cases": 50,
+    "new_architecture_cases": 1,
+    "backends": [
+      "SQLite",
+      "PostgreSQL 17"
+    ],
+    "real_crash": "4 new SIGKILL index consumer cases: before/after SQL commit on both databases; 14 existing capture/publication SIGKILL cases also rerun; database server not killed",
+    "repeat_note": "Earlier incremental subsets and targeted runs are not added to the final 283 unique cases."
+  },
+  "example": "examples/index_readiness.py passed: L1 before actual locator visibility; finite target coverage and continuous prefix 1",
+  "lint": {
+    "changed_python_files": "F,I passed",
+    "new_modules_tests_example_and_crash_fixture": "full configured rules passed"
+  },
+  "wheels": [
+    {
+      "file": "agent_memory-0.1.0-py3-none-any.whl",
+      "sha256": "8163d877773fafe872d25b4430589f5452274594133fccf7d673836cca323859"
+    },
+    {
+      "file": "agent_memory_postgres-0.1.0-py3-none-any.whl",
+      "sha256": "c8bdf7b7e4e5b7e519dd8ec953687a81b393e5b2018dd37a8f3c33103e82e982"
+    }
+  ],
+  "wheel_sources_match_final_files": true,
+  "postgres_migration_packaged": true,
+  "source_files_sha256": {
+    "packages/postgres/src/agent_memory_postgres/admission.py": "e71b07166854f4d57ef7f8bcdfff253b7a66bc98aee031fdf5bd582d8855cb22",
+    "packages/postgres/src/agent_memory_postgres/repository.py": "19743eaa6dcfa05d98c0613f311bc80725710e995bc95623ee7854528d20b73f",
+    "packages/postgres/src/agent_memory_postgres/retention.py": "6b5940b11dde10b6d7af1cb9eed6dc5d4700212bdd7127f404c2f9153c19a385",
+    "src/agent_memory/capture/producer.py": "6fd5c1e485db5827ae955b3a59cf767d5cbd15e1d475bdd6678ef4cb008c063a",
+    "src/agent_memory/operations/extraction_worker.py": "90ca105a33ada697372d6d58c97a01d105872ab26e210c0589f4a933a1f68f57",
+    "src/agent_memory/operations/readiness.py": "8b51ce2670b28eff59946b01c57f108eca57a191ed3812cbf761c81b3054b745",
+    "src/agent_memory/operations/sqlite_retention.py": "878dfe7bdea00bbdf98131b60e2242d20e095ae7fd2b7917b6aa8854cc33b376",
+    "src/agent_memory/ports.py": "bb42b8afe90272de60c985cbf74daf85f86131013659f79ba11824927b18c022",
+    "src/agent_memory/sqlite.py": "0c203ecd8301eea8a09ade74ac1380f7a277f3a005f94382e53063b090e2b470",
+    "tests/fixtures/durable_crash_child.py": "dccc13e53d902112361a20ffadc9f2a4f006ff234dabbcf3b95a76b280b48814",
+    "tests/test_architecture.py": "6ecbfeb8cd4f0dd28075931a0f05603097b1c7529e0b25db739bbe64291341ee",
+    "examples/index_readiness.py": "913bce2ae0e9c66d79bc331546e6273b2238c153ad1b044d7c2b854caedbc068",
+    "packages/postgres/migrations/011_candidate_index.sql": "39e133c7c5ab8b608ce5736154867da70a4319cf6ac9eb5077a14bb22678aa07",
+    "packages/postgres/src/agent_memory_postgres/index.py": "ef1ec195372981db78aa45621cf1483611e1525b2dd69d822c4af0640ac87000",
+    "src/agent_memory/operations/indexing.py": "c57d6c7b1b5d79fb232eed2997ca55bab675415835441aaaed717f4c734309ac",
+    "src/agent_memory/operations/sqlite_index.py": "c36c39d4233918690d65c39409aa22d70097384e4682caba84e4ea6e8588573d",
+    "tests/test_durable_indexing.py": "68ea746afc23765727f054bdf678b35fdfedc42f875379d11d24359c875ac35e"
+  },
+  "doc_validation": {
+    "frozen_design_hashes": "passed",
+    "task_links": "passed",
+    "task_count": 44,
+    "acceptance_rows": 66,
+    "statuses": {
+      "DONE": 1,
+      "IN_PROGRESS": 24,
+      "TODO": 19
+    }
+  },
+  "remaining": [
+    "full-text/vector/external index channels and equivalent authoritative fallback not enabled",
+    "cancelled/dead prefix positions are not skipped; explicit repair/rollover remains",
+    "multiple physical publications in a request and explicit reprocess target entry",
+    "general resource refresh and running new work; stale pointers blocked/filtered",
+    "incremental watermark storage, ledger compaction and index-space migration",
+    "backup restoration with authoritative latest deletion log replay",
+    "real domain gold/calibration and external ACL/model/derived contracts",
+    "no full-suite regression claim for revision 10"
+  ]
+}

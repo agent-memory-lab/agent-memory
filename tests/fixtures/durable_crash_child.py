@@ -61,6 +61,24 @@ async def main(config):
             unit_type.producer_put = before_commit
         await producer.append(event, session, sequence=1, actor="alice")
         await pause()
+    elif phase.startswith("index_"):
+        from agent_memory.operations.indexing import CandidateIndexChannel, CandidateIndexQueue
+
+        queue = CandidateIndexQueue(
+            repository, scope, CandidateIndexChannel("local"), clock=lambda: now
+        )
+        lease = await queue.claim("crashed-indexer", lease_seconds=5)
+        if phase == "index_before_commit":
+            original = unit_type.index_job_put
+
+            async def before_commit(uow, scope, row):
+                await original(uow, scope, row)
+                if row["status"] == "completed":
+                    await pause()
+
+            unit_type.index_job_put = before_commit
+        await queue.apply(lease.task, None)
+        await pause()
     else:
         generator = Generator()
         pipeline = AtomExtractionPipeline(generator, generator)
