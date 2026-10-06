@@ -311,6 +311,23 @@ class PostgresMemoryUnitOfWork:
             ),
         )
 
+    async def retention_head_get(self, scope, kind, identity):
+        return await retention.head_get(self.connection, scope, kind, identity)
+
+    async def retention_head_put(self, scope, kind, identity, payload, expected_generation):
+        return await retention.head_put(
+            self.connection, scope, kind, identity, payload, expected_generation
+        )
+
+    async def get_source_event(self, scope, event_id):
+        cursor = await self.connection.execute(
+            "SELECT * FROM agent_memory_events "
+            "WHERE partition_key=%s AND id=%s AND archived_at IS NULL",
+            (scope.partition_key(), event_id),
+        )
+        row = await cursor.fetchone()
+        return self._repository._event_from_row(row) if row else None
+
     async def retention_update(self, scope, request_id, payload):
         return await retention.update(self.connection, scope, request_id, payload)
 

@@ -1,0 +1,81 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "date": "2026-10-06",
+  "ledger_revision": 5,
+  "design": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "base_commit": "a45fe1178113d758293af2cb9a94a9e7a0898741",
+  "tests": {
+    "command": "pytest tests packages --junitxml=/tmp/agent-memory-v61-stage1-full.xml",
+    "passed": 1010,
+    "skipped": 5,
+    "skip_reason": "optional tiktoken unavailable",
+    "backends": [
+      "SQLite",
+      "PostgreSQL 17"
+    ],
+    "new_cases": 37
+  },
+  "example": "examples/durable_memory.py passed",
+  "lint": "F,I passed; new implementation modules formatted",
+  "wheels": [
+    {
+      "file": "agent_memory-0.1.0-py3-none-any.whl",
+      "sha256": "db3d4ab9fcd620c4b8d310c0aba9b84349a6304c4cfc2a5eb410b140a2fd8797"
+    },
+    {
+      "file": "agent_memory_mcp-0.1.0-py3-none-any.whl",
+      "sha256": "ce42bc08b006163686f4fa44659aa683e1eedc7a8fd42fc764cdd22d96b227c2"
+    },
+    {
+      "file": "agent_memory_postgres-0.1.0-py3-none-any.whl",
+      "sha256": "3500d94899291a2b90b3ea37c32ed69647a43227cccc23a4b6b39f5d29fc167d"
+    },
+    {
+      "file": "agent_memory_sdk-0.1.0-py3-none-any.whl",
+      "sha256": "baadf967b2026ad97334b7b18581732910dcb90ca7d65cdbfb4282d215c9f13a"
+    }
+  ],
+  "source_files_sha256": {
+    ".github/workflows/ci.yml": "d6bb923e0ad29f6302e6731130ba5ba03883ebc55372e31767b2839b1e371ec5",
+    "examples/durable_memory.py": "3fa3e5828af98c127f8b80dd3abee92c3e968b12582d6760e347043e14b12d4f",
+    "packages/mcp-server/src/agent_memory_mcp/server.py": "4e8a200cd697b88c0214a1ac0460e0c7024d6edca637097bacc8de123963dfb2",
+    "packages/postgres/src/agent_memory_postgres/repository.py": "2d768940b847e584b0cc07647c975a59bd71ac555a5e0c4f3da7b14421d2c843",
+    "packages/postgres/src/agent_memory_postgres/retention.py": "9ea620ee35a07708a60dc614c908690903de54551db2e59c401164d92d5aaab2",
+    "packages/python-sdk/src/agent_memory_sdk/client.py": "619b8f70fc964776ccc41342c8cbfa91b2b2e86919629af1821183e8a6ca5dbb",
+    "packages/python-sdk/src/agent_memory_sdk/durable.py": "7781c326744ae1a1e7f80eae81147bdacc882e3b37b86ab1b2926f7719ecd439",
+    "src/agent_memory/capture/durable_api.py": "3fbc2e6b451573449662c296219e70bb894a795f031051996e2a5e60a5cc5bd3",
+    "src/agent_memory/capture/producer.py": "9c834dea5b95cce540743f38012d45a8fef054721aa95ba47abd6f4ad77425c9",
+    "src/agent_memory/consolidation/admission_runtime.py": "ab432280951497d6a5540e4e63d20ee24e97663009309720426888aa690d3bcb",
+    "src/agent_memory/consolidation/atom_extraction.py": "ecc9311658adebd2ea6c7f236b382aa0540c390082452af0f9adc5a69a641557",
+    "src/agent_memory/operations/extraction_worker.py": "d427f0809d68d6d50a4acdd35bc6a51d4e9b9cb08f30c9ce8bbde6fe521dc727",
+    "src/agent_memory/operations/retention.py": "3568bf50ecf8a92bb7e6271f78557534a600e16523f4a6911181413b41d6c857",
+    "src/agent_memory/operations/sqlite_retention.py": "764bee16f583234e5ae77da32c1e7a79dfbf838f190396aa687f2a54cb4a9247",
+    "src/agent_memory/ports.py": "854c6866efcb07aab2d6f56b562bfd1e27a7233719122bcc3a00c5f071d2484f",
+    "src/agent_memory/sqlite.py": "1eb161426006b3badea5c90c6404c9c9c9dceb86966f24f45f5283e7f80f3ea6",
+    "packages/postgres/migrations/008_retention_heads.sql": "e0610ec6aa0a86c9247ebc62e6606069c71e2b0a4532bed7fc75b206c079e72f",
+    "src/agent_memory/consolidation/interpretation.py": "e7cf403057fa68f6dd4a9c3ac777b7658ce5193cc07a7d9ba21b8d7ed5bb2b55",
+    "src/agent_memory/operations/reprocessing.py": "d9a9ad003f689163caefbba7af2bc5acb3ff194168e3033d41cc142aaf7c6e49",
+    "src/agent_memory/operations/source_revisions.py": "bd072041b5aa4f323bee54dee557ff6d7ee15ce297081420156a0d9c8689226f",
+    "tests/test_reprocessing.py": "d1a7d852c991ed350bca6764c645a596f8d8282a9a40f799714896aa589ccc5a",
+    "tests/test_source_revisions.py": "bd74c4191d8a540e45f266bda899e8ca27c0aec6bf2383db7fff1dbb90e79437"
+  },
+  "doc_validation": {
+    "frozen_design_hashes": "passed",
+    "local_links": "passed",
+    "task_count": 44,
+    "acceptance_rows": 66,
+    "statuses": {
+      "DONE": 1,
+      "IN_PROGRESS": 23,
+      "TODO": 20
+    }
+  },
+  "remaining": [
+    "partial coverage and shadow streams",
+    "multi-source compound contribution replacement",
+    "conditional projection and support interval composition",
+    "cross-slot corrections",
+    "real process kill recovery and domain calibration"
+  ]
+}

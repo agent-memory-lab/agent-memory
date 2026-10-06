@@ -25,6 +25,15 @@ class DurableOutbox:
                     PRIMARY KEY(session_key,sequence), UNIQUE(session_key,event_id)
                 );
             """)
+            conn.execute("BEGIN IMMEDIATE")
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(durable_pending)")}
+            if "operation" not in columns:
+                conn.execute(
+                    "ALTER TABLE durable_pending "
+                    "ADD COLUMN operation TEXT NOT NULL DEFAULT 'append'"
+                )
+            if "revision_json" not in columns:
+                conn.execute("ALTER TABLE durable_pending ADD COLUMN revision_json TEXT")
             conn.execute(
                 "INSERT OR IGNORE INTO durable_sessions(session_key) VALUES (?)",
                 (self.session_key,),
@@ -47,6 +56,24 @@ class DurableOutbox:
 
     def append(self, sanitized_event):
         """Accept an already sanitized lifecycle envelope from a trusted host."""
+        return self._append(sanitized_event, "append", None)
+
+    def append_revision(self, sanitized_event, *, base_event_id, expected_revision):
+        if (
+            not isinstance(base_event_id, str)
+            or not 1 <= len(base_event_id) <= 256
+            or type(expected_revision) is not int
+            or expected_revision < 1
+        ):
+            raise ValueError("invalid source revision")
+        return self._append(
+            sanitized_event,
+            "revise",
+            {"base_event_id": base_event_id, "expected_revision": expected_revision},
+        )
+
+    def _append(self, sanitized_event, operation, revision):
+        revision_json = json.dumps(revision, sort_keys=True) if revision else None
         encoded = json.dumps(sanitized_event, sort_keys=True, ensure_ascii=False, allow_nan=False)
         if len(encoded.encode()) > 128_000:
             raise ValueError("pending submission exceeds size limit")
@@ -56,12 +83,12 @@ class DurableOutbox:
             conn.execute("BEGIN IMMEDIATE")
             self._check_live(conn)
             found = conn.execute(
-                "SELECT sequence,content_sha256 FROM durable_pending "
+                "SELECT sequence,content_sha256,operation,revision_json FROM durable_pending "
                 "WHERE session_key=? AND event_id=?",
                 (self.session_key, event_id),
             ).fetchone()
             if found:
-                if found[1] != digest:
+                if found[1:] != (digest, operation, revision_json):
                     raise ValueError("pending source identity reused with different content")
                 return found[0]
             count = conn.execute(
@@ -75,8 +102,11 @@ class DurableOutbox:
                 (self.session_key,),
             ).fetchone()[0]
             conn.execute(
-                "INSERT INTO durable_pending VALUES (?,?,?,?,?,0)",
-                (self.session_key, seq, event_id, encoded, digest),
+                "INSERT INTO durable_pending "
+                "(session_key,sequence,event_id,event_json,content_sha256,"
+                "acknowledged,operation,revision_json) "
+                "VALUES (?,?,?,?,?,0,?,?)",
+                (self.session_key, seq, event_id, encoded, digest, operation, revision_json),
             )
             return seq
 
@@ -84,15 +114,24 @@ class DurableOutbox:
         with self._connection() as conn:
             self._check_live(conn)
             row = conn.execute(
-                "SELECT sequence,event_json,content_sha256 FROM durable_pending "
+                "SELECT sequence,event_json,content_sha256,operation,revision_json "
+                "FROM durable_pending "
                 "WHERE session_key=? AND acknowledged=0 ORDER BY sequence LIMIT 1",
                 (self.session_key,),
             ).fetchone()
         if row is None:
             return None
-        response = await client.durable_append(json.loads(row[1]), self.session, row[0])
+        revision = json.loads(row[4]) if row[4] else None
+        if row[3] == "revise":
+            response = await client.durable_revise(
+                json.loads(row[1]), self.session, row[0], **revision
+            )
+        else:
+            response = await client.durable_append(json.loads(row[1]), self.session, row[0])
         if (
-            response.get("producer_id") != self.session["producer_id"]
+            response.get("operation", "append") != row[3]
+            or response.get("revision") != revision
+            or response.get("producer_id") != self.session["producer_id"]
             or response.get("epoch") != self.session["epoch"]
             or response.get("event_sha256") != row[2]
             or response.get("sequence") != row[0]
@@ -102,6 +141,7 @@ class DurableOutbox:
             "retry_wait",
             "completed",
             "dead",
+            "superseded",
         }:
             raise ValueError("invalid durable acknowledgment")
         with self._connection() as conn:

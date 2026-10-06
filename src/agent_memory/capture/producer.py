@@ -73,7 +73,7 @@ class DurableProducer:
             raise RetentionError("producer_revoked")
         return row
 
-    async def append(self, event, session, *, sequence, actor):
+    async def append(self, event, session, *, sequence, actor, _revision=None):
         if type(sequence) is not int or not 1 <= sequence <= 2**53:
             raise RetentionError("invalid_producer_sequence")
         if not isinstance(session, ProducerSession):
@@ -85,25 +85,38 @@ class DurableProducer:
             row = await self._check(uow, event.scope, session, actor)
             if sequence > row["acked_through"] + self.max_gap:
                 raise RetentionError("producer_gap_limit")
-            saved = await uow.retention_get(event.scope, "ticket", key)
-            ticket = (
-                self.receiver._ticket(saved)
-                if saved
-                else await self.receiver.issue_ticket(
+            if _revision is not None:
+                receipt = await self.receiver.revise(
                     event,
+                    **_revision,
                     request_id=key,
                     producer_id=session.producer_id,
                     configuration_sha256=session.configuration_sha256,
                     _unit_of_work=uow,
                 )
-            )
-            receipt = await self.receiver.submit(
-                event,
-                ticket=ticket,
-                producer_id=session.producer_id,
-                configuration_sha256=session.configuration_sha256,
-                _unit_of_work=uow,
-            )
+            else:
+                previous = await uow.retention_get(event.scope, "request", key)
+                if previous is not None and previous.get("revision_input") is not None:
+                    raise RetentionError("request_input_conflict")
+                saved = await uow.retention_get(event.scope, "ticket", key)
+                ticket = (
+                    self.receiver._ticket(saved)
+                    if saved
+                    else await self.receiver.issue_ticket(
+                        event,
+                        request_id=key,
+                        producer_id=session.producer_id,
+                        configuration_sha256=session.configuration_sha256,
+                        _unit_of_work=uow,
+                    )
+                )
+                receipt = await self.receiver.submit(
+                    event,
+                    ticket=ticket,
+                    producer_id=session.producer_id,
+                    configuration_sha256=session.configuration_sha256,
+                    _unit_of_work=uow,
+                )
             received = set(row["received"])
             if sequence > row["acked_through"]:
                 received.add(sequence)
@@ -118,6 +131,15 @@ class DurableProducer:
                 "acked_through": row["acked_through"],
                 "received_after_gap": row["received"],
             }
+
+    async def revise(self, event, session, *, sequence, actor, base_event_id, expected_revision):
+        return await self.append(
+            event,
+            session,
+            sequence=sequence,
+            actor=actor,
+            _revision={"base_event_id": base_event_id, "expected_revision": expected_revision},
+        )
 
     async def cursor(self, scope, session, *, actor):
         async with self.receiver.repository.unit_of_work() as uow:
@@ -154,12 +176,22 @@ class DurableProducer:
                 scope, (row["event_id"],)
             ):
                 return {"sequence": sequence, "status": "cancelled"}
+            from ..operations.source_revisions import source_is_current
+
+            source = await uow.get_source_event(scope, row["event_id"])
+            current = source is not None and await source_is_current(uow, source)
+            head = await uow.retention_head_get(scope, "interpretation", row["event_id"])
+            interpretation_current = (
+                current and head is not None and head["payload"]["request_id"] == key
+            )
             return {
                 "sequence": sequence,
+                "source_current": current,
+                "interpretation_current": interpretation_current,
                 "receipt": to_jsonable(self.receiver._receipt(row)),
                 "source_persisted": True,
                 "l1_decided": row["status"] == "completed",
                 "index_visible": "unsupported",
                 "attempts": row.get("attempts", 0),
-                "result": row.get("result"),
+                "result": row.get("result") if interpretation_current else None,
             }

@@ -219,7 +219,7 @@ def create_server(
     if durable_capture is not None:
         @server.tool()
         async def memory_durable(ctx: Context, operation: str, payload: dict[str, Any]) -> dict[str, Any]:
-            """Append, query status, or read a cursor using a host-issued producer session."""
+            """Append/revise sources or query status/cursors with a host-issued producer session."""
             identity = await identity_resolver.resolve(ctx)
             try:
                 return await durable_capture.call(operation, payload, identity)

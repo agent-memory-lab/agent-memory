@@ -87,7 +87,12 @@ jobs:
       - run: |
           python -m pip install -e '.[dev]'
           python -m pip install -e packages/postgres
+          python -m pip install -e packages/python-sdk
+          python -m pip install -e packages/mcp-server
       - run: >-
           python -m pytest -q packages/postgres/tests
           tests/test_bitemporal_claims.py tests/test_atom_admission.py tests/test_atom_temporal.py
           tests/test_atom_edges.py tests/test_atom_extraction.py
+          tests/test_durable_retention.py tests/test_durable_execution.py
+          tests/test_durable_producer.py tests/test_durable_transport.py
+          tests/test_reprocessing.py tests/test_source_revisions.py

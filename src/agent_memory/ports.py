@@ -185,6 +185,21 @@ class AdmissionRepository(MemoryRepository, Protocol):
 class RetentionUnitOfWork(AdmissionUnitOfWork, Protocol):
     """Optional durable-receive ledger; methods share the active event transaction."""
 
+    async def get_source_event(self, scope: MemoryScope, event_id: str) -> MemoryEvent | None: ...
+
+    async def retention_head_get(
+        self, scope: MemoryScope, kind: str, identity: str
+    ) -> dict[str, Any] | None: ...
+
+    async def retention_head_put(
+        self,
+        scope: MemoryScope,
+        kind: str,
+        identity: str,
+        payload: dict[str, Any],
+        expected_generation: int,
+    ) -> int: ...
+
     async def retention_update(self, scope: MemoryScope, request_id: str, payload: dict[str, Any]) -> None: ...
 
     async def retention_active(self, scope: MemoryScope) -> tuple[dict[str, Any], ...]: ...

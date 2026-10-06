@@ -7,6 +7,10 @@ the first stable release.
 
 ### Added
 
+- Immutable source revisions with shared SDK/MCP delivery and acknowledgment recovery.
+- Explicit whole-source additive/replacement processing, independent old-contribution review,
+  interpretation head CAS, preserved evidence identities and bitemporal history.
+
 - Opt-in durable local extraction with immutable sources, resumable stages, fenced leases,
   and transactional publication on SQLite and PostgreSQL.
 - Shared Embedded/MCP producer sessions, contiguous acknowledgments, status queries,

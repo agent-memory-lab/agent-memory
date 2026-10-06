@@ -36,7 +36,7 @@ class DurableCaptureAPI:
             return await self.producer.status(
                 context.scope, session, sequence=payload["sequence"], actor=context.actor
             )
-        if operation != "append":
+        if operation not in {"append", "revise"}:
             raise RetentionError("unsupported_durable_operation")
         data = {**payload["event"], "actor": context.actor}
         lifecycle = LifecycleEvent.from_dict(data, trusted_scope=context.scope)
@@ -54,10 +54,22 @@ class DurableCaptureAPI:
             ).hexdigest()
         )
         source = replace(safe.to_memory_event(), id=source_id)
-        response = await self.producer.append(
-            source, session, sequence=payload["sequence"], actor=context.actor
-        )
+        revision = None
+        if operation == "revise":
+            revision = {
+                "base_event_id": payload["base_event_id"],
+                "expected_revision": payload["expected_revision"],
+            }
+            response = await self.producer.revise(
+                source, session, sequence=payload["sequence"], actor=context.actor, **revision
+            )
+        else:
+            response = await self.producer.append(
+                source, session, sequence=payload["sequence"], actor=context.actor
+            )
         response.update(
+            operation=operation,
+            revision=revision,
             producer_id=session.producer_id,
             epoch=session.epoch,
             event_sha256=sha256(

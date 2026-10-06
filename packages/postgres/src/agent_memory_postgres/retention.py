@@ -145,3 +145,40 @@ async def producer_put(connection, scope, producer_id, payload):
         "ON CONFLICT(partition_key,producer_id) DO UPDATE SET payload_json=excluded.payload_json",
         (scope.partition_key(), producer_id, canonical_json(payload)),
     )
+
+
+async def head_get(connection, scope, head_kind, identity):
+    cursor = await connection.execute(
+        "SELECT generation,payload_json FROM agent_memory_retention_heads "
+        "WHERE partition_key=%s AND kind=%s AND identity=%s",
+        (scope.partition_key(), head_kind, identity),
+    )
+    row = await cursor.fetchone()
+    return {"generation": row["generation"], "payload": row["payload_json"]} if row else None
+
+
+async def head_put(connection, scope, head_kind, identity, payload, expected_generation):
+    from agent_memory.operations.retention import RetentionError
+
+    if expected_generation == 0:
+        cursor = await connection.execute(
+            "INSERT INTO agent_memory_retention_heads VALUES (%s,%s,%s,1,%s::jsonb) "
+            "ON CONFLICT DO NOTHING",
+            (scope.partition_key(), head_kind, identity, canonical_json(payload)),
+        )
+    else:
+        cursor = await connection.execute(
+            "UPDATE agent_memory_retention_heads "
+            "SET generation=generation+1,payload_json=%s::jsonb "
+            "WHERE partition_key=%s AND kind=%s AND identity=%s AND generation=%s",
+            (
+                canonical_json(payload),
+                scope.partition_key(),
+                head_kind,
+                identity,
+                expected_generation,
+            ),
+        )
+    if cursor.rowcount != 1:
+        raise RetentionError(head_kind + "_head_changed")
+    return expected_generation + 1

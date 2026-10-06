@@ -586,7 +586,7 @@ The versioned target architecture is [Agent Memory Design v6.1.0](docs/design/AG
 See the [design version index](docs/design/README.md) for status, history and versioning rules.
 Follow the [v6.1 implementation plan](docs/design/v6.1.0/plan.md) and [task checklist](docs/design/v6.1.0/task.md) for phased delivery and acceptance tracking.
 The [first implementation batch](docs/design/v6.1.0/batch-01.md) adds host capture provenance/replay restrictions and offline evidence quality gates; it does not enable the full v6.1 runtime.
-The [latest implementation](docs/design/v6.1.0/batch-03-05.md) adds opt-in durable local extraction, atomic publication, SDK/MCP producer recovery, qualified evidence, and bitemporal termination. Complex conditional projection and explicit reprocessing remain pending. Run [the local example](examples/durable_memory.py) for the supported round trip. See the [next implementation steps](docs/design/v6.1.0/next-steps.md).
+The [latest implementation](docs/design/v6.1.0/stage-01.md) adds immutable source revisions and explicit whole-source additive/replacement processing to the durable local extraction pipeline. It preserves historical knowledge, reviews old contributions independently, and activates interpretations atomically. Partial coverage, complex contribution reconciliation, and conditional projection remain pending. Run [the local example](examples/durable_memory.py) for the supported round trip. See the [next implementation steps](docs/design/v6.1.0/next-steps.md).
 The design distinguishes implemented capabilities from planned work.
 
 ## Current Boundaries

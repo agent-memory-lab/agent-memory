@@ -28,6 +28,7 @@ from agent_memory.operations.extraction_worker import (
     ExtractionQueue,
     processing_configuration_sha256,
 )
+from agent_memory.operations.reprocessing import ReprocessingService
 from agent_memory.operations.retention import DurableReceiver
 from agent_memory.operations.worker_runtime import BoundedWorker
 from agent_memory.providers import (
@@ -95,6 +96,46 @@ async def main():
                     ensure_ascii=False,
                 )
             )
+            # A host explicitly reinterprets the same immutable source. The model
+            # does not choose the processing mode, owner, scope or configuration.
+            source_id = status["receipt"]["source_event_id"]
+            reprocessing = ReprocessingService(
+                producer.receiver, producer_id="demo-host", actor="alice"
+            )
+            head = await reprocessing.snapshot(scope, source_id)
+            await reprocessing.submit(
+                scope,
+                source_event_id=source_id,
+                request_id="demo-reprocess",
+                mode="replace_interpretation",
+                configuration_sha256=configuration,
+                expected_head_generation=head["generation"],
+            )
+            await BoundedWorker(queue, {"memory.extract": handler}, worker_id="local").run_once()
+            result = await queue.status("demo-reprocess")
+            assert result["status"] == "completed"
+            assert result["result"]["candidate_ids"] == head["active_candidate_ids"]
+            print(
+                json.dumps({"reprocessing": result["result"]["interpretation"]}, ensure_ascii=False)
+            )
+
+            # Editing a source creates a new immutable revision, sharing the same
+            # outbox sequence/ack protocol as append. It does not assert a negation.
+            revision = {
+                **event,
+                "event_id": "user-message-1-revision-2",
+                "content": "我住在上海",
+                "occurred_at": utc_now().isoformat(),
+            }
+            sequence = outbox.append_revision(
+                revision, base_event_id=source_id, expected_revision=1
+            )
+            await outbox.flush_one(client)
+            await BoundedWorker(queue, {"memory.extract": handler}, worker_id="local").run_once()
+            revised = await client.durable_status(session, sequence)
+            assert revised["receipt"]["status"] == "completed"
+            assert revised["source_current"] and revised["interpretation_current"]
+            print(json.dumps({"revision": revised["receipt"]}, ensure_ascii=False))
             outbox.purge()
             await kernel.forget(ForgetRequest(scope, all_in_scope=True, mode=ForgetMode.ERASE))
         finally:

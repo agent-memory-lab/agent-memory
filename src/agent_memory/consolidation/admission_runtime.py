@@ -155,7 +155,21 @@ class AdmissionEngine:
         _extraction_audit: dict[str, Any] | None = None,
         _unit_of_work=None,
         _retained: bool = False,
+        _publication_id: str | None = None,
     ) -> AdmissionReceipt:
+        if _publication_id is not None and (not _retained or not isinstance(_publication_id, str)):
+            raise ValueError("publication identity requires retained source admission")
+
+        def identity_for(draft):
+            identity = candidate_id(event, draft)
+            if _publication_id is None:
+                return identity
+            return (
+                "candidate:"
+                + sha256(canonical_json([identity, _publication_id]).encode()).hexdigest()
+            )
+
+        source_family = event.metadata.get("_retention", {}).get("document_id", event.id)
         self._require_support()
         if is_memory_context(event):
             raise ValueError("memory context cannot be admitted as independent evidence")
@@ -195,8 +209,10 @@ class AdmissionEngine:
         if _extraction_audit is not None:
             metadata["atom_extraction"] = {
                 **_extraction_audit,
-                "candidates": [{"id": candidate_id(event, draft), "scope": to_jsonable(scope)}
-                               for draft, scope in zip(drafts, scopes, strict=True)],
+                "candidates": [
+                    {"id": identity_for(draft), "scope": to_jsonable(scope)}
+                    for draft, scope in zip(drafts, scopes, strict=True)
+                ],
             }
             if len(canonical_json(metadata).encode()) > 128_000:
                 raise ValueError("extraction audit exceeds metadata budget")
@@ -223,7 +239,9 @@ class AdmissionEngine:
             stored = await uow.find_event_by_idempotency(event.scope, event.idempotency_key)
             if _retained:
                 if (
-                    stored is None or stored.id != event.id or "_retention" not in stored.metadata
+                    stored is None
+                    or stored.id != event.id
+                    or "_retention" not in stored.metadata
                     or stored.content != event.content
                     or not await uow.events_exist(event.scope, (event.id,))
                 ):
@@ -231,7 +249,10 @@ class AdmissionEngine:
             elif stored:
                 if _extraction_audit is not None:
                     receipt, _ = await self._extraction_receipt(
-                        uow, stored, _extraction_audit["input_fingerprint"], duplicate=True,
+                        uow,
+                        stored,
+                        _extraction_audit["input_fingerprint"],
+                        duplicate=True,
                     )
                     return receipt
                 if stored.metadata.get("atom_fingerprint") != fingerprint:
@@ -249,7 +270,7 @@ class AdmissionEngine:
             rows: list[dict[str, Any]] = []
             existing: dict[str, list[dict[str, Any]]] = {}
             for draft, scope in zip(drafts, scopes, strict=True):
-                identity = candidate_id(event, draft)
+                identity = identity_for(draft)
                 if identity in {r["id"] for r in rows}:
                     continue
                 key = slot_key(event.scope, draft)
@@ -266,6 +287,8 @@ class AdmissionEngine:
                     "valid_from": (draft.valid_from or event.occurred_at).isoformat(),
                     "valid_to": draft.valid_to.isoformat() if draft.valid_to else None,
                     "source_event_ids": [event.id],
+                    "source_family": source_family,
+                    "interpretation_request": _publication_id,
                     "evidence": [],
                     "evidence_qualified": action == "ACCEPT",
                     "decisions": [],
@@ -275,13 +298,16 @@ class AdmissionEngine:
                 }
                 if _extraction_audit is not None:
                     matching_indexes = {
-                        i for i, item in enumerate(drafts) if candidate_id(event, item) == identity
+                        i for i, item in enumerate(drafts) if identity_for(item) == identity
                     }
                     payload["extraction"] = {
                         "generator_version": _extraction_audit["generator_version"],
                         "reviewer_version": _extraction_audit["reviewer_version"],
-                        "reports": [report for report in _extraction_audit["reports"]
-                                    if report["draft_index"] in matching_indexes],
+                        "reports": [
+                            report
+                            for report in _extraction_audit["reports"]
+                            if report["draft_index"] in matching_indexes
+                        ],
                     }
                 rows.append(
                     {

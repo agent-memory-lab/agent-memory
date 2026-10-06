@@ -5,6 +5,11 @@ import json
 from ..domain import canonical_json
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS retention_heads (
+    partition_key TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('document','interpretation')),
+    identity TEXT NOT NULL, generation INTEGER NOT NULL, payload_json TEXT NOT NULL,
+    PRIMARY KEY(partition_key, kind, identity)
+);
 CREATE TABLE IF NOT EXISTS retention_producers (
     partition_key TEXT NOT NULL, producer_id TEXT NOT NULL, payload_json TEXT NOT NULL,
     PRIMARY KEY(partition_key, producer_id)
@@ -157,3 +162,37 @@ def producer_put(connection, scope, producer_id, payload):
         "DO UPDATE SET payload_json=excluded.payload_json",
         (scope.partition_key(), producer_id, canonical_json(payload)),
     )
+
+
+def head_get(connection, scope, head_kind, identity):
+    row = connection.execute(
+        "SELECT generation,payload_json FROM retention_heads "
+        "WHERE partition_key=? AND kind=? AND identity=?",
+        (scope.partition_key(), head_kind, identity),
+    ).fetchone()
+    return {"generation": row[0], "payload": json.loads(row[1])} if row else None
+
+
+def head_put(connection, scope, head_kind, identity, payload, expected_generation):
+    from .retention import RetentionError
+
+    if expected_generation == 0:
+        cursor = connection.execute(
+            "INSERT OR IGNORE INTO retention_heads VALUES (?,?,?,?,?)",
+            (scope.partition_key(), head_kind, identity, 1, canonical_json(payload)),
+        )
+    else:
+        cursor = connection.execute(
+            "UPDATE retention_heads SET generation=generation+1,payload_json=? "
+            "WHERE partition_key=? AND kind=? AND identity=? AND generation=?",
+            (
+                canonical_json(payload),
+                scope.partition_key(),
+                head_kind,
+                identity,
+                expected_generation,
+            ),
+        )
+    if cursor.rowcount != 1:
+        raise RetentionError(head_kind + "_head_changed")
+    return expected_generation + 1

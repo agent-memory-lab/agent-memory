@@ -15,7 +15,9 @@ from secrets import token_urlsafe
 from ..consolidation.admission import authority_to_payload
 from ..domain import utc_now
 from ..serialization import to_jsonable
+from .reprocessing import checked_records
 from .retention import DurableReceiver, RetentionError, _identity, _time
+from .source_revisions import source_is_current
 from .worker_tasks import WorkerLease, WorkerQueueError, WorkerTask, WorkerTaskStatus
 
 
@@ -70,12 +72,14 @@ class ExtractionQueue:
         raise NotImplementedError("submit sources through DurableReceiver")
 
     async def _live(self, uow, row):
-        return (
-            row is not None
-            and row["status"] != "cancelled"
-            and row["epoch"] == await uow.retention_epoch(self.scope)
-            and await uow.events_exist(self.scope, (row["event_id"],))
-        )
+        if (
+            row is None
+            or row["status"] == "cancelled"
+            or row["epoch"] != await uow.retention_epoch(self.scope)
+        ):
+            return False
+        source = await uow.get_source_event(self.scope, row["event_id"])
+        return source is not None and await source_is_current(uow, source)
 
     async def checked(self, uow, request_id, token, *, completed=False):
         await DurableReceiver._check_support(uow, self.scope)
@@ -169,12 +173,35 @@ class ExtractionQueue:
             row = await self.checked(uow, lease.task.id, lease.token, completed=True)
             if row["status"] == "completed":
                 return
+            code = error.code if isinstance(error, RetentionError) else "processing_failed"
+            conflicts = {
+                "interpretation_head_changed",
+                "interpretation_contribution_changed",
+                "source_revision_changed",
+            }
+            resolution = {
+                "reprocessing_needs_resolution",
+                "reprocessing_incomplete",
+                "reprocessing_review_incomplete",
+                "reprocessing_review_inconsistent",
+                "interpretation_capability_unsupported",
+                "interpretation_capacity",
+            }
+            status = (
+                "conflict"
+                if code in conflicts
+                else "needs_resolution"
+                if code in resolution
+                else "dead"
+                if row["attempts"] >= self.max_attempts
+                else "retry_wait"
+            )
             row.update(
-                status="dead" if row["attempts"] >= self.max_attempts else "retry_wait",
+                status=status,
                 next_attempt_at=(
                     _time(self.clock()) + timedelta(seconds=self.retry_seconds)
                 ).isoformat(),
-                last_error_code="processing_failed",
+                last_error_code=code,
             )
             await uow.retention_update(self.scope, lease.task.id, row)
 
@@ -185,15 +212,25 @@ class ExtractionQueue:
             if row is None:
                 return None
             if not await self._live(uow, row):
-                return {"request_id": request_id, "status": "cancelled"}
+                source = await uow.get_source_event(self.scope, row["event_id"])
+                status = (
+                    "superseded"
+                    if source is not None and row["epoch"] == await uow.retention_epoch(self.scope)
+                    else "cancelled"
+                )
+                return {"request_id": request_id, "status": status}
+            head = await uow.retention_head_get(self.scope, "interpretation", row["event_id"])
             return {
                 "request_id": request_id,
                 "source_event_id": row["event_id"],
                 "status": row["status"],
                 "source_persisted": True,
                 "l1_decided": row["status"] == "completed",
+                "interpretation_current": head is not None
+                and head["payload"]["request_id"] == request_id,
                 "index_visible": "unsupported",
                 "attempts": row.get("attempts", 0),
+                "last_error_code": row.get("last_error_code"),
                 "result": row.get("result"),
             }
 
@@ -220,8 +257,7 @@ class DurableAtomHandler:
         self._check_config()
         async with self.queue.repository.unit_of_work() as uow:
             row = await self.queue.checked(uow, task.id, task.payload["fence"])
-            ticket = await uow.retention_get(task.scope, "ticket", task.id)
-            source = await uow.find_event_by_idempotency(task.scope, ticket["idempotency_key"])
+            source = await uow.get_source_event(task.scope, row["event_id"])
             if source is None or source.id != row["event_id"]:
                 raise stale()
             if source.metadata.get("lifecycle", {}).get("origin") == "model":
@@ -234,6 +270,20 @@ class DurableAtomHandler:
             }
             if origin is not None and origin != expected_origin.get(self.authority.kind):
                 raise RetentionError("source_origin_authority_mismatch")
+            reprocessing = row.get("reprocessing")
+            records = (
+                (
+                    await checked_records(
+                        uow,
+                        task.scope,
+                        source.id,
+                        reprocessing["expected_head_generation"],
+                        row["base_versions"],
+                    )
+                )
+                if reprocessing
+                else ()
+            )
             prepared = row.get("prepared")
             manifest = {
                 "source_event_id": source.id,
@@ -249,25 +299,68 @@ class DurableAtomHandler:
             )
             if prepared["audit"]["processing_state"] != "completed":
                 raise ValueError("extraction stage failed")
+            if reprocessing:
+                from ..consolidation.interpretation import prepare_reconciliation
+
+                prepared = await prepare_reconciliation(
+                    self.pipeline,
+                    source,
+                    prepared,
+                    records,
+                    reprocessing,
+                    self.policy,
+                    self.authority,
+                )
             await checkpoint({"prepared": prepared, "input_manifest": manifest})
         self._check_config()
         async with self.queue.repository.unit_of_work() as uow:
             row = await self.queue.checked(uow, task.id, task.payload["fence"])
-            current = await uow.find_event_by_idempotency(task.scope, ticket["idempotency_key"])
+            current = await uow.get_source_event(task.scope, source.id)
             if current is None or current.content_hash != source.content_hash:
                 raise stale()
-            receipt = await self.pipeline.publish_prepared(
-                self.queue.repository,
-                source,
-                prepared,
-                authority=self.authority,
-                policy=self.policy,
-                unit_of_work=uow,
-                retained=True,
-            )
+            interpretation = None
+            if reprocessing:
+                from ..consolidation.interpretation import activate
+
+                receipt, interpretation = await activate(
+                    uow,
+                    self.queue.repository,
+                    source,
+                    row,
+                    prepared,
+                    self.pipeline,
+                    self.policy,
+                    self.authority,
+                )
+            else:
+                receipt = await self.pipeline.publish_prepared(
+                    self.queue.repository,
+                    source,
+                    prepared,
+                    authority=self.authority,
+                    policy=self.policy,
+                    unit_of_work=uow,
+                    retained=True,
+                )
+                active_ids = [
+                    d.candidate_id
+                    for d in receipt.decisions
+                    if d.action not in {"REJECT", "L0_ONLY"}
+                ]
+                await uow.retention_head_put(
+                    task.scope,
+                    "interpretation",
+                    source.id,
+                    {"active_ids": active_ids, "request_id": task.id, "stream": "primary"},
+                    0,
+                )
             row.update(
                 status="completed",
-                result={**to_jsonable(receipt), "extraction": prepared["audit"]},
+                result={
+                    **to_jsonable(receipt),
+                    "extraction": prepared["audit"],
+                    **({"interpretation": interpretation} if interpretation else {}),
+                },
                 publication_id="publication:" + task.id,
                 completed_at=_time(self.queue.clock()).isoformat(),
             )

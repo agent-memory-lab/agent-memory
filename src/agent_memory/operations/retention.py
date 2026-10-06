@@ -83,7 +83,18 @@ class RetentionReceipt:
         if type(self.epoch) is not int or self.epoch < 0:
             raise RetentionError("invalid_epoch")
         if (
-            self.status not in {"queued", "running", "retry_wait", "completed", "dead", "cancelled"}
+            self.status
+            not in {
+                "queued",
+                "running",
+                "retry_wait",
+                "completed",
+                "dead",
+                "cancelled",
+                "conflict",
+                "needs_resolution",
+                "superseded",
+            }
             or self.schema != RETAIN_SCHEMA
         ):
             raise RetentionError("unsupported_receive_state")
@@ -97,7 +108,7 @@ class DurableReceiver:
 
     Inputs must already be sanitized by the trusted capture adapter. One request
     reserves one immutable event identity and an exact processing configuration.
-    Reprocessing an existing source is deliberately unsupported in this version.
+    Source revisions use revise(); same-source interpretation requests use ReprocessingService.
     """
 
     def __init__(
@@ -222,6 +233,8 @@ class DurableReceiver:
                 if datetime.fromisoformat(row["expires_at"]) <= now:
                     raise RetentionError("ticket_expired")
                 return self._ticket(row)
+            if await uow.retention_get(source.scope, "request", request_id):
+                raise RetentionError("request_identity_reserved")
             if await uow.retention_identity_owner(source.scope, source.id, source.idempotency_key):
                 raise RetentionError("source_identity_already_reserved")
             if await uow.retention_count(source.scope, "ticket") >= self.max_tickets:
@@ -252,6 +265,7 @@ class DurableReceiver:
         producer_id: str,
         configuration_sha256: str,
         _unit_of_work=None,
+        _revision=None,
     ) -> RetentionReceipt:
         source, fingerprint = self._input(event, producer_id, configuration_sha256)
         if not isinstance(ticket, AdmissionTicket):
@@ -298,6 +312,8 @@ class DurableReceiver:
                         "request_id": ticket.request_id,
                         "original_event_type": source.event_type,
                         "input_sha256": fingerprint,
+                        "producer_id": producer_id,
+                        **(_revision or {"document_id": source.id, "revision": 1}),
                     },
                 },
                 content_hash="",
@@ -314,7 +330,16 @@ class DurableReceiver:
                 schema=RETAIN_SCHEMA,
             )
             await uow.retention_insert(source.scope, "request", ticket.request_id, request)
+            if _revision is None:
+                from .source_revisions import document_head
+
+                await document_head(uow, retained)
             return self._receipt(request)
+
+    async def revise(self, event, **options):
+        from .source_revisions import revise
+
+        return await revise(self, event, **options)
 
     async def status(self, scope: MemoryScope, request_id: str) -> RetentionReceipt | None:
         _identity(request_id)

@@ -94,6 +94,21 @@ class _Operations(RecoveryClientOperations):
         return await self._call("memory_durable", {"operation": "append", "payload": {
             "event": to_jsonable(event), "session": to_jsonable(session), "sequence": sequence}})
 
+    async def durable_revise(self, event, session, sequence, *, base_event_id, expected_revision):
+        return await self._call(
+            "memory_durable",
+            {
+                "operation": "revise",
+                "payload": {
+                    "event": to_jsonable(event),
+                    "session": to_jsonable(session),
+                    "sequence": sequence,
+                    "base_event_id": base_event_id,
+                    "expected_revision": expected_revision,
+                },
+            },
+        )
+
     async def durable_status(self, session, sequence):
         return await self._call("memory_durable", {"operation": "status", "payload": {
             "session": to_jsonable(session), "sequence": sequence}})

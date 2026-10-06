@@ -313,6 +313,21 @@ class SQLiteMemoryUnitOfWork:
             ),
         )
 
+    async def retention_head_get(self, scope, kind, identity):
+        return sqlite_retention.head_get(self.connection, scope, kind, identity)
+
+    async def retention_head_put(self, scope, kind, identity, payload, expected_generation):
+        return sqlite_retention.head_put(
+            self.connection, scope, kind, identity, payload, expected_generation
+        )
+
+    async def get_source_event(self, scope, event_id):
+        row = self.connection.execute(
+            "SELECT * FROM events WHERE partition_key=? AND id=? AND archived_at IS NULL",
+            (scope.partition_key(), event_id),
+        ).fetchone()
+        return self._repository._event_from_row(row) if row else None
+
     async def retention_update(self, scope, request_id, payload):
         return sqlite_retention.update(self.connection, scope, request_id, payload)
 

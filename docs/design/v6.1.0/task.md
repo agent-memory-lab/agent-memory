@@ -6,8 +6,8 @@
 | 规范依据 | [完整设计 v6.1.0](../AGENT_MEMORY_DESIGN_V6.1.0.md)；设计规定语义，本文件安排实施 |
 | 设计 SHA-256 | `ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b` |
 | 实现基线 | `5cff9f47b7061351fd725c3b8e0a89bf5cb51517` |
-| 台账版本 | revision 4；2026-10-06；可随实施更新 |
-| 当前状态 | DONE 1 项；IN_PROGRESS 22 项；TODO 21 项；本地持久 L1、宿主恢复与事实资格切片已验证，M0/M1 未整体验收 |
+| 台账版本 | revision 5；2026-10-06；可随实施更新 |
+| 当前状态 | DONE 1 项；IN_PROGRESS 23 项；TODO 20 项；本地持久 L1、宿主恢复与事实资格切片已验证，M0/M1 未整体验收 |
 | 范围 | P0–P6 能力阶段；基础能力与可选扩展分别发布 |
 
 ## 1. 使用与依赖规则
@@ -173,6 +173,7 @@
 ### AM61-T15 — 入口生命周期凭证
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T02、T04；可与 P1 并行。
+- revision 5 证据：新增不可变 SourceRevision、owner/epoch 与 document head CAS；SDK/MCP revise 同确认协议。 见 [stage-01](stage-01.md)。
 - revision 4 证据：会话绑定 actor/scope/config/epoch，稳定来源身份；SDK/MCP 接入；revise 尚未实现。 详见 [batch-03-05](batch-03-05.md)。
 - revision 3 证据：已实现可信宿主 ticket、exact-scope epoch、期限、来源身份保留；既有 archive/erase 在同事务撤销票据；producer epoch/SDK 离线生命周期仍待实现。 见 [batch-02](batch-02.md) 与[后续计划](next-steps.md)。
 - 已有落点：`capture/api.py`、`runtime.py`、`kernel.py`、`lifecycle.py`、`operations/deletion_audit.py`。
@@ -183,6 +184,7 @@
 ### AM61-T16 — L0 与处理任务原子事务
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T02、T04、T15；先支持当前有限候选类型。
+- revision 5 证据：新增同源多 request、版本快照与解释 head 原子切换；阶段复用、贡献版本和来源修订屏障已测。 见 [stage-01](stage-01.md)。
 - revision 4 证据：事务 B 与阶段复用、单发布回执、来源/lease/config 复核；显式重处理对账未实现。 详见 [batch-03-05](batch-03-05.md)。
 - revision 3 证据：事务 A 已同 UoW 保存 L0 与处理 request，并恢复首次回执；没有 worker 消费、阶段产物、事务 B 或索引 outbox，下一批继续。 见 [batch-02](batch-02.md) 与[后续计划](next-steps.md)。
 - 已有落点：`capture/queue.py`、`capture/sink.py`、`operations/sqlite_worker_queue.py`、`sqlite.py`、`consolidation/admission_runtime.py`、PostgreSQL `repository.py`/`jobs.py`/`admission.py`。
@@ -193,6 +195,7 @@
 ### AM61-T17 — Producer 游标与可靠追加
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T06、T15、T16。
+- revision 5 证据：append/revise 共用 outbox 与 ack；旧 outbox 自动迁移及修订游标写入回滚已测。 见 [stage-01](stage-01.md)。
 - revision 4 证据：本地 outbox、连续 ack/缺口、丢确认重传、服务端 epoch 与本地 purge；自动多设备协调待补。 详见 [batch-03-05](batch-03-05.md)。
 - 已有落点：`capture/queue.py`、`capture/api.py`、`packages/python-sdk/src/agent_memory_sdk/client.py`、SDK `recovery.py`、MCP 捕获适配器。
 - 交付：发送前持久 PendingSubmission；保存 producer/epoch/event ID/sequence/hash；服务端原子幂等 append 或 CAS；连续确认游标与 ack 缺口分开；区分 append/resubmit/revise/resume。
@@ -218,7 +221,8 @@
 
 ### AM61-T20 — 解释替代与重处理对账
 
-- [ ] 状态/阶段：TODO / P2。依赖：T08–T10、T12、T16、T18。
+- [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T08–T10、T12、T16、T18。
+- revision 5 证据：整来源 primary 的 additive/replace、旧新并集复核、保留身份、零候选、待决、独立来源幸存及 CAS 已实现；局部覆盖/复杂合成仍待扩展。 见 [stage-01](stage-01.md)。
 - 已有落点：`consolidation/atom_extraction.py`、`consolidation/admission_runtime.py`、`sqlite.py`、PostgreSQL `admission.py`/`consolidation.py`。
 - 交付：显式 additive/replace_interpretation；固定来源身份、解释 stream/head、generation 与覆盖清单；旧新并集逐项 supported/unsupported/unknown 对账；统一解释头 CAS 原子激活。
 - 验收：零新候选不等于旧事实全撤回；partial 不激活；独立证据幸存；并发替代/additive 的失败者明确版本冲突并以新请求重做；失败/擦除无半个解释头或过去认知回写。
@@ -253,6 +257,7 @@
 ### AM61-T24 — 双后端与 SDK/MCP 纵向集成
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T14 及 T15–T23 中本次启用能力所需切片；持续接入，不等待可选扩展。
+- revision 5 证据：新增重处理/来源修订的 SQLite 和真实 PostgreSQL 共同测试；故障注入不等于真实进程强杀。 见 [stage-01](stage-01.md)。
 - revision 3 证据：新接收合同已在 SQLite 与真实 PostgreSQL 验证，覆盖跨连接初始化/回执恢复；SDK/MCP 全闭环、进程强杀及完整恢复矩阵待执行。 见 [batch-02](batch-02.md) 与[后续计划](next-steps.md)。
 - 已有落点：`packages/postgres/`、`packages/python-sdk/`、`packages/mcp-server/`、`src/agent_memory/mcp.py`、`extensions/testing.py`。
 - 交付：新版本请求/回执/状态/错误的端到端投影；SQLite/PostgreSQL 真数据库合同与迁移；SDK 重试/游标/等待；MCP 可信身份注入及旧客户端兼容；能力依赖不能被插件绕过。
@@ -443,12 +448,12 @@
 | R01-04 | 用户周五例外与团队维护禁止同时适用；时区未知 | AM61-T11 | T07/T10/T13/T28 | 未执行 |
 | R01-05 | Python/SQL 部分成员观察与 Python 反证 | AM61-T11 | T07/T10/T13/T28 | 未执行 |
 | R01-06 | K1/K2 合成政策不同，今天撤权；历史政策缺失 | AM61-T11 | T07/T10/T13/T28 | 未执行 |
-| R02-01 | 新提取零候选，但旧候选逐项复核仍 supported | AM61-T20 | T08/T09/T16/T18/T23 | 未执行 |
-| R02-02 | 旧误提被明确判为 unsupported，新解释通过 | AM61-T20 | T08/T09/T16/T18/T23 | 未执行 |
-| R02-03 | 生成截断/审查缺项；完整审查但资格未知 | AM61-T20 | T08/T09/T16/T18/T23 | 未执行 |
-| R02-04 | 撤去来源 A 支持，独立来源 B 仍支持同值 | AM61-T20 | T08/T09/T16/T18/T23 | 未执行 |
-| R02-05 | 覆盖重叠或不相交的两个替代及并发 additive | AM61-T20 | T08/T09/T16/T18/T23 | 未执行 |
-| R02-06 | 对账期间删除/撤权、提交崩溃或回执丢失 | AM61-T20 | T08/T09/T16/T18/T23 | 未执行 |
+| R02-01 | 新提取零候选，但旧候选逐项复核仍 supported | AM61-T20 | T08/T09/T16/T18/T23 | 通过（整来源模式）：零候选逐项复核仍 supported，保留身份且不增加独立证据 |
+| R02-02 | 旧误提被明确判为 unsupported，新解释通过 | AM61-T20 | T08/T09/T16/T18/T23 | 通过（同槽普通贡献）：明确 unsupported 退出，新解释原子接替；历史 known_at 保留 |
+| R02-03 | 生成截断/审查缺项；完整审查但资格未知 | AM61-T20 | T08/T09/T16/T18/T23 | 部分：复核缺项/未知与 allow_pending 已测；复杂生成完整性和局部覆盖待扩展 |
+| R02-04 | 撤去来源 A 支持，独立来源 B 仍支持同值 | AM61-T20 | T08/T09/T16/T18/T23 | 部分：来源 A 的独立记录退出不影响 B；组合贡献 AND/OR 待扩展 |
+| R02-05 | 覆盖重叠或不相交的两个替代及并发 additive | AM61-T20 | T08/T09/T16/T18/T23 | 部分：整来源 additive/replace 共享 CAS，失败不改基线；部分覆盖明确拒绝 |
+| R02-06 | 对账期间删除/撤权、提交崩溃或回执丢失 | AM61-T20 | T08/T09/T16/T18/T23 | 部分：删除、贡献版本改变、事务异常与阶段重用已测；动态撤权/真实进程强杀待补 |
 | R03-01 | 旧索引命中已撤权正文，拟送外部精排 | AM61-T13 | T04/T21/T23/T24 | 未执行 |
 | R03-02 | 有读取权但无指定供应商/区域处理权 | AM61-T13 | T04/T21/T23/T24 | 未执行 |
 | R03-03 | Reflect 读取后、交付授权前擦除；缓存命中也同样 | AM61-T13 | T04/T21/T23/T24 | 未执行 |
@@ -464,7 +469,7 @@
 | N01-01 | 纯工具响应、多块内容、流中断 | AM61-T06 | T03/T08/T25 | 部分：工具结果/省略，未覆盖多块 |
 | N01-02 | 注入记忆再回流及已知改写 | AM61-T06 | T03/T08/T25 | 部分：宿主标记与三条接纳入口，未覆盖完整谱系 |
 | N01-03 | 无宿主事件全集或伪造来源角色 | AM61-T06 | T03/T08/T25 | 部分：宿主 origin/actor/scope 绑定及 SDK/MCP 同合同已测；完整事件全集适配待补 |
-| N02-01 | 确认丢失、重复投递、同ID异载荷 | AM61-T17 | T15/T16/T23/T24 | 部分：SDK/MCP 丢确认重传、重复/异载荷冲突已测；revise/重处理待补 |
+| N02-01 | 确认丢失、重复投递、同ID异载荷 | AM61-T17 | T15/T16/T23/T24 | 部分：SDK/MCP append/revise 丢确认重传、异载荷冲突及重处理固定身份已测；多设备协调待补 |
 | N02-02 | 乱序ack、多个生产者并发追加 | AM61-T17 | T15/T16/T23/T24 | 部分：单 producer 乱序 ack/缺口已测；多 producer 并发待补 |
 | N02-03 | 离线outbox遇scope擦除 | AM61-T17 | T15/T16/T23/T24 | 部分：服务端 epoch 拒旧会话、本地 purge 撤销已测；自动离线设备联动待补 |
 | N03-01 | 整理运行中收到新变更 | AM61-T18 | T04/T16/T27/T31 | 未执行 |
@@ -534,3 +539,5 @@ AcceptanceProfile、scorer、实验 manifest 与结果文件：
 | 2 | 2026-10-06 | T01 审计完成；实现评测/质量门和宿主 capture 切片，关联真实回归证据 | DONE 1；IN_PROGRESS 8；TODO 35；未完成整体里程碑 |
 | 3 | 2026-10-06 | 新增 ticket、删除 epoch、L0+请求原子接收及双后端验证；列出 B03–B09 顺序 | DONE 1；IN_PROGRESS 12；TODO 31；仅接收端，抽取 worker/事务 B 待开发 |
 | 4 | 2026-10-06 | 本地持久执行、SDK/MCP producer/outbox、限定字段与双时态终止切片；见 [batch-03-05](batch-03-05.md) | DONE 1；IN_PROGRESS 22；TODO 21；B03/B04/B05 未整体完成 |
+
+| 5 | 2026-10-06 | [第一阶段来源修订与显式重处理](stage-01.md) | DONE 1；IN_PROGRESS 23；TODO 20；整来源模式已验证，完整 T20 未完成 |

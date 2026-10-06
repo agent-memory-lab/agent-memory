@@ -368,7 +368,16 @@ class AtomExtractionPipeline:
         }
 
     async def publish_prepared(
-        self, repository, event, prepared, *, authority, policy, unit_of_work=None, retained=False
+        self,
+        repository,
+        event,
+        prepared,
+        *,
+        authority,
+        policy,
+        unit_of_work=None,
+        retained=False,
+        publication_id=None,
     ):
         """Publish saved stage data; caller may provide the transaction-B UoW."""
         from .admission import draft_from_payload
@@ -395,6 +404,7 @@ class AtomExtractionPipeline:
             _extraction_audit=audit,
             _unit_of_work=unit_of_work,
             _retained=retained,
+            _publication_id=publication_id,
         )
 
     async def process(
