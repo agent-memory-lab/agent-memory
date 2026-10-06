@@ -1,0 +1,88 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "date": "2026-10-06",
+  "ledger_revision": 8,
+  "design": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "base_commit": "ec8d2a702e0f29cf76799b4189ac15d2eb0a56c4",
+  "enabled_scope": "trusted exact-scope producers and SDK outboxes opting into sync_purges; no external model dispatch",
+  "tests": {
+    "command": "pytest tests packages --junitxml=/tmp/agent-memory-v61-stage4-full.xml -q",
+    "passed": 1129,
+    "skipped": 5,
+    "skip_reason": "optional tiktoken unavailable",
+    "backends": [
+      "SQLite",
+      "PostgreSQL 17"
+    ],
+    "new_behavior_cases": 48,
+    "case_groups": {
+      "test_durable_purge": 34,
+      "test_durable_process_recovery": 14
+    },
+    "real_crash": "SIGKILL application subprocess at transaction A, lease, checkpoint, publication and deletion-before-recovery boundaries; database server not killed"
+  },
+  "example": "examples/durable_purge.py passed: old body cleared before fresh sequence 2 delivery; actual sequence 1 gap retained",
+  "lint": {
+    "changed_python_files": "F,I passed",
+    "new_modules_tests_example": "full configured rules passed"
+  },
+  "wheels": [
+    {
+      "file": "agent_memory-0.1.0-py3-none-any.whl",
+      "sha256": "1fe293e85381ff971ae967ee86bb43630fb4e385c66d74ada41e783f76d565e9"
+    },
+    {
+      "file": "agent_memory_postgres-0.1.0-py3-none-any.whl",
+      "sha256": "af0e54f4b10f3cc092a29f55c70832216ce27b85033770cf3fff6333128139fb"
+    },
+    {
+      "file": "agent_memory_sdk-0.1.0-py3-none-any.whl",
+      "sha256": "af7ee5bab19258028a1817ac9ba3a45d7d162692bc69e6eb84d856f40a8cc9e2"
+    }
+  ],
+  "wheel_sources_match_final_files": true,
+  "postgres_migration_packaged": true,
+  "source_files_sha256": {
+    "packages/postgres/src/agent_memory_postgres/repository.py": "2193fb4db31e501545d9cbcc47d480a6aa95ce21859d0cd123624ad9c4bcd085",
+    "packages/postgres/src/agent_memory_postgres/retention.py": "c2c52291aa3ea30787987d2b6330851466c71b929d9a95cbf90fe0c9aa7fa0d8",
+    "packages/python-sdk/src/agent_memory_sdk/client.py": "e5cccf1c3400ca0c5f0dcdb7c63b94df53aa7c705780985a138c566fc902b82f",
+    "packages/python-sdk/src/agent_memory_sdk/durable.py": "dc1a8f32f0295b7d0d956d632de0474f12ab18b40bc6695b993dc304ab72e567",
+    "src/agent_memory/capture/durable_api.py": "2bc9b57b4f7c7dfa26bbad67e8609709f8972263d11ed3ad2c98b1e06a812fba",
+    "src/agent_memory/capture/producer.py": "889c419e76b661aebcd776fabfbeafad62f1732228e174aa3d25f8343ca26161",
+    "src/agent_memory/operations/retention.py": "c678ab1e501c909427fb655df6e73d69a8e0fc33e29a42bb3666c4dc7c3c414e",
+    "src/agent_memory/operations/sqlite_retention.py": "7e2092d871e2cc553bf54e936bd127f801b369710286a20ad02f727d6b231644",
+    "src/agent_memory/ports.py": "ec7672f5744828f7bc8301699bd64432a9f48f1fe24b850dcc93569c7e532bf5",
+    "src/agent_memory/sqlite.py": "25d4c4f25045c7a5d0544db8049d7dc1889ec4350a6b5bdc9cf7e3bcf61f14ab",
+    "examples/durable_purge.py": "5ba3946f115a61a6eb5f0a2dadf75d57a1afb9df44a86c67b808b03369c37895",
+    "packages/postgres/migrations/009_purge_journal.sql": "c548cdea26c49160a0a86a48e6ca45d0342fda9754c870f1e7f6bd8abd19d8cb",
+    "packages/postgres/src/agent_memory_postgres/purge.py": "8863cfa16b4693f64bea28731555f014c0d52bff54b08b3fb4f0d8754f790140",
+    "packages/python-sdk/src/agent_memory_sdk/durable_purge.py": "d804f0fa3876681a8c8e166db78d19365b7337f758fdd7b58fb2ef813f71036f",
+    "src/agent_memory/capture/purge.py": "3b0c4f4d6c5bfd5a8c8e60f63d9703135f8ff9f6762d8f158fa884c19bca0c22",
+    "src/agent_memory/operations/sqlite_purge.py": "7c0a60435f35d0f3f3915cbf963076772b7fb2f3eb8326b4ed5c8015f9327eef",
+    "tests/fixtures/durable_crash_child.py": "9e678945ae0f458749d6f38c676e9fe8df858b8fd9351445612a84e9497d626e",
+    "tests/test_durable_process_recovery.py": "63dad4f58c6b3c9db45b9bb549da4ba62a7d6262e2c63e2bbcb7369691c393f4",
+    "tests/test_durable_purge.py": "84ba53b7c3f43c0e15d5a806fb9fec01a7b760e85e8a3a89530361cc8bed40a3"
+  },
+  "doc_validation": {
+    "frozen_design_hashes": "passed",
+    "task_links": "passed",
+    "task_count": 44,
+    "acceptance_rows": 66,
+    "statuses": {
+      "DONE": 1,
+      "IN_PROGRESS": 24,
+      "TODO": 19
+    }
+  },
+  "remaining": [
+    "finite capture target and closed multi-publication manifest",
+    "explicit cancelled sequence disposition and stream rollover",
+    "index / derived outbox and readiness watermarks",
+    "general resource refresh / running new work",
+    "pre-upgrade object deletion log reconstruction requires host authoritative records",
+    "full backup restoration with latest external deletion log replay",
+    "database server / host power loss and external dispatch recovery",
+    "real domain gold, calibration and external verification"
+  ]
+}

@@ -239,6 +239,9 @@ class DurableReceiver:
                 raise RetentionError("source_identity_already_reserved")
             if await uow.retention_count(source.scope, "ticket") >= self.max_tickets:
                 raise RetentionError("ticket_capacity")
+            erased = getattr(uow, "source_erased", None)
+            if callable(erased) and await erased(source.scope, source.id):
+                raise RetentionError("source_identity_erased")
             # The existing idempotency and deletion tombstones remain authoritative.
             if await uow.find_event_by_idempotency(source.scope, source.idempotency_key):
                 raise RetentionError("source_already_exists")

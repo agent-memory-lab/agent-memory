@@ -334,6 +334,21 @@ class SQLiteMemoryUnitOfWork:
     async def retention_active(self, scope):
         return sqlite_retention.active(self.connection, scope)
 
+    async def purge_head(self, scope):
+        from .operations import sqlite_purge
+
+        return sqlite_purge.head(self.connection, scope)
+
+    async def purge_page(self, scope, after, limit):
+        from .operations import sqlite_purge
+
+        return sqlite_purge.page(self.connection, scope, after, limit)
+
+    async def source_erased(self, scope, identity):
+        from .operations import sqlite_purge
+
+        return sqlite_purge.erased(self.connection, scope, identity)
+
     async def producer_get(self, scope, producer_id):
         return sqlite_retention.producer_get(self.connection, scope, producer_id)
 

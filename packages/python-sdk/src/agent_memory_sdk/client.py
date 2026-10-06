@@ -113,6 +113,14 @@ class _Operations(RecoveryClientOperations):
         return await self._call("memory_durable", {"operation": "status", "payload": {
             "session": to_jsonable(session), "sequence": sequence}})
 
+    async def durable_purge_sync(self, session, *, after=0, limit=128):
+        return await self._call("memory_durable", {"operation": "purge_sync", "payload": {
+            "session": to_jsonable(session), "after": after, "limit": limit}})
+
+    async def durable_purge_ack(self, session, *, through):
+        return await self._call("memory_durable", {"operation": "purge_ack", "payload": {
+            "session": to_jsonable(session), "through": through}})
+
     async def durable_cursor(self, session):
         return await self._call("memory_durable", {"operation": "cursor", "payload": {
             "session": to_jsonable(session)}})

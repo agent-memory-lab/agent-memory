@@ -6,7 +6,7 @@
 | 规范依据 | [完整设计 v6.1.0](../AGENT_MEMORY_DESIGN_V6.1.0.md)；设计规定语义，本文件安排实施 |
 | 设计 SHA-256 | `ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b` |
 | 实现基线 | `5cff9f47b7061351fd725c3b8e0a89bf5cb51517` |
-| 台账版本 | revision 7；2026-10-06；可随实施更新 |
+| 台账版本 | revision 8；2026-10-06；可随实施更新 |
 | 当前状态 | DONE 1 项；IN_PROGRESS 24 项；TODO 19 项；本地持久 L1、宿主恢复与事实资格切片已验证，M0/M1 未整体验收 |
 | 范围 | P0–P6 能力阶段；基础能力与可选扩展分别发布 |
 
@@ -190,6 +190,7 @@
 ### AM61-T16 — L0 与处理任务原子事务
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T02、T04、T15；先支持当前有限候选类型。
+- revision 8 证据：事务 A 与事务 B 提交前/后真实 SIGKILL、原回执恢复及阶段复用已验证；多发布/索引 outbox 仍待补。见 [stage-04](stage-04.md)。
 - revision 5 证据：新增同源多 request、版本快照与解释 head 原子切换；阶段复用、贡献版本和来源修订屏障已测。 见 [stage-01](stage-01.md)。
 - revision 4 证据：事务 B 与阶段复用、单发布回执、来源/lease/config 复核；显式重处理对账未实现。 详见 [batch-03-05](batch-03-05.md)。
 - revision 3 证据：事务 A 已同 UoW 保存 L0 与处理 request，并恢复首次回执；没有 worker 消费、阶段产物、事务 B 或索引 outbox，下一批继续。 见 [batch-02](batch-02.md) 与[后续计划](next-steps.md)。
@@ -201,6 +202,7 @@
 ### AM61-T17 — Producer 游标与可靠追加
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T06、T15、T16。
+- revision 8 证据：6 producer 跨连接乱序与重复竞争、受控 SDK/MCP 离线对象/scope purge 已验证；永久缺口取消处置与完整宿主生命周期仍待补。见 [stage-04](stage-04.md)。
 - revision 5 证据：append/revise 共用 outbox 与 ack；旧 outbox 自动迁移及修订游标写入回滚已测。 见 [stage-01](stage-01.md)。
 - revision 4 证据：本地 outbox、连续 ack/缺口、丢确认重传、服务端 epoch 与本地 purge；自动多设备协调待补。 详见 [batch-03-05](batch-03-05.md)。
 - 已有落点：`capture/queue.py`、`capture/api.py`、`packages/python-sdk/src/agent_memory_sdk/client.py`、SDK `recovery.py`、MCP 捕获适配器。
@@ -211,6 +213,7 @@
 ### AM61-T18 — 任务去重、资源租约与运行中新工作
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T02、T04、T16。
+- revision 8 证据：真实 worker 强杀覆盖领取、保存阶段、发布事务与完成确认边界；通用资源刷新/运行中新工作仍待补。见 [stage-04](stage-04.md)。
 - revision 4 证据：复用 BoundedWorker 的最小租约接口，原子领取、失效租约阻断与次数上限；通用合并/刷新待补。 详见 [batch-03-05](batch-03-05.md)。
 - 已有落点：`operations/worker_tasks.py`、`operations/worker_runtime.py`、`operations/sqlite_worker_queue.py`、PostgreSQL `jobs.py`/`worker.py`。
 - 交付：分离 dedupe_key、serialization_key、generation；固定 claimed_through 并维护 requested_through；完成与剩余任务检查原子化；租约 fencing、心跳/提交进度、背压、重试、取消分别建模。
@@ -254,6 +257,7 @@
 ### AM61-T23 — 擦除、撤回与恢复屏障
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T13、T15、T16、T18；为每种已启用写入路径逐步接入。
+- revision 8 证据：删除事务原子写无正文 purge 日志、未知离线来源阻断、双端 opt-in 本地清理/游标事务与确认重试已测；升级前对象历史不回填，完整备份删除 replay 待补。见 [stage-04](stage-04.md)。
 - revision 6 证据：辅助证据正文从当前/历史 qualification 清除；OR 幸存、AND 失效、读删竞态和同事务回滚已测；完整外部权限/多设备删除协议仍待补。 见 [stage-02](stage-02.md)。
 - revision 3 证据：新增接收 ledger 的删除联动、scope epoch 与未提交 ticket 屏障；历史/派生/模型输入/外部缓存全链路删除协议尚未完成。 见 [batch-02](batch-02.md) 与[后续计划](next-steps.md)。
 - 已有落点：`lifecycle.py`、`operations/deletion_audit.py`、`operations/doctor.py`、`capture/queue.py`、`sqlite.py`、PostgreSQL 删除/恢复适配边界。
@@ -264,6 +268,7 @@
 ### AM61-T24 — 双后端与 SDK/MCP 纵向集成
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T14 及 T15–T23 中本次启用能力所需切片；持续接入，不等待可选扩展。
+- revision 8 证据：新增 SQLite 与 PostgreSQL 17 的真实 SIGKILL、producer 竞争及 SDK/MCP purge 测试；数据库服务器断电、外部调用与完整恢复矩阵不作通过声明。见 [stage-04](stage-04.md)。
 - revision 5 证据：新增重处理/来源修订的 SQLite 和真实 PostgreSQL 共同测试；故障注入不等于真实进程强杀。 见 [stage-01](stage-01.md)。
 - revision 3 证据：新接收合同已在 SQLite 与真实 PostgreSQL 验证，覆盖跨连接初始化/回执恢复；SDK/MCP 全闭环、进程强杀及完整恢复矩阵待执行。 见 [batch-02](batch-02.md) 与[后续计划](next-steps.md)。
 - 已有落点：`packages/postgres/`、`packages/python-sdk/`、`packages/mcp-server/`、`src/agent_memory/mcp.py`、`extensions/testing.py`。
@@ -476,11 +481,11 @@
 | N01-01 | 纯工具响应、多块内容、流中断 | AM61-T06 | T03/T08/T25 | 部分：工具结果/省略，未覆盖多块 |
 | N01-02 | 注入记忆再回流及已知改写 | AM61-T06 | T03/T08/T25 | 部分：宿主标记与三条接纳入口，未覆盖完整谱系 |
 | N01-03 | 无宿主事件全集或伪造来源角色 | AM61-T06 | T03/T08/T25 | 部分：宿主 origin/actor/scope 绑定及 SDK/MCP 同合同已测；完整事件全集适配待补 |
-| N02-01 | 确认丢失、重复投递、同ID异载荷 | AM61-T17 | T15/T16/T23/T24 | 部分：SDK/MCP append/revise 丢确认重传、异载荷冲突及重处理固定身份已测；多设备协调待补 |
-| N02-02 | 乱序ack、多个生产者并发追加 | AM61-T17 | T15/T16/T23/T24 | 部分：单 producer 乱序 ack/缺口已测；多 producer 并发待补 |
-| N02-03 | 离线outbox遇scope擦除 | AM61-T17 | T15/T16/T23/T24 | 部分：服务端 epoch 拒旧会话、本地 purge 撤销已测；自动离线设备联动待补 |
+| N02-01 | 确认丢失、重复投递、同ID异载荷 | AM61-T17 | T15/T16/T23/T24 | 部分：SDK/MCP append/revise 丢确认与异载荷冲突、真实接收进程强杀恢复、purge 确认丢失重启已测；完整生命周期仍待补 |
+| N02-02 | 乱序ack、多个生产者并发追加 | AM61-T17 | T15/T16/T23/T24 | 通过（受控 producer）：6 producer 跨两连接乱序追加、独立连续 ack 和重复回执在双后端已测 |
+| N02-03 | 离线outbox遇scope擦除 | AM61-T17 | T15/T16/T23/T24 | 通过（双端 opt-in SDK/MCP）：旧 epoch 离线正文先清理再拒绝上传，未知对象删除同步、新 epoch 与旧会话分离已测；历史设备范围见 stage-04 |
 | N03-01 | 整理运行中收到新变更 | AM61-T18 | T04/T16/T27/T31 | 未执行 |
-| N03-02 | 同资源多worker及旧租约回报 | AM61-T18 | T04/T16/T27/T31 | 部分：多 worker 原子领取、旧租约不可发布已测；派生刷新并发待补 |
+| N03-02 | 同资源多worker及旧租约回报 | AM61-T18 | T04/T16/T27/T31 | 部分：多 worker 领取、旧租约不可发布和真实 SIGKILL 到期恢复/阶段复用已测；派生刷新并发待补 |
 | N03-03 | 背压defer、心跳无提交、部分提交后取消 | AM61-T18 | T04/T16/T27/T31 | 未执行 |
 | N04-01 | source query/模板语义变化 | AM61-T31 | T26/T29/T30/T33 | 未执行 |
 | N04-02 | 零edits、补丁无效、待撤回内容 | AM61-T31 | T26/T29/T30/T33 | 未执行 |
@@ -507,8 +512,8 @@
 | R08-02 | 查询截断、删除成员、无写入时间边界 | AM61-T26 | T25/T29/T31 | 未执行 |
 | R09-01 | K20更正A1后查询K15历史派生 | AM61-T28 | T23/T25/T29 | 未执行 |
 | R09-02 | 今天撤权/擦除后查询任意known_at | AM61-T28 | T23/T25/T29 | 未执行 |
-| R10-01 | 入口ticket签发后、事务A前scope擦除 | AM61-T15 | T17/T23/T24 | 部分：原子 producer 追加与双后端回滚已测；远端在途交付屏障待补 |
-| R10-02 | 新授权输入与旧离线重传 | AM61-T15 | T17/T23/T24 | 部分：旧 producer/session 与 ticket 被 epoch 撤销；完整 revise 协议待补 |
+| R10-01 | 入口ticket签发后、事务A前scope擦除 | AM61-T15 | T17/T23/T24 | 部分：ticket/scope epoch 屏障、事务 A 真正强杀前后原子恢复已测；外部远端在途交付守卫待补 |
+| R10-02 | 新授权输入与旧离线重传 | AM61-T15 | T17/T23/T24 | 通过（受控 SDK/MCP）：旧 producer/ticket 撤销；新授权 epoch 输入可接收，旧离线正文先清理、旧身份禁止搬入新会话；revise 沿用确认合同 |
 | R11-01 | capture token到位、publication manifest未闭合且为空 | AM61-T22 | T16/T24/T33 | 未执行 |
 | R11-02 | 多个发布token与不连续索引完成 | AM61-T22 | T16/T24/T33 | 未执行 |
 | R12-01 | 十个worker竞争多层账户最后一次调用额度 | AM61-T21 | T04/T13/T23 | 未执行 |
@@ -548,3 +553,5 @@ AcceptanceProfile、scorer、实验 manifest 与结果文件：
 | 4 | 2026-10-06 | 本地持久执行、SDK/MCP producer/outbox、限定字段与双时态终止切片；见 [batch-03-05](batch-03-05.md) | DONE 1；IN_PROGRESS 22；TODO 21；B03/B04/B05 未整体完成 |
 | 5 | 2026-10-06 | [第一阶段来源修订与显式重处理](stage-01.md) | DONE 1；IN_PROGRESS 23；TODO 20；整来源模式已验证，完整 T20 未完成 |
 | 6 | 2026-10-06 | [字段/时间支持与条件投影](stage-02.md) | DONE 1；IN_PROGRESS 24；TODO 19；同 scope 完整字段条件事实已验证，完整 P1 未完成 |
+| 7 | 2026-10-06 | [贡献级更正、撤回与独立终止](stage-03.md) | DONE 1；IN_PROGRESS 24；TODO 19；同槽切片通过，跨槽关闭 |
+| 8 | 2026-10-06 | [运行恢复与离线删除同步](stage-04.md) | DONE 1；IN_PROGRESS 24；TODO 19；首个恢复切片通过，manifest/索引与备份 replay 待补 |

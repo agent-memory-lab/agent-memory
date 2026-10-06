@@ -2,6 +2,8 @@
 
 from agent_memory.domain import canonical_json
 
+from . import purge
+
 
 def kind(value):
     if value not in {"ticket", "request"}:
@@ -81,6 +83,7 @@ async def forget(connection, request):
         )
     elif not request.memory_ids:
         return
+    await purge.record(connection, request, await epoch(connection, request.scope))
     condition = "partition_key=%s"
     params = (key,)
     if not request.all_in_scope:

@@ -30,8 +30,10 @@ class DurableProducer:
             raise ValueError("max_gap must be between 1 and 10000")
         self.receiver, self.max_gap = receiver, max_gap
 
-    async def open(self, scope, *, producer_id, actor, configuration_sha256):
+    async def open(self, scope, *, producer_id, actor, configuration_sha256, sync_purges=False):
         """Trusted host setup, never a model-callable registration operation."""
+        if type(sync_purges) is not bool:
+            raise ValueError("sync_purges must be boolean")
         _identity(producer_id)
         _identity(actor)
         _hash(configuration_sha256)
@@ -40,6 +42,9 @@ class DurableProducer:
             epoch = await uow.retention_epoch(scope)
             row = await uow.producer_get(scope, producer_id)
             if row is None:
+                purge_head = getattr(uow, "purge_head", None)
+                if sync_purges and not callable(purge_head):
+                    raise NotImplementedError("producer purge synchronization requires purge storage")
                 row = dict(
                     producer_id=producer_id,
                     epoch=epoch,
@@ -48,17 +53,23 @@ class DurableProducer:
                     actor=actor,
                     acked_through=0,
                     received=[],
+                    sync_purges=sync_purges,
+                    purged_through=await purge_head(scope) if callable(purge_head) else 0,
                 )
                 await uow.producer_put(scope, producer_id, row)
             if row["epoch"] != epoch:
                 raise RetentionError("producer_revoked")
-            if row["actor"] != actor or row["configuration_sha256"] != configuration_sha256:
+            if (
+                row["actor"] != actor
+                or row["configuration_sha256"] != configuration_sha256
+                or row.get("sync_purges", False) != sync_purges
+            ):
                 raise RetentionError("producer_configuration_conflict")
             return ProducerSession(
                 **{name: row[name] for name in ProducerSession.__dataclass_fields__}
             )
 
-    async def _check(self, uow, scope, session, actor):
+    async def _check(self, uow, scope, session, actor, *, allow_revoked=False):
         if not isinstance(session, ProducerSession):
             raise RetentionError("invalid_producer")
         await self.receiver._check_support(uow, scope)
@@ -69,7 +80,7 @@ class DurableProducer:
             or row["actor"] != actor
         ):
             raise RetentionError("invalid_producer")
-        if row["epoch"] != await uow.retention_epoch(scope):
+        if not allow_revoked and row["epoch"] != await uow.retention_epoch(scope):
             raise RetentionError("producer_revoked")
         return row
 
@@ -83,6 +94,12 @@ class DurableProducer:
         key = self._request_key(event.scope, session, sequence)
         async with self.receiver.repository.unit_of_work() as uow:
             row = await self._check(uow, event.scope, session, actor)
+            if row.get("sync_purges"):
+                head = await uow.purge_head(event.scope)
+                if row.get("purged_through", 0) > head:
+                    raise RetentionError("purge_history_unavailable")
+                if row.get("purged_through", 0) < head:
+                    raise RetentionError("producer_purge_required")
             if sequence > row["acked_through"] + self.max_gap:
                 raise RetentionError("producer_gap_limit")
             if _revision is not None:
@@ -145,6 +162,16 @@ class DurableProducer:
         async with self.receiver.repository.unit_of_work() as uow:
             row = await self._check(uow, scope, session, actor)
             return {"acked_through": row["acked_through"], "received_after_gap": row["received"]}
+
+    async def purge_sync(self, scope, session, *, actor, after=0, limit=128):
+        from .purge import synchronize
+
+        return await synchronize(self, scope, session, actor=actor, after=after, limit=limit)
+
+    async def purge_ack(self, scope, session, *, actor, through):
+        from .purge import acknowledge
+
+        return await acknowledge(self, scope, session, actor=actor, through=through)
 
     @staticmethod
     def _request_key(scope, session, sequence):

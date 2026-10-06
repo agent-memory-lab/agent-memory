@@ -7,9 +7,14 @@ from hashlib import sha256
 
 from agent_memory.serialization import to_jsonable
 
+from .durable_purge import identity_hash, purge_session, synchronize
+
 
 class DurableOutbox:
-    def __init__(self, path, session):
+    def __init__(self, path, session, *, sync_purges=False):
+        if type(sync_purges) is not bool:
+            raise ValueError("sync_purges must be boolean")
+        self.sync_purges = sync_purges
         self.path = str(path)
         self.session = to_jsonable(session)
         self.session_key = sha256(json.dumps(self.session, sort_keys=True).encode()).hexdigest()
@@ -18,6 +23,7 @@ class DurableOutbox:
                 CREATE TABLE IF NOT EXISTS durable_sessions (
                     session_key TEXT PRIMARY KEY, revoked INTEGER NOT NULL DEFAULT 0
                 );
+                CREATE TABLE IF NOT EXISTS durable_purged_ids (event_sha256 TEXT PRIMARY KEY);
                 CREATE TABLE IF NOT EXISTS durable_pending (
                     session_key TEXT NOT NULL, sequence INTEGER NOT NULL, event_id TEXT NOT NULL,
                     event_json TEXT NOT NULL, content_sha256 TEXT NOT NULL,
@@ -26,6 +32,14 @@ class DurableOutbox:
                 );
             """)
             conn.execute("BEGIN IMMEDIATE")
+            session_columns = {row[1] for row in conn.execute("PRAGMA table_info(durable_sessions)")}
+            for name, declaration in (
+                ("purge_cursor", "INTEGER NOT NULL DEFAULT 0"),
+                ("scope_key", "TEXT"),
+                ("epoch", "INTEGER"),
+            ):
+                if name not in session_columns:
+                    conn.execute(f"ALTER TABLE durable_sessions ADD COLUMN {name} {declaration}")
             columns = {row[1] for row in conn.execute("PRAGMA table_info(durable_pending)")}
             if "operation" not in columns:
                 conn.execute(
@@ -38,6 +52,10 @@ class DurableOutbox:
                 "INSERT OR IGNORE INTO durable_sessions(session_key) VALUES (?)",
                 (self.session_key,),
             )
+            conn.execute(
+                "UPDATE durable_sessions SET epoch=? WHERE session_key=?",
+                (self.session["epoch"], self.session_key),
+            )
 
     def _check_live(self, conn):
         if conn.execute(
@@ -49,6 +67,7 @@ class DurableOutbox:
     def _connection(self):
         conn = sqlite3.connect(self.path, timeout=30)
         try:
+            conn.execute("PRAGMA secure_delete=ON")
             with conn:
                 yield conn
         finally:
@@ -82,6 +101,10 @@ class DurableOutbox:
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             self._check_live(conn)
+            if conn.execute(
+                "SELECT 1 FROM durable_purged_ids WHERE event_sha256=?", (identity_hash(event_id),)
+            ).fetchone():
+                raise ValueError("source identity was purged")
             found = conn.execute(
                 "SELECT sequence,content_sha256,operation,revision_json FROM durable_pending "
                 "WHERE session_key=? AND event_id=?",
@@ -110,7 +133,12 @@ class DurableOutbox:
             )
             return seq
 
+    async def synchronize_purges(self, client, *, max_pages=32):
+        return await synchronize(self, client, max_pages=max_pages)
+
     async def flush_one(self, client):
+        if self.sync_purges:
+            await self.synchronize_purges(client)
         with self._connection() as conn:
             self._check_live(conn)
             row = conn.execute(
@@ -145,6 +173,13 @@ class DurableOutbox:
         }:
             raise ValueError("invalid durable acknowledgment")
         with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            self._check_live(conn)
+            event_id = json.loads(row[1])["event_id"]
+            if conn.execute(
+                "SELECT 1 FROM durable_purged_ids WHERE event_sha256=?", (identity_hash(event_id),)
+            ).fetchone():
+                raise ValueError("pending submission purged during delivery")
             # Remove the body after acknowledgment; keep identity/sequence to avoid reuse.
             conn.execute(
                 "UPDATE durable_pending SET acknowledged=1,event_json='null' "
@@ -154,12 +189,5 @@ class DurableOutbox:
         return response
 
     def purge(self):
-        """Host deletion hook: erase pending bodies, retain sequence tombstones."""
-        with self._connection() as conn:
-            conn.execute(
-                "UPDATE durable_sessions SET revoked=1 WHERE session_key=?", (self.session_key,)
-            )
-            conn.execute(
-                "UPDATE durable_pending SET acknowledged=1,event_json='null' WHERE session_key=?",
-                (self.session_key,),
-            )
+        """Erase this session's pending bodies and block their identity across this file."""
+        purge_session(self)

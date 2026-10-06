@@ -334,6 +334,21 @@ class PostgresMemoryUnitOfWork:
     async def retention_active(self, scope):
         return await retention.active(self.connection, scope)
 
+    async def purge_head(self, scope):
+        from . import purge
+
+        return await purge.head(self.connection, scope)
+
+    async def purge_page(self, scope, after, limit):
+        from . import purge
+
+        return await purge.page(self.connection, scope, after, limit)
+
+    async def source_erased(self, scope, identity):
+        from . import purge
+
+        return await purge.erased(self.connection, scope, identity)
+
     async def producer_get(self, scope, producer_id):
         return await retention.producer_get(self.connection, scope, producer_id)
 

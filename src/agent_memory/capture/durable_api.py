@@ -30,6 +30,15 @@ class DurableCaptureAPI:
         if not isinstance(payload, dict):
             raise RetentionError("invalid_durable_payload")
         session = ProducerSession(**payload["session"])
+        if operation == "purge_sync":
+            return await self.producer.purge_sync(
+                context.scope, session, actor=context.actor,
+                after=payload.get("after", 0), limit=payload.get("limit", 128),
+            )
+        if operation == "purge_ack":
+            return await self.producer.purge_ack(
+                context.scope, session, actor=context.actor, through=payload["through"],
+            )
         if operation == "cursor":
             return await self.producer.cursor(context.scope, session, actor=context.actor)
         if operation == "status":
