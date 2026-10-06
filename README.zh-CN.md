@@ -1,513 +1,249 @@
-# Agent Memory
-
-[English](README.md) | [简体中文](README.zh-CN.md)
+<h1 align="center">Agent Memory</h1>
 
 <p align="center">
-  <img src="docs/assets/agent-memory-architecture.svg" alt="Agent Memory architecture" width="100%">
+  <strong>让 Agent 的记忆有据可查、随变化更新、按预算使用。</strong>
 </p>
 
-一个轻量、可插拔、证据可追溯的 AI Agent 记忆层。
+<p align="center">
+  轻量、可插拔的 AI Agent 记忆层。<br>
+  从 Python + SQLite 本地运行开始，按需接入模型、存储与 Agent 框架。
+</p>
 
-Agent Memory 将 Agent 运行过程中产生的原始事件，转换成有边界、可验证、可追溯的下一步决策上下文。系统明确区分当前事实、历史经验、可复用流程和实验性自进化能力，避免记忆无限膨胀、事实互相冲突或实验策略直接污染线上行为。
+<p align="center">
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.13%2B-3776AB?logo=python&logoColor=white" alt="Python 3.13+"></a>
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/Core_runtime_dependencies-0-14866D" alt="核心运行时第三方依赖为零"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue" alt="Apache 2.0 许可证"></a>
+  <a href="docs/design/v6.1.0/task.md"><img src="https://img.shields.io/badge/Status-Alpha-orange" alt="Alpha 状态"></a>
+</p>
 
-> 当前状态：**v0.1 MVP**。本地 SQLite 内核、插件协议、MCP 适配器、Python SDK、LangGraph 适配器和受控自进化基础能力已经实现。当前版本尚不建议直接用于生产环境。
+<p align="center">
+  <a href="README.md">English</a> ·
+  <a href="#快速开始">快速开始</a> ·
+  <a href="#可运行示例">可运行示例</a> ·
+  <a href="#集成方式">集成方式</a> ·
+  <a href="#文档导航">文档导航</a> ·
+  <a href="CONTRIBUTING.md">参与贡献</a>
+</p>
 
-## 为什么需要 Agent Memory
+Agent 需要记住用户偏好、跟进变化的项目约束，并复用有效经验。Agent Memory 将这些交互组织为**当前事实、带引用的历史和受控流程**，再为下一次模型调用返回有界的 `MemoryBundle`。
 
-常见的 Agent 记忆方案通常从向量检索开始，也在向量检索结束：
+**基础写入与检索无需 API Key、向量数据库或后台服务。** 核心运行时没有第三方依赖；模型辅助抽取与其他集成按需启用。
 
-~~~text
-对话 -> 文本切块 -> 向量化 -> Top-K 上下文
-~~~
+> **Alpha · 软件版本 v0.1.0。** 本地运行时和可选集成包已提供。v6.1 是分阶段实施的架构设计版本，与软件包版本独立；M0/M1 整体里程碑及生产验收尚未完成。支持范围见[能力状态](#能力状态)。
 
-这种方式适合寻找语义相似内容，但无法独立解决以下问题：
+## 为什么选择 Agent Memory？
 
-- Agent 当前应该相信哪个事实？
-- 新事实出现后，旧事实如何失效？
-- 一条记忆来自哪次用户输入或工具调用？
-- 每次允许多少记忆进入模型上下文？
-- 多租户、应用、Agent、用户和会话之间如何隔离？
-- 新学到的行为如何经过评估、灰度和回滚后再启用？
+实用的记忆层应帮助 Agent 回答两件事：**“现在适用什么？”**和**“依据是什么？”**
 
-Agent Memory 使用以当前状态为优先的记忆模型：
-
-~~~text
-Agent 原始事件
-      |
-      v
-不可变证据日志
-      |
-      +--> 结构化声明 ------> 当前状态
-      +--> 历史片段 --------> 情景记忆
-      +--> 可复用流程 ------> 程序记忆
-      |
-      v
-受预算约束的记忆包
-      |
-      v
-下一次模型决策
-~~~
-
-每条返回内容都保留来源证据。新事实通过版本和替代关系使旧事实失效，而不是无声覆盖。实验性流程必须经过明确的评估阶段，不能直接修改线上行为。
-
-## 设计原则
-
-| 原则 | 含义 |
+| Agent 的需求 | Agent Memory 提供的能力 |
 | --- | --- |
-| 协议优先 | Agent 只依赖 MemoryProvider，不绑定 SQLite、PostgreSQL、MCP 或具体框架。 |
-| 本地优先 | MVP 可在进程内使用 Python 和 SQLite 运行，核心包没有运行时第三方依赖。 |
-| 证据优先 | 声明、摘要和流程保留原始事件引用。 |
-| 状态优先 | 当前有效事实的检索优先级高于语义相似历史。 |
-| 上下文有界 | 强制限制条目数、字符数、估算 Token 数和各通道配额。 |
-| 隔离由宿主管理 | 租户和用户范围由可信宿主传入，不接受模型自行指定。 |
-| 自进化可控 | 候选策略必须经过离线评估、影子运行和灰度验证。 |
-| 可降级 | 可选检索通道失败时，不能破坏当前状态主链路。 |
+| 跟进变化的偏好与决定 | 版本化声明与当前状态；显式事实接纳和更正接口 |
+| 解释事实来源 | 来源事件 ID 与证据关联；Atom 接纳路径支持引文和字段检查 |
+| 区分事实发生时间与系统获知时间 | 使用独立的 `valid_at` 和 `known_at` 查询 Claim |
+| 控制上下文开销 | 条目数、字符数、估算 Token 数与检索通道配额 |
+| 隔离用户与工作空间 | 由可信宿主定义租户、用户、Agent、工作空间和会话范围 |
+| 更换框架或存储 | `MemoryProvider` 协议及 SQLite、PostgreSQL、SDK、MCP、LangGraph 集成 |
+| 从任务结果积累经验 | 关联反馈与 Procedure 候选，经过评估、影子运行、灰度和回滚流程 |
 
-## 五分钟开始使用
+**一个具体例子：**用户从杭州搬到上海。贡献接口可以记录变更、保留此前状态，并分别记录“旧状态结束”和“新城市成立”的依据。上海证据被擦除后，后续查询返回**未知**，不会无依据地重新认定用户仍在杭州。[运行示例 →](examples/contribution_memory.py)
 
-### 1. 安装本地 MVP
+## 快速开始
 
-~~~bash
+### 安装
+
+需要 **Python 3.13+**。从本仓库安装到虚拟环境：
+
+```bash
 git clone https://github.com/agent-memory-lab/agent-memory.git
 cd agent-memory
-./setup.sh
-~~~
-
-需要 Python 3.11+。`setup.sh` 会自动选择可用的 Python 3.13、3.12 或 3.11；如需指定解释器，可执行
-`PYTHON_BIN=/path/to/python3.11 ./setup.sh`。
-
-只安装可编辑的核心包：
-
-~~~bash
+python3.13 -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 python -m pip install -e .
-~~~
+```
 
-### 2. 写入并读取记忆
+开发环境可使用 `./setup.sh`；`./setup.sh --all` 同时安装可选包。通过 `PYTHON_BIN=/path/to/python3.13 ./setup.sh` 指定解释器。
 
-~~~python
+### 写入 → 检索 → 查看来源
+
+保存为 `demo.py`，执行 `python demo.py`：
+
+```python
 import asyncio
-
 from agent_memory import AgentMemory, MemoryScope
 
 
-async def main() -> None:
-    scope = MemoryScope(
-        tenant_id="demo",
-        namespace="support-agent",
-        agent_id="assistant",
-        user_id="user-42",
-        session_id="session-1",
-    )
-
-    async with AgentMemory.local(
-        ".agent-memory/demo.sqlite3",
-        scope=scope,
-    ) as memory:
+async def main():
+    # 身份和作用域由宿主应用提供。
+    scope = MemoryScope(tenant_id="demo", user_id="alice", agent_id="assistant")
+    async with AgentMemory.local("memory.sqlite3", scope=scope) as memory:
         await memory.remember(
-            "请优先使用电子邮件联系我。",
+            "我偏好简洁的回答。",
             event_type="user.message",
-            claims=(
-                {
-                    "key": "contact.preference",
-                    "value": "email",
-                    "text": "用户偏好使用电子邮件。",
-                    "scope": "user",
-                    "confidence": 0.98,
-                },
-            ),
+            actor="user",
+            idempotency_key="alice-answer-style-1",
+            claims=({
+                "key": "answer.style",
+                "value": "concise",
+                "text": "Alice 偏好简洁的回答。",
+                "scope": "user",
+                "confidence": 0.98,
+            },),
         )
-
-        bundle = await memory.recall(
-            "应该如何联系这个用户？",
-            limit=8,
-            token_budget=1_200,
-        )
-
+        bundle = await memory.recall("应该如何回答 Alice？", token_budget=600)
         for claim in bundle.current_state:
-            print(claim.key, claim.value, claim.provenance.source_event_ids)
+            print(f"{claim.key}: {claim.value}")
+            print("source events:", len(claim.provenance.source_event_ids))
 
 
 asyncio.run(main())
-~~~
+```
 
-**AgentMemory.local()** 会创建一个带保守资源限制的可用运行时，不需要向量数据库、外部服务、模型密钥或后台任务。
+新数据库中的输出：
 
-### 自动提取任务轨迹
+```text
+answer.style: concise
+source events: 1
+```
 
-自动提取是可选能力，并且不绑定模型厂商。实现精简的 `ClaimGenerator` 协议后，
-可以在不修改 Agent 和存储层的情况下完成注入：
+这里由宿主代码提供结构化声明，展示持久化与检索；自动抽取是独立的可选路径。`confidence` 是输入评分，不是真实性保证。返回的记忆包由宿主组装进模型请求，本例不会调用 LLM。
 
-~~~python
-from agent_memory import AgentMemory, build_trajectory_extractor
+## 可运行示例
 
-extractor = build_trajectory_extractor(
-    my_claim_generator,
-    provider="my-model-provider",
-    model="my-model",
-)
-memory = AgentMemory.local("memory.sqlite3", scope=scope, extractor=extractor)
-~~~
+选择想体验的行为。以下本地示例无需模型密钥；持久接入示例还需执行 `python -m pip install -e packages/python-sdk`。
 
-生成器接收可信生命周期事件，包括用户消息和工具元数据。结构化输出会经过 Schema
-校验、置信度门控、作用域检查和单事件数量限制，并绑定来源证据。宿主显式声明具有更高
-优先级；生成器故障时系统退化为仅写入事件，不会阻断 Agent 主流程。
+| 示例 | 可以观察的行为 |
+| --- | --- |
+| [基础记忆](examples/quickstart.py) | 写入偏好并读取当前状态 |
+| [持久记忆](examples/durable_memory.py) | 保存来源和处理请求，再发布 L1 事实 |
+| [条件记忆](examples/contextual_memory.py) | 基于字段与时间证据查询条件事实 |
+| [贡献级更正](examples/contribution_memory.py) | 区分状态终止、更正和来源擦除 |
+| [离线删除同步](examples/durable_purge.py) | 参与同步的 SDK 待发队列先清理旧内容，再投递新事件 |
+| [插件契约](examples/plugin_contract.py) | 实现并验证插件生命周期 |
 
-## 核心记忆模型
+生命周期钩子的接入可参考[捕获集成模板](examples/capture_harness.py)，由宿主装配 Provider、认证上下文和队列；该模板需要 Python SDK 与宿主配置。
 
-Agent Memory 不把所有内容都存成相同的文本块，而是区分不同职责的记忆对象。
+在仓库根目录运行独立示例，例如：
 
-| 对象 | 作用 | 变更规则 |
-| --- | --- | --- |
-| Event | 保存 Agent 生命周期中的原始证据 | 只追加并支持幂等写入 |
-| Claim | 从证据中提取的结构化声明 | 版本化，可替代旧声明 |
-| Current State | 某个作用域当前有效的事实集合 | 由有效声明构建 |
-| Episode | 已完成交互的压缩记录 | 追加并保留引用 |
-| Procedure | 可以复用的行为和操作流程 | 版本化并受策略管理 |
-| Decision | Agent 某次决策的记录 | 关联上下文和策略版本 |
-| Outcome | 决策产生的可观察结果 | 与决策关联 |
-| Reward | 对结果的评价信号 | 与策略启用流程分离 |
+```bash
+python examples/contribution_memory.py
+```
 
-MemoryBundle 是这些对象经过检索、过滤和预算裁剪后的投影，不是数据库内容的直接拼接，也不是一组缺少依据的相似文本。
+## 工作方式
 
-## 检索机制
+```text
+宿主事件 → 来源证据 → 事实声明 / 历史片段 / 可复用流程
+                                  ↓
+                         当前状态 + 历史检索
+                                  ↓
+                         过滤 + 融合 + 上下文预算
+                                  ↓
+                             MemoryBundle
+                                  ↓
+                           下一次模型调用
+```
 
-默认检索流程保持确定性和可解释性：
-
-~~~text
-查询 + 可信作用域
-      |
-      +--> 当前状态通道
-      +--> 语义检索通道
-      +--> 情景记忆通道
-      +--> 程序记忆通道
-      |
-      v
-倒数排名融合 RRF
-      |
-      v
-去重 + 策略过滤
-      |
-      v
-强制预算裁剪
-      |
-      v
-MemoryBundle（条目、引用、Token 估算）
-~~~
-
-当前状态通道优先，是因为最新的有效事实不能因为文字相似度较低而输给过期历史。RRF 用排名融合多个通道，不要求不同通道的原始分数具有相同尺度。
-
-本地 MVP 强制执行：
-
-- 最大返回条目数；
-- 最大字符数；
-- Token 数量估算；
-- 各检索通道配额；
-- 租户、应用、Agent、用户和会话隔离；
-- 确定性排序；
-- 返回内容到原始证据的引用。
-
-## 插件化架构
+- **Event：**保留来源活动，写入支持幂等；保留和擦除通过显式操作执行。
+- **Claim：**表示版本化声明。Atom 接纳进一步提供类型化谓词、来源资格、待决/争议状态和证据检查。
+- **Episode / Procedure：**组织任务历史和可复用行为。流程演化默认关闭，启用需经过宿主定义的门槛。
+- **MemoryBundle：**返回带引用和预算记录的检索结果。当前已接纳状态优先，可选候选通道仍需通过范围与来源检查。
 
 <p align="center">
-  <img src="docs/assets/plugin-integration-flow.svg" alt="插件接入流程" width="100%">
+  <img src="docs/assets/agent-memory-architecture.svg" alt="Agent Memory 架构：证据、状态、检索与可选集成" width="100%">
 </p>
 
-系统的公共边界是 **MemoryProvider** 协议。存储引擎、通信方式、Agent 框架和自进化引擎都可以替换。
+模型可以通过 `ClaimGenerator`、`AtomGenerator`、`AtomReviewer` 等可注入协议生成候选。宿主控制身份、政策和接纳规则。使用方式与支持边界见[自动 Atom 抽取](docs/ATOM_EXTRACTION.md)、[Atom 接纳](docs/ATOM_ADMISSION.md)和[双时态记忆](docs/BITEMPORAL_MEMORY.md)。
 
-~~~text
-Agent / 宿主应用
-       |
-       v
- AgentMemory 门面
-       |
-       v
-  MemoryProvider
-       |
-       +--> 本地 SQLite 内核
-       +--> PostgreSQL Provider
-       +--> 远程 MCP Provider
-       +--> 第三方自定义 Provider
-~~~
+## 集成方式
 
-插件通过 Python Entry Points 延迟发现。仅导入核心包时，不会加载数据库驱动、MCP 运行时、Agent 框架或机器学习依赖。
+从核心包开始，只安装需要的集成：
 
-| 插件入口组 | 职责 |
-| --- | --- |
-| agent_memory.providers | 存储和检索 Provider |
-| agent_memory.adapters | Agent 框架生命周期适配器 |
-| agent_memory.embedders | 可选向量化实现 |
-| agent_memory.rerankers | 可选重排序实现 |
-| agent_memory.evolution | 候选策略生成和评估引擎 |
-
-更换 Provider 不需要修改 Agent 业务逻辑：
-
-~~~python
-from agent_memory import AgentMemory, MemoryScope
-
-scope = MemoryScope(
-    tenant_id="acme",
-    namespace="research",
-    agent_id="analyst",
-)
-
-memory = AgentMemory.from_plugin(
-    "postgres",
-    scope=scope,
-    dsn="postgresql://memory@localhost/agent_memory",
-)
-~~~
-
-第三方包只需要实现协议并注册入口，不需要修改本仓库。
-
-## 包结构
-
-| 包 | 作用 | 是否增加核心依赖 |
+| 包 | 用途 | 本地安装 |
 | --- | --- | --- |
-| agent-memory | 领域模型、本地内核、SQLite、检索、策略和插件注册 | 无运行时第三方依赖 |
-| agent-memory-postgres | PostgreSQL 和 pgvector Provider | 可选 |
-| agent-memory-mcp-server | MCP stdio 和 HTTP 通信层 | 可选 |
-| agent-memory-python-sdk | 面向客户端的 Python 门面 | 可选 |
-| agent-memory-langgraph | LangGraph 生命周期适配器 | 可选 |
-| agent-memory-evolution | 受控程序记忆自进化 | 可选 |
+| `agent-memory` | 领域契约、SQLite 运行时、检索和插件加载 | `python -m pip install -e .` |
+| [Python SDK](packages/python-sdk/README.md) | 嵌入式/远程门面与宿主持久待发队列 | `python -m pip install -e packages/python-sdk` |
+| [MCP Server](packages/mcp-server/README.md) | stdio 与 Streamable HTTP 通信 | `python -m pip install -e packages/mcp-server` |
+| [LangGraph](packages/langgraph/README.md) | 生命周期适配器 | `python -m pip install -e packages/langgraph` |
+| [PostgreSQL](packages/postgres/README.md) | PostgreSQL Provider 与可选向量能力 | `python -m pip install -e packages/postgres` |
+| [Evolution](packages/evolution/README.md) | 流程候选评估与受控晋升 | `python -m pip install -e packages/evolution` |
 
-这种拆分确保默认安装保持轻量，部署方只安装真正需要的能力。
+本地 MCP 宿主安装上表中的 MCP 包后，可以启动绑定作用域的 stdio 服务：
 
-## MCP 集成
+```bash
+agent-memory-mcp --transport stdio --database memory.sqlite3 \
+  --tenant-id demo --user-id alice --agent-id assistant --session-id session-1
+```
 
-安装 MCP 包：
+远程 HTTP 使用[认证网关契约](packages/mcp-server/README.md#streamable-http)。身份来自可信宿主配置或经过验证的认证信息。
 
-~~~bash
-python -m pip install -e packages/mcp-server
-~~~
+公共边界是 `MemoryProvider`。可选包延迟发现，导入核心不会加载数据库驱动、框架运行时或机器学习库。Plugin Protocol v1 提供 Manifest、能力协商、生命周期健康状态、资源限制和稳定错误。参考[插件示例](examples/plugin_manifest.py)与[架构说明](docs/ARCHITECTURE.md)。
 
-启动本地 stdio 服务：
+## 适用场景
 
-~~~bash
-agent-memory-mcp --transport stdio --database .agent-memory/mcp.sqlite3
-~~~
+- **个人助手：**保存用户偏好，并查看偏好建立时的原始输入。
+- **编程与研究 Agent：**在后续调用中按上下文预算携带项目约束和决定。
+- **客服 Agent：**在宿主定义的用户范围内关联交互历史、决策与结果。
+- **Agent 基础设施：**围绕公共协议实现存储或框架适配器，通过固定回放评估记忆策略。
 
-MCP 服务提供六个操作：
+宿主负责执行任务、认证调用方和定义结果含义；Agent Memory 提供证据、状态与检索层。
 
-| 工具 | 作用 |
+## 能力状态
+
+| 领域 | 当前支持范围 |
 | --- | --- |
-| memory_remember | 写入事件和可选结构化声明 |
-| memory_recall | 返回受预算约束的记忆包 |
-| memory_get_state | 读取当前有效状态 |
-| memory_forget | 按作用域和策略删除记忆 |
-| memory_feedback | 记录结果或评价反馈 |
-| memory_health | 返回 Provider 和协议健康状态 |
+| 本地记忆 | 已实现 SQLite、显式声明、当前状态、引用、预算与按范围遗忘 |
+| 集成 | 提供 Python SDK、MCP、LangGraph、PostgreSQL 和 Evolution 包；部分 PostgreSQL 契约已在真实后端验证 |
+| 事实接纳与抽取 | 支持文档规定的谓词/语法；参考适配器不自动核验现实世界真值 |
+| 事实历史 | SQLite/PostgreSQL 支持 `valid_at` / `known_at`，以及规定范围内的更正与当前擦除守卫 |
+| 持久处理 | 已验证原子接收/发布、producer 恢复、应用进程强杀恢复及显式启用的 SDK/MCP 删除同步切片 |
+| 条件与贡献语义 | 已验证同范围单值事实/偏好及同槽普通贡献操作；复杂组合仍有限制 |
+| 检索扩展 | 有界 lexical/hybrid 候选插件按需启用；高级编排与候选到记忆包的完整接入仍在实施计划中 |
+| Observation 与 L2/L3 | 完整依赖生命周期、刷新与历史安全设计待实现；已有摘要/Block 基础能力不代表完整契约通过 |
+| 外部模型治理 | 完整 v6.1 派发、权限、预算和最终交付契约尚未完成 |
 
-stdio 集成由宿主通过可信配置提供作用域。远程 HTTP 部署必须使用签名网关或经过身份认证的反向代理，并根据已验证身份生成作用域。不能允许模型自行选择任意租户或用户标识。
+[贡献操作记录](docs/design/v6.1.0/stage-03.md)、[恢复与删除同步记录](docs/design/v6.1.0/stage-04.md)及[资源基线](docs/RESOURCE_BASELINE.md)记录了验证范围与限制。这些属于工程验证，不代表领先基准成绩或生产认证。
 
-## Agent 框架集成
-
-框架适配器只负责把生命周期事件转换成 MemoryProvider 调用，不拥有记忆语义。
-
-| 生命周期节点 | 记忆操作 |
-| --- | --- |
-| 会话开始 | 解析可信作用域并打开 Provider |
-| 用户、模型或工具事件之后 | 追加原始证据 |
-| 模型调用之前 | 获取有界记忆包 |
-| 产生结果之后 | 记录结果和反馈 |
-| 会话结束 | 完成情景记忆并关闭 Provider |
-
-仓库中的 LangGraph 包展示了这一边界。同样的方式可以接入自定义 Agent、命令行 Agent、托管运行时和其他编排框架。
-
-## 基于记忆的受控自进化
-
-自进化不等于允许 Agent 随意重写提示词。Agent Memory 将程序记忆的升级视为一个受治理的发布流程：
-
-~~~text
-运行观察
-   -> 候选流程
-   -> 离线评估
-   -> 影子运行
-   -> 小流量灰度
-   -> 正式启用
-          |
-          +-> 回滚
-~~~
-
-MVP 的安全约束包括：
-
-- 自进化默认关闭；
-- 候选流程不能直接进入启用状态；
-- 评估证据必须持久化；
-- 策略版本必须明确；
-- 启用和回滚过程可审计；
-- 确定性规则始终作为回退路径；
-- 潜在表示或学习策略不能替代事实状态源。
-
-这样可以形成从任务轨迹到行为改进的路径，同时避免实验记忆无声控制线上决策。
-
-## 能力完成度
-
-| 能力 | 状态 | 说明 |
-| --- | --- | --- |
-| 不可变事件写入 | 已实现 | 支持幂等事件键 |
-| 结构化声明和当前状态 | 已实现 | 支持来源和替代关系 |
-| 情景记忆 | 已实现 | 摘要保留证据引用 |
-| 程序记忆 | 已实现 | 流程版本化 |
-| 状态优先混合检索 | 已实现 | 多通道 RRF |
-| 上下文硬限制 | 已实现 | 条目、字符和 Token 估算 |
-| 按作用域遗忘 | 已实现 | 受策略控制的本地删除 |
-| SQLite Provider | 已实现 | 默认零配置路径 |
-| Python SDK | 已实现 | 可选包 |
-| LangGraph 适配器 | 已实现 | 可选包 |
-| MCP stdio 通信 | 已实现 | 已完成协议冒烟验证 |
-| PostgreSQL Provider | 已实现但未完成部署认证 | 需要真实环境集成验证 |
-| pgvector 检索 | 可选 | Provider 能力，不是核心必需项 |
-| 受控程序自进化 | MVP 已实现 | 默认关闭 |
-| 图记忆 | 计划中 | 必须保持可选 |
-| 学习型潜在记忆 | 研究方向 | 不得成为事实状态源 |
-| 在线自主策略训练 | 未实现 | 需要独立安全和评估设计 |
-
-## 资源占用
-
-项目面向小型本地 Agent 和插件宿主进行轻量化设计。
-
-在本地 SQLite MVP 写入 100 个事件的一次开发环境测量中：
-
-| 指标 | 观测值 |
-| --- | ---: |
-| 导入核心包后的堆内存 | 约 1.84 MiB |
-| 最终堆内存 | 约 1.95 MiB |
-| 峰值堆内存 | 约 2.17 MiB |
-| SQLite 数据库 | 136 KiB |
-| SQLite 共享内存文件 | 32 KiB |
-
-以上数据是单一开发环境的方向性测量，不是跨平台性能承诺。只有实际安装并启用插件时，向量模型、远程客户端、框架运行时和数据库驱动才会进入进程。
-
-## 安全模型
-
-记忆会影响未来模型行为，因此必须被视为高权限子系统。
-
-系统假设：
-
-- 宿主应用负责调用方身份认证；
-- 宿主根据可信身份生成作用域；
-- 存储内容是不可信数据，而不是可执行指令；
-- 密钥只在运行时提供，不写入仓库；
-- Provider 强制执行租户边界；
-- 删除和保留策略必须明确；
-- 所有检索结果都可以追溯到证据。
-
-远程部署前请阅读：
-
-- [安全策略](SECURITY.md)
-- [威胁模型](docs/THREAT_MODEL.md)
-- [MVP 架构](docs/MVP.md)
-
-发现安全漏洞时，请按照 SECURITY.md 中的私密报告流程处理，不要在公开 Issue 中提交利用方式或敏感信息。
-
-## 开发与构建
-
-创建完整开发环境：
-
-~~~bash
-./setup.sh --all
-~~~
-
-运行核心测试：
-
-~~~bash
-python -m pytest -q
-~~~
-
-构建包并检查发布元数据：
-
-~~~bash
-python -m build
-python -m twine check dist/*
-~~~
-
-当前测试覆盖事件写入、幂等、事实替代、作用域检索、上下文预算、遗忘、插件发现和自进化状态门。
-
-## 仓库目录
-
-~~~text
-agent-memory/
-├── src/agent_memory/          # 零依赖核心；稳定契约与装配入口
-│   ├── capture/              # 采集
-│   ├── consolidation/        # 归并与归纳
-│   ├── retrieval/            # 检索与候选治理
-│   ├── ontology/             # 本体模型、存储与运营
-│   ├── context/              # 恢复与压缩
-│   ├── extensions/           # 插件契约与加载
-│   ├── operations/           # 审计、诊断与后台任务
-│   └── evaluation/           # 评测、比较与回放
-├── packages/
-│   ├── postgres/              # PostgreSQL Provider
-│   ├── mcp-server/            # MCP 通信层
-│   ├── python-sdk/            # Python 客户端门面
-│   ├── langgraph/             # 框架适配器
-│   └── evolution/             # 受控自进化
-├── tests/                     # 核心行为测试
-├── examples/                  # 可运行示例
-├── docs/                      # 架构、计划和安全文档
-└── setup.sh                   # 本地安装入口
-~~~
-
-模块职责、拆分原则和旧导入兼容方式见[代码架构说明](docs/ARCHITECTURE.md)。
-
-## 当前边界
-
-MVP 不宣称已经提供以下能力：
-
-- 托管式记忆云服务；
-- 经过生产认证的多区域 PostgreSQL 部署；
-- 由内置向量模型保证的语义检索质量；
-- 通用图记忆引擎；
-- 跨外部备份和副本的端到端删除；
-- 缺少人工安全门的在线自主训练；
-- 对所有 Agent 框架的兼容性认证。
-
-这些属于部署或研究路线，不是轻量核心中的隐藏行为。
+Alpha 尚未完成整体生产验收、跨范围原子更正、外部备份/缓存的端到端擦除或在线自主训练。参与同步的待发队列支持删除同步；恢复备份时回放权威删除日志的完整能力仍待补齐。远程部署前阅读[安全策略](SECURITY.md)和[威胁模型](docs/THREAT_MODEL.md)。
 
 ## 路线图
 
-### v0.1：最小可靠记忆系统
+开发遵循 [v6.1 实施计划](docs/design/v6.1.0/plan.md)与[任务台账](docs/design/v6.1.0/task.md)。软件、架构、协议和数据库版本独立演进。
 
-- 本地 SQLite 运行时；
-- Event、Claim、State、Episode 和 Procedure 模型；
-- 带引用的有界检索；
-- 插件协议和延迟发现；
-- MCP、SDK、LangGraph、PostgreSQL 和 Evolution 包；
-- 构建、安全和发布文档。
+| 里程碑 | 交付目标 |
+| --- | --- |
+| M0 · 可实施基线 | 固定契约、可信领域金标准、故障夹具和校准后的验收配置 |
+| M1 · 可靠 L1 | 宿主捕获 → 持久处理 → 事实读取、更正、恢复与擦除 |
+| M2 · 可维护知识 | 带依赖的 Observation 与可刷新的 L2/L3 视图 |
+| M3 · 经验证的检索 | 证据追踪、按用途检索、冻结对照和可选只读 Reflect |
+| M4 · 按需扩展 | 按实际需求增加规模、多模态、可移植导入导出与受控演化 |
 
-### v0.2：运行与发布加固
+**近期重点是补齐可靠 L1 的交付与恢复契约，同时推进真实领域质量校准。** 当前优先级和剩余切片见[后续步骤](docs/design/v6.1.0/next-steps.md)。可选扩展分别满足自己的验收要求。
 
-- PostgreSQL 真实环境集成测试；
-- 签名 HTTP 网关参考实现；
-- 数据保留和删除审计报告；
-- 检索质量基准；
-- Agent 框架兼容性矩阵；
-- 包发布和可复现发布流程。
+## 文档导航
 
-### v0.3：可选高级记忆
-
-- 图记忆插件；
-- 外部向量化和重排序插件；
-- 冲突解决策略；
-- 更完整的评估数据集；
-- 灰度监控和自动回滚信号。
-
-### 研究方向
-
-- 任务轨迹压缩；
-- 学习型检索策略；
-- 潜在记忆表示；
-- 程序记忆反事实评估；
-- 感知记忆的 Agent 规划。
-
-所有高级能力都必须保持可选、可测量、可回滚，并服从证据支持的当前状态。
+| 想了解什么 | 阅读入口 |
+| --- | --- |
+| 模块职责与代码边界 | [代码架构](docs/ARCHITECTURE.md) |
+| 事实接纳与自动抽取 | [Atom 接纳](docs/ATOM_ADMISSION.md) · [自动抽取](docs/ATOM_EXTRACTION.md) |
+| 历史事实查询 | [双时态记忆](docs/BITEMPORAL_MEMORY.md) |
+| 任务结果反馈 | [反馈契约](docs/FEEDBACK_CONTRACT.md) |
+| 部署配置与故障恢复 | [单机部署](docs/single-host-deployment.md) · [恢复操作](docs/recovery-operations.md) |
+| 评测与资源测量 | [评测方法](docs/LOCAL_MEMORY_COMPARISON_EVAL.md) · [资源基线](docs/RESOURCE_BASELINE.md) |
+| 当前开发进度 | [设计版本](docs/design/README.md) · [计划](docs/design/v6.1.0/plan.md) · [任务](docs/design/v6.1.0/task.md) |
 
 ## 参与贡献
 
-贡献必须保持以下核心约束：默认占用小、框架中立、严格作用域隔离、证据可追溯、重量级依赖可选。
+欢迎贡献适配器、证据驱动的示例、故障恢复和评测数据集。先查看[任务台账](docs/design/v6.1.0/task.md)中的依赖和待办，再阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
-提交 Pull Request 前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。架构变更应明确说明问题、协议影响、失败行为、迁移路径和资源成本。
+```bash
+./setup.sh --all
+source .venv/bin/activate
+python -m pytest -q
+```
+
+集成与真实 PostgreSQL 测试需要额外配置，参见 [CI](.github/workflows/ci.yml)。贡献应保持默认占用小、契约与框架无关、范围由宿主控制和证据可追溯这几项核心特性。
+
+发现可复现的问题或集成缺口，可以[提交 Issue](https://github.com/agent-memory-lab/agent-memory/issues)。安全漏洞通过 [SECURITY.md](SECURITY.md) 中的私密流程报告。
 
 ## 许可证
 
-本项目使用 [Apache License 2.0](LICENSE)。
+[Apache License 2.0](LICENSE)。

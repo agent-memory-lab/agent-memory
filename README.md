@@ -1,670 +1,249 @@
-# Agent Memory
-
-[English](README.md) | [简体中文](README.zh-CN.md)
+<h1 align="center">Agent Memory</h1>
 
 <p align="center">
-  <img src="docs/assets/agent-memory-architecture.svg" alt="Agent Memory architecture" width="100%">
+  <strong>Give your agents memory they can trace, update, and use within a budget.</strong>
 </p>
 
-A lightweight, pluggable, evidence-backed memory layer for AI agents.
+<p align="center">
+  A lightweight, pluggable memory layer for AI agents.<br>
+  Start locally with Python and SQLite. Add models, storage, and framework integrations as you need them.
+</p>
 
-Agent Memory turns raw agent activity into bounded, traceable context for the next decision. It separates current facts, historical episodes, reusable procedures, and experimental self-evolution so that an agent can remember without turning its prompt, process, or storage into an unbounded black box.
+<p align="center">
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.13%2B-3776AB?logo=python&logoColor=white" alt="Python 3.13+"></a>
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/Core_runtime_dependencies-0-14866D" alt="Zero third-party core runtime dependencies"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue" alt="Apache 2.0 license"></a>
+  <a href="docs/design/v6.1.0/task.md"><img src="https://img.shields.io/badge/Status-Alpha-orange" alt="Alpha status"></a>
+</p>
 
-> Status: **v0.1 MVP**. The local SQLite path, Plugin Protocol v1, automatic capture primitives, bounded lexical/hybrid candidate plugins, MCP adapter, Python SDK, LangGraph adapter, and controlled evolution primitives are implemented. The project is not yet recommended for production use.
+<p align="center">
+  <a href="README.zh-CN.md">简体中文</a> ·
+  <a href="#quickstart">Quickstart</a> ·
+  <a href="#examples">Examples</a> ·
+  <a href="#integrations">Integrations</a> ·
+  <a href="#documentation">Documentation</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
 
-## Why Agent Memory
+Agents need to remember preferences, follow changing project constraints, and reuse what worked. Agent Memory turns those interactions into **current facts, cited history, and governed procedures**, then returns a bounded `MemoryBundle` for the next model call.
 
-Most agent memory implementations begin and end with vector search:
+**Run the basic write-and-recall loop without an API key, vector database, or background service.** The core has zero third-party runtime dependencies; model-assisted extraction and other integrations are opt-in.
 
-~~~text
-conversation -> chunks -> embeddings -> top-k context
-~~~
+> **Alpha · software v0.1.0.** The local runtime and optional integration packages are available. The v6.1 architecture is being implemented in stages; it is a design version, not the package version. The full M0/M1 milestones and production acceptance remain open. See [capability status](#capability-status) for the supported scope.
 
-That is useful for semantic recall, but it does not answer several operational questions:
+## Why Agent Memory?
 
-- What is the agent's current source of truth?
-- Which old fact was superseded by a newer fact?
-- Where did a memory come from?
-- How much memory may enter the model context?
-- Can a host application isolate users, agents, and sessions?
-- Can a learned behavior be evaluated and rolled back before activation?
+A useful memory layer should help an agent answer both **“What applies now?”** and **“What evidence supports it?”**
 
-Agent Memory uses a state-first model instead:
-
-~~~text
-agent events
-    |
-    v
-immutable evidence log
-    |
-    +--> claims ----------> current state
-    +--> episodes --------> historical recall
-    +--> procedures ------> reusable behavior
-    |
-    v
-bounded retrieval bundle
-    |
-    v
-next model decision
-~~~
-
-Every returned item keeps provenance. New truth supersedes old truth instead of silently overwriting it. Experimental procedures move through explicit evaluation gates instead of modifying live behavior directly.
-
-## Design Principles
-
-| Principle | Meaning |
+| What your agent needs | What Agent Memory provides |
 | --- | --- |
-| Pluggable by contract | Agents depend on **MemoryProvider**, not on SQLite, PostgreSQL, MCP, or a framework adapter. |
-| Local by default | The MVP runs in-process with Python and SQLite; the core has no runtime dependencies. |
-| Evidence before inference | Claims and summaries retain links to source events. |
-| State before similarity | Current accepted state is retrieved before semantic or episodic material. |
-| Bounded context | Item count, character count, token estimate, and per-channel limits are enforced. |
-| Host-owned isolation | Scope is supplied by trusted host code, not accepted from model-generated arguments. |
-| Safe evolution | Candidate behaviors are evaluated offline, then in shadow and canary stages, before activation. |
-| Honest degradation | Optional channels may fail without corrupting the current-state path. |
+| Keep up with changing preferences and decisions | Versioned claims and current state; explicit fact admission and correction APIs |
+| Explain where a fact came from | Source event IDs and evidence links; richer quote/field checks through Atom admission |
+| Distinguish effective time from knowledge time | Claim queries with independent `valid_at` and `known_at` |
+| Keep context under control | Limits on items, characters, estimated tokens, and retrieval channels |
+| Serve different users and workspaces | Trusted host scopes for tenants, users, agents, workspaces, and sessions |
+| Change frameworks or storage | A `MemoryProvider` contract with SQLite, PostgreSQL, SDK, MCP, and LangGraph integrations |
+| Learn from task outcomes | Linked feedback and Procedure candidates with evaluation, shadow, canary, and rollback stages |
 
-## Five-Minute Start
+**A concrete example:** a user moves from Hangzhou to Shanghai. The contribution API can record the move, preserve the earlier state, and track the evidence for ending the old state separately from the evidence for the new city. If the Shanghai evidence is erased, the later answer becomes **unknown** rather than reviving Hangzhou without support. [Run the example →](examples/contribution_memory.py)
 
-### 1. Install the local MVP
+## Quickstart
 
-~~~bash
+### Install
+
+Requires **Python 3.13+**. Install from this repository into a virtual environment:
+
+```bash
 git clone https://github.com/agent-memory-lab/agent-memory.git
 cd agent-memory
-./setup.sh
-~~~
-
-Python 3.13+ is required. `setup.sh` selects Python 3.13 when available; set
-`PYTHON_BIN=/path/to/python3.13 ./setup.sh` to choose it explicitly.
-
-For an editable core-only install:
-
-~~~bash
+python3.13 -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 python -m pip install -e .
-~~~
+```
 
-### 2. Remember and recall
+For a development environment, use `./setup.sh`; use `./setup.sh --all` to include the optional packages. Select an interpreter with `PYTHON_BIN=/path/to/python3.13 ./setup.sh`.
 
-~~~python
+### Remember → recall → inspect the source
+
+Save this as `demo.py`, then run `python demo.py`:
+
+```python
 import asyncio
-
 from agent_memory import AgentMemory, MemoryScope
 
 
-async def main() -> None:
-    scope = MemoryScope(
-        tenant_id="demo",
-        namespace="support-agent",
-        agent_id="assistant",
-        user_id="user-42",
-        session_id="session-1",
-    )
-
-    async with AgentMemory.local(
-        ".agent-memory/demo.sqlite3",
-        scope=scope,
-    ) as memory:
+async def main():
+    # Your application supplies identity and scope.
+    scope = MemoryScope(tenant_id="demo", user_id="alice", agent_id="assistant")
+    async with AgentMemory.local("memory.sqlite3", scope=scope) as memory:
         await memory.remember(
-            "Please contact me by email.",
+            "I prefer concise answers.",
             event_type="user.message",
-            claims=(
-                {
-                    "key": "contact.preference",
-                    "value": "email",
-                    "text": "The user prefers email.",
-                    "scope": "user",
-                    "confidence": 0.98,
-                },
-            ),
+            actor="user",
+            idempotency_key="alice-answer-style-1",
+            claims=({
+                "key": "answer.style",
+                "value": "concise",
+                "text": "Alice prefers concise answers.",
+                "scope": "user",
+                "confidence": 0.98,
+            },),
         )
-
-        bundle = await memory.recall(
-            "How should I contact this user?",
-            limit=8,
-            token_budget=1_200,
-        )
-
+        bundle = await memory.recall("How should I answer Alice?", token_budget=600)
         for claim in bundle.current_state:
-            print(claim.key, claim.value, claim.provenance.source_event_ids)
+            print(f"{claim.key}: {claim.value}")
+            print("source events:", len(claim.provenance.source_event_ids))
 
 
 asyncio.run(main())
-~~~
+```
 
-**AgentMemory.local()** creates a ready-to-use runtime with conservative limits. No vector database, external service, model key, or background worker is required.
+Output on a fresh database:
 
-### Explicit atom admission
+```text
+answer.style: concise
+source events: 1
+```
 
-`remember_atoms()` accepts host-supplied subjects, registered predicates, source authority,
-and evidence quotes. It returns per-candidate decisions, preserves pending or contested
-inputs, and supports bitemporal state changes and explicit review with `resolve_atom()`.
-The existing `remember()` API remains compatible. See the [Atom admission guide](docs/ATOM_ADMISSION.md)
-for examples, correction IDs, evidence-time semantics, and the first-release limitations.
+This example supplies the structured claim from host code. It demonstrates persistence and recall; automatic extraction is a separate, optional path. `confidence` is an input score, not a guarantee of truth. The returned bundle contains memory context for your host to assemble into a model request; it does not call an LLM.
 
-### Governed automatic atom extraction
+## Examples
 
-`extract_atoms()` generates typed candidates, reviews source faithfulness and reuse value,
-then applies host-controlled admission and bitemporal conflict handling. It includes a
-bounded offline Chinese/English reference adapter and injectable `AtomGenerator` /
-`AtomReviewer` protocols. First results, including failures, are stored for idempotent replay.
-See [automatic Atom extraction](docs/ATOM_EXTRACTION.md) for runnable usage, supported grammar,
-transaction boundaries and authored evaluation cases.
+Choose the behavior you want to try. These local examples run without a model key; the durable examples also require `python -m pip install -e packages/python-sdk`.
 
-### Automatic trajectory extraction
+| Example | What you can inspect |
+| --- | --- |
+| [Basic memory](examples/quickstart.py) | Write a preference and retrieve current state |
+| [Durable memory](examples/durable_memory.py) | Persist sources and processing requests, then publish L1 facts |
+| [Contextual memory](examples/contextual_memory.py) | Query conditional facts with field and temporal support |
+| [Contribution correction](examples/contribution_memory.py) | Separate state termination, correction, and source erasure |
+| [Offline deletion sync](examples/durable_purge.py) | Clean a participating SDK outbox before delivering new events |
+| [Plugin contracts](examples/plugin_contract.py) | Implement and validate a plugin lifecycle |
 
-Automatic extraction is optional and model-vendor neutral. Implement the small
-`ClaimGenerator` protocol, then inject it without changing the agent or storage layer:
+For lifecycle hooks, [the capture integration recipe](examples/capture_harness.py) shows how to wire a host provider, authenticated context, and queue. It requires the Python SDK and host setup.
 
-~~~python
-from agent_memory import AgentMemory, build_trajectory_extractor
+Run a standalone example from the repository root, for instance:
 
-extractor = build_trajectory_extractor(
-    my_claim_generator,
-    provider="my-model-provider",
-    model="my-model",
-)
-memory = AgentMemory.local("memory.sqlite3", scope=scope, extractor=extractor)
-~~~
+```bash
+python examples/contribution_memory.py
+```
 
-The generator receives trusted lifecycle events, including user messages and tool metadata.
-Its structured output is schema-validated, confidence-gated, scope-checked, capped per event,
-and bound to source evidence. Explicit host claims take priority. Generator failures degrade
-to event-only ingestion and do not block the agent.
-Generated claims must now include a valid numeric `confidence`; missing scores are skipped
-instead of being defaulted to `1.0`. This score is not a proof of factual correctness.
+## How it works
 
-## Core Model
+```text
+Host events → source evidence → claims / episodes / procedures
+                                      ↓
+                       current state + historical recall
+                                      ↓
+                       filtering + fusion + context budgets
+                                      ↓
+                                 MemoryBundle
+                                      ↓
+                              your next model call
+```
 
-Agent Memory treats memory as several related but distinct artifacts.
-
-| Artifact | Purpose | Mutation rule |
-| --- | --- | --- |
-| Event | Immutable evidence from the agent lifecycle | Append-only and idempotent |
-| Claim | Structured statement derived from evidence | Versioned; may supersede an older claim |
-| Current state | Latest accepted claims for a scope | Rebuilt from active claims |
-| Episode | Compressed account of a completed interaction | Append-only with citations |
-| Procedure | Reusable behavioral knowledge | Versioned and governed |
-| Decision | Record of what an agent chose | Linked to context and policy version |
-| Outcome | Observable result of a decision | Linked to the decision |
-| Reward | Evaluation signal for an outcome | Stored separately from activation |
-
-A memory bundle is a bounded projection over these artifacts. It is not a database dump and it is not an unqualified list of semantically similar text.
-
-## Retrieval
-
-The default retrieval pipeline is deterministic and inspectable:
-
-~~~text
-query + trusted scope
-    |
-    +--> current-state channel
-    +--> semantic channel
-    +--> episodic channel
-    +--> procedural channel
-    |
-    v
-reciprocal-rank fusion
-    |
-    v
-deduplication + policy filtering
-    |
-    v
-hard budget enforcement
-    |
-    v
-MemoryBundle(items, citations, token_estimate)
-~~~
-
-The current-state channel has priority because recent accepted truth should not lose to an older but more similar passage. Reciprocal-rank fusion combines channel rankings without requiring their raw scores to share a scale.
-
-The local MVP enforces:
-
-- maximum returned items;
-- maximum characters;
-- estimated token budget;
-- per-channel limits;
-- tenant, application, agent, user, and session scope;
-- deterministic ordering;
-- citations back to source evidence.
-
-### Optional lexical and hybrid candidates
-
-V4 adds an opt-in candidate layer without silently changing `AgentMemory.recall()`:
-
-~~~text
-trusted scope + query
-        |
-        +--> bounded lexical source
-        +--> optional host retrievers
-        |
-        v
-scope and provenance validation
-        |
-        v
-deterministic reciprocal-rank fusion
-~~~
-
-The bundled lexical retriever scans a bounded window of recent, unarchived SQLite events. It is
-dependency-free, supports Latin and Chinese terms, uses deterministic BM25 ranking, preserves
-source event IDs, and rejects the entire batch if a source returns unlabelled or cross-scope data.
-It is intentionally a recent-event baseline, not a full-text or vector index.
-
-Hosts explicitly load and call retriever plugins. The default retrieval path remains unchanged:
-
-~~~python
-from agent_memory import (
-    AgentMemory,
-    PluginContext,
-    PluginKind,
-    PluginLoader,
-    PluginResourceLimits,
-)
-from agent_memory.retriever_plugin import register_sqlite_lexical_retriever
-from agent_memory.sqlite import SQLiteMemoryRepository
-
-database = ".agent-memory/demo.sqlite3"
-
-async with AgentMemory.local(database, scope=scope) as memory:
-    loader = PluginLoader(core_version="0.1.0")
-    register_sqlite_lexical_retriever(loader, SQLiteMemoryRepository(database))
-    loaded = await loader.load(
-        "scoped-lexical",
-        PluginKind.RETRIEVER,
-        PluginContext(
-            scope=scope,
-            resource_limits=PluginResourceLimits(
-                timeout_ms=1_000,
-                max_candidates=8,
-                max_batch_size=128,
-                max_concurrency=1,
-            ),
-            request_id="retrieval-1",
-        ),
-        required_capabilities=("lexical.search",),
-    )
-    try:
-        candidates = await memory.retrieve_candidates("migration rollback", loaded)
-    finally:
-        await loader.close()
-~~~
-
-`retrieve_candidates()` enforces the AgentMemory scope, plugin timeout, host and plugin candidate
-limits, and candidate type before returning results. Candidate plugins do not write memory, activate
-procedures, or bypass the normal bounded `MemoryBundle` path.
-
-## Plugin Architecture
+- **Events** preserve source activity; writes support idempotency. Retention and erasure are explicit operations.
+- **Claims** represent versioned statements. Atom admission adds typed predicates, source authority, pending/contested decisions, and evidence checks.
+- **Episodes and Procedures** organize task history and reusable behavior. Procedure evolution is disabled by default and requires host-defined gates.
+- **MemoryBundle** is the retrieval result with citations and budget accounting. Current accepted state has priority; optional candidate channels remain subject to scope and provenance checks.
 
 <p align="center">
-  <img src="docs/assets/plugin-integration-flow.svg" alt="Plugin integration flow" width="100%">
+  <img src="docs/assets/agent-memory-architecture.svg" alt="Agent Memory architecture: evidence, state, retrieval, and optional integrations" width="100%">
 </p>
 
-The public boundary is the **MemoryProvider** protocol. Storage engines, transports, framework integrations, and evolution engines remain replaceable.
+Models can generate candidates through injectable protocols such as `ClaimGenerator`, `AtomGenerator`, and `AtomReviewer`. The host controls identity, policies, and admission. See [automatic Atom extraction](docs/ATOM_EXTRACTION.md), [Atom admission](docs/ATOM_ADMISSION.md), and [bitemporal memory](docs/BITEMPORAL_MEMORY.md) for usage and supported boundaries.
 
-~~~text
-Agent / Host Application
-          |
-          v
- AgentMemory facade
-          |
-          v
-   MemoryProvider
-          |
-          +--> local SQLite kernel
-          +--> PostgreSQL provider
-          +--> remote MCP provider
-          +--> future third-party provider
-~~~
+## Integrations
 
-Plugins are discovered lazily through Python entry points. Importing the core does not import optional databases, MCP runtimes, frameworks, or machine-learning libraries. Plugin Protocol v1 provides a versioned manifest, capability negotiation, resource limits, lifecycle health, stable errors, and rollback when initialization fails.
+Start with the core and install the integration packages you need:
 
-| Entry-point group | Responsibility |
-| --- | --- |
-| agent_memory.capture | Agent-framework lifecycle capture adapters |
-| agent_memory.extractors | Evidence-to-claim extractors |
-| agent_memory.retrievers | Lexical, semantic, temporal, or entity candidate sources |
-| agent_memory.consolidators | Episode, claim, and procedure proposal builders |
-| agent_memory.storage | Replaceable storage providers |
-| agent_memory.evaluators | Candidate and release evaluators |
-
-Every Plugin Protocol v1 implementation exposes `plugin_manifest()`, `initialize()`, `health()`,
-and `close()`. The host supplies a `PluginContext` containing the trusted scope, deadline,
-cancellation signal, configuration, and effective resource limits. Plugins return candidates or
-proposals; the host and kernel retain final validation and commit authority.
-
-Switching providers does not require changing agent logic:
-
-~~~python
-from agent_memory import AgentMemory, MemoryScope
-
-scope = MemoryScope(
-    tenant_id="acme",
-    namespace="research",
-    agent_id="analyst",
-)
-
-memory = AgentMemory.from_plugin(
-    "postgres",
-    scope=scope,
-    dsn="postgresql://memory@localhost/agent_memory",
-)
-~~~
-
-Third-party packages can implement the protocol and register their own entry point without modifying this repository.
-
-## Packages
-
-| Package | Role | Core dependency impact |
+| Package | Purpose | Local installation |
 | --- | --- | --- |
-| agent-memory | Domain model, local kernel, SQLite store, retrieval, policy, plugin registry | Zero runtime dependencies |
-| agent-memory-postgres | PostgreSQL and pgvector-capable provider | Optional |
-| agent-memory-mcp-server | MCP stdio/HTTP transport | Optional |
-| agent-memory-python-sdk | Client-facing Python facade | Optional |
-| agent-memory-langgraph | LangGraph lifecycle adapter | Optional |
-| agent-memory-evolution | Governed procedure evolution | Optional |
+| `agent-memory` | Domain contracts, SQLite runtime, retrieval, plugin loading | `python -m pip install -e .` |
+| [Python SDK](packages/python-sdk/README.md) | Embedded/remote facade and durable host outbox | `python -m pip install -e packages/python-sdk` |
+| [MCP server](packages/mcp-server/README.md) | stdio and Streamable HTTP transport | `python -m pip install -e packages/mcp-server` |
+| [LangGraph](packages/langgraph/README.md) | Lifecycle adapter | `python -m pip install -e packages/langgraph` |
+| [PostgreSQL](packages/postgres/README.md) | PostgreSQL provider and optional vector support | `python -m pip install -e packages/postgres` |
+| [Evolution](packages/evolution/README.md) | Evaluated Procedure candidates and promotion | `python -m pip install -e packages/evolution` |
 
-This split keeps the default installation small while allowing deployments to add only the integration surface they need.
+For a local MCP host, install the MCP package above and start a scope-bound stdio server:
 
-## MCP Integration
+```bash
+agent-memory-mcp --transport stdio --database memory.sqlite3 \
+  --tenant-id demo --user-id alice --agent-id assistant --session-id session-1
+```
 
-Install the MCP package:
+For remote HTTP, use the [authenticated gateway contract](packages/mcp-server/README.md#streamable-http). Identity comes from trusted host configuration or verified authentication.
 
-~~~bash
-python -m pip install -e packages/mcp-server
-~~~
+The public boundary is `MemoryProvider`. Optional packages use lazy discovery; importing the core does not load database drivers, framework runtimes, or ML libraries. Plugin Protocol v1 adds manifests, capability negotiation, lifecycle health, resource limits, and stable errors. See the [plugin example](examples/plugin_manifest.py) and [architecture guide](docs/ARCHITECTURE.md).
 
-Start a local stdio server:
+## Where it fits
 
-~~~bash
-agent-memory-mcp --transport stdio --database .agent-memory/mcp.sqlite3
-~~~
+- **Personal assistants:** keep user preferences and inspect the inputs that established them.
+- **Coding and research agents:** carry project constraints and decisions into later calls with a context budget.
+- **Support agents:** link interaction history, decisions, and outcomes within a host-defined user scope.
+- **Agent infrastructure:** build storage or framework adapters against a shared contract, then evaluate memory policies with fixed replay.
 
-The MCP surface exposes six operations:
+The host owns task execution, caller identity, and the meaning of outcomes. Agent Memory supplies the evidence, state, and retrieval layer.
 
-| Tool | Purpose |
+## Capability status
+
+| Area | Current scope |
 | --- | --- |
-| memory_remember | Ingest an event and optional structured claims |
-| memory_recall | Return a bounded memory bundle |
-| memory_get_state | Read current accepted state |
-| memory_forget | Remove memory according to scope and policy |
-| memory_feedback | Record outcome or evaluation feedback |
-| memory_health | Report provider and protocol health |
+| Local memory | Implemented: SQLite, explicit claims, current state, citations, budgets, and scoped forgetting |
+| Integrations | Python SDK, MCP, LangGraph, PostgreSQL, and Evolution packages; selected live PostgreSQL contracts validated |
+| Fact admission and extraction | Implemented for documented predicates/grammars; automatic real-world truth verification is outside the reference adapters |
+| Claim history | SQLite/PostgreSQL `valid_at` / `known_at`; supported corrections and current erasure guards |
+| Durable processing | Validated slices: atomic receive/publish, producer recovery, application SIGKILL recovery, and opt-in SDK/MCP purge sync |
+| Conditional and contribution semantics | Validated subsets: same-scope scalar facts/preferences and same-slot ordinary contribution operations; complex combinations remain restricted |
+| Retrieval extensions | Bounded lexical/hybrid candidate plugins are opt-in; advanced orchestration and candidate-to-bundle work remain on the implementation plan |
+| Observation and L2/L3 | The complete dependency-aware lifecycle, refresh, and historical safety design remains planned; existing summary/block primitives do not establish that contract |
+| External model governance | Full v6.1 dispatch, permission, budget, and delivery contracts remain incomplete |
 
-For stdio integrations, the host supplies scope through trusted configuration. For remote HTTP deployments, use a signed gateway or authenticated reverse proxy and derive scope from verified identity. Do not let a model choose arbitrary tenant or user identifiers.
+Validation is documented with scope and limitations in [contribution operations](docs/design/v6.1.0/stage-03.md), [recovery and deletion sync](docs/design/v6.1.0/stage-04.md), and the [resource baseline](docs/RESOURCE_BASELINE.md). These are engineering checks, not a claim of superior benchmark accuracy or production certification.
 
-## Framework Integration
-
-Framework adapters translate lifecycle hooks into the provider protocol; they do not own memory semantics.
-
-| Lifecycle point | Memory action |
-| --- | --- |
-| Session start | Resolve trusted scope and open provider |
-| After user/model/tool event | Append evidence |
-| Before model call | Retrieve a bounded bundle |
-| After outcome | Record outcome and feedback |
-| Session end | Finalize episode and close provider |
-
-The included LangGraph package demonstrates this boundary. The same model supports custom agents, command-line agents, hosted runtimes, and other orchestration frameworks.
-
-## Trusted Feedback Loop
-
-The host owns outcome meaning and identity. Agent Memory only validates, stores, links, and
-consolidates the supplied evidence:
-
-~~~text
-remember / recall -> record_decision -> record_outcome
-                  -> record_evaluation -> record_reward
-                  -> Episode -> Procedure candidate
-~~~
-
-Use `record_decision`, `record_outcome`, `record_evaluation`, and `record_reward` on the local
-facade, Python SDK, or MCP tools. Supply stable idempotency keys for retries. Feedback may arrive
-out of order, but remains `pending` until its parent exists; cross-scope references and untrusted
-evaluators are rejected. `feedback_status` and `feedback_history` expose receipts without SQL.
-
-Corrections supersede prior records rather than rewriting history. Forgetting source evidence
-invalidates dependent feedback, Episodes, evaluations, rewards, and evolution candidates. Archive
-retains permitted audit fields; erase removes sensitive payloads. The full field and compatibility
-contract is in [docs/FEEDBACK_CONTRACT.md](docs/FEEDBACK_CONTRACT.md).
-
-## Controlled Memory Evolution
-
-Self-evolution is not unrestricted prompt rewriting. Agent Memory models it as a governed release process for procedures:
-
-~~~text
-observations
-    -> candidate
-    -> offline evaluation
-    -> shadow
-    -> canary
-    -> active
-             |
-             +-> rollback
-~~~
-
-Safety rules in the MVP:
-
-- evolution is disabled by default;
-- candidates never become active directly;
-- evaluation evidence is persisted;
-- candidate, dataset, evaluator, rubric, reward, and policy versions are explicit;
-- evaluator and approver identities come from host allowlists;
-- active approval is candidate/scope bound and expires;
-- activation and rollback are auditable;
-- one active pointer per exact scope controls selection;
-- interrupted activation and rollback states have deterministic restart recovery;
-- deterministic rules remain the fallback;
-- latent or learned policies cannot replace the source-of-truth state.
-
-This creates a path from task trajectories to improved behavior without allowing experimental memory to silently control production decisions.
-
-SQLite schema upgrades run during provider initialization. Back up persistent databases before
-upgrading or downgrading. Evolution registry upgrades add provenance and idempotency columns
-without rewriting existing evidence; legacy evaluations without scope/version binding cannot drive
-new promotion. PostgreSQL migrations live in `packages/postgres/migrations` and must be applied in
-an isolated environment before deployment.
-
-## Capability Status
-
-| Capability | Status | Notes |
-| --- | --- | --- |
-| Immutable event ingestion | Implemented | Idempotent event keys |
-| Structured claims and current state | Implemented | Provenance and supersession |
-| Episodic memory | Implemented | Citation-preserving summaries |
-| Procedural memory | Implemented | Versioned procedures |
-| State-first hybrid retrieval | Implemented | Multi-channel RRF |
-| Deterministic lexical candidates | Implemented, opt-in | Bounded recent-event SQLite window |
-| Scope-checked retriever plugin | Implemented, opt-in | Plugin Protocol v1 with timeout and capacity limits |
-| External candidate fusion | Implemented, opt-in | Deterministic RRF; up to four additional sources |
-| Parallel retriever orchestration | Planned | Independent timeout, cancellation, and degradation trace |
-| Hard context budgets | Implemented | Items, characters, and token estimate |
-| Scoped forgetting | Implemented | Policy-controlled local deletion |
-| SQLite provider | Implemented | Default zero-config path |
-| Python SDK | Implemented | Optional package |
-| LangGraph adapter | Implemented | Optional package |
-| MCP stdio transport | Implemented | Protocol smoke-tested |
-| PostgreSQL provider | Live contract validated | PostgreSQL 17.11; production operations remain host-owned |
-| pgvector retrieval | Optional | Provider capability, not a core requirement |
-| Trusted feedback and correction | Implemented | Idempotent, ordered, scoped, and auditable |
-| Controlled procedure evolution | MVP implemented | Disabled by default; host-defined gates |
-| Retrieval policy candidate | Deterministic MVP | Fixed replay only; no causal claim |
-| Graph memory | Planned | Must remain optional |
-| Learned latent memory | Research track | Must not become source of truth |
-| Online autonomous policy training | Not implemented | Requires a separate safety and evaluation design |
-
-## Resource Profile
-
-The project is deliberately optimized for small local agents and plugin hosts.
-
-A local development measurement for the SQLite MVP with 100 events produced:
-
-| Measurement | Observed value |
-| --- | ---: |
-| Heap after core import | approximately 1.84 MiB |
-| Final heap | approximately 1.95 MiB |
-| Peak heap | approximately 2.17 MiB |
-| SQLite database | 136 KiB |
-| SQLite shared-memory file | 32 KiB |
-
-These values are directional measurements from one development environment, not cross-platform guarantees. Embedding models, remote clients, framework runtimes, and database drivers are excluded from the core process unless their plugins are installed and used.
-
-## Security Model
-
-Memory is a privileged subsystem because it can influence future model behavior.
-
-The design assumes:
-
-- the host application authenticates the caller;
-- the host derives the memory scope;
-- stored content is untrusted data, not executable instruction;
-- credentials are supplied at runtime and never committed;
-- providers enforce tenant boundaries;
-- deletion and retention policies are explicit;
-- retrieved items remain attributable to evidence.
-
-Before deploying remotely, read:
-
-- [Security policy](SECURITY.md)
-- [Threat model](docs/THREAT_MODEL.md)
-- [MVP architecture](docs/MVP.md)
-
-If you discover a vulnerability, follow the private reporting process in **SECURITY.md**. Do not open a public issue containing exploit details or secrets.
-
-## Development
-
-Create a development environment:
-
-~~~bash
-./setup.sh --all
-~~~
-
-Run the core test suite:
-
-~~~bash
-python -m pytest -q
-~~~
-
-Build a package:
-
-~~~bash
-python -m build
-python -m twine check dist/*
-~~~
-
-The repository contains focused tests for ingestion, feedback lineage, correction, supersession,
-scoped retrieval, context budgets, forgetting, plugin discovery, evolution authorization, restart
-recovery, and deterministic retrieval-policy gates. See
-[docs/ACCEPTANCE_REPORT_2026-09-11.md](docs/ACCEPTANCE_REPORT_2026-09-11.md) for exact results and
-the outstanding live PostgreSQL requirement.
-
-## Repository Layout
-
-~~~text
-agent-memory/
-├── src/agent_memory/          # zero-dependency core; stable contracts and entry points
-│   ├── capture/              # capture
-│   ├── consolidation/        # consolidation and induction
-│   ├── retrieval/            # retrieval and candidate governance
-│   ├── ontology/             # ontology model, persistence and operations
-│   ├── context/              # recovery and compression
-│   ├── extensions/           # plugin contracts and loading
-│   ├── operations/           # audit, diagnostics and workers
-│   └── evaluation/           # evaluation, comparison and replay
-├── packages/
-│   ├── postgres/              # PostgreSQL provider
-│   ├── mcp-server/            # MCP transport
-│   ├── python-sdk/            # Python client facade
-│   ├── langgraph/             # framework adapter
-│   └── evolution/             # governed self-evolution
-├── tests/                     # core behavior tests
-├── examples/                  # runnable examples
-├── docs/                      # architecture, plan, and security
-└── setup.sh                   # local setup entry point
-~~~
-
-See [architecture boundaries and import compatibility](docs/ARCHITECTURE.md).
-
-The versioned target architecture is [Agent Memory Design v6.1.0](docs/design/AGENT_MEMORY_DESIGN_V6.1.0.md).
-See the [design version index](docs/design/README.md) for status, history and versioning rules.
-Follow the [v6.1 implementation plan](docs/design/v6.1.0/plan.md) and [task checklist](docs/design/v6.1.0/task.md) for phased delivery and acceptance tracking.
-The [first implementation batch](docs/design/v6.1.0/batch-01.md) adds host capture provenance/replay restrictions and offline evidence quality gates; it does not enable the full v6.1 runtime.
-The [latest implementation](docs/design/v6.1.0/stage-02.md) adds host-bound query context, three-valued conditions, complete field evidence with temporal AND/OR support, and contextual state composition. Auxiliary evidence erasure preserves complete OR alternatives and invalidates broken AND proofs. It builds on [immutable revisions and explicit reprocessing](docs/design/v6.1.0/stage-01.md). Run [the durable example](examples/durable_memory.py) and [the contextual example](examples/contextual_memory.py). Cross-scope composition, constraint conjunction and complex contribution corrections remain pending; see the [next steps](docs/design/v6.1.0/next-steps.md).
-The design distinguishes implemented capabilities from planned work.
-
-## Current Boundaries
-
-The MVP intentionally does not claim to provide:
-
-- a hosted memory service;
-- a production-certified multi-region PostgreSQL deployment;
-- semantic quality guarantees from a bundled embedding model;
-- a universal graph-memory engine;
-- end-to-end deletion across external backups and replicas;
-- safe online autonomous training without human-defined gates;
-- compatibility certification for every agent framework.
-
-These are deployment or research tracks, not hidden behavior in the lightweight core.
+The alpha does not yet provide full production acceptance, cross-scope atomic correction, end-to-end erasure across external backups/caches, or autonomous online training. Participating outboxes support deletion sync; complete backup restoration with authoritative deletion-log replay remains open. Read the [security policy](SECURITY.md) and [threat model](docs/THREAT_MODEL.md) before remote deployment.
 
 ## Roadmap
 
-### v0.1: Minimal reliable memory
+Implementation follows [the v6.1 plan](docs/design/v6.1.0/plan.md) and [task ledger](docs/design/v6.1.0/task.md). Software, architecture, protocol, and database versions evolve independently.
 
-- local SQLite runtime;
-- event, claim, state, episode, and procedure model;
-- bounded retrieval with citations;
-- plugin protocol and lazy discovery;
-- MCP, SDK, LangGraph, PostgreSQL, and evolution packages;
-- packaging, security, and release documentation.
+| Milestone | Goal |
+| --- | --- |
+| M0 · Implementation baseline | Stable contracts, trusted domain gold, fault fixtures, and calibrated acceptance profiles |
+| M1 · Reliable L1 | Host capture → durable processing → fact retrieval, correction, recovery, and erasure |
+| M2 · Maintainable knowledge | Dependency-aware Observation and refreshable L2/L3 views |
+| M3 · Evaluated retrieval | Evidence tracing, purpose-aware retrieval, frozen comparisons, and optional read-only Reflect |
+| M4 · On-demand extensions | Scale, multimodal inputs, portable transfer, and governed evolution where needed |
 
-### v0.2: Operational hardening
+**The immediate focus is completing reliable L1 delivery and recovery contracts, alongside real-domain quality calibration.** See [next steps](docs/design/v6.1.0/next-steps.md) for current priorities and remaining slices. Optional extensions have separate acceptance requirements.
 
-- live PostgreSQL integration suite;
-- signed HTTP gateway reference;
-- retention and deletion audit reports;
-- lexical-only and hybrid retrieval quality benchmarks;
-- semantic, temporal, and entity retriever contracts;
-- parallel candidate execution with per-plugin timeout and degradation trace;
-- final candidate-to-MemoryBundle policy validation;
-- compatibility matrix for supported agent frameworks;
-- package publication and reproducible release workflow.
+## Documentation
 
-### v0.3: Optional advanced memory
-
-- graph-memory plugin;
-- external embedding and reranking plugins;
-- conflict-resolution policies;
-- richer evaluation datasets;
-- canary dashboards and automated rollback signals.
-
-### Research
-
-- trajectory compression;
-- learned retrieval policies;
-- latent memory representations;
-- counterfactual procedure evaluation;
-- memory-aware agent planning.
-
-Advanced features must remain optional, measurable, reversible, and subordinate to evidence-backed state.
+| Start here | Read |
+| --- | --- |
+| Understand module boundaries | [Code architecture](docs/ARCHITECTURE.md) |
+| Admit and extract facts | [Atom admission](docs/ATOM_ADMISSION.md) · [Automatic extraction](docs/ATOM_EXTRACTION.md) |
+| Query historical facts | [Bitemporal memory](docs/BITEMPORAL_MEMORY.md) |
+| Record task feedback | [Feedback contract](docs/FEEDBACK_CONTRACT.md) |
+| Configure and recover a deployment | [Single-host deployment](docs/single-host-deployment.md) · [Recovery operations](docs/recovery-operations.md) |
+| Inspect tests and resource measurements | [Evaluation methodology](docs/LOCAL_MEMORY_COMPARISON_EVAL.md) · [Resource baseline](docs/RESOURCE_BASELINE.md) |
+| Follow development | [Design versions](docs/design/README.md) · [Plan](docs/design/v6.1.0/plan.md) · [Tasks](docs/design/v6.1.0/task.md) |
 
 ## Contributing
 
-Contributions should preserve the core constraints: small default footprint, framework neutrality, strict scope isolation, traceable evidence, and optional heavy dependencies.
+Contributions are welcome in adapters, evidence-focused examples, fault recovery, and evaluation datasets. Check the [task ledger](docs/design/v6.1.0/task.md) for dependencies and open work, then read [CONTRIBUTING.md](CONTRIBUTING.md).
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Architecture changes should include the problem, contract impact, failure behavior, migration path, and resource cost.
+```bash
+./setup.sh --all
+source .venv/bin/activate
+python -m pytest -q
+```
+
+Integration and live PostgreSQL tests have additional setup; see [CI](.github/workflows/ci.yml). Preserve the project's core properties: a small default footprint, framework-neutral contracts, host-owned scope, and traceable evidence.
+
+Found a reproducible bug or an integration gap? [Open an issue](https://github.com/agent-memory-lab/agent-memory/issues). Report security vulnerabilities through the private process in [SECURITY.md](SECURITY.md).
 
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE).
-
-### Bitemporal Claim memory
-
-SQLite and PostgreSQL can now query Claim facts with independent `valid_at`
-(real-world effective time) and `known_at` (system knowledge time) parameters.
-Claim metadata accepts `valid_from`, `valid_to`, and explicit `corrects_id` for
-retroactive corrections. Earlier knowledge snapshots retain their original
-interpretation and evidence. SDK/MCP retrieval accepts timezone-aware ISO-8601
-parameters; ordinary recall remains available without them.
-
-See [the bitemporal contract and examples](docs/BITEMPORAL_MEMORY.md) for
-migration limits and historical retrieval scope, and
-[the extraction architecture analysis](docs/MEMORY_EXTRACTION_DESIGN.md) for
-L0–L3 layering and alternative extraction methods. Historical retrieval currently
-covers Claims; derived scene/persona summaries are not historical evidence.
+[Apache License 2.0](LICENSE).
