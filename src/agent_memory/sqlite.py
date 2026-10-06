@@ -1661,6 +1661,56 @@ class SQLiteMemoryRepository:
                  AND COALESCE(json_extract(payload_json, '$.deleted'), 0) = 0""",
             (request.scope.tenant_id, request.scope.namespace),
         ).fetchall()
+        from .evidence_support import scrub_support
+
+        cleaned_rows = []
+        scrubbed_at = None
+        for original in rows:
+            row = dict(original)
+            payload = json.loads(row["payload_json"])
+            if payload.get("qualification") and row["event_id"] not in event_ids:
+                versions = connection.execute(
+                    "SELECT version,payload_json FROM admission_versions WHERE record_id=?",
+                    (row["record_id"],),
+                ).fetchall()
+                changed = scrub_support(payload, event_ids)
+                for version in versions:
+                    past = json.loads(version["payload_json"])
+                    if scrub_support(past, event_ids):
+                        changed = True
+                        connection.execute(
+                            "UPDATE admission_versions SET payload_json=? "
+                            "WHERE record_id=? AND version=?",
+                            (canonical_json(past), row["record_id"], version["version"]),
+                        )
+                if changed:
+                    scrubbed_at = scrubbed_at or self._admission_publication_time(
+                        connection, request.scope
+                    )
+                    row.update(
+                        payload_json=canonical_json(payload),
+                        version=row["version"] + 1,
+                        recorded_at=scrubbed_at,
+                    )
+                    connection.execute(
+                        "UPDATE admission_records SET payload_json=?,version=?,recorded_at=? "
+                        "WHERE record_id=?",
+                        (row["payload_json"], row["version"], scrubbed_at, row["record_id"]),
+                    )
+                    connection.execute(
+                        "INSERT INTO admission_versions "
+                        "(record_id,version,partition_key,payload_json,recorded_at) "
+                        "VALUES (?,?,?,?,?)",
+                        (
+                            row["record_id"],
+                            row["version"],
+                            row["partition_key"],
+                            row["payload_json"],
+                            scrubbed_at,
+                        ),
+                    )
+            cleaned_rows.append(row)
+        rows = cleaned_rows
         dependencies = {}
         for row in rows:
             snapshots = [json.loads(row["payload_json"])]

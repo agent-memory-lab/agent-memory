@@ -185,3 +185,27 @@ async def revise(
         row["revision_input"] = revision_input
         await uow.retention_update(source.scope, request_id, row)
         return receipt
+
+
+async def source_available_at(uow, source, known_at):
+    """Revision visibility at known_at, while source existence obeys current erasure."""
+    if "_retention" not in source.metadata:
+        return True
+    _, head = await document_head(uow, source)
+    identity = head["payload"]["event_id"]
+    for _ in range(256):
+        revision = await uow.get_source_event(source.scope, identity)
+        if revision is None:
+            return False
+        metadata = revision.metadata["_retention"]
+        request = await uow.retention_get(source.scope, "request", metadata["request_id"])
+        if request is None:
+            return False
+        from datetime import datetime
+
+        if datetime.fromisoformat(request["received_at"]) <= known_at:
+            return revision.id == source.id
+        identity = metadata.get("parent_event_id")
+        if identity is None:
+            return False
+    raise ValueError("source revision history budget exceeded")

@@ -2,7 +2,8 @@
 
 An alternative is an AND group of spans; alternatives are OR branches. Exact
 spans establish provenance only. Semantic truth remains a reviewer/host decision.
-The current scalar state projector cannot execute conditions or negation.
+Scalar reads do not execute these raw qualifiers. ContextualMemory requires host-bound
+condition expressions and complete temporal field proofs; negated states stay pending.
 """
 
 from dataclasses import dataclass

@@ -48,9 +48,9 @@ def test_production_code_uses_owners_instead_of_compatibility_modules():
         assert not (set(dependencies) & legacy), path
 
 
-@pytest.mark.parametrize("name", ["domain.py", "ports.py", "fact_qualification.py", "ontology/model.py"])
+@pytest.mark.parametrize("name", ["domain.py", "ports.py", "fact_qualification.py", "conditions.py", "evidence_support.py", "ontology/model.py"])
 def test_domain_contracts_do_not_depend_on_implementation(name):
-    allowed = {"agent_memory.domain", "agent_memory.serialization", "agent_memory.fact_qualification"}
+    allowed = {"agent_memory.domain", "agent_memory.serialization", "agent_memory.fact_qualification", "agent_memory.conditions"}
     for module in imports(SOURCE / name):
         if module.startswith("agent_memory."):
             assert any(module == item or module.startswith(item + ".") for item in allowed)

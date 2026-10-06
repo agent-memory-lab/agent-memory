@@ -81,7 +81,7 @@
         "N07",
         "N08"
       ],
-      "implementation_status": "partial_source_revision_reprocessing_ledger_revision_5",
+      "implementation_status": "partial_contextual_field_support_ledger_revision_6",
       "required_acceptance_cases": 66,
       "deployment_calibration_pending": [
         "predicate_and_source_authority_policies",
@@ -90,7 +90,7 @@
         "quality_thresholds_and_dataset_sufficiency"
       ],
       "external_benchmarks_executed": false,
-      "implementation_record": "v6.1.0/stage-01.md"
+      "implementation_record": "v6.1.0/stage-02.md"
     },
     {
       "version": "6.0.0",

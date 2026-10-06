@@ -40,8 +40,15 @@ def project_records(
     groups: dict[str, list[dict[str, Any]]] = {}
     for record in records:
         groups.setdefault(record["slot_key"], []).append(record)
-    claims, conflicts, support = [], [], {}
+    claims, conflicts, support, context_required = [], [], {}, []
     for key, rows in sorted(groups.items()):
+        if any(
+            r["payload"].get("qualification")
+            and r["payload"]["action"] not in {"WITHDRAWN", "REJECT", "L0_ONLY"}
+            for r in rows
+        ):
+            context_required.append(key)
+            continue
         accepted = [r for r in rows if r["payload"]["action"] == "ACCEPT"]
         corrected = {r["payload"].get("corrects") for r in accepted}
         accepted = [r for r in accepted if r["id"] not in corrected]
@@ -151,4 +158,8 @@ def project_records(
             "basis": "source_assertion" if applicable else "assumed_continuity",
             **({"termination": payload["termination"]} if payload.get("termination") else {}),
         }
-    return tuple(claims), {"conflicts": conflicts, "atom_support": support}
+    return tuple(claims), {
+        "conflicts": conflicts,
+        "atom_support": support,
+        **({"context_required": context_required} if context_required else {}),
+    }

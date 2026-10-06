@@ -96,3 +96,4 @@ jobs:
           tests/test_durable_retention.py tests/test_durable_execution.py
           tests/test_durable_producer.py tests/test_durable_transport.py
           tests/test_reprocessing.py tests/test_source_revisions.py
+          tests/test_contextual_memory.py

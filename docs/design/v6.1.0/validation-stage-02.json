@@ -1,0 +1,71 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "date": "2026-10-06",
+  "ledger_revision": 6,
+  "design": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "base_commit": "df8f71c845ef317fdebbbedbd7f354fcc2a08d3f",
+  "tests": {
+    "command": "pytest tests packages --junitxml=/tmp/agent-memory-v61-stage2-full.xml",
+    "passed": 1039,
+    "skipped": 5,
+    "skip_reason": "optional tiktoken unavailable",
+    "backends": [
+      "SQLite",
+      "PostgreSQL 17"
+    ],
+    "new_behavior_cases": 27,
+    "new_architecture_cases": 2
+  },
+  "example": "examples/contextual_memory.py passed: A=resolved; B/unknown=unknown; scalar projection empty",
+  "lint": {
+    "changed_python_files": "F,I passed",
+    "new_core_modules_and_example": "full configured rules passed"
+  },
+  "wheels": [
+    {
+      "file": "agent_memory-0.1.0-py3-none-any.whl",
+      "sha256": "9f3e53d46b16102c092b638603d9712558ab1778eda6cdc4cecca781d19acc26"
+    },
+    {
+      "file": "agent_memory_postgres-0.1.0-py3-none-any.whl",
+      "sha256": "caec5f6a48df862bc5b32a07c132bd12f8f52b384b474d150512afa19171eef8"
+    }
+  ],
+  "wheel_sources_match_final_files": true,
+  "source_files_sha256": {
+    ".github/workflows/ci.yml": "20874c4c2c37a2720ea3a457601412e10039d323ce3673da68b9dde1ccb0be79",
+    "packages/postgres/src/agent_memory_postgres/admission.py": "69ef92dce7db122c591466b99eb0267e2cb6ea80153c6da78b09b23e89bc6736",
+    "src/agent_memory/consolidation/admission_runtime.py": "726363ead7fdbc76ff53dd9dd3bb2e7dabfab5647f149ddc75950363d557072d",
+    "src/agent_memory/fact_qualification.py": "b3fd74fbf236b37606415cc09a6295d2f2a09aa67a3fbfb685bdb11ccd2ca2ef",
+    "src/agent_memory/operations/reprocessing.py": "e7c9b101ada00a55fb58eed9a7a67bb074c8f1ba4227040b6f32f8303693b293",
+    "src/agent_memory/operations/source_revisions.py": "469b775f422c99026eb22ee1b51c6d4aa1edd2afdc2b31268036c773ccf6ef4d",
+    "src/agent_memory/retrieval/atom_state.py": "a77965ef4b462be22032234496b9961b0563e12593a4dba06b3c7066c2af48e7",
+    "src/agent_memory/sqlite.py": "89e49d8071c429c5893f6114656b8fb4158ca601069eeedbfd4dc9d528f474d4",
+    "tests/test_architecture.py": "18e2238ff7141177dad34bc63f89bebdf02866fb7907c29cf3c5c957b14ae19b",
+    "examples/contextual_memory.py": "0b4acdcebe06cdfca41b398aed4375f6459855aa4fd645f59de55bd2ad27fd6f",
+    "src/agent_memory/conditions.py": "fc0671f67c8513c532fdf0f00d87eaea767e2e9bb3224fe183a8660b0a6f8d9d",
+    "src/agent_memory/consolidation/qualification.py": "849c80678a3b8e395b0848bf0f5bd4213edb9829fd77feb266f8ae904aaf286d",
+    "src/agent_memory/evidence_support.py": "e3042d68345d119e5e3baaeb64ab93660d97eb3641bf12899f0a69b0a18cd210",
+    "src/agent_memory/retrieval/contextual_state.py": "e9d84620eeac87a5ca8018e25a86fb9d2dd710d02fcd80596c175cc1ae0bfd92",
+    "tests/test_contextual_memory.py": "7c438bb61d5ca63fe1a3276a9cd1c99e2c1ab0017d0ea0264be85db48aa8020f"
+  },
+  "doc_validation": {
+    "frozen_design_hashes": "passed",
+    "task_links": "passed",
+    "task_count": 44,
+    "acceptance_rows": 66,
+    "statuses": {
+      "DONE": 1,
+      "IN_PROGRESS": 24,
+      "TODO": 19
+    }
+  },
+  "remaining": [
+    "cross-storage-scope routing and dynamic external ACL",
+    "constraint conjunction, set membership and negated states",
+    "partial-field separately persisted projections",
+    "complex transition/cross-slot corrections",
+    "real domain calibration and process kill recovery"
+  ]
+}

@@ -53,6 +53,12 @@ SQLite/PostgreSQL 适配器负责批次原子性、版本比较和删除屏障�
 最终通过 `admission_runtime.py` 原子保存原文、抽取报告与候选。`runtime.py` 和 `kernel.py`
 仅新增装配入口。使用方式与失败语义见 [自动 Atom 抽取](ATOM_EXTRACTION.md)。
 
+条件事实复用同一接纳账本：`conditions.py` 与 `evidence_support.py` 是跨写入/读取/删除共享的
+纯值对象和规则；`consolidation/qualification.py` 校验宿主核验、字段支持与候选版本；
+`retrieval/contextual_state.py` 根据可信上下文计算适用性、时间支持和合成结果。数据库适配器只执行
+同事务的快照清理与版本更新。候选不进入无条件 Claim 表；完整合同及边界见
+[第二阶段实施记录](design/v6.1.0/stage-02.md)。
+
 ## 拆分与合并标准
 
 - 同一数据、事务边界及变更原因的代码放在一起。`sqlite.py` 的本地仓储和工作单元

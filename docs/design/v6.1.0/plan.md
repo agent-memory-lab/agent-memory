@@ -3,7 +3,7 @@
 | 元数据 | 值 |
 | --- | --- |
 | 计划标识 | `AM61-PLAN` |
-| 计划修订 | `5`，2026-10-06 |
+| 计划修订 | `6`，2026-10-06 |
 | 设计依据 | [统一架构设计 v6.1.0](../AGENT_MEMORY_DESIGN_V6.1.0.md) |
 | 设计 SHA-256 | `ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b` |
 | 设计实现核对基线 | `5cff9f47b7061351fd725c3b8e0a89bf5cb51517` |
@@ -232,5 +232,5 @@ R01–R13 的组合契约及 66 项验收责任在 task.md 中逐项登记，避
 | 2026-10-06 | 2 | 完成 [差距审计](implementation-audit.md)，交付 [首批评测/捕获切片](batch-01.md) | T01 DONE；8 项 IN_PROGRESS；其余 TODO，生产 profile 待校准 |
 | 2026-10-06 | 3 | 实施 [原子接收切片](batch-02.md)，补充 [B03–B09 后续顺序](next-steps.md) | 接收端双后端已验证；T15/T16/T23/T24 IN_PROGRESS；未声明 durable 抽取闭环 |
 | 2026-10-06 | 4 | 实施 [B03–B05 主链切片](batch-03-05.md)，更新模块边界与后续顺序 | DONE 1；IN_PROGRESS 22；TODO 21；M0/M1 未整体完成 |
-
 | 2026-10-06 | 5 | [来源修订与显式重处理](stage-01.md) | 整来源 primary 闭环；T20 IN_PROGRESS；进入字段/时间支持与条件投影 |
+| 2026-10-06 | 6 | [字段/时间支持与条件投影](stage-02.md) | 同 scope 单值事实/偏好、AND/OR 时间域与辅助证据删除；T11 IN_PROGRESS |

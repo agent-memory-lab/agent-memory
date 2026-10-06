@@ -379,13 +379,44 @@ async def forget_records(connection: Any, request: Any) -> tuple[set[str], int]:
             break
         for row in rows:
             cursor = await connection.execute(
-                "SELECT payload_json FROM agent_memory_admission_versions WHERE record_id = %s",
+                "SELECT version,payload_json FROM agent_memory_admission_versions WHERE record_id = %s",
                 (row["record_id"],),
             )
-            payloads = [
-                row["payload_json"],
-                *(item["payload_json"] for item in await cursor.fetchall()),
-            ]
+            versions = await cursor.fetchall()
+            from agent_memory.evidence_support import scrub_support
+
+            if row["payload_json"].get("qualification") and row["event_id"] not in source_ids:
+                changed = scrub_support(row["payload_json"], source_ids)
+                for version in versions:
+                    if scrub_support(version["payload_json"], source_ids):
+                        changed = True
+                        await connection.execute(
+                            "UPDATE agent_memory_admission_versions SET payload_json=%s::jsonb "
+                            "WHERE record_id=%s AND version=%s",
+                            (_json(version["payload_json"]), row["record_id"], version["version"]),
+                        )
+                if changed:
+                    deleted_at = deleted_at or await publication_time(connection, request.scope)
+                    row["version"] += 1
+                    row["recorded_at"] = deleted_at
+                    await connection.execute(
+                        "UPDATE agent_memory_admission_records "
+                        "SET payload_json=%s::jsonb,version=%s,recorded_at=%s WHERE record_id=%s",
+                        (_json(row["payload_json"]), row["version"], deleted_at, row["record_id"]),
+                    )
+                    await connection.execute(
+                        "INSERT INTO agent_memory_admission_versions "
+                        "(record_id,version,partition_key,payload_json,recorded_at) "
+                        "VALUES (%s,%s,%s,%s::jsonb,%s)",
+                        (
+                            row["record_id"],
+                            row["version"],
+                            row["partition_key"],
+                            _json(row["payload_json"]),
+                            deleted_at,
+                        ),
+                    )
+            payloads = [row["payload_json"], *(item["payload_json"] for item in versions)]
             refs = {row["event_id"]}
             claim_ids: set[str] = set()
             for payload in payloads:

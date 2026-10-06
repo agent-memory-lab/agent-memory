@@ -7,6 +7,11 @@ the first stable release.
 
 ### Added
 
+- Host-bound query context, bounded three-valued conditions and explicit applicability precedence.
+- Versioned complete-field temporal AND/OR support with source-family and business-revision checks.
+- Contextual projections without unconditional Claim leakage; atomic auxiliary-evidence erasure
+  preserves surviving OR branches and removes broken AND proofs on both storage providers.
+
 - Immutable source revisions with shared SDK/MCP delivery and acknowledgment recovery.
 - Explicit whole-source additive/replacement processing, independent old-contribution review,
   interpretation head CAS, preserved evidence identities and bitemporal history.

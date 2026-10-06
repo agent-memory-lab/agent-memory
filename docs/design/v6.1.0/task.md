@@ -6,8 +6,8 @@
 | 规范依据 | [完整设计 v6.1.0](../AGENT_MEMORY_DESIGN_V6.1.0.md)；设计规定语义，本文件安排实施 |
 | 设计 SHA-256 | `ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b` |
 | 实现基线 | `5cff9f47b7061351fd725c3b8e0a89bf5cb51517` |
-| 台账版本 | revision 5；2026-10-06；可随实施更新 |
-| 当前状态 | DONE 1 项；IN_PROGRESS 23 项；TODO 20 项；本地持久 L1、宿主恢复与事实资格切片已验证，M0/M1 未整体验收 |
+| 台账版本 | revision 6；2026-10-06；可随实施更新 |
+| 当前状态 | DONE 1 项；IN_PROGRESS 24 项；TODO 19 项；本地持久 L1、宿主恢复与事实资格切片已验证，M0/M1 未整体验收 |
 | 范围 | P0–P6 能力阶段；基础能力与可选扩展分别发布 |
 
 ## 1. 使用与依赖规则
@@ -101,6 +101,7 @@
 ### AM61-T07 — PredicateSpec、实体与状态槽
 
 - [ ] 状态/阶段：IN_PROGRESS / P1。依赖：T02、T03。
+- revision 6 证据：增加版本化 ProjectionPolicy、带来源族/业务版本的字段支持合同；保持原 slot 身份；复杂实体与非标量类型仍待实现。 见 [stage-02](stage-02.md)。
 - revision 4 证据：增加 required_evidence_fields 与有界限定/字段证据值对象；复杂谓词与实体歧义仍待实现。 详见 [batch-03-05](batch-03-05.md)。
 - 已有落点：`domain.py`、`consolidation/admission.py`、`consolidation/claims.py`、`ontology/model.py`、`ontology/registry.py`、`retrieval/entity.py`。
 - 交付：为首批领域固定类型、基数、可比较性、证据资格、必要限定与适用范围政策；增加实体绑定/歧义状态；保持身份、别名、槽和适用域切片的区分；禁止自动实体合并扩权。
@@ -119,6 +120,7 @@
 ### AM61-T09 — 字段核验与部分支持表达式
 
 - [ ] 状态/阶段：IN_PROGRESS / P1。依赖：T07、T08 的候选合同。
+- revision 6 证据：完整字段 AND/OR 的时间交/并与间隙、点/未知时间、业务版本、独立来源要求和辅助证据擦除已贯通双后端；部分字段新断言持久发布未启用。 见 [stage-02](stage-02.md)。
 - revision 4 证据：同一来源修订的字段 span 与 AND/OR 门；跨来源及有效时间组合/撤证仍待实现。 详见 [batch-03-05](batch-03-05.md)。
 - 已有落点：`consolidation/admission.py`、`consolidation/admission_runtime.py`、`domain.py`、`ports.py`；核验编排作为 `consolidation/` 内部实现。
 - 交付：分开原文定位、语义支持与领域核验；持久化字段/时间级 EvidenceLink；实现版本化 AND/OR SupportExpression；只从完整支持的字段集合生成独立完整投影，保留原候选待决。
@@ -128,6 +130,7 @@
 ### AM61-T10 — 双时态与状态终止依据
 
 - [ ] 状态/阶段：IN_PROGRESS / P1。依赖：T07、T09。
+- revision 6 证据：支持域与候选现实区间相交；到期不复活；来源修订 known_at 可见性及当前擦除守卫已测；完整 TransitionDecision 待第三步。 见 [stage-02](stage-02.md)。
 - revision 4 证据：独立来源终止与 valid/known 快照、不恢复旧值；独立贡献幸存及 transition 更正仍待实现。 详见 [batch-03-05](batch-03-05.md)。
 - 已有落点：`consolidation/claims.py`、`retrieval/atom_state.py`、`retrieval/temporal.py`、`retrieval/temporal_history.py`、`sqlite.py`、`packages/postgres/src/agent_memory_postgres/admission.py`。
 - 交付：完整保存 valid 区间、系统版本与来源事件时间；表达粗粒度/未知/点事件；TransitionDecision 分开旧值终止和新值开始依据；迟到、更正、现实变化与撤证分别处理。
@@ -136,7 +139,8 @@
 
 ### AM61-T11 — 跨适用范围的可信解释合成
 
-- [ ] 状态/阶段：TODO / P1。依赖：T07、T10。
+- [ ] 状态/阶段：IN_PROGRESS / P1。依赖：T07、T10。
+- revision 6 证据：同一授权 scope 的 QueryContext、条件 AST 三值判断、例外、不同适用域、single_exclusive/ordered_override 已实现；跨存储 scope、约束合取及通用政策历史仍待扩展。 见 [stage-02](stage-02.md)。
 - 已有落点：`retrieval/atom_state.py`、`retrieval/guard.py`、`retrieval/governed.py`、`domain.py`。
 - 交付：由宿主可信 QueryContext 驱动范围选择；谓词级偏序/合取/集合政策及三值条件；保留同存储槽不同适用域切片；实现争议、屏障、缺失与到期的不同回退规则。
 - 验收：顺序无关；优先关系循环被拒绝；高优先争议不伪回退；团队禁止不能被个人例外撤销；历史合成政策与当前安全分开。
@@ -248,6 +252,7 @@
 ### AM61-T23 — 擦除、撤回与恢复屏障
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T13、T15、T16、T18；为每种已启用写入路径逐步接入。
+- revision 6 证据：辅助证据正文从当前/历史 qualification 清除；OR 幸存、AND 失效、读删竞态和同事务回滚已测；完整外部权限/多设备删除协议仍待补。 见 [stage-02](stage-02.md)。
 - revision 3 证据：新增接收 ledger 的删除联动、scope epoch 与未提交 ticket 屏障；历史/派生/模型输入/外部缓存全链路删除协议尚未完成。 见 [batch-02](batch-02.md) 与[后续计划](next-steps.md)。
 - 已有落点：`lifecycle.py`、`operations/deletion_audit.py`、`operations/doctor.py`、`capture/queue.py`、`sqlite.py`、PostgreSQL 删除/恢复适配边界。
 - 交付：scope/source 代次、删除日志和立即不可读屏障；覆盖任务、缓存、候选、索引、历史及备份恢复；区分 retract/archive/erase；基础备份恢复、崩溃恢复与擦除日志回放在本任务验证，恢复前重放最新删除事实；财务审计仅保留获准最小字段。
@@ -442,12 +447,12 @@
 
 | 验收 ID | 场景定位（完整预期见设计） | 责任任务 | 协作任务 | 验证状态 |
 | --- | --- | --- | --- | --- |
-| R01-01 | 用户中文，项目 A 英文，批准覆盖；另测同用户存储槽分别适用 A/B 的两条偏好 | AM61-T11 | T07/T10/T13/T28 | 未执行 |
-| R01-02 | 不可比较范围异值；交换入库/候选顺序；循环优先政策 | AM61-T11 | T07/T10/T13/T28 | 未执行 |
-| R01-03 | 高优先项分别为争议、无记录、到期、block_inheritance | AM61-T11 | T07/T10/T13/T28 | 未执行 |
-| R01-04 | 用户周五例外与团队维护禁止同时适用；时区未知 | AM61-T11 | T07/T10/T13/T28 | 未执行 |
+| R01-01 | 用户中文，项目 A 英文，批准覆盖；另测同用户存储槽分别适用 A/B 的两条偏好 | AM61-T11 | T07/T10/T13/T28 | 部分：同存储槽项目 A/B 条件分段与显式偏序已测；跨存储范围路由待补 |
+| R01-02 | 不可比较范围异值；交换入库/候选顺序；循环优先政策 | AM61-T11 | T07/T10/T13/T28 | 部分：顺序无关、不可比较异值、循环优先政策拒绝已测；跨范围完整矩阵待补 |
+| R01-03 | 高优先项分别为争议、无记录、到期、block_inheritance | AM61-T11 | T07/T10/T13/T28 | 部分：高优先争议/未知不回退，到期不恢复旧值；可配置 fallback/block_inheritance 待补 |
+| R01-04 | 用户周五例外与团队维护禁止同时适用；时区未知 | AM61-T11 | T07/T10/T13/T28 | 部分：例外三值与时区未知已测；团队约束合取保持 unsupported |
 | R01-05 | Python/SQL 部分成员观察与 Python 反证 | AM61-T11 | T07/T10/T13/T28 | 未执行 |
-| R01-06 | K1/K2 合成政策不同，今天撤权；历史政策缺失 | AM61-T11 | T07/T10/T13/T28 | 未执行 |
+| R01-06 | K1/K2 合成政策不同，今天撤权；历史政策缺失 | AM61-T11 | T07/T10/T13/T28 | 部分：政策版本不符拒绝、历史/当前擦除分开；动态 ACL/实体政策历史注册待补 |
 | R02-01 | 新提取零候选，但旧候选逐项复核仍 supported | AM61-T20 | T08/T09/T16/T18/T23 | 通过（整来源模式）：零候选逐项复核仍 supported，保留身份且不增加独立证据 |
 | R02-02 | 旧误提被明确判为 unsupported，新解释通过 | AM61-T20 | T08/T09/T16/T18/T23 | 通过（同槽普通贡献）：明确 unsupported 退出，新解释原子接替；历史 known_at 保留 |
 | R02-03 | 生成截断/审查缺项；完整审查但资格未知 | AM61-T20 | T08/T09/T16/T18/T23 | 部分：复核缺项/未知与 allow_pending 已测；复杂生成完整性和局部覆盖待扩展 |
@@ -490,8 +495,8 @@
 | N08-01 | 冻结L1检索与原事件端到端两组 | AM61-T38 | T03/T05/T34/T39 | 未执行 |
 | N08-02 | 17事件/20检查适配 | AM61-T38 | T03/T05/T34/T39 | 部分：17/20 已适配，端到端未执行 |
 | N08-03 | 抽取达标但最终召回/任务退化 | AM61-T38 | T03/T05/T34/T39 | 未执行 |
-| R05-01 | 部分字段/时间核验 | AM61-T09 | T10/T19/T29 | 部分：字段必要性与同来源 span/AND/OR 已测；跨来源时态投影待补 |
-| R05-02 | 联合证据不同业务版本、OR时段不重合、AND无共同区间、撤项 | AM61-T09 | T10/T19/T29 | 未执行 |
+| R05-01 | 部分字段/时间核验 | AM61-T09 | T10/T19/T29 | 部分：必要字段/限定完整性、点证据不延长、跨来源时间 AND/OR 已测；部分字段独立持久发布未启用 |
+| R05-02 | 联合证据不同业务版本、OR时段不重合、AND无共同区间、撤项 | AM61-T09 | T10/T19/T29 | 部分：辅助 OR 分支擦除幸存、AND 缺项失效、业务版本与来源族核验已测；完整异步核验待补 |
 | R06-01 | A被B替换，撤回B支持但结束A依据幸存 | AM61-T10 | T09/T12 | 未执行 |
 | R06-02 | 明确纠正错误transition及其起点 | AM61-T10 | T09/T12 | 未执行 |
 | R07-01 | E1误提家庭地址，E2独立支持家庭地址；更正E1为工作地址 | AM61-T12 | T09/T16/T24 | 未执行 |
@@ -539,5 +544,5 @@ AcceptanceProfile、scorer、实验 manifest 与结果文件：
 | 2 | 2026-10-06 | T01 审计完成；实现评测/质量门和宿主 capture 切片，关联真实回归证据 | DONE 1；IN_PROGRESS 8；TODO 35；未完成整体里程碑 |
 | 3 | 2026-10-06 | 新增 ticket、删除 epoch、L0+请求原子接收及双后端验证；列出 B03–B09 顺序 | DONE 1；IN_PROGRESS 12；TODO 31；仅接收端，抽取 worker/事务 B 待开发 |
 | 4 | 2026-10-06 | 本地持久执行、SDK/MCP producer/outbox、限定字段与双时态终止切片；见 [batch-03-05](batch-03-05.md) | DONE 1；IN_PROGRESS 22；TODO 21；B03/B04/B05 未整体完成 |
-
 | 5 | 2026-10-06 | [第一阶段来源修订与显式重处理](stage-01.md) | DONE 1；IN_PROGRESS 23；TODO 20；整来源模式已验证，完整 T20 未完成 |
+| 6 | 2026-10-06 | [字段/时间支持与条件投影](stage-02.md) | DONE 1；IN_PROGRESS 24；TODO 19；同 scope 完整字段条件事实已验证，完整 P1 未完成 |

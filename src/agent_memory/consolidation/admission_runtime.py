@@ -575,6 +575,8 @@ class AdmissionEngine:
             previous_action = payload["action"]
             if payload["action"] not in PENDING_ACTIONS:
                 raise ValueError("only pending or contested candidates can be resolved")
+            if payload.get("qualification"):
+                raise ValueError("contextual candidates require versioned field qualification")
             original = draft_from_payload(payload["draft"])
             checked = replace(
                 original,
