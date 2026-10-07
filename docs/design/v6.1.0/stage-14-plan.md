@@ -1,8 +1,8 @@
 # 第十四阶段方案：查询控制、权限与历史覆盖
 
-版本 AM61-ST14 / 1.0；2026-10-07；IN_PROGRESS；执行台账 revision 19。
+版本 AM61-ST14 / 1.1；2026-10-07；IN_PROGRESS；执行台账 revision 20。
 依据冻结 v6.1.0，推进 T25/T26/T28/T29 及协议、恢复与运行文档的必要切片。
-任务见 [stage-14-tasks.md](stage-14-tasks.md)，A 切片结果见 [stage-14a.md](stage-14a.md)。
+任务见 [stage-14-tasks.md](stage-14-tasks.md)，A 切片结果见 [stage-14a.md](stage-14a.md)，B.1 结果见 [stage-14b.md](stage-14b.md)。
 
 ## A：当前查询与本地 authority（已实现）
 
@@ -30,13 +30,30 @@
    两个后端的擦除枚举包含新 ledger kinds；原删除日志备份回放复用同一擦除计划。
    本切片验证旧权限备份被独立 floor 阻断；当前 authority 控制状态的恢复须走宿主受信恢复流程，不提供降低 pin 的自动修复。
 
-## B：历史 coverage（下一切片，未实现）
+## B：历史 coverage（B.1 已实现，完整 B 尚未完成）
 
-先固定历史请求的 known_at/valid_at、query/definition/policy/context 版本，不允许读取时偷偷使用最新政策重解释过去。
-保存可验证的历史候选全集、来源/解释版本和有效覆盖区间；区分当时采用的解释与当前授权许可。
-历史输出必须同时通过当前 authority、来源权限、当前擦除及生成依赖安全守卫。
-当前 registry 只保存最新控制版本，A 的 hash/代次证明不能冒充政策历史或历史重建证明。
-历史修订不足、空覆盖不能证明或权限不可验证时拒绝；测试前不改 historical=false。
+B.1 开放宿主显式启用的 `published-point/1`：
+
+1. `known_at` 必须精确命中已成功发布的完整候选检查点；`valid_at` 独立投影该认知下的事实。
+   认知时间由发布事务内的宿主时钟写入，不能用调用者的快照时间证明更早覆盖。
+   检查点之间、迁移以前、未发布时段均不插值或回填；两个时间必须同时提供、有时区，未来请求拒绝。
+2. 同一次事务保存不可变的定义/代次、query/代次、政策、完整 L1 行版本、来源解释/文档版本、输入 manifest、空覆盖及完成证书。
+   普通修订、更正或撤回不重解释已发布的旧认知；读取使用冻结合同和候选行，不读取最新 L1 作为旧语义。
+   同时刻相同语义检查点去重；不同语义冲突使新发布整体回滚。
+3. 历史语义仍受当前定义读者/用途、当时读者/用途、当前 authority/floor、全部实际来源 grant 和物理删除屏障约束。
+   检查权限先于历史正文；authority 续期后必须重新授权来源。历史时间不会复活旧权限。
+   对象擦除保守清除相关 facet 的所有历史正文及覆盖点，包括此前空查询；备份删除日志回放执行相同计划。
+4. SDK/MCP 只提供 `history_points`、`read`、`derived_context` 等读取能力；最终交付的两次读取都保持原 known_at/valid_at。
+   `capabilities` 仅在宿主及定义 opt-in 时声明 `historical_mode=published-point/1`，历史 renderer 仅 `locale-snapshot/1`。
+   当前 `locale-context/1` 的期限/上下文代次合同不能冒充历史 context；条件化历史显式不支持。
+5. 每 facet 最多 128 个覆盖点，每 scope 最多 4096 个；每检查点归档上限 256 KiB，保留既有候选/来源/输出上限。
+   容量不足拒绝整笔发布，墓碑不能被重新分配；分页/压缩属于后续规模任务。
+
+B.2 下一步补足连续知识时间覆盖：先设计候选、解释、query/definition/policy 的版本区间及事务起点，
+再证明已发布点之间的完整成员变化和空区间；无法证明的区间仍返回 coverage_unavailable。
+B.3 随后定义历史 QueryContext、适用范围/偏序及资格证据版本；复用当前 authority 与删除守卫，
+验证条件历史及政策迁移矩阵后才开放 `locale-context/1` 的历史读取。
+因此 B01–B04 的完整上下文/连续覆盖验收仍是 IN_PROGRESS，B.1 不等于完整 T28 或 M2。
 
 ## C：传递 processing 图（B 后，未实现）
 
@@ -46,10 +63,11 @@
 
 ## 责任边界与退出条件
 
-- derived/contracts.py：QueryDefinition/HostGrantAuthority 纯合同。
+- derived/contracts.py：QueryDefinition/HostGrantAuthority/HistoricalQuery 纯合同。
 - derived/registry.py：宿主登记、CAS、控制证明和权限交集；不依赖数据库实现或 renderer。
 - derived/model.py：facet/unit 合同与共享擦除计划。
 - derived/service.py：授权快照、纯准备、原子发布与最终交付；renderer 不管理 authority。
+- derived/history.py：有界不可变检查点、历史语义重建与当前安全守卫；复用同一 UoW，不新增数据库适配器。
 - operations/facet_refresh.py：既有有限单元队列、路由、租约和固定回执。
 - SQLite/PostgreSQL：复用原 ledger/UoW/锁和索引，当前无需新表或 DDL migration。
 

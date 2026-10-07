@@ -104,6 +104,7 @@ class FacetDefinition:
     context: FacetContext | None = None
     query_id: str | None = None
     authority_id: str | None = None
+    history_mode: str | None = None
 
     def __post_init__(self):
         for value in (self.id, self.subject_id, self.facet, self.version, self.purpose):
@@ -134,12 +135,20 @@ class FacetDefinition:
         for value in (self.query_id, self.authority_id):
             if value is not None:
                 identity(value)
+        if self.history_mode is not None and (
+            self.history_mode != "published-point/1"
+            or self.query_id is None
+            or self.authority_id is None
+        ):
+            raise DerivedError("invalid_derived_history_definition")
+        if self.history_mode is not None and self.template_version != "locale-snapshot/1":
+            raise DerivedError("derived_history_template_unsupported")
 
     def payload(self):
         values = to_jsonable(self)
         if self.context is None:
             values.pop("context")  # Preserve the deployed v1 definition fingerprint.
-        for key in ("query_id", "authority_id"):
+        for key in ("query_id", "authority_id", "history_mode"):
             if values[key] is None:
                 values.pop(key)
         return values
@@ -285,11 +294,21 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
             or parents.intersection(r["payload"].get("parents", []))
         )
     }
+    # Historical empty coverage also depends on the query, including members
+    # erased after that checkpoint. Never revive an older certificate afterward.
+    affected.update(
+        r["payload"]["facet_id"]
+        for r in rows
+        if r["kind"] == "history_point"
+        and (all_in_scope or set(r["payload"].get("slots", ())).intersection(slots))
+    )
     # Active jobs carry identities only; they remain useful after object deletion.
     result = []
     for item in rows:
         kind, key, row = item["kind"], item["identity"], item["payload"]
-        if kind == "authority" and all_in_scope:
+        if kind == "history_point" and (all_in_scope or row.get("facet_id") in affected):
+            result.append((kind, key, {"id": key, "facet_id": row["facet_id"], "state": "erased"}))
+        elif kind == "authority" and all_in_scope:
             result.append(
                 (
                     kind,

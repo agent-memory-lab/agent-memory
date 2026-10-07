@@ -1,0 +1,162 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "date": "2026-10-07",
+  "design": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "ledger_revision": 20,
+  "initial_base_commit": "2cb155b056bb52c9d3d3e688b002c20eff9cefe8",
+  "base_commit": "c8c62d245f3bcf82bbe1db52ae011c2ae8bc5f02",
+  "baseline_note": "An independent README/diagram commit c8c62d2 landed and was pushed during work. Its files are unchanged by this slice; the initial dirty architecture document is byte-identical and excluded.",
+  "stage_plan": "AM61-ST14/1.1",
+  "stage_slice": "AM61-ST14-B.1/1.0",
+  "status": "passed",
+  "stage_tasks_completed": [
+    "ST14-B.1-01",
+    "ST14-B.1-02",
+    "ST14-B.1-03",
+    "ST14-B.1-04",
+    "ST14-B.1-05"
+  ],
+  "stage_tasks_remaining": [
+    "ST14-B01",
+    "ST14-B02",
+    "ST14-B03",
+    "ST14-B04",
+    "ST14-C01",
+    "ST14-C02",
+    "ST14-C03"
+  ],
+  "enabled_scope": "host opt-in published-point/1; exact successfully published complete or empty knowledge-time checkpoint; independently projected valid_at; frozen non-qualified locale query/definition/policy/L1 versions with current authority, source grants and physical erasure guards",
+  "knowledge_time_authority": "publication transaction host clock, not caller-provided snapshot time",
+  "full_test_run": false,
+  "tests": {
+    "unique_targeted_cases": 592,
+    "passed": 592,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "new_behavior_cases": 75,
+    "new_backend_cases_each": 36,
+    "new_pure_contract_cases": 3,
+    "new_architecture_case": 1,
+    "backends": [
+      "SQLite",
+      "PostgreSQL 17 (real isolated Unix-socket server)"
+    ],
+    "real_sigkill_cases": 4,
+    "real_sigkill_matrix": "history point before/after publication commit × both backends; related older fault tests also run",
+    "reports": {
+      "agent-memory-stage14b-baseline.xml": {
+        "cases": 325,
+        "sha256": "5b3b529f191949453f9bc18ab88a873062cb0341ad549231ad71f823e90da0f9"
+      },
+      "agent-memory-stage14b-targeted.xml": {
+        "cases": 559,
+        "sha256": "0107888c243d7e9cbd32d2761103dfd1d99dff8ed4129440428cf8dd3220e914"
+      },
+      "agent-memory-stage14b-packages.xml": {
+        "cases": 123,
+        "sha256": "da876574f9192345c63c7228196fd25416fca11467d9e950febfb4c6f566d688"
+      }
+    },
+    "cases_sha256": "b208ef5aaf20326f4aa8b668d8d606c4a9f3543a418da0d11064954bd4fa91fe",
+    "accounting": "Latest passed result per (classname,name) across baseline, targeted and packages. Installed reruns are separate; no prior-stage scores counted.",
+    "final_review_repairs": [
+      "Use the publication transaction clock and actual registry definition/query slots for the checkpoint; caller snapshot time and copied metadata cannot certify earlier knowledge."
+    ],
+    "fixture_repair": "Use canonical admission action=REJECT when testing a later L1 decision, rather than an ignored status field."
+  },
+  "build": {
+    "core": {
+      "verified_source_files": 146,
+      "mismatches": [],
+      "artifacts": {
+        "agent_memory-0.1.0-py3-none-any.whl": "f533cf82b49ddf17b18829bc14e9c511a5c4d32be8a223a6a07f2fea2b66b8fc",
+        "agent_memory-0.1.0.tar.gz": "cb72d7e25b94bc9e2572f200cf708e992b3703ec500cc1a5f303145e84578208"
+      }
+    },
+    "postgres": {
+      "verified_source_files": 25,
+      "mismatches": [],
+      "artifacts": {
+        "agent_memory_postgres-0.1.0-py3-none-any.whl": "c89943ffb2521b13de22f813358588d1b736eb45271bc666d305a1afa1da3fe4",
+        "agent_memory_postgres-0.1.0.tar.gz": "a22fb049f843a4bf0d5d29be1bece271297280668063a8c117cc1d4fc5c1e9ba"
+      }
+    },
+    "sdk": {
+      "verified_source_files": 9,
+      "mismatches": [],
+      "artifacts": {
+        "agent_memory_sdk-0.1.0-py3-none-any.whl": "d4fb6f3520a29a4553b8b1f578db7035c720033b23351e6c4dfe2e207a07370a",
+        "agent_memory_sdk-0.1.0.tar.gz": "a1e3ce01e4000af1e02a6bd414b67459353e61841e9a0de394160bfc5cb93f96"
+      }
+    }
+  },
+  "installed": {
+    "passed": 71,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "report_sha256": "3ca8b5549f9f6723f2d264405cda03b1d5085579ed7d990158250d5e3787642a",
+    "source": "fresh core/PostgreSQL/Python SDK wheels in /tmp/agent-memory-stage14b-installed; unchanged MCP package from existing environment",
+    "exclusion": "4 actual SIGKILL cases excluded from installed rerun because the source helper controls subprocess PYTHONPATH; all 4 passed on real source processes",
+    "examples": [
+      "derived_history.py",
+      "derived_controls.py",
+      "derived_observation.py"
+    ],
+    "imports_verified": true
+  },
+  "build_note": "Standard isolated sdist-to-wheel builds, hatchling 1.32.4. Every package source matches the tested code. Core package README metadata used pre-existing documentation at build time, before the independent documentation commit; code bytes are unchanged.",
+  "code_files_sha256": {
+    "src/agent_memory/derived/__init__.py": "453ce5f6ccc69c249cd9cd17d33a563448ab505324a54fa3f7ddb348532dc0fb",
+    "src/agent_memory/derived/contracts.py": "0feb671bc1d1462a618b403302d3a9715cb43261c2b61baa87955a7b5a9f1dce",
+    "src/agent_memory/derived/model.py": "e92e75f6fb8419332812921ae2337a79d7e1eca3b45df61fa39d8cf01e79fad2",
+    "src/agent_memory/derived/service.py": "4aae776760dc48441cefa9932249e3b23b243de96146d07545d9d48f5ccbab09",
+    "src/agent_memory/derived/history.py": "5f3319853d61317bc428ad6a4b59b3359927d1d7c1aad66481eac40726d63852",
+    "src/agent_memory/mcp.py": "6a88dd3448780f42622facf9c02745bf7c75e554fe6539f5e40ace2b24bb5916",
+    "src/agent_memory/operations/sqlite_derived.py": "a33cbe22c2df810edfbcd274f68b76ca54ee874cbf395916c7e341520c65b41f",
+    "packages/postgres/src/agent_memory_postgres/derived.py": "aafa6c533ada79f69922da069636beaed8269cd298fb4988923619ba564d8407",
+    "packages/python-sdk/src/agent_memory_sdk/client.py": "cd83788234065f5eee18aefba2fdd60fc7c3e2e46c9096496355d4615d3ae6c3",
+    "tests/test_derived_history.py": "1749362904265a79ac339961717051c13f3f63b043149c48f6928e4956350c36",
+    "tests/test_architecture.py": "c8093c22b4216fd2a7938a2147b625dbc004b587d9ddd67288cb85a99f1d1ab4",
+    "tests/fixtures/durable_crash_child.py": "72258cb47cac2a3af69e6816a820a971ca30428cab25e87be4fe2b120b8789b8",
+    "examples/derived_observation.py": "e397df83f61faf3b4b66385f20f334d0592771810c714049b6b3834027d22bd2",
+    "examples/derived_history.py": "80161d56bb383e82de94c8d58a818019262a7c47408deaa8257f07ce2ecb7e8e"
+  },
+  "initial_preserved_baseline_files_sha256": {
+    "README.md": "ed51cc999553888d4a525c74256e24f42b9f94a97412ca4011bb8f09b3c445fe",
+    "README.zh-CN.md": "edf7e58624d41d7cf2b8ce2b69754eb3ef5a09654ce089314dcaf71d3f121474",
+    "docs/AGENT_MEMORY_ARCHITECTURE_PLAN.md": "81095de8aa02db4f59a643d0d6708b4fa9ee415bfb3f230bab4a7abf962fe849"
+  },
+  "preserved_files_at_integration_sha256": {
+    "README.md": "334f088344cb43a3e0a92d95d633bce72f84dc9130a85fd6d0a68d9b0895eec1",
+    "README.zh-CN.md": "a654c795f16f1119b751c56953ad13ff49d808097a4bd423efa9abe90cbed7c4",
+    "docs/assets/agent-memory-overview.svg": "643456d1bce4125b87dbfa43af8e34e6dfc80ea26358d57d6bdc6be4117e25af",
+    "docs/AGENT_MEMORY_ARCHITECTURE_PLAN.md": "81095de8aa02db4f59a643d0d6708b4fa9ee415bfb3f230bab4a7abf962fe849"
+  },
+  "frozen_designs_sha256": {
+    "6.1.0": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+    "6.0.0": "f16f0a3fb1da497b6ef73c96851de04b0cc42ac9353fa9f4278b26122dfe39d0",
+    "5.0.0": "83330a5c8e7921aa56ea76afbb9e8a9b255a5a22732ae4f7c20816deaf25517f"
+  },
+  "lint": "ruff passed for production/history/example/fixture changes. SDK client and architecture tests retain 6 and 2 pre-existing E501 findings respectively; all changed lines and non-E501 checks pass. git diff --check passed.",
+  "quality_evidence": "Deterministic synthetic retained sources and protocol/fault fixtures; no production gold or external model/remote ACL quality claim.",
+  "not_enabled": [
+    "continuous known_at intervals",
+    "pre-migration/backfill history",
+    "qualified historical context",
+    "transitive derived parents",
+    "arbitrary predicate renderers",
+    "remote ACL freshness synchronization",
+    "external models",
+    "L2 pages",
+    "L3 persona inference"
+  ],
+  "global_task_state": {
+    "DONE": 1,
+    "IN_PROGRESS": 29,
+    "TODO": 14
+  },
+  "next": "B.2 continuous candidate/interpretation/control version intervals and empty coverage; B.3 historically valid context and qualification; complete B acceptance before C."
+}

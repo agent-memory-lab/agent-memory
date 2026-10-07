@@ -76,3 +76,27 @@ class HostGrantAuthority:
 
     def payload(self):
         return to_jsonable(self)
+
+
+@dataclass(frozen=True)
+class HistoricalQuery:
+    """Fixed bitemporal request; known-time coverage is one published checkpoint."""
+
+    known_at: datetime
+    valid_at: datetime
+
+    def __post_init__(self):
+        timestamp(self.known_at)
+        timestamp(self.valid_at)
+
+    @classmethod
+    def parse(cls, known_at, valid_at):
+        def parse_time(value):
+            try:
+                return datetime.fromisoformat(value) if isinstance(value, str) else value
+            except ValueError:
+                raise DerivedError("invalid_derived_history_request") from None
+
+        if known_at is None or valid_at is None:
+            raise DerivedError("invalid_derived_history_request")
+        return cls(parse_time(known_at), parse_time(valid_at))

@@ -70,7 +70,8 @@ class LocaleExample:
         ]
 
 
-async def main(*, host_controls=False):
+async def main(*, host_controls=False, history=False):
+    host_controls = host_controls or history
     with TemporaryDirectory(prefix="memory-observation-") as directory:
         repository = SQLiteMemoryRepository(Path(directory) / "memory.db")
         kernel = MemoryKernel(
@@ -108,6 +109,7 @@ async def main(*, host_controls=False):
                 policy,
                 authority_id=authority_id,
                 authority_min_version=0 if host_controls else None,
+                history_mode="published-point/1" if history else None,
             )
             if host_controls:
                 await derived.set_authority(
@@ -120,6 +122,7 @@ async def main(*, host_controls=False):
                     "alice",
                     query_id=query_id,
                     authority_id=authority_id,
+                    history_mode="published-point/1" if history else None,
                 )
             )
             await derived.grant(ProcessingGrant(source.id, ("alice",)))
@@ -135,6 +138,19 @@ async def main(*, host_controls=False):
             print(
                 json.dumps(await client.derived_context("language"), ensure_ascii=False, indent=2)
             )
+            if history:
+                points = await client.derived_history_points("language")
+                known_at = points["points"][0]["known_at"]
+                for valid_at in (source.occurred_at, source.occurred_at - timedelta(seconds=1)):
+                    print(
+                        json.dumps(
+                            await client.derived_read(
+                                "language", known_at=known_at, valid_at=valid_at.isoformat()
+                            ),
+                            ensure_ascii=False,
+                            indent=2,
+                        )
+                    )
         finally:
             await kernel.close()
 

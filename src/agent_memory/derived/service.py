@@ -6,6 +6,9 @@ from datetime import datetime
 from ..domain import canonical_json, utc_now
 from ..operations.retention import RetentionError
 from ..operations.source_revisions import source_is_current
+from .contracts import HistoricalQuery
+from .history import MODE as HISTORY_MODE
+from .history import PublishedHistory
 from .model import (
     DerivedError,
     FacetContext,
@@ -107,6 +110,7 @@ class ObservationService:
         context_token=None,
         authority_id=None,
         authority_min_version=None,
+        history_mode=None,
     ):
         self.repository, self.scope, self.clock = repository, scope, clock
         self.policy = policy.config_payload()
@@ -119,6 +123,12 @@ class ObservationService:
         if self.authority_id is None and authority_min_version is not None:
             raise DerivedError("derived_authority_mismatch")
         self.authority_min_version = authority_min_version
+        if history_mode not in {None, HISTORY_MODE}:
+            raise DerivedError("unsupported_derived_history_mode")
+        if history_mode is not None and self.authority_id is None:
+            raise DerivedError("trusted_history_authority_required")
+        self.history_mode = history_mode
+        self.history = PublishedHistory(self)
         self.registry = DerivedRegistry(self)
         predicates = {s["predicate"]: s for s in self.policy["predicates"]}
         if "locale" not in predicates or predicates["locale"]["value_type"] != "string":
@@ -144,6 +154,8 @@ class ObservationService:
         if definition.subject_id != self.scope.user_id:
             raise DerivedError("derived_subject_scope_mismatch")
         spec = definition.payload()
+        if spec.get("history_mode") != self.history_mode:
+            raise DerivedError("derived_history_configuration_mismatch")
         self._context_binding(spec)
         if definition.context is not None:
             definition.context.current(self.clock())
@@ -238,13 +250,17 @@ class ObservationService:
         if digest(dict(definition=row["spec"], policy=self.policy)) != row["fingerprint"]:
             raise DerivedError("derived_definition_configuration_changed")
         self._context_binding(row["spec"])
+        if row["spec"].get("history_mode") != self.history_mode:
+            raise DerivedError("derived_history_configuration_mismatch")
         await self.registry.bindings(uow, row["spec"])
         return row
 
     def accepts_definition(self, row):
         binding = row["spec"].get("context")
-        return row["spec"].get("authority_id") == self.authority_id and (
-            binding is None or binding["query"]["snapshot_token"] == self.context_token
+        return (
+            row["spec"].get("authority_id") == self.authority_id
+            and (binding is None or binding["query"]["snapshot_token"] == self.context_token)
+            and row["spec"].get("history_mode") == self.history_mode
         )
 
     def _context_binding(self, spec):
@@ -540,6 +556,7 @@ class ObservationService:
                 definition["spec"], snapshot["sources"], snapshot["grants"]
             ):
                 raise DerivedError("derived_manifest_invalid")
+            archive = await self.history.archive(uow, snapshot, definition=definition, known_at=now)
             facet_id = definition["facet_id"]
             all_revisions = await uow.derived_records(self.scope, "revision")
             if len(all_revisions) >= 4096:
@@ -590,6 +607,8 @@ class ObservationService:
                         built_at=snapshot["at"].isoformat(),
                         next_transition_at=prepared["next_transition_at"],
                     )
+                    if archive is not None:
+                        revision.update(history=archive, history_sha256=digest(archive))
                     await uow.derived_put(self.scope, "revision", revision_id, revision)
                     await uow.derived_edges(self.scope, revision_id, prepared["edges"])
             audit_revision_id = revision_id
@@ -611,9 +630,13 @@ class ObservationService:
                         parents=sorted({parent for _, parent in prepared["edges"]}),
                         built_at=snapshot["at"].isoformat(),
                         next_transition_at=prepared["next_transition_at"],
+                        **(
+                            dict(history=archive, history_sha256=digest(archive)) if archive else {}
+                        ),
                     ),
                 )
                 await uow.derived_edges(self.scope, audit_revision_id, prepared["edges"])
+            await self.history.persist(uow, task, snapshot, archive, audit_revision_id)
             await uow.derived_put(
                 self.scope,
                 "head",
@@ -723,14 +746,29 @@ class ObservationService:
             state="ready",
             revision_id=revision["id"],
             body=deepcopy(revision["body"]),
+            **(
+                dict(known_at=revision["history"]["known_at"])
+                if self.history_mode is not None
+                else {}
+            ),
         )
 
     async def read(self, facet_id, *, actor, purpose="agent_context", known_at=None, valid_at=None):
         if known_at is not None or valid_at is not None:
-            raise DerivedError("derived_history_unsupported")
+            if self.history_mode is None:
+                raise DerivedError("derived_history_unsupported")
+            query = HistoricalQuery.parse(known_at, valid_at)
+            async with self.repository.unit_of_work() as uow:
+                await open_derived(uow, self.scope)
+                return await self.history.read(uow, facet_id, actor, purpose, query)
         async with self.repository.unit_of_work() as uow:
             await open_derived(uow, self.scope)
             return await self._read(uow, facet_id, actor, purpose)
+
+    async def history_points(self, facet_id, *, actor, purpose="agent_context"):
+        async with self.repository.unit_of_work() as uow:
+            await open_derived(uow, self.scope)
+            return await self.history.points(uow, facet_id, actor, purpose)
 
     async def call(self, operation, payload, context):
         if not isinstance(operation, str):
@@ -752,8 +790,11 @@ class ObservationService:
                 schema="derived-capabilities/1",
                 readonly=True,
                 facets=["communication.language"],
-                operations=["capabilities", "read", "status", "derived_context"],
-                historical=False,
+                operations=["capabilities", "read", "status", "derived_context"]
+                + (["history_points"] if self.history_mode else []),
+                historical=self.history_mode is not None,
+                historical_mode=self.history_mode,
+                historical_templates=["locale-snapshot/1"] if self.history_mode else [],
                 query_definitions="derived-query/1",
                 query_membership="all_candidates",
                 grant_authority="host-grant-authority/1" if self.authority_id else None,
@@ -779,6 +820,8 @@ class ObservationService:
                     payload.get("facet_id"),
                     actor=context.actor,
                     purpose=payload.get("purpose", "agent_context"),
+                    known_at=payload.get("known_at"),
+                    valid_at=payload.get("valid_at"),
                 )
                 return dict(
                     schema="derived-context/1",
@@ -786,6 +829,12 @@ class ObservationService:
                     observations=[result] if result["state"] == "ready" else [],
                 )
             return result
+        if operation == "history_points" and self.history_mode is not None:
+            return await self.history_points(
+                payload.get("facet_id"),
+                actor=context.actor,
+                purpose=payload.get("purpose", "agent_context"),
+            )
         if operation == "status":
             from ..operations.facet_refresh import FacetRefreshQueue
 

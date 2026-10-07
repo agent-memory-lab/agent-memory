@@ -163,6 +163,14 @@ def test_purge_restore_depends_on_ports_not_database_adapters():
     )
 
 
+def test_historical_observation_orchestration_does_not_import_storage_adapters():
+    dependencies = imports(SOURCE / "derived" / "history.py")
+    assert not any(
+        name.startswith(("sqlite3", "psycopg", "agent_memory.sqlite", "agent_memory_postgres"))
+        for name in dependencies
+    )
+
+
 def test_publication_protocol_and_workflow_do_not_import_database_adapters():
     dependencies = {dependency for name in ("publication_manifest.py", "publication_batches.py")
                     for dependency in imports(SOURCE / "operations" / name)}

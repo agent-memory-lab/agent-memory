@@ -383,11 +383,25 @@ class _Operations(RecoveryClientOperations):
         )
 
     async def derived_context(
+        self, facet_id: str, *, purpose: str = "agent_context", known_at=None, valid_at=None
+    ) -> dict[str, Any]:
+        payload = {"facet_id": facet_id, "purpose": purpose}
+        if known_at is not None or valid_at is not None:
+            payload.update(known_at=known_at, valid_at=valid_at)
+        return await self._call(
+            "memory_derived",
+            {"operation": "derived_context", "payload": payload},
+        )
+
+    async def derived_history_points(
         self, facet_id: str, *, purpose: str = "agent_context"
     ) -> dict[str, Any]:
         return await self._call(
             "memory_derived",
-            {"operation": "derived_context", "payload": {"facet_id": facet_id, "purpose": purpose}},
+            {
+                "operation": "history_points",
+                "payload": {"facet_id": facet_id, "purpose": purpose},
+            },
         )
 
     async def deletion_audit(self, *, limit: int = 100) -> dict[str, Any]:

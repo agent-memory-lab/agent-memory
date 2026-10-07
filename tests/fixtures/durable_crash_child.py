@@ -214,19 +214,27 @@ async def main(config):
                 expected_version=1,
             )
         await pause()
-    elif phase.startswith("derived_"):
+    elif phase.startswith(("derived_", "history_")):
         from agent_memory.derived import ObservationService
         from agent_memory.operations.facet_refresh import FacetRefreshQueue
 
-        service = ObservationService(repository, scope, base.POLICY, clock=lambda: now)
+        service = ObservationService(
+            repository, scope, base.POLICY, clock=lambda: now,
+            **(dict(authority_id="local-host", authority_min_version=1,
+                    history_mode="published-point/1") if phase.startswith("history_") else {}),
+        )
         queue = FacetRefreshQueue(service)
         lease = await queue.claim("crashed-derived-worker", lease_seconds=5)
-        if phase == "derived_before_commit":
+        if phase in {"derived_before_commit", "history_before_commit"}:
             original = unit_type.derived_put
 
             async def before_commit(uow, scope, kind, identity, row):
                 await original(uow, scope, kind, identity, row)
-                if kind == "job" and row["status"] == "completed":
+                if (phase == "history_before_commit" and kind == "history_point") or (
+                    phase == "derived_before_commit"
+                    and kind == "job"
+                    and row["status"] == "completed"
+                ):
                     await pause()
 
             unit_type.derived_put = before_commit
