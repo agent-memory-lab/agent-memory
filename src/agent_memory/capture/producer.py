@@ -214,7 +214,9 @@ class DurableProducer:
         async with self.receiver.repository.unit_of_work() as uow:
             row = await self._check(uow, scope, session, actor)
             supported = callable(getattr(uow, "delivery_get", None))
-            indexed = self.index_channel is not None and callable(getattr(uow, "index_job_get", None))
+            indexed = self.index_channel is not None and callable(
+                getattr(uow, "index_job_get", None)
+            )
             return {
                 "schema": "durable-contracts/1",
                 "staged_readiness": supported,
@@ -225,10 +227,21 @@ class DurableProducer:
                 "scope_key": scope.partition_key(),
                 "supported_stages": (
                     ["source_persisted", "l1_decided"] + (["index_visible"] if indexed else [])
-                ) if supported else [],
+                )
+                if supported
+                else [],
                 "index_visible": "candidate-locator/1" if indexed else "unsupported",
-                **({"index_channel": self.index_channel.payload(),
-                    "index_stream": await self._index_stream(uow, scope)} if indexed else {}),
+                **(
+                    {
+                        "index_channel": self.index_channel.payload(),
+                        "index_stream": await self._index_stream(uow, scope),
+                    }
+                    if indexed
+                    else {}
+                ),
+                "publication_manifest_schemas": ["publication-manifest/1", "publication-manifest/2"]
+                if supported
+                else [],
                 "target_limit": 128,
                 "sync_purges": row.get("sync_purges", False),
                 "sequence_dispositions": row.get("sequence_dispositions", False),

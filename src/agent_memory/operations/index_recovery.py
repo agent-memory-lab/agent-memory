@@ -2,6 +2,7 @@
 
 from ..domain import MemoryScope, utc_now
 from .indexing import CandidateIndexChannel, current_document, digest, proof, verified
+from .publication_manifest import token_dispositions, token_time
 from .readiness import valid_manifest
 from .retention import DurableReceiver, RetentionError, _hash, _identity, _time
 from .source_revisions import source_is_current
@@ -74,7 +75,6 @@ async def published_request(uow, scope, channel, token):
     if (
         not row
         or not valid_manifest(scope, row)
-        or not row["publication_manifest"]["closed"]
         or token not in row["publication_manifest"]["publication_commit_tokens"]
         or row["publication_manifest"].get("index_channel") != channel.payload()
     ):
@@ -186,7 +186,7 @@ class CandidateIndexRecovery:
                 >= 1000
             ):
                 raise RetentionError("index_repair_capacity")
-            job["dispositions"] = row["publication_manifest"]["dispositions"]
+            job["dispositions"] = token_dispositions(row, job["token"])
             applied = await write_projection(uow, self.scope, key, job["dispositions"])
             job.update(status="completed", applied=applied, proof=proof(job, applied))
             for field in ("lease_token", "lease_until", "next_attempt_at", "last_error_code"):
@@ -257,19 +257,24 @@ class CandidateIndexRecovery:
                 or len(
                     {
                         d["candidate_id"]
-                        for r, _ in baseline
-                        for d in r["publication_manifest"]["dispositions"]
+                        for r, token in baseline
+                        for d in token_dispositions(r, token)
                     }
                 )
                 > 4096
             ):
                 raise RetentionError("index_rollover_capacity")
             baseline.sort(
-                key=lambda item: (item[0]["completed_at"], item[0]["request_id"], item[1]["id"])
+                key=lambda item: (
+                    token_time(*item),
+                    item[0]["request_id"],
+                    item[1].get("batch_index", 0),
+                    item[1]["id"],
+                )
             )
             identities = []
             for sequence, (row, token) in enumerate(baseline, start=1):
-                dispositions = row["publication_manifest"]["dispositions"]
+                dispositions = token_dispositions(row, token)
                 applied = await write_projection(uow, self.scope, key, dispositions)
                 job = {
                     "schema": "index-publication/1",

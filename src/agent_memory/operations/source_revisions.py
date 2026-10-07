@@ -39,6 +39,8 @@ async def interpretation_head(uow, source):
     """The registered primary stream is one head per immutable source revision."""
     head = await uow.retention_head_get(source.scope, "interpretation", source.id)
     if head is not None:
+        if head["payload"].get("publication_closed") is False:
+            raise RetentionError("initial_interpretation_not_ready")
         return head
     initial = await uow.retention_get(
         source.scope, "request", source.metadata["_retention"]["request_id"]

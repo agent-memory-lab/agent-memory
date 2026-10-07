@@ -61,12 +61,77 @@ async def main(config):
             unit_type.producer_put = before_commit
         await producer.append(event, session, sequence=1, actor="alice")
         await pause()
+    elif phase.startswith("publication_"):
+        from test_publication_batches import Generator as BatchGenerator
+        from test_publication_batches import ReplacementGenerator
+
+        from agent_memory.operations.indexing import CandidateIndexChannel
+        from agent_memory.operations.publication_batches import PublicationPolicy
+
+        generator = ReplacementGenerator() if "activation" in phase else BatchGenerator()
+        pipeline = AtomExtractionPipeline(generator, generator)
+        channel, policy = CandidateIndexChannel("local"), PublicationPolicy(1)
+        configuration = processing_configuration_sha256(
+            pipeline, base.POLICY, base.SELF, index_channel=channel, publication_policy=policy
+        )
+        queue = ExtractionQueue(
+            repository, scope, configuration, clock=lambda: now, retry_seconds=0
+        )
+        handler = DurableAtomHandler(
+            queue,
+            pipeline,
+            base.POLICY,
+            base.SELF,
+            local_only=True,
+            index_channel=channel,
+            publication_policy=policy,
+        )
+        lease = await queue.claim("crashed-publication", lease_seconds=5)
+        original_generate = generator.generate_atoms
+
+        async def tracked_generation(event):
+            with open(config["calls"], "a") as log:
+                log.write("generate\n")
+            return await original_generate(event)
+
+        generator.generate_atoms = tracked_generation
+        original_update, original_exit = unit_type.retention_update, unit_type.__aexit__
+
+        async def update(uow, *args):
+            await original_update(uow, *args)
+            row = args[-1]
+            match = (
+                row.get("status") == "running"
+                and len(row.get("publication_manifest", {}).get("publications", [])) == 1
+                if "batch" in phase
+                else row.get("status") == "completed"
+            )
+            if match:
+                if phase.endswith("before_commit"):
+                    await pause()
+                uow._publication_crash_pause = True
+
+        async def after_exit(uow, *args):
+            result = await original_exit(uow, *args)
+            if args[0] is None and getattr(uow, "_publication_crash_pause", False):
+                await pause()
+            return result
+
+        unit_type.retention_update = update
+        if phase.endswith("after_commit"):
+            unit_type.__aexit__ = after_exit
+        await handler(lease.task, lambda value: queue.checkpoint(lease, value))
+        await pause()
     elif phase.startswith("purge_restore_"):
         from agent_memory.operations.purge_restore import PurgeRestore
 
         operator = PurgeRestore(
-            repository, scope, authority_id="authority", actor="operator",
-            secret=config["test_secret"].encode(), clock=lambda: now,
+            repository,
+            scope,
+            authority_id="authority",
+            actor="operator",
+            secret=config["test_secret"].encode(),
+            clock=lambda: now,
         )
         if phase.endswith("before_commit"):
             original = unit_type.purge_restore_put
@@ -78,8 +143,10 @@ async def main(config):
             unit_type.purge_restore_put = before_commit
         snapshot = config["snapshot"]
         await operator.replay(
-            snapshot, expected_checkpoint=snapshot["checkpoint"],
-            restore_id="restore", reason="offline-backup",
+            snapshot,
+            expected_checkpoint=snapshot["checkpoint"],
+            restore_id="restore",
+            reason="offline-backup",
         )
         await pause()
     elif phase.startswith("recovery_"):

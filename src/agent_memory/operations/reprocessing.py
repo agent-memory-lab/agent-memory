@@ -16,6 +16,8 @@ async def checked_records(uow, scope, source_id, expected_generation, versions=N
     head = await uow.retention_head_get(scope, "interpretation", source_id)
     if head is None or head["generation"] != expected_generation:
         raise RetentionError("interpretation_head_changed")
+    if head["payload"].get("publication_closed") is False:
+        raise RetentionError("initial_interpretation_not_ready")
     ids = head["payload"]["active_ids"]
     if len(ids) > 64:
         raise RetentionError("interpretation_capacity")

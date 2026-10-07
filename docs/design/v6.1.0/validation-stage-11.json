@@ -1,0 +1,108 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "date": "2026-10-07",
+  "ledger_revision": 15,
+  "design": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "base_commit": "b511cf18554ed429e30d7e01077f3afca148240a",
+  "enabled_scope": "opt-in exact-scope local initial L1 requests publish a fixed slot-preserving finite plan in multiple atomic batches, separately close the manifest, reuse saved stages on retry, and explicitly resume dead partial requests by host CAS; replacement interpretations remain one atomic activation with per-slot proofs; all-token indexing, repair, rollover, source/delete/backup fencing and SDK/MCP covered",
+  "full_test_run": false,
+  "test_scope_reason": "User requested partial tests only; new complete publication stage and affected admission execution/readiness/indexing/recovery/reprocessing/source/deletion/SDK/MCP/architecture contracts.",
+  "tests": {
+    "runner": "pytest",
+    "targets": [
+      "tests/test_publication_batches.py",
+      "tests/test_durable_execution.py",
+      "tests/test_durable_indexing.py",
+      "tests/test_index_recovery.py",
+      "tests/test_durable_readiness.py",
+      "tests/test_reprocessing.py",
+      "tests/test_reprocessing_readiness.py",
+      "tests/test_source_revisions.py",
+      "tests/test_durable_retention.py",
+      "tests/test_durable_purge.py",
+      "tests/test_purge_restore.py",
+      "tests/test_durable_process_recovery.py",
+      "tests/test_architecture.py",
+      "packages/python-sdk/tests/test_embedded_contract.py",
+      "packages/mcp-server/tests/test_capture_contract.py"
+    ],
+    "unique_targeted_cases": 575,
+    "passed": 575,
+    "skipped": 0,
+    "new_behavior_cases": 83,
+    "new_architecture_cases": 1,
+    "backends": [
+      "SQLite",
+      "PostgreSQL 17"
+    ],
+    "real_crash": "12 new SIGKILL cases: before/after actual batch, closure and atomic replacement commits on both backends; no database-server power-loss claim",
+    "real_backup": "4 new cases restore actual SQLite connection.backup / PostgreSQL 17 pg_dump of an open partial request and replay latest independently pinned deletion logs",
+    "result_accounting": "Initial targeted run: 571 pass, 2 existing test harness failures (an accidentally changed local constructor referenced an undefined optional fixture parameter). Fixed that harness and explicitly reran both cases; also added 2 unindexed-host cases. Final publication module and architecture case rerun after adding atomic manifest precommit validation. Results use each case latest result; repeated cases are not counted twice.",
+    "runs": [
+      {
+        "report": "agent-memory-v61-stage11-targeted.xml",
+        "sha256": "0817325850c015e4dec484afca8bb67c5a9cc82406c6bc38a48bb8a9bda4ce85"
+      },
+      {
+        "report": "agent-memory-v61-stage11-repaired.xml",
+        "sha256": "fe31fb292a2a2a3c866c13e4ffa6d27896e1ab2500f7a53334bf7b4a62f617af"
+      },
+      {
+        "report": "agent-memory-v61-stage11-final-publication.xml",
+        "sha256": "cbd9c1270b78971b61d33f7207c210dbf2678fd8a91793ac2a4f335168bb7a5a"
+      }
+    ]
+  },
+  "example": "examples/publication_batches.py passed: one source, two independently admitted slots, two publication tokens; one indexed batch still processing, both covered and continuous prefix 2 reached",
+  "lint": {
+    "changed_python_files": "F,I passed",
+    "new_protocol_workflow_tests_example_and_crash_fixture": "full configured rules passed"
+  },
+  "wheels": [
+    {
+      "file": "agent_memory-0.1.0-py3-none-any.whl",
+      "sha256": "de8e10358ba4ba6db2a3379aa34b2ca29e7037cd0e896c1009cfc3d786ba976b"
+    },
+    {
+      "file": "agent_memory_postgres-0.1.0-py3-none-any.whl",
+      "sha256": "2516d99955978ad8c15cc80933be51393b64c21bbfb1e6b4ca1de86190c8678f"
+    }
+  ],
+  "wheel_sources_match_final_files": true,
+  "postgres_migration": "no new DDL; existing migration 014 packaged",
+  "source_files_sha256": {
+    "src/agent_memory/capture/producer.py": "9c41e8884ba1bd81ec4af8bc547ed521e450ea5f74aa7ced03e525290b54b5a9",
+    "src/agent_memory/operations/extraction_worker.py": "6ef924f0da4ba539a7c5d0c95d2314770d90f8eed1f320f819ea788ea6c87da8",
+    "src/agent_memory/operations/index_recovery.py": "ad665f7f2a4661fd080ede428551a0ab8d92e595e8c93f80d211b4cd949d0af1",
+    "src/agent_memory/operations/indexing.py": "8de8b64621732d74fd9e9dd1738f0322dc2519bffac7b8b383712da8518dc618",
+    "src/agent_memory/operations/readiness.py": "8d8521be1ce1e843e601e8a4d571085f3c1e1a14a1fb75ee2a5d644e60258158",
+    "src/agent_memory/operations/reprocessing.py": "94fa20be8fb3ce22e36cd6b71a4481042fc36cdd9e413a53f34e27d967cc0427",
+    "src/agent_memory/operations/source_revisions.py": "aa6878977caea7faf119e9257d64cfc2c3f9ee63d701bd777ac06aab50762358",
+    "tests/fixtures/durable_crash_child.py": "b2f39a5a7e249ec88eb0eaf723cb0702dc158c294803e76a26404f00c1a35e08",
+    "tests/test_architecture.py": "3b4f7f734fbb05d3a36e42d1b522a496ea0bb7c946d9a13ea8e787bd281af533",
+    "tests/test_durable_indexing.py": "8e4c2a3ebcecc5706670ed3e2c99c5710078434ba9e94e133c6a442bc4bc79e1",
+    "examples/publication_batches.py": "1519c85ae6ec8ed78da6139aef734a1a81b64312c6e7330b734b4c412698afd4",
+    "src/agent_memory/operations/publication_batches.py": "f89179ffb5510c640f7f4fdd3d97b7590264b5172b7c56804c8ad7dd526e10d4",
+    "src/agent_memory/operations/publication_manifest.py": "407daa9b013b5d66a6bcbc803455236c3e034437038923b3e06637d832da55ad",
+    "tests/test_publication_batches.py": "0525a8063f56ea973a23818ae4863ed8016c901a830cb3880dd00bded40c7a8a"
+  },
+  "doc_validation": {
+    "frozen_design_hashes": "passed",
+    "task_links": "passed",
+    "task_count": 44,
+    "acceptance_rows": 66,
+    "statuses": {
+      "DONE": 1,
+      "IN_PROGRESS": 24,
+      "TODO": 19
+    }
+  },
+  "remaining": [
+    "concrete derived support/processing dependencies, revision and audience/use intersections, invalidation/rebuild and query-membership barriers",
+    "dynamic ACL, partial interpretation coverage, complex synthetic and cross-scope contributions",
+    "protected external journal deployment, monotonic latest checkpoints, serving isolation and large/remote restore",
+    "real-domain gold/calibration and governed external model activation",
+    "no full-suite or whole P2/B03/B04/M0/M1 completion claim"
+  ]
+}

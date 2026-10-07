@@ -28,13 +28,24 @@ from agent_memory.operations.worker_tasks import WorkerQueueError
 store = base.store
 
 
-async def service(engine, kernel, scope, clock):
+async def service(
+    engine,
+    kernel,
+    scope,
+    clock,
+    *,
+    generator=None,
+    publication_policy=None,
+    policy=base.POLICY,
+    authority=base.SELF,
+    max_candidates=32,
+):
     sdk = pytest.importorskip("agent_memory_sdk")
     channel = CandidateIndexChannel("local")
-    generator = Generator()
-    pipeline = AtomExtractionPipeline(generator, generator)
+    generator = generator or Generator()
+    pipeline = AtomExtractionPipeline(generator, generator, max_candidates=max_candidates)
     config = processing_configuration_sha256(
-        pipeline, base.POLICY, base.SELF, index_channel=channel
+        pipeline, policy, authority, index_channel=channel, publication_policy=publication_policy
     )
     producer = DurableProducer(
         DurableReceiver(engine.repository, clock=lambda: clock[0]), index_channel=channel
@@ -48,7 +59,13 @@ async def service(engine, kernel, scope, clock):
     )
     extract = ExtractionQueue(engine.repository, scope, config, clock=lambda: clock[0])
     handler = DurableAtomHandler(
-        extract, pipeline, base.POLICY, base.SELF, local_only=True, index_channel=channel
+        extract,
+        pipeline,
+        policy,
+        authority,
+        local_only=True,
+        index_channel=channel,
+        publication_policy=publication_policy,
     )
     worker = BoundedWorker(extract, {"memory.extract": handler}, worker_id="extract")
     queue = CandidateIndexQueue(engine.repository, scope, channel, clock=lambda: clock[0])

@@ -12,6 +12,7 @@ from secrets import token_urlsafe
 
 from ..domain import canonical_json, utc_now
 from .extraction_worker import stale
+from .publication_manifest import token_dispositions, token_time
 from .retention import DurableReceiver, RetentionError, _identity, _time
 from .source_revisions import source_is_current
 from .worker_tasks import WorkerLease, WorkerTask, WorkerTaskStatus
@@ -38,7 +39,7 @@ class CandidateIndexChannel:
 
 
 async def enqueue(uow, scope, row, channel):
-    """Called inside transaction B, after closing the publication manifest."""
+    """Called inside each publication transaction, including open batch manifests."""
     if not callable(getattr(uow, "index_job_put", None)):
         raise RetentionError("index_storage_unsupported")
     from .index_recovery import active_stream, physical_channel
@@ -51,7 +52,9 @@ async def enqueue(uow, scope, row, channel):
     for token in manifest["publication_commit_tokens"]:
         existing = await uow.index_job_get(scope, key, row["epoch"], token["id"])
         if existing is not None:
-            if existing["token"] != token or existing["dispositions"] != manifest["dispositions"]:
+            if existing["token"] != token or existing["dispositions"] != token_dispositions(
+                row, token
+            ):
                 raise RetentionError("index_publication_conflict")
             continue
         if (
@@ -67,10 +70,10 @@ async def enqueue(uow, scope, row, channel):
             "sequence": max((j["sequence"] for j in jobs), default=0) + 1,
             "request_id": row["request_id"],
             "event_id": row["event_id"],
-            "dispositions": manifest["dispositions"],
+            "dispositions": token_dispositions(row, token),
             "status": "pending",
             "attempts": 0,
-            "created_at": row["completed_at"],
+            "created_at": token_time(row, token),
         }
         await uow.index_job_put(scope, job)
         jobs = (*jobs, job)
@@ -207,7 +210,7 @@ async def coverage(uow, scope, rows, channel, index_stream=None):
             or job["epoch"] != token["epoch"]
             or job["request_id"] != token["generation"]
             or job["event_id"] != request["event_id"]
-            or job["dispositions"] != request["publication_manifest"]["dispositions"]
+            or job["dispositions"] != token_dispositions(request, job["token"])
         ):
             invalid.append(token["id"])
         elif job["status"] in {"dead", "cancelled"}:
@@ -413,7 +416,7 @@ class CandidateIndexQueue:
                 or not valid_manifest(self.scope, request)
                 or job["token"] not in request["publication_manifest"]["publication_commit_tokens"]
                 or request["publication_manifest"].get("index_channel") != self.channel.payload()
-                or job["dispositions"] != request["publication_manifest"]["dispositions"]
+                or job["dispositions"] != token_dispositions(request, job["token"])
             ):
                 raise RetentionError("index_publication_conflict")
             applied = []

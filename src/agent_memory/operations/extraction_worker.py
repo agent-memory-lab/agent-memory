@@ -21,7 +21,9 @@ from .source_revisions import source_is_current
 from .worker_tasks import WorkerLease, WorkerQueueError, WorkerTask, WorkerTaskStatus
 
 
-def processing_configuration_sha256(pipeline, policy, authority, *, index_channel=None):
+def processing_configuration_sha256(
+    pipeline, policy, authority, *, index_channel=None, publication_policy=None
+):
     return sha256(
         json.dumps(
             {
@@ -31,6 +33,11 @@ def processing_configuration_sha256(pipeline, policy, authority, *, index_channe
                 "authority": authority_to_payload(authority),
                 "execution": "local-exact-scope",
                 **({"index_channel": index_channel.payload()} if index_channel else {}),
+                **(
+                    {"publication_policy": publication_policy.payload()}
+                    if publication_policy
+                    else {}
+                ),
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -235,9 +242,71 @@ class ExtractionQueue:
                 "result": row.get("result"),
             }
 
+    async def resume(self, request_id, *, expected_manifest_version, actor, reason):
+        """Explicit host recovery of a dead partial publication; completed work stays fixed."""
+        from .publication_manifest import valid_manifest
+
+        _identity(request_id)
+        _identity(actor)
+        _identity(reason)
+        if type(expected_manifest_version) is not int:
+            raise RetentionError("invalid_manifest_version")
+        async with self.repository.unit_of_work() as uow:
+            await DurableReceiver._check_support(uow, self.scope)
+            row = await uow.retention_get(self.scope, "request", request_id)
+            if not await self._live(uow, row):
+                raise RetentionError("source_unavailable")
+            if row["configuration_sha256"] != self.configuration_sha256:
+                raise RetentionError("processing_configuration_changed")
+            manifest = row.get("publication_manifest", {})
+            if (
+                row["status"] != "dead"
+                or manifest.get("schema") != "publication-manifest/2"
+                or not valid_manifest(self.scope, row)
+                or manifest["closed"]
+                or not manifest["publications"]
+                or "prepared" not in row
+            ):
+                raise RetentionError("publication_resume_unavailable")
+            if manifest["version"] != expected_manifest_version:
+                raise RetentionError("publication_manifest_changed")
+            resumptions = manifest.setdefault("resumptions", [])
+            if len(resumptions) >= 32:
+                raise RetentionError("publication_resume_capacity")
+            resumptions.append(
+                {
+                    "actor": actor,
+                    "reason": reason,
+                    "attempts": row["attempts"],
+                    "manifest_version": expected_manifest_version,
+                    "recorded_at": _time(self.clock()).isoformat(),
+                }
+            )
+            row.update(status="queued", attempts=0)
+            for field in ("lease_token", "lease_until", "next_attempt_at", "last_error_code"):
+                row.pop(field, None)
+            if not valid_manifest(self.scope, row):
+                raise RetentionError("publication_resume_capacity")
+            await uow.retention_update(self.scope, request_id, row)
+            return {
+                "request_id": request_id,
+                "status": "queued",
+                "manifest_version": manifest["version"],
+            }
+
 
 class DurableAtomHandler:
-    def __init__(self, queue, pipeline, policy, authority, *, local_only, index_channel=None):
+    def __init__(
+        self,
+        queue,
+        pipeline,
+        policy,
+        authority,
+        *,
+        local_only,
+        index_channel=None,
+        publication_policy=None,
+    ):
         if local_only is not True:
             raise NotImplementedError("external dispatch authorization is not enabled")
         if queue.scope.project(pipeline.scope_level) != queue.scope:
@@ -249,12 +318,22 @@ class DurableAtomHandler:
             if not isinstance(index_channel, CandidateIndexChannel):
                 raise TypeError("expected CandidateIndexChannel")
         self.index_channel = index_channel
+        if publication_policy is not None:
+            from .publication_batches import PublicationPolicy
+
+            if not isinstance(publication_policy, PublicationPolicy):
+                raise TypeError("expected PublicationPolicy")
+        self.publication_policy = publication_policy
         self._check_config()
 
     def _check_config(self):
         if (
             processing_configuration_sha256(
-                self.pipeline, self.policy, self.authority, index_channel=self.index_channel
+                self.pipeline,
+                self.policy,
+                self.authority,
+                index_channel=self.index_channel,
+                publication_policy=self.publication_policy,
             )
             != self.queue.configuration_sha256
         ):
@@ -322,6 +401,11 @@ class DurableAtomHandler:
                 )
             await checkpoint({"prepared": prepared, "input_manifest": manifest})
         self._check_config()
+        if self.publication_policy is not None and not reprocessing:
+            from .publication_batches import initial
+
+            await initial(self, task, source, prepared)
+            return
         async with self.queue.repository.unit_of_work() as uow:
             row = await self.queue.checked(uow, task.id, task.payload["fence"])
             current = await uow.get_source_event(task.scope, source.id)
@@ -376,6 +460,12 @@ class DurableAtomHandler:
             from .readiness import close
 
             close(task.scope, row, receipt, interpretation)
+            if self.publication_policy is not None:
+                from .publication_batches import atomic_manifest
+
+                await atomic_manifest(
+                    uow, task.scope, row, receipt, interpretation, prepared, self.publication_policy
+                )
             if self.index_channel is not None:
                 from .indexing import enqueue
 
