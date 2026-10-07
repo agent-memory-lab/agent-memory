@@ -6,7 +6,7 @@
 | 规范依据 | [完整设计 v6.1.0](../AGENT_MEMORY_DESIGN_V6.1.0.md)；设计规定语义，本文件安排实施 |
 | 设计 SHA-256 | `ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b` |
 | 实现基线 | `5cff9f47b7061351fd725c3b8e0a89bf5cb51517` |
-| 台账版本 | revision 15；2026-10-07；可随实施更新 |
+| 台账版本 | revision 16；2026-10-07；可随实施更新 |
 | 当前状态 | DONE 1 项；IN_PROGRESS 24 项；TODO 19 项；本地持久 L1、宿主恢复与事实资格切片已验证，M0/M1 未整体验收 |
 | 范围 | P0–P6 能力阶段；基础能力与可选扩展分别发布 |
 
@@ -329,6 +329,7 @@
 ### AM61-T25 — 事实支持与全部生成输入依赖
 
 - [ ] 状态/阶段：IN_PROGRESS / P3。依赖：T09、T13、T16、T23；L1 模型输入清单基础从 T13 提前落地。
+- revision 16 规划：见 [第十二阶段方案](stage-12-plan.md) 与 [执行任务](stage-12-tasks.md)；本范围内查询成员屏障、当前安全/时间守卫及派生擦除为交付必需，尚未开发或验收。
 - revision 4 证据：单来源输入清单与 exact-scope 输出、在途删除阻断；多来源权限传播和依赖图未实现。 详见 [batch-03-05](batch-03-05.md)。
 - 已有落点：`domain.py`、`consolidation/`、`retrieval/guard.py`、`context/`、`sqlite.py`、PostgreSQL 持久层。
 - 交付：分别持久 support/processing 边及输入 revision；覆盖多轮、few-shot、旧摘要、缓存、增强索引文本与传递输入；检测依赖环；受众/用途/保留交集；独立公开重建与可选受控级别转换边界。
@@ -338,6 +339,7 @@
 ### AM61-T26 — 查询覆盖依赖与发布屏障
 
 - [ ] 状态/阶段：TODO / P3。依赖：T10、T11、T16、T25。
+- revision 16 规划：见 [第十二阶段方案](stage-12-plan.md) 与 [执行任务](stage-12-tasks.md)；本范围内查询成员屏障、当前安全/时间守卫及派生擦除为交付必需，尚未开发或验收。
 - 已有落点：`retrieval/governed.py`、`ontology/queries.py`、`ontology/delta.py`、`consolidation/`、两种存储事务适配器。
 - 交付：QueryDependency 固定查询/过滤/范围/时间/版本；查询前已有订阅屏障或保守父代次；查询与代次同快照；源发布事务更新代次；发布 CAS 和定时生效边界覆盖否定/集合结论。
 - 验收：首次订阅前、查询中、发布后新增成员均不漏；截断/故障不当闭合否定；删除、资格变化、时间到期均可使当前完整结论失效；无关变化不强制全库重建。
@@ -346,6 +348,7 @@
 ### AM61-T27 — 按 facet 组织 Observation
 
 - [ ] 状态/阶段：TODO / P3。依赖：T18、T22、T25、T26；输入类型取已验收 T07–T11 子集。
+- revision 16 规划：见 [第十二阶段方案](stage-12-plan.md) 与 [执行任务](stage-12-tasks.md)；本范围内查询成员屏障、当前安全/时间守卫及派生擦除为交付必需，尚未开发或验收。
 - 已有落点：`consolidation/` 内部整理实现、`ontology/layers.py`、`domain.py`、`operations/worker_tasks.py`。
 - 交付：主体/facet/分组政策身份；基于合格 L1 的小批整理、反例/冲突处置；区分当前状态和时间线模式、明确陈述与推断；记录依据版本、查询覆盖与处理水位。
 - 验收：同名不同主体/侧面不误合并；推断不回写为独立 L1 证据；来源更正即时使不合格 Observation 停用；整理运行中新工作不丢失。
@@ -354,6 +357,7 @@
 ### AM61-T28 — 历史解释与当前安全双守卫
 
 - [ ] 状态/阶段：TODO / P3。依赖：T10、T11、T23、T25、T26。
+- revision 16 规划：见 [第十二阶段方案](stage-12-plan.md) 与 [执行任务](stage-12-tasks.md)；本范围内查询成员屏障、当前安全/时间守卫及派生擦除为交付必需，尚未开发或验收。
 - 已有落点：`retrieval/guard.py`、`retrieval/temporal_history.py`、`retrieval/atom_state.py`、PostgreSQL `temporal_history.py`。
 - 交付：semantic_guard(valid_at, known_at) 与 current_safety_guard；版本化支持/政策/适用范围/依赖；区分 semantic 和 safety 失效；历史缺口与不支持能力明确返回。
 - 验收：当前更正不会抹去合法旧认知；今天撤权/擦除阻止所有历史正文交付；历史缺失不返回当前摘要；当前安全代次永不回退。
@@ -362,6 +366,7 @@
 ### AM61-T29 — 派生删除与依赖失效传播
 
 - [ ] 状态/阶段：TODO / P3。依赖：T23、T25、T26、T27；历史路径接 T28。
+- revision 16 规划：见 [第十二阶段方案](stage-12-plan.md) 与 [执行任务](stage-12-tasks.md)；本范围内查询成员屏障、当前安全/时间守卫及派生擦除为交付必需，尚未开发或验收。
 - 已有落点：`lifecycle.py`、`operations/deletion_audit.py`、`retrieval/guard.py`、`consolidation/`、两种存储反向依赖查询。
 - 交付：来源/断言/政策/query 变化沿相应边传播；事务内必要屏障、异步重建及清理任务；覆盖候选、缓存、Observation、页面、历史及索引；独立 OR 支持精细重评估。
 - 验收：受限后代立即不可用；重建失败不会恢复资格；失效环与重复投递可终结；支持撤回和处理权限撤回不同；擦除传递不被少引用或级别转换切断。
@@ -615,3 +620,4 @@ AcceptanceProfile、scorer、实验 manifest 与结果文件：
 | 13 | 2026-10-07 | [索引显式修复与流切换](stage-09.md) | DONE 1；IN_PROGRESS 24；TODO 19；301 项相关测试通过，未运行全量测试 |
 | 14 | 2026-10-07 | [权威删除日志备份回放](stage-10.md) | DONE 1；IN_PROGRESS 24；TODO 19；508 项相关测试通过，未运行全量测试 |
 | 15 | 2026-10-07 | [单请求分批发布与完整清单覆盖](stage-11.md) | DONE 1；IN_PROGRESS 24；TODO 19；仅新增及受影响回归，未运行全量测试 |
+| 16 | 2026-10-07 | [受控 Observation 阶段规划](stage-12-plan.md) | DONE 1；IN_PROGRESS 24；TODO 19；新增实施方案/任务，未增加实现与测试通过声明 |

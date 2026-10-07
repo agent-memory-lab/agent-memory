@@ -1,0 +1,37 @@
+{
+  "schema": "agent-memory-planning-validation/1",
+  "date": "2026-10-07",
+  "plan": "AM61-ST12/1.0",
+  "ledger_revision": 16,
+  "implementation_baseline": "f70eec434b57dd0cf40d198c80daa5bd2d1bf0ae",
+  "status": "PLANNED",
+  "implementation_changes": false,
+  "runtime_tests_run": false,
+  "checks": {
+    "frozen_design_hashes": "passed",
+    "pre_existing_architecture_draft_preserved": "passed",
+    "relative_links": "passed",
+    "global_tasks": 44,
+    "global_acceptance_rows": 66,
+    "task_statuses_unchanged": {
+      "TODO": 19,
+      "IN_PROGRESS": 24,
+      "DONE": 1
+    },
+    "implementation_steps": 7,
+    "stage_tasks": 10
+  },
+  "documents_sha256": {
+    "plan.md": "e67d9d3e81ac08b8f5f32cc711413894f567da8d17647ca0075ff357ce02c7c7",
+    "task.md": "8cf0acc5c0933259386fba0f416ed7fea6eb8ed517e9a9922463f48f0fbf4363",
+    "next-steps.md": "56a2bbf6d61a5e956f6df0a4936e955fd08a5e55f66b8b42f2fa2c904863e348",
+    "stage-12-plan.md": "a7b72f7d756884090690b4f8ce51734e241d74a56947fc3dbfb82daf58f32569",
+    "stage-12-tasks.md": "797686f70a7aa2f2dbd925ea73d258f888bfb9c6b87dee59465a4261f38b9084"
+  },
+  "scope_corrections": [
+    "T26 selected-facet membership barrier is required before complete current Observation publication",
+    "T28 current safety/time guards and T29 derived erase are mandatory slices of this stage",
+    "versioned facet work units are required to rebuild after deleting the final source; existing live-source units remain guarded"
+  ],
+  "no_implementation_or_passed_runtime_capability_claim": true
+}
