@@ -127,6 +127,8 @@ class FacetRefreshQueue:
                 readers=definition["spec"]["readers"],
                 epoch=job["unit"]["epoch"],
             )
+            if definition["spec"].get("context"):
+                receipt["context_token"] = self.service.context_token
             await uow.derived_put(self.scope, "request", target_id, receipt)
             return receipt
 
@@ -146,9 +148,19 @@ class FacetRefreshQueue:
             raise ValueError("invalid facet lease duration")
         async with self.repository.unit_of_work() as uow:
             epoch = await open_derived(uow, self.scope)
-            for item in await uow.derived_records(self.scope, "definition"):
+            definitions = await uow.derived_records(self.scope, "definition")
+            owned = {
+                item["identity"]
+                for item in definitions
+                if self.service.accepts_definition(item["payload"])
+            }
+            for item in definitions:
                 definition = item["payload"]
-                if definition.get("disabled") or definition["epoch"] != epoch:
+                if (
+                    item["identity"] not in owned
+                    or definition.get("disabled")
+                    or definition["epoch"] != epoch
+                ):
                     continue
                 await self._time_transition(uow, definition)
                 if definition["dirty"]:
@@ -165,6 +177,8 @@ class FacetRefreshQueue:
                 if r["status"] == "running" and datetime.fromisoformat(r["lease_until"]) > now
             }
             for row in sorted(rows, key=lambda r: (r.get("created_at", ""), r["id"])):
+                if row.get("unit", {}).get("facet_id") not in owned:
+                    continue
                 if row["status"] not in {"pending", "retry", "running"}:
                     continue
                 if row["unit"]["epoch"] != epoch:
@@ -256,6 +270,11 @@ class FacetRefreshQueue:
                 raise DerivedError("derived_target_unavailable")
             if actor not in receipt["readers"]:
                 raise DerivedError("derived_read_denied")
+            if (
+                receipt.get("context_token") is not None
+                and receipt["context_token"] != self.service.context_token
+            ):
+                raise DerivedError("derived_context_mismatch")
             row = await uow.derived_get(self.scope, "job", receipt["unit_id"])
             complete = bool(
                 row

@@ -7,7 +7,11 @@ from ..retrieval.atom_state import project_records
 from .model import DerivedError, digest
 
 
-def compose(definition, records, sources, at):
+def compose(definition, records, sources, at, *, admission_policy=None):
+    if definition["template_version"] == "locale-context/1":
+        from .contextual import compose_contextual
+
+        return compose_contextual(definition, records, sources, at, admission_policy)
     for record in records:
         payload = record["payload"]
         if payload.get("qualification"):

@@ -6,7 +6,7 @@
 | 规范依据 | [完整设计 v6.1.0](../AGENT_MEMORY_DESIGN_V6.1.0.md)；设计规定语义，本文件安排实施 |
 | 设计 SHA-256 | `ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b` |
 | 实现基线 | `5cff9f47b7061351fd725c3b8e0a89bf5cb51517` |
-| 台账版本 | revision 17；2026-10-07；可随实施更新 |
+| 台账版本 | revision 18；2026-10-07；可随实施更新 |
 | 当前状态 | DONE 1 项；IN_PROGRESS 29 项；TODO 14 项；本地持久 L1、宿主恢复与事实资格切片已验证，M0/M1 未整体验收 |
 | 范围 | P0–P6 能力阶段；基础能力与可选扩展分别发布 |
 
@@ -155,6 +155,7 @@
 
 - [ ] 状态/阶段：IN_PROGRESS / P1。依赖：T07、T10。
 - revision 6 证据：同一授权 scope 的 QueryContext、条件 AST 三值判断、例外、不同适用域、single_exclusive/ordered_override 已实现；跨存储 scope、约束合取及通用政策历史仍待扩展。 见 [stage-02](stage-02.md)。
+- revision 18 证据：新增 [资格保持的语言 facet](stage-13.md) 与 [验证记录](validation-stage-13.json)：可信路由/期限、三值条件/例外、字段时间支持、同域争议/偏序、原子上下文 CAS、当前交付和擦除；仅声明 locale-context/1，通用 query/ACL/history/derived-parent 仍关闭。
 - 已有落点：`retrieval/atom_state.py`、`retrieval/guard.py`、`retrieval/governed.py`、`domain.py`。
 - 交付：由宿主可信 QueryContext 驱动范围选择；谓词级偏序/合取/集合政策及三值条件；保留同存储槽不同适用域切片；实现争议、屏障、缺失与到期的不同回退规则。
 - 验收：顺序无关；优先关系循环被拒绝；高优先争议不伪回退；团队禁止不能被个人例外撤销；历史合成政策与当前安全分开。
@@ -331,6 +332,7 @@
 - [ ] 状态/阶段：IN_PROGRESS / P3。依赖：T09、T13、T16、T23；L1 模型输入清单基础从 T13 提前落地。
 - revision 17 证据：见 [第十二阶段实施](stage-12.md) 与 [验证记录](validation-stage-12.json)；多来源当前语言 facet、query 屏障、可信处理交集、当前安全/时间守卫、完整重建与派生擦除切片已验证。通用传递图、动态 ACL、条件化 facet 与历史派生保持关闭。
 - revision 4 证据：单来源输入清单与 exact-scope 输出、在途删除阻断；多来源权限传播和依赖图未实现。 详见 [batch-03-05](batch-03-05.md)。
+- revision 18 证据：新增 [资格保持的语言 facet](stage-13.md) 与 [验证记录](validation-stage-13.json)：可信路由/期限、三值条件/例外、字段时间支持、同域争议/偏序、原子上下文 CAS、当前交付和擦除；仅声明 locale-context/1，通用 query/ACL/history/derived-parent 仍关闭。
 - 已有落点：`domain.py`、`consolidation/`、`retrieval/guard.py`、`context/`、`sqlite.py`、PostgreSQL 持久层。
 - 交付：分别持久 support/processing 边及输入 revision；覆盖多轮、few-shot、旧摘要、缓存、增强索引文本与传递输入；检测依赖环；受众/用途/保留交集；独立公开重建与可选受控级别转换边界。
 - 验收：少引用或可选引用不扩大权限；公开重建不夹带旧私有状态；delta 修改块继承本次全部输入；受控转换保留擦除谱系；基础版本未支持级别转换则拒绝。
@@ -340,6 +342,7 @@
 
 - [ ] 状态/阶段：IN_PROGRESS / P3。依赖：T10、T11、T16、T25。
 - revision 17 证据：见 [第十二阶段实施](stage-12.md) 与 [验证记录](validation-stage-12.json)；多来源当前语言 facet、query 屏障、可信处理交集、当前安全/时间守卫、完整重建与派生擦除切片已验证。通用传递图、动态 ACL、条件化 facet 与历史派生保持关闭。
+- revision 18 证据：新增 [资格保持的语言 facet](stage-13.md) 与 [验证记录](validation-stage-13.json)：可信路由/期限、三值条件/例外、字段时间支持、同域争议/偏序、原子上下文 CAS、当前交付和擦除；仅声明 locale-context/1，通用 query/ACL/history/derived-parent 仍关闭。
 - 已有落点：`retrieval/governed.py`、`ontology/queries.py`、`ontology/delta.py`、`consolidation/`、两种存储事务适配器。
 - 交付：QueryDependency 固定查询/过滤/范围/时间/版本；查询前已有订阅屏障或保守父代次；查询与代次同快照；源发布事务更新代次；发布 CAS 和定时生效边界覆盖否定/集合结论。
 - 验收：首次订阅前、查询中、发布后新增成员均不漏；截断/故障不当闭合否定；删除、资格变化、时间到期均可使当前完整结论失效；无关变化不强制全库重建。
@@ -349,6 +352,7 @@
 
 - [ ] 状态/阶段：IN_PROGRESS / P3。依赖：T18、T22、T25、T26；输入类型取已验收 T07–T11 子集。
 - revision 17 证据：见 [第十二阶段实施](stage-12.md) 与 [验证记录](validation-stage-12.json)；多来源当前语言 facet、query 屏障、可信处理交集、当前安全/时间守卫、完整重建与派生擦除切片已验证。通用传递图、动态 ACL、条件化 facet 与历史派生保持关闭。
+- revision 18 证据：新增 [资格保持的语言 facet](stage-13.md) 与 [验证记录](validation-stage-13.json)：可信路由/期限、三值条件/例外、字段时间支持、同域争议/偏序、原子上下文 CAS、当前交付和擦除；仅声明 locale-context/1，通用 query/ACL/history/derived-parent 仍关闭。
 - 已有落点：`consolidation/` 内部整理实现、`ontology/layers.py`、`domain.py`、`operations/worker_tasks.py`。
 - 交付：主体/facet/分组政策身份；基于合格 L1 的小批整理、反例/冲突处置；区分当前状态和时间线模式、明确陈述与推断；记录依据版本、查询覆盖与处理水位。
 - 验收：同名不同主体/侧面不误合并；推断不回写为独立 L1 证据；来源更正即时使不合格 Observation 停用；整理运行中新工作不丢失。
@@ -367,6 +371,7 @@
 
 - [ ] 状态/阶段：IN_PROGRESS / P3。依赖：T23、T25、T26、T27；历史路径接 T28。
 - revision 17 证据：见 [第十二阶段实施](stage-12.md) 与 [验证记录](validation-stage-12.json)；多来源当前语言 facet、query 屏障、可信处理交集、当前安全/时间守卫、完整重建与派生擦除切片已验证。通用传递图、动态 ACL、条件化 facet 与历史派生保持关闭。
+- revision 18 证据：新增 [资格保持的语言 facet](stage-13.md) 与 [验证记录](validation-stage-13.json)：可信路由/期限、三值条件/例外、字段时间支持、同域争议/偏序、原子上下文 CAS、当前交付和擦除；仅声明 locale-context/1，通用 query/ACL/history/derived-parent 仍关闭。
 - 已有落点：`lifecycle.py`、`operations/deletion_audit.py`、`retrieval/guard.py`、`consolidation/`、两种存储反向依赖查询。
 - 交付：来源/断言/政策/query 变化沿相应边传播；事务内必要屏障、异步重建及清理任务；覆盖候选、缓存、Observation、页面、历史及索引；独立 OR 支持精细重评估。
 - 验收：受限后代立即不可用；重建失败不会恢复资格；失效环与重复投递可终结；支持撤回和处理权限撤回不同；擦除传递不被少引用或级别转换切断。
@@ -502,6 +507,7 @@
 - revision 12 证据：补充 module/端口/存储责任、migration 012、host-only 启用边界、容量/停止限制及可运行 Block 刷新示例。见 [stage-08](stage-08.md)。
 - revision 11 证据：补充版本兼容、旧请求缺少 processing token 的拒绝策略、无新增 DDL 的升级说明和可运行示例。见 [stage-07](stage-07.md)。
 - revision 17 证据：新增 [stage-12.md](stage-12.md)、版本方案/清单、验证记录和可运行示例；完整运行交付手册仍待各启用能力会合验收。
+- revision 18 证据：新增 [资格保持的语言 facet](stage-13.md) 与 [验证记录](validation-stage-13.json)：可信路由/期限、三值条件/例外、字段时间支持、同域争议/偏序、原子上下文 CAS、当前交付和擦除；仅声明 locale-context/1，通用 query/ACL/history/derived-parent 仍关闭。
 - 已有落点：`docs/single-host-deployment.md`、`docs/recovery-operations.md`、`docs/RESOURCE_BASELINE.md`、`operations/doctor.py`、本目录 plan/task。
 - 交付：部署/升级/备份/擦除/费用对账/队列卡住/回滚运行手册；支持矩阵和未覆盖边界；迁移预演、告警与诊断；汇总实现提交、profile、各阶段证据及可选能力决定。
 - 验收：另一操作者可按手册重现受支持闭环、定位故障并安全恢复；配置与发布能力一致；未决事项具名且不伪完成；仅在本轮声明交付范围全部验收后勾选，后续新增能力启动新台账 revision。
@@ -623,3 +629,4 @@ AcceptanceProfile、scorer、实验 manifest 与结果文件：
 | 15 | 2026-10-07 | [单请求分批发布与完整清单覆盖](stage-11.md) | DONE 1；IN_PROGRESS 24；TODO 19；仅新增及受影响回归，未运行全量测试 |
 | 16 | 2026-10-07 | [受控 Observation 阶段规划](stage-12-plan.md) | DONE 1；IN_PROGRESS 24；TODO 19；新增实施方案/任务，未增加实现与测试通过声明 |
 | 17 | 2026-10-07 | [受控 Observation 完整阶段](stage-12.md) | DONE 1；IN_PROGRESS 29；TODO 14；558 项唯一相关用例通过，未运行全量测试 |
+| 18 | 2026-10-07 | [资格保持的语言 facet](stage-13.md)；[第十二阶段全量补充](stage-12-full-test.md) | DONE 1；IN_PROGRESS 29；TODO 14；限定组合已验证，新代码仅相关测试，完整 M2 待补 |

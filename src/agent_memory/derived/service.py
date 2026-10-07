@@ -9,6 +9,7 @@ from ..operations.retention import RetentionError
 from ..operations.source_revisions import source_is_current
 from .model import (
     DerivedError,
+    FacetContext,
     FacetDefinition,
     FacetRefreshUnit,
     ProcessingGrant,
@@ -96,9 +97,10 @@ def authorization_summary(spec, sources, grants):
 class ObservationService:
     """Trusted host API. Transport exposes only call(), never these write methods."""
 
-    def __init__(self, repository, scope, policy, *, clock=utc_now):
+    def __init__(self, repository, scope, policy, *, clock=utc_now, context_token=None):
         self.repository, self.scope, self.clock = repository, scope, clock
         self.policy = policy.config_payload()
+        self.context_token = identity(context_token) if context_token is not None else None
         predicates = {s["predicate"]: s for s in self.policy["predicates"]}
         if "locale" not in predicates or predicates["locale"]["value_type"] != "string":
             raise DerivedError("derived_predicate_unregistered")
@@ -109,6 +111,9 @@ class ObservationService:
         if definition.subject_id != self.scope.user_id:
             raise DerivedError("derived_subject_scope_mismatch")
         spec = definition.payload()
+        self._context_binding(spec)
+        if definition.context is not None:
+            definition.context.current(self.clock())
         fingerprint = digest(dict(definition=spec, policy=self.policy))
         async with self.repository.unit_of_work() as uow:
             epoch = await open_derived(uow, self.scope)
@@ -206,7 +211,25 @@ class ObservationService:
             raise DerivedError("derived_definition_unavailable")
         if digest(dict(definition=row["spec"], policy=self.policy)) != row["fingerprint"]:
             raise DerivedError("derived_definition_configuration_changed")
+        self._context_binding(row["spec"])
         return row
+
+    def accepts_definition(self, row):
+        binding = row["spec"].get("context")
+        return binding is None or binding["query"]["snapshot_token"] == self.context_token
+
+    def _context_binding(self, spec):
+        if spec.get("context") is None:
+            return None
+        binding = FacetContext.from_payload(spec["context"])
+        if (
+            binding.query.snapshot_token != self.context_token
+            or binding.query.scope != self.scope
+            or binding.query.subject_id != spec["subject_id"]
+            or binding.query.purpose != spec["purpose"]
+        ):
+            raise DerivedError("derived_context_mismatch")
+        return binding
 
     async def _check_unit(self, uow, unit):
         row = await self._definition(uow, unit["facet_id"])
@@ -232,6 +255,9 @@ class ObservationService:
             unit = task.payload["unit"]
             definition = await self._check_unit(uow, unit)
             at = self.clock()
+            binding = self._context_binding(definition["spec"])
+            if binding is not None:
+                binding.current(at)  # Expired routing must not fetch source bodies.
             headers = await uow.derived_candidates(self.scope, definition["slots"])
             if len(headers) > 64:
                 raise DerivedError("derived_snapshot_capacity")
@@ -252,6 +278,12 @@ class ObservationService:
                 if source is None or source.scope != self.scope:
                     raise DerivedError("derived_source_unavailable")
                 if key not in primary_ids:
+                    if (
+                        binding is not None
+                        and "_retention" in source.metadata
+                        and not await source_is_current(uow, source)
+                    ):
+                        raise DerivedError("derived_evidence_superseded")
                     interpretations[key] = {"context": True}
                     sources[key] = source
                     continue
@@ -322,7 +354,11 @@ class ObservationService:
 
     def prepare(self, snapshot):
         result = compose(
-            snapshot["definition"]["spec"], snapshot["records"], snapshot["sources"], snapshot["at"]
+            snapshot["definition"]["spec"],
+            snapshot["records"],
+            snapshot["sources"],
+            snapshot["at"],
+            admission_policy=self.policy,
         )
         expiries = [g["expires_at"] for g in snapshot["grants"].values() if g.get("expires_at")]
         transitions = [v for v in [result["next_transition_at"], *expiries] if v]
@@ -560,6 +596,12 @@ class ObservationService:
         definition = await self._definition(uow, facet_id)
         if actor not in definition["spec"]["readers"] or purpose != definition["spec"]["purpose"]:
             raise DerivedError("derived_read_denied")
+        binding = self._context_binding(definition["spec"])
+        if binding is not None:
+            try:
+                binding.current(self.clock())
+            except DerivedError as error:
+                return dict(facet_id=facet_id, state="invalid", body=None, reason=error.code)
         head = await uow.derived_get(self.scope, "head", facet_id)
         if head is None:
             return dict(facet_id=facet_id, state="stale", body=None, reason="not_built")
@@ -651,7 +693,9 @@ class ObservationService:
                 facets=["communication.language"],
                 operations=["capabilities", "read", "status", "derived_context"],
                 historical=False,
-                qualified_inputs=False,
+                qualified_inputs=self.context_token is not None,
+                qualified_templates=["locale-context/1"] if self.context_token is not None else [],
+                context_attributes=["project", "holiday"] if self.context_token is not None else [],
                 derived_parents=False,
                 renderer="deterministic_full_snapshot",
             )

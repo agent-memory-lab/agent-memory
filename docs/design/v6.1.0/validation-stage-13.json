@@ -1,0 +1,130 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "date": "2026-10-07",
+  "design": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "ledger_revision": 18,
+  "base_commit": "655de37",
+  "stage_plan": "AM61-ST13/1.0",
+  "status": "passed",
+  "stage_tasks_completed": [
+    "ST13-01",
+    "ST13-02",
+    "ST13-03",
+    "ST13-04",
+    "ST13-05",
+    "ST13-06",
+    "ST13-07",
+    "ST13-08"
+  ],
+  "enabled_scope": "opt-in same-scope current communication.language locale-context/1 from closed primary L1 with host-reviewed qualifiers, typed expiring host routing, complete field proofs and all actual source grants; no unconditional Claim publication",
+  "full_test_run": false,
+  "previous_full_validation": "validation-stage-12-full.json at 9d4201c; separate pre-stage-13 code evidence",
+  "tests": {
+    "unique_targeted_cases": 656,
+    "passed": 656,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "new_behavior_cases": 71,
+    "new_backend_cases_each": 33,
+    "new_pure_contract_cases": 5,
+    "backends": [
+      "SQLite",
+      "PostgreSQL 17 (real isolated server)"
+    ],
+    "accounting": "Latest result per currently collected (classname,name). Removed obsolete unparameterized auxiliary-erasure case names. Installed-wheel reruns are not added to the unique count.",
+    "initial_repairs": [
+      "Use optional serialized exceptions/conditions fields without KeyError.",
+      "Test qualification helper reads the updated row instead of treating the returned integer version as a record."
+    ],
+    "reports_sha256": {
+      "agent-memory-v61-stage13-final.xml": "fce0612fc46a63a6a87f76e721bc954d11e549310853409ef16404846b1e4501",
+      "agent-memory-v61-stage13-latest.xml": "fe66b21aea08092fc79d201531a0ed16106e2cebdefbb1157174088013fd7d41",
+      "agent-memory-v61-stage13-transport.xml": "d12e43f4a61c4279455a4d281b85a78de8b74d4566533d1e9393256cdac1b506"
+    },
+    "cases_sha256": "210704a97c55d72bbb450d4db0a1529ba9775ccff4993e8317104f35ac903f01"
+  },
+  "build": {
+    "core": {
+      "status": "passed",
+      "verified_packaged_files": 143,
+      "artifacts": {
+        "agent_memory-0.1.0-py3-none-any.whl": "f287844fed3728be4245e207bbf71cbe1171f1631f825ba8c6d2866d791f45c6",
+        "agent_memory-0.1.0.tar.gz": "6dda5f1f9bc4efa98a90aaa6e5baa133eaf3c52367e70c4f0409e005571535d7"
+      }
+    },
+    "postgres": {
+      "status": "passed",
+      "verified_packaged_files": 40,
+      "artifacts": {
+        "agent_memory_postgres-0.1.0-py3-none-any.whl": "e0e6181ed22818dd20ea0a97659bcdfb07d154602474316692879922d905a8de",
+        "agent_memory_postgres-0.1.0.tar.gz": "cc63033b63fdd5df35b641f625528627f2b26a54584a33cdd457d51cd086e564"
+      }
+    },
+    "sdk": {
+      "status": "passed",
+      "verified_packaged_files": 9,
+      "artifacts": {
+        "agent_memory_sdk-0.1.0-py3-none-any.whl": "40974a7c27dc34c75c023c64c9a34ea4fb258fbb75fa9aca2c647413a56b5b76",
+        "agent_memory_sdk-0.1.0.tar.gz": "52e64e8037bcf37a94c33848e16caee16fc471b20a27d83c43c1403777609354"
+      }
+    },
+    "mcp": {
+      "status": "passed",
+      "verified_packaged_files": 5,
+      "artifacts": {
+        "agent_memory_mcp-0.1.0-py3-none-any.whl": "414ee2db3e9c0744ba7f40d5f0c1365e07ba362e4d8cfbf1297dc41c2418dd46",
+        "agent_memory_mcp-0.1.0.tar.gz": "b68d6d6074132d76a3b80eb01df96d17a6e2c159741d1de9cd110a81ef88c425"
+      }
+    }
+  },
+  "installed_wheels": {
+    "passed": 71,
+    "failures": 0,
+    "skipped": 0,
+    "all_four_runtime_module_paths_verified": true,
+    "junit_sha256": "614b99558d2475083bfa9c5d347b8bf680c26dc3b22dc09eb6dbcc7b4819f949",
+    "smoke": [
+      "Qualified SQLite example delivers source_fact/zh-CN with conditions, exceptions and source evidence",
+      "Real PostgreSQL repeat initialization and v1 empty publication/status/read"
+    ]
+  },
+  "checks": {
+    "ruff_changed_code": "passed",
+    "frozen_design_hashes": "passed",
+    "preserved_user_edits": "passed",
+    "ddl": "No new tables/migration; existing derived ledger and UoW reused",
+    "global_task_statuses": {
+      "DONE": 1,
+      "IN_PROGRESS": 29,
+      "TODO": 14
+    }
+  },
+  "source_files_sha256": {
+    "src/agent_memory/derived/__init__.py": "de595745e97c905faa6b776ac8e5d2b306b8b8245d476633214f48bd78a3193a",
+    "src/agent_memory/derived/contextual.py": "e4ba60184f4e92268a9b98343e24c3bdf72d5d75b2791dda21cb7273d17d7561",
+    "src/agent_memory/derived/model.py": "1dcbebfce85a65430897c6738e531e8a4602ce08ff904d017410fb8a4e267e95",
+    "src/agent_memory/derived/observation.py": "37d771569ed92c67ad91ecc492e24f59944be8c733a64baf4688e220e385a9a3",
+    "src/agent_memory/derived/service.py": "e3c73cca20734af90502ad10629b25a0c5b879f7feb68880911acfe823c7ce7a",
+    "src/agent_memory/operations/facet_refresh.py": "a9b426c875dfa67879bf696bbca11eb99d5d5894ae01d669ae93944de03ba70d",
+    "tests/test_derived_contextual.py": "5340173cbb5af9a2d2a9aa98d2b07437d2f35a97d55955fe53aa078e47d13bf4",
+    "examples/derived_contextual_observation.py": "1051cba26aa7f2d00666c6e9563549171dccedf39001816b1e79c9ccf78d357e"
+  },
+  "preserved_user_documents_sha256": {
+    "README.md": "ed51cc999553888d4a525c74256e24f42b9f94a97412ca4011bb8f09b3c445fe",
+    "README.zh-CN.md": "edf7e58624d41d7cf2b8ce2b69754eb3ef5a09654ce089314dcaf71d3f121474",
+    "docs/AGENT_MEMORY_ARCHITECTURE_PLAN.md": "81095de8aa02db4f59a643d0d6708b4fa9ee415bfb3f230bab4a7abf962fe849"
+  },
+  "unsupported": [
+    "Other facets/predicates",
+    "Arbitrary private memory-derived context attributes",
+    "Cross-scope composition",
+    "Historical derived delivery and general policy history",
+    "General query/ACL authority",
+    "Derived-parent/transitive processing graph",
+    "Cross-slot conditional contribution mutation",
+    "L2/L3, delta pages and external model dispatch",
+    "Production extraction-quality certification"
+  ]
+}

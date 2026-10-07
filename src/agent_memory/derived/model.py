@@ -1,9 +1,13 @@
 """Pure contracts for bounded, current-time, source-supported Observations."""
 
 import json
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from hashlib import sha256
+
+from ..conditions import ContextAttribute, ProjectionPolicy, QueryContext
+from ..domain import MemoryScope
+from ..serialization import to_jsonable
 
 
 class DerivedError(ValueError):
@@ -33,6 +37,61 @@ def timestamp(value):
 
 
 @dataclass(frozen=True)
+class FacetContext:
+    """Expiring host routing binding, evaluated at the current time only."""
+
+    query: QueryContext
+    policy: ProjectionPolicy
+    expires_at: datetime
+
+    def __post_init__(self):
+        if not isinstance(self.query, QueryContext) or not isinstance(
+            self.policy, ProjectionPolicy
+        ):
+            raise DerivedError("trusted_facet_context_required")
+        timestamp(self.expires_at)
+        if (
+            self.query.purpose != self.policy.purpose
+            or self.query.valid_at != self.query.known_at
+            or self.query.snapshot_token == "host-request"
+            or not 0 < (self.expires_at - self.query.known_at).total_seconds() <= 86400
+        ):
+            raise DerivedError("invalid_facet_context")
+        # Routing attributes are not an untracked arbitrary memory input channel.
+        for attr in self.query.attributes:
+            if (
+                (attr.name == "project" and not isinstance(attr.value, str))
+                or (attr.name == "holiday" and type(attr.value) is not bool)
+                or attr.name not in {"project", "holiday"}
+            ):
+                raise DerivedError("unsupported_facet_context_attribute")
+
+    def payload(self):
+        return to_jsonable(self)
+
+    @classmethod
+    def from_payload(cls, payload):
+        query = dict(payload["query"])
+        query["scope"] = MemoryScope(**query["scope"])
+        query["attributes"] = tuple(ContextAttribute(**a) for a in query["attributes"])
+        for key in ("valid_at", "known_at"):
+            query[key] = datetime.fromisoformat(query[key])
+        return cls(
+            QueryContext(**query),
+            ProjectionPolicy(**payload["policy"]),
+            datetime.fromisoformat(payload["expires_at"]),
+        )
+
+    def current(self, at):
+        timestamp(at)
+        if at < self.query.known_at:
+            raise DerivedError("derived_context_future")
+        if at >= self.expires_at:
+            raise DerivedError("derived_context_expired")
+        return replace(self.query, valid_at=at, known_at=at)
+
+
+@dataclass(frozen=True)
 class FacetDefinition:
     id: str
     subject_id: str
@@ -42,6 +101,7 @@ class FacetDefinition:
     purpose: str = "agent_context"
     readers: tuple[str, ...] = ("alice",)
     template_version: str = "locale-snapshot/1"
+    context: FacetContext | None = None
 
     def __post_init__(self):
         for value in (self.id, self.subject_id, self.facet, self.version, self.purpose):
@@ -49,9 +109,18 @@ class FacetDefinition:
         if (
             self.facet != "communication.language"
             or self.predicates != ("locale",)
-            or (self.template_version != "locale-snapshot/1")
+            or self.template_version not in {"locale-snapshot/1", "locale-context/1"}
         ):
             raise DerivedError("unsupported_derived_facet")
+        if (self.context is not None and not isinstance(self.context, FacetContext)) or (
+            (self.template_version == "locale-context/1") != isinstance(self.context, FacetContext)
+        ):
+            raise DerivedError("trusted_facet_context_required")
+        if self.context is not None and (
+            self.context.query.subject_id != self.subject_id
+            or self.context.query.purpose != self.purpose
+        ):
+            raise DerivedError("derived_context_mismatch")
         if (
             not self.readers
             or len(self.readers) > 16
@@ -62,7 +131,10 @@ class FacetDefinition:
             identity(reader)
 
     def payload(self):
-        return json.loads(json.dumps(asdict(self)))
+        values = to_jsonable(self)
+        if self.context is None:
+            values.pop("context")  # Preserve the deployed v1 definition fingerprint.
+        return values
 
 
 @dataclass(frozen=True)
@@ -209,6 +281,7 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
             row["safety_generation"] += 1
             if all_in_scope:
                 row["disabled"] = True
+                row["spec"].pop("context", None)  # Erase retired host routing values too.
             result.append((kind, key, row))
         elif kind == "job" and all_in_scope:
             result.append(
