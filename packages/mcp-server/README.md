@@ -51,3 +51,9 @@ server.run(
 )
 ```
 
+Hosts can pass `derived=observation_service` to `create_server()` to expose the
+read-only `memory_derived` tool. Its page operations are `page_capabilities`,
+`page_read`, `page_context` and `page_status`; page definitions and refresh writes
+remain host APIs. The current page capability requires the backend contract
+`page-full-rebuild/1`. Historical pages, page-to-page inputs and inferred personas
+are disabled. `page_context` rechecks current input permissions before delivery.

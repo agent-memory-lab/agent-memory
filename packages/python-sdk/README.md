@@ -24,3 +24,14 @@ client = EmbeddedMemoryClient(
 await client.initialize()
 ```
 
+With a host-configured `ObservationService` passed as `derived=service`, the same
+embedded and MCP clients expose `page_capabilities()`, `page_read(page_id)`,
+`page_context(page_id)` and `page_status(target_id)`. These operations are read-only.
+`complete` certifies the fixed refresh job; `page_complete` also requires the current
+guarded page to match that job, including a completed empty page. `page_ready`
+requires usable nonempty content. A completed old target cannot certify a newer page.
+
+The first L2 template is `language-scenario/1`, with deterministic full rebuild from
+fixed current language Observations. The host registers `ScenarioDefinition` and
+`PageDefinition` and uses the existing `FacetRefreshQueue` to request and execute a
+refresh. See [the runnable page example](../../examples/derived_scenario_page.py).

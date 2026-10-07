@@ -19,8 +19,10 @@ from agent_memory.derived import (
     FacetDefinition,
     HostGrantAuthority,
     ObservationService,
+    PageDefinition,
     ProcessingGrant,
     QueryDefinition,
+    ScenarioDefinition,
 )
 from agent_memory.domain import (
     AtomReview,
@@ -70,8 +72,8 @@ class LocaleExample:
         ]
 
 
-async def main(*, host_controls=False, history=False, continuous=False, parents=False):
-    if parents and (history or continuous):
+async def main(*, host_controls=False, history=False, continuous=False, parents=False, pages=False):
+    if (parents or pages) and (history or continuous):
         raise ValueError("Derived parent views currently require current-time inputs")
     history = history or continuous
     host_controls = host_controls or history
@@ -161,6 +163,22 @@ async def main(*, host_controls=False, history=False, continuous=False, parents=
                     ProcessingGrant(source.id, ("alice",), revoked=True), expected_version=1
                 )
                 assert (await client.derived_context("agent-language"))["observations"] == []
+            if pages:
+                await derived.register_page(PageDefinition(
+                    "language-page", ScenarioDefinition("demo", scope, "alice", "Demo language"),
+                    ("language",), authority_id=authority_id,
+                ))
+                target = await queue.request("language-page", dedupe_key="page-example")
+                assert await BoundedWorker(
+                    queue, {"memory.facet_refresh": derived.apply}, worker_id="page"
+                ).run_once()
+                assert (await client.page_status(target["target_id"]))["page_ready"]
+                print(json.dumps(await client.page_context("language-page"),
+                                 ensure_ascii=False, indent=2))
+                await derived.grant(
+                    ProcessingGrant(source.id, ("alice",), revoked=True), expected_version=1
+                )
+                assert (await client.page_context("language-page"))["pages"] == []
             if history:
                 points = await client.derived_history_points("language")
                 known_at = points["points"][0]["known_at"]

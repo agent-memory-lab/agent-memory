@@ -361,6 +361,26 @@ class _Operations(RecoveryClientOperations):
     async def derived_capabilities(self) -> dict[str, Any]:
         return await self._call("memory_derived", {"operation": "capabilities", "payload": {}})
 
+    async def page_capabilities(self) -> dict[str, Any]:
+        return await self._call("memory_derived", {"operation": "page_capabilities", "payload": {}})
+
+    async def page_read(self, page_id: str, *, purpose: str = "agent_context") -> dict[str, Any]:
+        return await self._call("memory_derived", {"operation": "page_read", "payload": {
+            "page_id": page_id, "purpose": purpose,
+        }})
+
+    async def page_context(self, page_id: str, *, purpose: str = "agent_context") -> dict[str, Any]:
+        return await self._call("memory_derived", {"operation": "page_context", "payload": {
+            "page_id": page_id, "purpose": purpose,
+        }})
+
+    async def page_status(
+        self, target_id: str, *, purpose: str = "agent_context"
+    ) -> dict[str, Any]:
+        return await self._call("memory_derived", {"operation": "page_status", "payload": {
+            "target_id": target_id, "purpose": purpose,
+        }})
+
     async def derived_read(
         self, facet_id: str, *, purpose: str = "agent_context", known_at=None, valid_at=None
     ) -> dict[str, Any]:

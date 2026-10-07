@@ -174,6 +174,7 @@ October 6: unknown
 | [Durable memory](examples/durable_memory.py) | Persist sources and processing requests, then publish L1 | + SDK |
 | [Contextual facts](examples/contextual_memory.py) | Field evidence, conditions, and supported time ranges | Core |
 | [Derived parent views](examples/derived_parent_views.py) | Fixed current parent versions, transitive access and revocation | + SDK |
+| [Versioned L2 page](examples/derived_scenario_page.py) | Full rebuild, stable block identities and guarded current page readiness | + SDK |
 | [Current Observation](examples/derived_observation.py) | Build and read a current language facet | + SDK |
 | [Offline deletion sync](examples/durable_purge.py) | Clean a participating SDK outbox before new delivery | + SDK |
 | [L1 readiness](examples/durable_readiness.py) | Wait for a fixed set of requests; cancel a deleted offline sequence | + SDK |

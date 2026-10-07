@@ -358,11 +358,12 @@ class MCPMemoryTools:
             tools += (
                 self._tool(
                     "memory_derived",
-                    "Read guarded Observations, history points or explicit derived context.",
+                    "Read guarded Observations, L2 pages, history points or explicit context.",
                     {
                         "operation": {
                             "type": "string",
                             "enum": ["capabilities", "read", "status", "derived_context"]
+                            + ["page_capabilities", "page_read", "page_status", "page_context"]
                             + (
                                 ["history_points"]
                                 if getattr(self._derived, "history_mode", None) else []
