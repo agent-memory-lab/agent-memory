@@ -173,6 +173,7 @@ October 6: unknown
 | --- | --- | --- |
 | [Durable memory](examples/durable_memory.py) | Persist sources and processing requests, then publish L1 | + SDK |
 | [Contextual facts](examples/contextual_memory.py) | Field evidence, conditions, and supported time ranges | Core |
+| [Derived parent views](examples/derived_parent_views.py) | Fixed current parent versions, transitive access and revocation | + SDK |
 | [Current Observation](examples/derived_observation.py) | Build and read a current language facet | + SDK |
 | [Offline deletion sync](examples/durable_purge.py) | Clean a participating SDK outbox before new delivery | + SDK |
 | [L1 readiness](examples/durable_readiness.py) | Wait for a fixed set of requests; cancel a deleted offline sequence | + SDK |
@@ -212,7 +213,7 @@ The public boundary is `MemoryProvider`. Optional packages use lazy discovery; i
 
 ## Capability status and roadmap
 
-The current documented delivery baseline is **stage 14A of the v6.1 architecture plan**. The software package is **v0.1.0 / Alpha**; architecture, protocol, and package versions are tracked separately.
+The current documented delivery baseline is **stage 14 bounded A/B/C delivery of the v6.1 architecture plan**. The software package is **v0.1.0 / Alpha**; architecture, protocol, and package versions are tracked separately.
 
 | Capability | Current implementation | Evidence |
 | --- | --- | --- |
@@ -220,18 +221,20 @@ The current documented delivery baseline is **stage 14A of the v6.1 architecture
 | Recovery and readiness | Fixed processing targets, bounded waiting, batch closure, local candidate indexing, explicit repair, and stream rollover | [Index recovery](docs/design/v6.1.0/stage-09.md) · [Batched publication](docs/design/v6.1.0/stage-11.md) |
 | Erasure and backup replay | Participating outbox deletion sync and controlled offline replay using an independently held authoritative checkpoint | [Deletion sync](docs/design/v6.1.0/stage-04.md) · [Backup replay](docs/design/v6.1.0/stage-10.md) |
 | Current Observation | Same-scope language facets, complete input dependencies, invalidation, full rebuild, and conditional language templates | [Lifecycle](docs/design/v6.1.0/stage-12.md) · [Conditions](docs/design/v6.1.0/stage-13.md) |
+| Historical Observation | Frozen language snapshots/context, independent known/valid time, certified coverage and current permission/erasure checks | [History](docs/design/v6.1.0/stage-14b3.md) |
+| Derived parent inputs | Fixed current language revisions, complete processing lineage, guarded delivery and transitive physical erasure | [Stage 14C](docs/design/v6.1.0/stage-14c.md) |
 | Query and host permissions | Versioned current queries, expiring local authority, source-grant binding, and checks before final delivery | [Stage 14A](docs/design/v6.1.0/stage-14a.md) |
 | Retrieval and feedback foundations | Scoped, bounded recall; optional lexical/hybrid candidates; outcome-linked Episode/Procedure and gated Evolution components | [Architecture](docs/ARCHITECTURE.md) · [Feedback](docs/FEEDBACK_CONTRACT.md) |
 
-Current Observation is limited to the documented language facet. Historical Observation, derived-parent inputs, remote ACL synchronization, and the unified L2/L3 lifecycle remain future work. L1's existing bitemporal queries are available independently.
+Observation remains limited to documented language templates. Published-point and certified-interval history preserve frozen policies/context and current access checks. Current `locale-parents/1` views bind fixed parent revisions and transitive processing permissions. Conditional/historical parents, remote ACL synchronization, and the unified L2/L3 lifecycle remain future work.
 
-Validation records include SQLite and real PostgreSQL contracts, cross-connection races, process-kill recovery, and backup replay. The [stage 12 full-suite report](docs/design/v6.1.0/stage-12-full-test.md) belongs to its recorded code baseline; [stage 13](docs/design/v6.1.0/stage-13.md) and [stage 14A](docs/design/v6.1.0/stage-14a.md) record targeted and affected regression runs. Production acceptance, real-domain extraction quality, and full M0/M1/M2 milestone acceptance remain open.
+Validation records include SQLite and real PostgreSQL contracts, cross-connection races, process-kill recovery, and backup replay. The [stage 12 full-suite report](docs/design/v6.1.0/stage-12-full-test.md) belongs to its recorded code baseline; [stage 13](docs/design/v6.1.0/stage-13.md) and [stage 14](docs/design/v6.1.0/stage-14c.md) record targeted and affected regression runs. Production acceptance, real-domain extraction quality, and full M0/M1/M2 milestone acceptance remain open.
 
 **Next in the [implementation plan](docs/design/v6.1.0/next-steps.md):**
 
-1. **Historical Observation:** versioned historical definitions, policies, context, and complete query coverage, with current permission checks.
-2. **Derived dependencies:** fixed parent revisions, transitive input permissions, invalidation, and erasure.
-3. **L2/L3 knowledge:** versioned scenario pages and full rebuild before incremental refresh or inferred profiles.
+1. **L2 pages:** typed scenario/page/block versions, full rebuild, fixed readiness targets, guarded reads and erasure.
+2. **Further composition:** qualified/historical parents and broader predicates need their own frozen-input contracts and acceptance.
+3. **Incremental views and L3:** evaluate delta after page full rebuild is proven; inferred profiles remain gated.
 4. **Real-world validation:** domain gold, model input and delivery controls, dispatch budgets, and reproducible quality/cost comparisons.
 
 Advanced retrieval and optional read-only Reflect remain on the [task ledger](docs/design/v6.1.0/task.md). Remote deployments use the [security policy](SECURITY.md) and [threat model](docs/THREAT_MODEL.md); external caches, remote ACL systems, and provider-held copies need their own integration contracts.

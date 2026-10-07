@@ -70,7 +70,9 @@ class LocaleExample:
         ]
 
 
-async def main(*, host_controls=False, history=False, continuous=False):
+async def main(*, host_controls=False, history=False, continuous=False, parents=False):
+    if parents and (history or continuous):
+        raise ValueError("Derived parent views currently require current-time inputs")
     history = history or continuous
     host_controls = host_controls or history
     history_mode = (
@@ -142,6 +144,23 @@ async def main(*, host_controls=False, history=False, continuous=False):
             print(
                 json.dumps(await client.derived_context("language"), ensure_ascii=False, indent=2)
             )
+            if parents:
+                for key, parent in (("scenario-language", "language"),
+                                    ("agent-language", "scenario-language")):
+                    await derived.register(FacetDefinition(
+                        key, "alice", template_version="locale-parents/1",
+                        parent_facets=(parent,), authority_id=authority_id,
+                    ))
+                    await queue.request(key, dedupe_key=key)
+                    assert await BoundedWorker(
+                        queue, {"memory.facet_refresh": derived.apply}, worker_id=key
+                    ).run_once()
+                print(json.dumps(await client.derived_context("agent-language"),
+                                 ensure_ascii=False, indent=2))
+                await derived.grant(
+                    ProcessingGrant(source.id, ("alice",), revoked=True), expected_version=1
+                )
+                assert (await client.derived_context("agent-language"))["observations"] == []
             if history:
                 points = await client.derived_history_points("language")
                 known_at = points["points"][0]["known_at"]

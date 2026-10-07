@@ -8,6 +8,7 @@ from ..domain import AtomDraft, ScopeLevel
 from .contracts import HostGrantAuthority, QueryDefinition
 from .coverage import close_coverage
 from .model import DerivedError, digest
+from .parents import invalidate_descendants
 
 
 def slots(scope, subject, predicates):
@@ -48,6 +49,9 @@ class DerivedRegistry:
                 if safety:
                     row["safety_generation"] += 1
                 await uow.derived_put(self.scope, "definition", item["identity"], row)
+                await invalidate_descendants(
+                    uow, self.scope, (item["identity"],), safety=safety
+                )
 
     async def register_query(self, uow, epoch, definition, generation):
         expected(generation)

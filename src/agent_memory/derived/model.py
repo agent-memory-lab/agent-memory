@@ -124,6 +124,7 @@ class FacetDefinition:
     query_id: str | None = None
     authority_id: str | None = None
     history_mode: str | None = None
+    parent_facets: tuple[str, ...] = ()
 
     def __post_init__(self):
         for value in (self.id, self.subject_id, self.facet, self.version, self.purpose):
@@ -131,7 +132,9 @@ class FacetDefinition:
         if (
             self.facet != "communication.language"
             or self.predicates != ("locale",)
-            or self.template_version not in {"locale-snapshot/1", "locale-context/1"}
+            or self.template_version not in {
+                "locale-snapshot/1", "locale-context/1", "locale-parents/1"
+            }
         ):
             raise DerivedError("unsupported_derived_facet")
         if (self.context is not None and not isinstance(self.context, FacetContext)) or (
@@ -154,6 +157,17 @@ class FacetDefinition:
         for value in (self.query_id, self.authority_id):
             if value is not None:
                 identity(value)
+        if (
+            not isinstance(self.parent_facets, tuple)
+            or any(not isinstance(v, str) for v in self.parent_facets)
+            or (self.template_version == "locale-parents/1") != bool(self.parent_facets)
+            or len(self.parent_facets) > 4
+            or len(set(self.parent_facets)) != len(self.parent_facets)
+            or (self.parent_facets and (self.query_id or self.history_mode or self.context))
+        ):
+            raise DerivedError("invalid_derived_parents")
+        for value in self.parent_facets:
+            identity(value)
         if self.history_mode is not None and (
             self.history_mode not in HISTORY_MODES
             or self.query_id is None
@@ -168,6 +182,8 @@ class FacetDefinition:
         for key in ("query_id", "authority_id", "history_mode"):
             if values[key] is None:
                 values.pop(key)
+        if not self.parent_facets:
+            values.pop("parent_facets")
         return values
 
 
@@ -220,17 +236,39 @@ class FacetRefreshUnit:
     time_generation: int
     schema: str = "facet-refresh-unit/1"
     bindings: dict | None = None
+    parents: dict | None = None
 
     def __post_init__(self):
         identity(self.facet_id)
         if (
-            self.schema not in {"facet-refresh-unit/1", "facet-refresh-unit/2"}
+            self.schema not in {
+                "facet-refresh-unit/1", "facet-refresh-unit/2", "facet-refresh-unit/3"
+            }
             or len(self.definition_sha256) != 64
             or any(c not in "0123456789abcdef" for c in self.definition_sha256)
         ):
             raise DerivedError("invalid_facet_refresh_unit")
-        if (self.schema == "facet-refresh-unit/2") != (self.bindings is not None):
+        if self.schema != "facet-refresh-unit/3" and (
+            (self.schema == "facet-refresh-unit/2") != (self.bindings is not None)
+        ):
             raise DerivedError("invalid_facet_refresh_unit")
+        if (self.schema == "facet-refresh-unit/3") != (self.parents is not None):
+            raise DerivedError("invalid_facet_refresh_unit")
+        if self.parents is not None:
+            if not isinstance(self.parents, dict) or not 1 <= len(self.parents) <= 4:
+                raise DerivedError("invalid_facet_refresh_unit")
+            for key, parent in self.parents.items():
+                identity(key)
+                if not isinstance(parent, dict) or set(parent) != {
+                    "revision_id", "head_sha256", "definition_sha256"
+                }:
+                    raise DerivedError("invalid_facet_refresh_unit")
+                identity(parent["revision_id"])
+                for field in ("head_sha256", "definition_sha256"):
+                    if not isinstance(parent[field], str) or len(parent[field]) != 64 or any(
+                        c not in "0123456789abcdef" for c in parent[field]
+                    ):
+                        raise DerivedError("invalid_facet_refresh_unit")
         if self.bindings is not None:
             if (
                 not isinstance(self.bindings, dict)
@@ -261,7 +299,7 @@ class FacetRefreshUnit:
         ):
             if type(value) is not int or value < 0:
                 raise DerivedError("invalid_facet_refresh_unit")
-        if not 1 <= len(self.query_generation) <= 16:
+        if not (0 if self.parents is not None else 1) <= len(self.query_generation) <= 16:
             raise DerivedError("invalid_facet_refresh_unit")
         for key, value in self.query_generation.items():
             identity(key)
@@ -272,6 +310,8 @@ class FacetRefreshUnit:
         values = asdict(self)
         if self.bindings is None:
             values.pop("bindings")
+        if self.parents is None:
+            values.pop("parents")
         return values
 
     @property
@@ -319,6 +359,24 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
         if r["kind"] == "history_point"
         and (all_in_scope or set(r["payload"].get("slots", ())).intersection(slots))
     )
+    # Clear every version of an affected facet, then follow fixed processing
+    # revision edges and configured subscriptions (including empty/unbuilt views).
+    while True:
+        descendants = {
+            r["identity"] for r in rows if r["kind"] == "definition"
+            and set(r["payload"]["spec"].get("parent_facets", ())).intersection(affected)
+        }
+        erased_parents = {
+            "derived:" + r["identity"] for r in rows if r["kind"] == "revision"
+            and r["payload"].get("facet_id") in affected
+        }
+        descendants.update(
+            r["payload"]["facet_id"] for r in rows if r["kind"] == "revision"
+            and erased_parents.intersection(r["payload"].get("parents", ()))
+        )
+        if descendants.issubset(affected):
+            break
+        affected.update(descendants)
     # Active jobs carry identities only; they remain useful after object deletion.
     result = []
     for item in rows:
@@ -367,7 +425,9 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
                     },
                 )
             )
-        elif kind == "revision" and (all_in_scope or row.get("facet_id") in affected):
+        elif kind in {"revision", "revision_header"} and (
+            all_in_scope or row.get("facet_id") in affected
+        ):
             result.append(
                 (
                     kind,
@@ -406,12 +466,13 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
     return result, affected
 
 
-def validate_edges(values, *, atom_ids, source_event_ids, slot_ids):
-    """This release has no derived parents; every edge must name a snapshot input."""
+def validate_edges(values, *, atom_ids, source_event_ids, slot_ids, derived_ids=()):
+    """Every edge names an actual fixed input; derived inputs require explicit census."""
+    derived = {"derived:" + key for key in derived_ids}
     allowed = {
-        "support": {"atom:" + key for key in atom_ids},
+        "support": {"atom:" + key for key in atom_ids} | derived,
         "processing": {"atom:" + key for key in atom_ids}
-        | {"source:" + key for key in source_event_ids},
+        | {"source:" + key for key in source_event_ids} | derived,
         "query": {"facet:" + key for key in slot_ids},
     }
     if len(values) > 512:

@@ -113,6 +113,7 @@ def forget(connection, request):
         "query",
         "grant",
         "revision",
+        "revision_header",
         "head",
         "definition",
         "job",

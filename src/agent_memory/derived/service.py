@@ -24,6 +24,13 @@ from .model import (
     validate_edges,
 )
 from .observation import compose
+from .parents import (
+    ParentGraph,
+    compose_parents,
+    invalidate_descendants,
+    revision_header,
+    supported,
+)
 from .registry import DerivedRegistry, slots
 
 
@@ -60,6 +67,7 @@ async def mark_slot_changed(uow, scope, key, *, at=None, reason="candidate"):
             await close_coverage(uow, scope, row["facet_id"], at=at or utc_now(), reason=reason)
             row["dirty"] = True  # durable refresh responsibility in original write UoW
             await uow.derived_put(scope, "definition", item["identity"], row)
+            await invalidate_descendants(uow, scope, (item["identity"],))
 
 
 async def interpretation_changed(uow, scope, source_id, *, at=None):
@@ -67,7 +75,7 @@ async def interpretation_changed(uow, scope, source_id, *, at=None):
     changed_slots = set()
     for item in await uow.derived_records(scope, "definition"):
         row = item["payload"]
-        headers = await uow.derived_candidates(scope, row["slots"])
+        headers = await uow.derived_candidates(scope, row["slots"]) if row["slots"] else ()
         if any(source_id in h["source_ids"] for h in headers):
             changed_slots.update(row["slots"])
     for key in sorted(changed_slots):
@@ -79,6 +87,10 @@ async def document_changed(uow, scope, *, at):
     # new candidates exist. Conservatively close this scope's tracked intervals.
     for item in await uow.derived_records(scope, "definition"):
         await close_coverage(uow, scope, item["identity"], at=at, reason="document")
+        row = item["payload"]
+        if not row.get("disabled"):
+            row["dirty"] = True
+            await uow.derived_put(scope, "definition", item["identity"], row)
 
 
 async def source_document(uow, source):
@@ -144,6 +156,7 @@ class ObservationService:
         self.history_mode = history_mode
         self.history = PublishedHistory(self)
         self.registry = DerivedRegistry(self)
+        self.parents = ParentGraph(self)
         predicates = {s["predicate"]: s for s in self.policy["predicates"]}
         if "locale" not in predicates or predicates["locale"]["value_type"] != "string":
             raise DerivedError("derived_predicate_unregistered")
@@ -177,6 +190,7 @@ class ObservationService:
         async with self.repository.unit_of_work() as uow:
             epoch = await open_derived(uow, self.scope, self.history_mode)
             await self.registry.bindings(uow, spec)
+            await self.parents.validate_registration(uow, spec)
             old = await uow.derived_get(self.scope, "definition", definition.id)
             if old and old["spec"].get("authority_id") not in {None, self.authority_id}:
                 raise DerivedError("derived_authority_mismatch")
@@ -189,7 +203,8 @@ class ObservationService:
             row = dict(
                 spec=spec,
                 facet_id=definition.id,
-                slots=slots(self.scope, definition.subject_id, definition.predicates),
+                slots=([] if definition.parent_facets else
+                       slots(self.scope, definition.subject_id, definition.predicates)),
                 fingerprint=fingerprint,
                 generation=(old["generation"] if old else 0) + 1,
                 epoch=epoch,
@@ -203,6 +218,7 @@ class ObservationService:
                     uow, self.scope, definition.id, at=self.clock(), reason="definition"
                 )
             await uow.derived_put(self.scope, "definition", definition.id, row)
+            await invalidate_descendants(uow, self.scope, (definition.id,))
             return deepcopy(row)
 
     async def grant(self, grant, *, expected_version=0):
@@ -228,12 +244,13 @@ class ObservationService:
             await uow.derived_put(self.scope, "grant", grant.source_id, row)
             for item in await uow.derived_records(self.scope, "definition"):
                 definition = item["payload"]
-                headers = await uow.derived_candidates(self.scope, definition["slots"])
+                headers = await self._candidates(uow, definition)
                 if any(grant.source_id in h["source_ids"] for h in headers):
                     definition.update(
                         dirty=True, safety_generation=definition["safety_generation"] + 1
                     )
                     await uow.derived_put(self.scope, "definition", item["identity"], definition)
+                    await invalidate_descendants(uow, self.scope, (item["identity"],), safety=True)
             return deepcopy(row)
 
     async def _unit(self, uow, row):
@@ -245,6 +262,7 @@ class ObservationService:
             ]
             for key in row["slots"]
         }
+        parents = await self.parents.bindings(uow, row["spec"])
         return FacetRefreshUnit(
             row["facet_id"],
             row["fingerprint"],
@@ -253,9 +271,15 @@ class ObservationService:
             query,
             row["safety_generation"],
             row["time_generation"],
-            schema="facet-refresh-unit/2" if bindings is not None else "facet-refresh-unit/1",
+            schema=("facet-refresh-unit/3" if parents is not None else
+                    "facet-refresh-unit/2" if bindings is not None else "facet-refresh-unit/1"),
             bindings=bindings,
+            parents=parents,
         )
+
+    async def _candidates(self, uow, definition):
+        return (await uow.derived_candidates(self.scope, definition["slots"])
+                if definition["slots"] else ())
 
     async def _definition(self, uow, facet_id):
         row = await uow.derived_get(self.scope, "definition", identity(facet_id))
@@ -323,7 +347,10 @@ class ObservationService:
             binding = self._context_binding(definition["spec"])
             if binding is not None:
                 binding.current(at)  # Expired routing must not fetch source bodies.
-            headers = await uow.derived_candidates(self.scope, definition["slots"])
+            parents, parent_headers = await self.parents.inputs(
+                uow, definition["spec"], unit.get("parents"), at
+            )
+            headers = await self._candidates(uow, definition)
             if len(headers) > 64:
                 raise DerivedError("derived_snapshot_capacity")
             ids = sorted({key for header in headers for key in header["source_ids"]})
@@ -407,6 +434,15 @@ class ObservationService:
                 query_complete=True,
             )
             manifest["authorization"] = authorization_summary(definition["spec"], sources, grants)
+            if parents:
+                manifest.update(
+                    schema="derived-input-manifest/2", parents=unit["parents"],
+                    lineage={key: dict(revision_id=h["id"], sha256=digest(h))
+                             for key, h in parent_headers.items()},
+                )
+                manifest["authorization"] = self._parent_authorization(
+                    definition["spec"], parent_headers
+                )
             if len(canonical_json(manifest).encode()) > 262144:
                 raise DerivedError("derived_manifest_capacity")
             await self._check_unit(uow, unit)  # Legacy head adoption can advance a barrier.
@@ -420,10 +456,24 @@ class ObservationService:
                 manifest=manifest,
                 expected_head=head,
                 authority=authority,
+                **(dict(parents=parents, parent_headers=parent_headers) if parents else {}),
             )
 
+    @staticmethod
+    def _parent_authorization(spec, headers):
+        summaries = [h["manifest"]["authorization"] for h in headers.values()]
+        sensitivity = {"public": 0, "internal": 1, "private": 2, "restricted": 3}
+        retention = {"ephemeral": 0, "session": 1, "standard": 2, "persistent": 3}
+        return dict(
+            readers=spec["readers"], purpose=spec["purpose"],
+            sensitivity=max((h["sensitivity"] for h in summaries), key=sensitivity.get),
+            retention_class=min((h["retention_class"] for h in summaries), key=retention.get),
+        )
+
     def prepare(self, snapshot):
-        result = compose(
+        result = compose_parents(snapshot["definition"]["spec"], snapshot["parents"]) if (
+            snapshot["definition"]["spec"].get("parent_facets")
+        ) else compose(
             snapshot["definition"]["spec"],
             snapshot["records"],
             snapshot["sources"],
@@ -439,6 +489,8 @@ class ObservationService:
         )
         edges = result["support"] + [("processing", "atom:" + r["id"]) for r in snapshot["records"]]
         edges += [("processing", "source:" + key) for key in snapshot["sources"]]
+        edges += [("processing", "derived:" + parent["id"])
+                  for parent in snapshot.get("parents", {}).values()]
         edges += [
             ("query", "facet:" + key) for key in snapshot["manifest"]["unit"]["query_generation"]
         ]
@@ -449,6 +501,7 @@ class ObservationService:
             atom_ids=snapshot["manifest"]["atoms"],
             source_event_ids=snapshot["manifest"]["sources"],
             slot_ids=snapshot["manifest"]["unit"]["query_generation"],
+            derived_ids=[p["id"] for p in snapshot.get("parents", {}).values()],
         )
         result["edges"] = sorted(set(edges))
         result["manifest_sha256"] = digest(snapshot["manifest"])
@@ -468,7 +521,14 @@ class ObservationService:
             if snapshot.get("authority") != authority:
                 raise DerivedError("derived_safety_changed")
             now = self.clock()
-            headers = await uow.derived_candidates(self.scope, definition["slots"])
+            parents, parent_headers = await self.parents.inputs(
+                uow, definition["spec"], task.payload["unit"].get("parents"), now
+            )
+            if parents != snapshot.get("parents", {}) or (
+                parent_headers != snapshot.get("parent_headers", {})
+            ):
+                raise DerivedError("derived_input_changed")
+            headers = await self._candidates(uow, definition)
             if len(headers) > 64:
                 raise DerivedError("derived_snapshot_capacity")
             # Re-authorize the actual census, not a caller-supplied subset of a manifest.
@@ -526,8 +586,7 @@ class ObservationService:
                     raise DerivedError("derived_source_changed")
             manifest = snapshot["manifest"]
             if (
-                set(manifest)
-                != {
+                set(manifest) != ({
                     "schema",
                     "unit",
                     "policy_sha256",
@@ -536,8 +595,10 @@ class ObservationService:
                     "sources",
                     "query_complete",
                     "authorization",
-                }
-                or manifest["schema"] != "derived-input-manifest/1"
+                } | ({"parents", "lineage"} if parents else set()))
+                or manifest["schema"] != (
+                    "derived-input-manifest/2" if parents else "derived-input-manifest/1"
+                )
             ):
                 raise DerivedError("derived_manifest_invalid")
             if len(canonical_json(manifest).encode()) > 262144:
@@ -570,9 +631,16 @@ class ObservationService:
                 grant = await uow.derived_get(self.scope, "grant", key)
                 if source != snapshot["sources"][key] or grant != snapshot["grants"][key]:
                     raise DerivedError("derived_input_changed")
-            if manifest["authorization"] != authorization_summary(
+            if parents and (manifest["parents"] != task.payload["unit"]["parents"] or
+                manifest["lineage"] != {key: dict(revision_id=h["id"], sha256=digest(h))
+                                        for key, h in parent_headers.items()}):
+                raise DerivedError("derived_manifest_invalid")
+            authorization = self._parent_authorization(definition["spec"], parent_headers) if (
+                parents
+            ) else authorization_summary(
                 definition["spec"], snapshot["sources"], snapshot["grants"]
-            ):
+            )
+            if manifest["authorization"] != authorization:
                 raise DerivedError("derived_manifest_invalid")
             archive = await self.history.archive(uow, snapshot, definition=definition, known_at=now)
             facet_id = definition["facet_id"]
@@ -655,6 +723,15 @@ class ObservationService:
                 )
                 await uow.derived_edges(self.scope, audit_revision_id, prepared["edges"])
             await self.history.persist(uow, task, snapshot, archive, audit_revision_id)
+            header_proof = {}
+            if supported(uow):
+                input_header = revision_header(
+                    await uow.derived_get(self.scope, "revision", audit_revision_id)
+                )
+                await uow.derived_put(
+                    self.scope, "revision_header", audit_revision_id, input_header
+                )
+                header_proof["input_header_sha256"] = digest(input_header)
             await uow.derived_put(
                 self.scope,
                 "head",
@@ -666,10 +743,12 @@ class ObservationService:
                     state="empty" if prepared["no_outputs"] else "ready",
                     unit=task.payload["unit"],
                     next_transition_at=prepared["next_transition_at"],
+                    **header_proof,
                 ),
             )
             definition.update(next_transition_at=prepared["next_transition_at"])
             await uow.derived_put(self.scope, "definition", facet_id, definition)
+            await invalidate_descendants(uow, self.scope, (facet_id,))
             token = "derived-commit:" + digest(
                 [self.scope.partition_key(), job["unit"], revision_id, outcome]
             )
@@ -693,7 +772,7 @@ class ObservationService:
         snapshot = await self.snapshot(task)
         return await self.publish(task, snapshot, self.prepare(snapshot))
 
-    async def _read(self, uow, facet_id, actor, purpose):
+    async def _read(self, uow, facet_id, actor, purpose, *, lineage_checked=False):
         definition = await self._definition(uow, facet_id)
         _, authority = await self.registry.bindings(uow, definition["spec"])
         if actor not in definition["spec"]["readers"] or purpose != definition["spec"]["purpose"]:
@@ -711,7 +790,15 @@ class ObservationService:
             return dict(facet_id=facet_id, state="erased", body=None)
         if head.get("unit", {}).get("safety_generation") != definition["safety_generation"]:
             return dict(facet_id=facet_id, state="invalid", body=None, reason="safety_changed")
-        if head.get("unit") != (await self._unit(uow, definition)).payload():
+        try:
+            unit = (await self._unit(uow, definition)).payload()
+            if not lineage_checked:
+                await self.parents.inputs(
+                    uow, definition["spec"], unit.get("parents"), self.clock(), readers=(actor,)
+                )
+        except DerivedError as error:
+            return dict(facet_id=facet_id, state="invalid", body=None, reason=error.code)
+        if head.get("unit") != unit:
             return dict(facet_id=facet_id, state="stale", body=None, reason="generation_changed")
         now = self.clock()
         if (
@@ -719,13 +806,15 @@ class ObservationService:
             and datetime.fromisoformat(head["next_transition_at"]) <= now
         ):
             return dict(facet_id=facet_id, state="stale", body=None, reason="time_coverage_expired")
-        if not head.get("revision_id"):
+        if not head.get("revision_id") and not head.get("audit_revision_id"):
             return dict(facet_id=facet_id, state="empty", body=None)
-        revision = await uow.derived_get(self.scope, "revision", head["revision_id"])
-        if not revision or revision["state"] != "ready":
+        revision = await uow.derived_get(
+            self.scope, "revision", head.get("revision_id") or head["audit_revision_id"]
+        )
+        if not revision or revision["state"] not in {"ready", "empty"}:
             return dict(facet_id=facet_id, state="invalid", body=None)
         if (
-            digest(revision["body"]) != revision["body_sha256"]
+            (revision["state"] == "ready" and digest(revision["body"]) != revision["body_sha256"])
             or digest(revision["manifest"]) != revision["manifest_sha256"]
             or revision["unit"] != head["unit"]
         ):
@@ -759,6 +848,8 @@ class ObservationService:
             row = await uow.get_admission_record(self.scope, key)
             if row is None or row["version"] != version or row["payload"].get("deleted"):
                 return dict(facet_id=facet_id, state="invalid", body=None, reason="atom_changed")
+        if revision["state"] == "empty":
+            return dict(facet_id=facet_id, state="empty", body=None)
         return dict(
             facet_id=facet_id,
             state="ready",
@@ -804,6 +895,7 @@ class ObservationService:
         if operation == "capabilities":
             async with self.repository.unit_of_work() as uow:
                 await open_derived(uow, self.scope, self.history_mode)
+                parent_supported = supported(uow) and self.history_mode is None
             return dict(
                 schema="derived-capabilities/1",
                 readonly=True,
@@ -834,7 +926,11 @@ class ObservationService:
                 qualified_inputs=self.context_token is not None,
                 qualified_templates=["locale-context/1"] if self.context_token is not None else [],
                 context_attributes=["project", "holiday"] if self.context_token is not None else [],
-                derived_parents=False,
+                derived_parents=parent_supported,
+                derived_parent_templates=["locale-parents/1"] if parent_supported else [],
+                derived_parent_history=False,
+                derived_parent_contract="processing-graph/1" if parent_supported else None,
+                derived_parent_limits=dict(parents=4, depth=4, nodes=32, input_bytes=262144),
                 renderer="deterministic_full_snapshot",
             )
         if operation in {"read", "derived_context"}:

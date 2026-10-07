@@ -92,6 +92,7 @@ def _provenance(value: str) -> Provenance:
 
 class SQLiteMemoryUnitOfWork:
     derived_coverage_contract = "write-hooks/1"
+    derived_parent_contract = "processing-graph/1"
 
     def __init__(self, repository: SQLiteMemoryRepository) -> None:
         self._repository = repository

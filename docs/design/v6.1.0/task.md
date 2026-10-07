@@ -6,7 +6,7 @@
 | 规范依据 | [完整设计 v6.1.0](../AGENT_MEMORY_DESIGN_V6.1.0.md)；设计规定语义，本文件安排实施 |
 | 设计 SHA-256 | `ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b` |
 | 实现基线 | `5cff9f47b7061351fd725c3b8e0a89bf5cb51517` |
-| 台账版本 | revision 22；2026-10-07；可随实施更新 |
+| 台账版本 | revision 23；2026-10-07；可随实施更新 |
 | 当前状态 | DONE 1 项；IN_PROGRESS 29 项；TODO 14 项；本地持久 L1、宿主恢复与事实资格切片已验证，M0/M1 未整体验收 |
 | 范围 | P0–P6 能力阶段；基础能力与可选扩展分别发布 |
 
@@ -49,6 +49,7 @@
 ### AM61-T02 — 领域模型与版本化协议合同
 
 - [ ] 状态/阶段：IN_PROGRESS / P0。依赖：T01 的入口/模型盘点；可提前起草。
+- revision 23 证据：增加显式 parent_facets、v3 固定单元与 manifest/2；旧无父 v1/v2 序列化保留。 见 [stage-14c](stage-14c.md) 与 [验证记录](validation-stage-14c.json)。
 - revision 22 证据：FacetContext 增加冻结历史双时间投影和认知期限证明；两种 mode 显式支持 locale-context/1，当前合同保持原义。 见 [stage-14b3](stage-14b3.md) 与 [验证记录](validation-stage-14b3.json)。
 - revision 21 证据：新增可选 DerivedCoverageUnitOfWork/write-hooks/1；区间 mode 显式协商，旧点模式和 v1 保持原义。 见 [stage-14b2](stage-14b2.md) 与 [验证记录](validation-stage-14b2.json)。
 - revision 20 证据：新增固定 HistoricalQuery 与宿主 opt-in published-point/1，能力明确精确检查点/非条件模板；SDK/MCP 不接受写入或历史上下文。 见 [stage-14b](stage-14b.md) 与 [验证记录](validation-stage-14b.json)。
@@ -302,6 +303,7 @@
 ### AM61-T23 — 擦除、撤回与恢复屏障
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T13、T15、T16、T18；为每种已启用写入路径逐步接入。
+- revision 23 证据：共享擦除闭包清理所有受影响 facet 的修订/header/manifest/历史覆盖和反向边，实际旧备份回放同样执行。 见 [stage-14c](stage-14c.md) 与 [验证记录](validation-stage-14c.json)。
 - revision 22 证据：辅助字段证据/范围擦除及真实备份回放同步清除资格归档、上下文证明、manifest 和所有区间。 见 [stage-14b3](stage-14b3.md) 与 [验证记录](validation-stage-14b3.json)。
 - revision 21 证据：对象/范围擦除和真实 SQLite backup/PostgreSQL dump 回放同时清除区间证明，包含先前空全集。 见 [stage-14b2](stage-14b2.md) 与 [验证记录](validation-stage-14b2.json)。
 - revision 15 证据：部分提交后修订/擦除清理清单与准备结果，旧 worker/index 租约不能续写；真实旧备份删除回放阻断复活。见 [stage-11](stage-11.md)。
@@ -320,6 +322,7 @@
 ### AM61-T24 — 双后端与 SDK/MCP 纵向集成
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T14 及 T15–T23 中本次启用能力所需切片；持续接入，不等待可选扩展。
+- revision 23 证据：新增及受影响双后端测试、真实 SIGKILL、独立连接权限竞争和安装包验证见本轮独立记录；未执行全量测试。 见 [stage-14c](stage-14c.md) 与 [验证记录](validation-stage-14c.json)。
 - revision 22 证据：981 个唯一相关用例通过，无失败或跳过；136 个新增用例、安装包专项 124 项及六个示例，未运行全量测试。 见 [stage-14b3](stage-14b3.md) 与 [验证记录](validation-stage-14b3.json)。
 - revision 21 证据：最终新增及受影响回归 818 passed、0 skipped；另有安装包专项 66 项与四个示例，未执行全量测试。 见 [stage-14b2](stage-14b2.md) 与 [验证记录](validation-stage-14b2.json)。
 - revision 20 证据：真实备份删除日志回放清除历史候选正文、manifest 及覆盖点；旧 authority 备份被独立宿主 floor 阻断。 见 [stage-14b](stage-14b.md) 与 [验证记录](validation-stage-14b.json)。
@@ -343,6 +346,7 @@
 ### AM61-T25 — 事实支持与全部生成输入依赖
 
 - [ ] 状态/阶段：IN_PROGRESS / P3。依赖：T09、T13、T16、T23；L1 模型输入清单基础从 T13 提前落地。
+- revision 23 证据：实际父版本/输入 header 与传递 census；完整授权先于任何父/L0/L1 正文；support 与 processing 分离，空和未引用输入仍约束交付。多轮模型/缓存/级别转换尚未启用。 见 [stage-14c](stage-14c.md) 与 [验证记录](validation-stage-14c.json)。
 - revision 22 证据：历史归档保存全部实际资格/字段来源，非引用辅助来源撤权仍阻断读取；传递父图尚未启用。 见 [stage-14b3](stage-14b3.md) 与 [验证记录](validation-stage-14b3.json)。
 - revision 19 证据：宿主权限 authority 与来源 grant 版本绑定；发布重新授权实际查询全集，包含未被引用和反例来源，先检查权限再读 L0/L1。传递父输入仍未启用。见 [stage-14a](stage-14a.md) 与 [验证记录](validation-stage-14a.json)。
 - revision 17 证据：见 [第十二阶段实施](stage-12.md) 与 [验证记录](validation-stage-12.json)；多来源当前语言 facet、query 屏障、可信处理交集、当前安全/时间守卫、完整重建与派生擦除切片已验证。通用传递图、动态 ACL、条件化 facet 与历史派生保持关闭。
@@ -356,6 +360,7 @@
 ### AM61-T26 — 查询覆盖依赖与发布屏障
 
 - [ ] 状态/阶段：IN_PROGRESS / P3。依赖：T10、T11、T16、T25。
+- revision 23 证据：父定义/候选/query/授权/发布与原 dirty 后继同事务；子读取复核整个链，队列等待有效父，旧有限回执不漂移。 见 [stage-14c](stage-14c.md) 与 [验证记录](validation-stage-14c.json)。
 - revision 22 证据：条件历史复用完整候选和稳定区间，区间上限纳入旧上下文到期；新上下文/后续变更不能延长旧覆盖。 见 [stage-14b3](stage-14b3.md) 与 [验证记录](validation-stage-14b3.json)。
 - revision 21 证据：完整/空候选发布开启稳定知识时间区间，首次候选/解释/文档/控制变化在原事务关闭；缺口拒绝。 见 [stage-14b2](stage-14b2.md) 与 [验证记录](validation-stage-14b2.json)。
 - revision 20 证据：完整/空候选检查点及版本归档可证明发布点的历史覆盖，缺口拒绝；连续知识时间区间仍待补。 见 [stage-14b](stage-14b.md) 与 [验证记录](validation-stage-14b.json)。
@@ -370,6 +375,7 @@
 ### AM61-T27 — 按 facet 组织 Observation
 
 - [ ] 状态/阶段：IN_PROGRESS / P3。依赖：T18、T22、T25、T26；输入类型取已验收 T07–T11 子集。
+- revision 23 证据：新增确定性 locale-parents/1，完整保留父块/争议/时间/来源，不把派生摘要重新作为 L1 事实或增加证据。 见 [stage-14c](stage-14c.md) 与 [验证记录](validation-stage-14c.json)。
 - revision 22 证据：locale-context/1 历史保持条件/例外、三值、字段 AND/OR/point 支持及冻结偏序；高优先争议/未知不回退。 见 [stage-14b3](stage-14b3.md) 与 [验证记录](validation-stage-14b3.json)。
 - revision 21 证据：非条件 locale-snapshot/1 的独立 known_at/valid_at 投影扩展到已证实的稳定区间；历史资格 renderer 待补。 见 [stage-14b2](stage-14b2.md) 与 [验证记录](validation-stage-14b2.json)。
 - revision 20 证据：非条件 locale-snapshot/1 新增已发布点的独立 known_at/valid_at 投影；条件化历史与通用 renderer 未启用。 见 [stage-14b](stage-14b.md) 与 [验证记录](validation-stage-14b.json)。
@@ -384,6 +390,7 @@
 ### AM61-T28 — 历史解释与当前安全双守卫
 
 - [ ] 状态/阶段：IN_PROGRESS / P3。依赖：T10、T11、T23、T25、T26。
+- revision 23 证据：当前父图与原历史守卫共存；历史父和条件父仍明确 unsupported，不假用今天的父版本重建旧认知。 见 [stage-14c](stage-14c.md) 与 [验证记录](validation-stage-14c.json)。
 - revision 22 证据：两种 mode 的有界语言历史冻结 QueryContext、资格和政策；独立 valid_at 不受旧上下文今天是否过期影响，当前授权/擦除仍先检查。完整一般谓词/跨范围历史待补。 见 [stage-14b3](stage-14b3.md) 与 [验证记录](validation-stage-14b3.json)。
 - revision 21 证据：published-interval/1 冻结旧语义并证明半开稳定区间；输入摘要、时钟、当前权限和删除双守卫已验证，条件历史尚未验收。 见 [stage-14b2](stage-14b2.md) 与 [验证记录](validation-stage-14b2.json)。
 - revision 20 证据：published-point/1 冻结定义/query/policy/L1 行版本；普通修订保留旧认知，当前权限/期限/floor/物理删除先于归档正文；完整连续/条件历史未验收。 见 [stage-14b](stage-14b.md) 与 [验证记录](validation-stage-14b.json)。
@@ -396,6 +403,7 @@
 ### AM61-T29 — 派生删除与依赖失效传播
 
 - [ ] 状态/阶段：IN_PROGRESS / P3。依赖：T23、T25、T26、T27；历史路径接 T28。
+- revision 23 证据：固定实际父、权限/期限、循环/深度/数量/容量守卫，父变化立即阻断子交付，删除传递物理清理并验证恢复。一般跨范围与远端许可待补。 见 [stage-14c](stage-14c.md) 与 [验证记录](validation-stage-14c.json)。
 - revision 22 证据：上下文认知期限与今天访问许可分离；路由 CAS、撤权/期限/floor、来源撤回和物理删除继续保护历史交付。 见 [stage-14b3](stage-14b3.md) 与 [验证记录](validation-stage-14b3.json)。
 - revision 21 证据：区间证明与原写入原子失效，完整来源授权先于归档正文；历史 SDK/MCP 保持固定双时间并重检当前许可。 见 [stage-14b2](stage-14b2.md) 与 [验证记录](validation-stage-14b2.json)。
 - revision 20 证据：擦除清除相关 facet 的全部历史归档和检查点，包括过去空覆盖；最终历史交付重检当前 authority 并保持固定双时间。 见 [stage-14b](stage-14b.md) 与 [验证记录](validation-stage-14b.json)。
@@ -436,6 +444,7 @@
 ### AM61-T33 — Observation 与视图就绪
 
 - [ ] 状态/阶段：TODO / P4。依赖：T22、T27、T31；L2/L3 目标按需接 T32。
+- revision 23 证据：只读 SDK/MCP 最终两次读取复核完整处理链，期间撤权不交付旧子正文；页面级就绪仍待下一阶段。 见 [stage-14c](stage-14c.md) 与 [验证记录](validation-stage-14c.json)。
 - revision 22 证据：历史条件 SDK/MCP 最终两次读取固定 known_at/valid_at，期间上下文到期/切换保留旧认知，撤权阻断；页面级就绪待补。 见 [stage-14b3](stage-14b3.md) 与 [验证记录](validation-stage-14b3.json)。
 - revision 21 证据：非条件历史区间沿用完整完成证书及只读最终交付，不推进缺口为就绪；页面级目标仍待实现。 见 [stage-14b2](stage-14b2.md) 与 [验证记录](validation-stage-14b2.json)。
 - revision 20 证据：Python SDK 与 MCP 新增只读 history_points 和固定双时间 derived_context；两次最终读取不回退当前摘要，撤权阻断。 见 [stage-14b](stage-14b.md) 与 [验证记录](validation-stage-14b.json)。
@@ -534,6 +543,7 @@
 ### AM61-T44 — 运行手册与最终交付汇总
 
 - [ ] 状态/阶段：IN_PROGRESS / P6；从首个运行能力开始持续更新。依赖：拟交付子集已通过 T39；不要求 DEFERRED 扩展实现。
+- revision 23 证据：新增父组合示例、版本化 C 交付与验证记录，以及第十五阶段 L2 页面 full rebuild 方案/任务。 见 [stage-14c](stage-14c.md) 与 [验证记录](validation-stage-14c.json)。
 - revision 22 证据：新增历史条件示例、B.3 实施/验证、上下文认知期限/回退边界；下一步为 C01–C03 传递处理图。 见 [stage-14b3](stage-14b3.md) 与 [验证记录](validation-stage-14b3.json)。
 - revision 21 证据：新增连续历史示例、B.2 实施/验证记录及同版本写入/可信时钟启用合同；下一步明确为 B.3。 见 [stage-14b2](stage-14b2.md) 与 [验证记录](validation-stage-14b2.json)。
 - revision 20 证据：新增第十四阶段 B.1 独立实施/验证记录、可运行历史示例，后续先连续覆盖再历史 context，随后传递父和 L2。 见 [stage-14b](stage-14b.md) 与 [验证记录](validation-stage-14b.json)。
@@ -671,3 +681,4 @@ AcceptanceProfile、scorer、实验 manifest 与结果文件：
 | 20 | 2026-10-07 | [已发布检查点的双时态 Observation](stage-14b.md) | DONE 1；IN_PROGRESS 29；TODO 14；B.1 已验证，连续/条件历史及 C 待补；未运行全量测试 |
 | 21 | 2026-10-07 | [连续知识时间覆盖](stage-14b2.md) | DONE 1；IN_PROGRESS 29；TODO 14；B.2 已验证，历史资格上下文/完整 B 与 C 待补；未运行全量测试 |
 | 22 | 2026-10-07 | [历史资格上下文](stage-14b3.md) | DONE 1；IN_PROGRESS 29；TODO 14；本阶段 B 有界语言组合已验收，C/完整 T28/M2 待补；未运行全量测试 |
+| 23 | 2026-10-07 | [有界传递处理图](stage-14c.md)；[L2 页面规划](stage-15-plan.md) | DONE 1；IN_PROGRESS 29；TODO 14；第十四阶段本阶段有界组合完成，通用父历史/完整 M2/L2/L3 尚未完成；仅相关测试 |

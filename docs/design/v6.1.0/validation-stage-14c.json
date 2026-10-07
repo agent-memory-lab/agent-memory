@@ -1,0 +1,177 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "date": "2026-10-07",
+  "design": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "ledger_revision": 23,
+  "base_commit": "680144f78f7ce8d1ef7298ef73123cdf41448b33",
+  "stage_plan": "AM61-ST14/1.4",
+  "stage_slice": "AM61-ST14-C/1.0",
+  "status": "passed",
+  "stage_tasks_completed": [
+    "ST14-C01",
+    "ST14-C02",
+    "ST14-C03"
+  ],
+  "stage_tasks_remaining": [],
+  "stage_tasks_completed_scope": "Stage 14 A/B/C bounded language combinations; C is same-exact-scope current non-qualified locale-parents/1, not general T25/T28, P3/M2 or L2/L3 completion",
+  "enabled_scope": "Host typed parent_facets opt-in, current locale-parents/1, compatible subject/purpose/authority and backend processing-graph/1; readonly SDK/MCP",
+  "proof": {
+    "inputs": "v3 unit binds direct parent audit revision (including empty), head and definition digests; manifest/2 binds exact direct parents and transitive metadata header census. Publication compares storage-derived actual inputs, never caller-selected citations.",
+    "processing": "Every actual parent is a processing edge; only nonempty output parents are support edges. Renderer preserves full nested blocks, conflicts, time and provenance, without new L1 facts or increased independent evidence.",
+    "access": "Full transitive metadata census, current reader/purpose, authority and external restore floor, all source grants/version/expiry pass before any parent revision/L0/L1 body. Child audience is an allowed subset; inherited sensitivity, retention and expiry cannot be relaxed.",
+    "invalidation": "Original writer UoW persists dirty descendants for candidates, interpretation/document, definition/query/authority/grants and parent publication. Current reads dynamically check the entire chain; queue waits for ready parents before claiming children, preserving finite target identity.",
+    "erase": "Shared closure follows every affected facet revision and configured subscriptions, physically tombstoning body/manifest/header/history and removing reverse edges. Actual SQLite backup and PostgreSQL pg_dump deletion-journal replay verify source, scope and derived-object erasure.",
+    "compatibility": "Legacy no-parent definitions/v1-v2 units serialize without new fields. Old publications lacking actual input headers require explicit full republish. Backends without processing-graph/1 neither advertise parents nor store new headers.",
+    "bounds": {
+      "direct_parents": 4,
+      "path_nodes_including_child": 4,
+      "graph_nodes_including_child": 32,
+      "input_bytes": 262144,
+      "output_bytes": 32768,
+      "facet_revisions": 128,
+      "scope_revisions": 4096
+    }
+  },
+  "full_test_run": false,
+  "tests": {
+    "unique_targeted_cases": 1082,
+    "passed": 1082,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "new_behavior_cases": 101,
+    "new_backend_cases_each": 49,
+    "new_pure_cases": 3,
+    "backends": [
+      "SQLite",
+      "PostgreSQL 17 (real isolated Unix-socket server)"
+    ],
+    "real_sigkill_cases": 8,
+    "real_sigkill_matrix": "root publication + child publication, before/after commit, both backends; verifies fixed manifest/header/head/completion and descendant outbox atomicity",
+    "report": {
+      "file": "agent-memory-stage14c-final-targeted.xml",
+      "cases": 1082,
+      "sha256": "2e13cb55495318988cecc796654825aa5224daf5c294cc90f73691cdcae949ae"
+    },
+    "cases_sha256": "27533d63e4b9bf70ca4176b7e51e103842892caeecdadbdb47ab2be1606fca38",
+    "modules": {
+      "tests.test_derived_parents": 101,
+      "tests.test_derived_context_history": 136,
+      "tests.test_derived_coverage": 78,
+      "tests.test_derived_history": 75,
+      "tests.test_derived_observations": 90,
+      "tests.test_derived_controls": 74,
+      "tests.test_derived_contextual": 71,
+      "tests.test_architecture": 92,
+      "tests.test_durable_purge": 34,
+      "tests.test_purge_restore": 64,
+      "tests.test_source_revisions": 13,
+      "tests.test_atom_admission": 30,
+      "tests.test_admission_sqlite_storage": 9,
+      "tests.test_fact_qualification": 10,
+      "tests.test_contextual_memory": 27,
+      "tests.test_publication_batches": 83,
+      "tests.test_durable_process_recovery": 14,
+      "tests.test_feedback_mcp_sdk": 2,
+      "tests.test_contribution_lifecycle": 40,
+      "packages.postgres.tests.test_admission": 7,
+      "packages.python-sdk.tests.test_capture_sink_integration": 3,
+      "packages.python-sdk.tests.test_embedded_contract": 1,
+      "packages.python-sdk.tests.test_plugin_error_contract": 9,
+      "packages.mcp-server.tests.test_capture_contract": 1,
+      "packages.mcp-server.tests.test_contract": 1,
+      "packages.mcp-server.tests.test_recovery_http_acceptance": 5,
+      "packages.mcp-server.tests.test_recovery_stdio": 6,
+      "packages.mcp-server.tests.test_tls_gateway_acceptance": 6
+    },
+    "accounting": "Final targeted source run only; prior-stage scores and installed repeats are not counted.",
+    "fixture_repair": "New SQLite grant/publication race initially blocked its own shared event loop because synchronous BEGIN IMMEDIATE waited on the paused owner. Corrected to an independent thread/event loop, matching independent writer execution. PostgreSQL uses independent asynchronous connections; no production lock workaround."
+  },
+  "build": {
+    "core": {
+      "verified_source_files": 148,
+      "mismatches": [],
+      "artifacts": {
+        "agent_memory-0.1.0-py3-none-any.whl": "094610213b9064ce247c94f2099c95de9cd2e94c3381ade055846449c00f08d7",
+        "agent_memory-0.1.0.tar.gz": "645a1c1eadb3a2cb2ddba264b1e250c542a9db1a053e85624fb4a3d8407651de"
+      }
+    },
+    "postgres": {
+      "verified_source_files": 25,
+      "mismatches": [],
+      "artifacts": {
+        "agent_memory_postgres-0.1.0-py3-none-any.whl": "22a87e0c69e01b3d653687899a41045cfe77197f8c93db754d24943130e14d0b",
+        "agent_memory_postgres-0.1.0.tar.gz": "f05ef6768fbeb063d38900664e0edff8f4ad3fd844f2f4d93c2b2156fe049c14"
+      }
+    }
+  },
+  "installed": {
+    "passed": 93,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "report_sha256": "a2ab1d36209c9cb15cf9e0fbcaed41b36d81ae374f56c36e513d27d66311584d",
+    "source": "Fresh core/PostgreSQL wheels in /tmp/agent-memory-stage14c-installed; unchanged SDK/MCP from existing environment",
+    "imports_verified": true,
+    "exclusion": "8 actual SIGKILL cases excluded only from installed rerun because source subprocess helper controls PYTHONPATH; all 8 passed in real source processes",
+    "examples": [
+      "derived_parent_views.py",
+      "derived_context_history.py",
+      "derived_contextual_observation.py",
+      "derived_interval_history.py",
+      "derived_history.py",
+      "derived_controls.py",
+      "derived_observation.py"
+    ]
+  },
+  "build_note": "Standard isolated sdist-to-wheel builds with hatchling 1.32.4; all production source/type markers byte-match final tested code; SDK/MCP production source unchanged.",
+  "code_files_sha256": {
+    "examples/derived_observation.py": "050891b988c6121f33b368e62529a4db77422a4433360952f903c85f24f7ea0e",
+    "packages/postgres/src/agent_memory_postgres/derived.py": "475ccba697d45fbf4a0179cff07bd9b09567ed119d59ac82c2ebfc1db9c6ca68",
+    "packages/postgres/src/agent_memory_postgres/repository.py": "341e59416e64f320d93ab853889499486e9440b34efd42ddb0c6a7ee73e74568",
+    "src/agent_memory/derived/model.py": "b31f4e5ffed0a83004cfda2576c03e746cc24ec6c14859b66353d14edb858342",
+    "src/agent_memory/derived/registry.py": "5a56877d5f28d80a5aa8dc68420757506c9eaa55223c1826b5d51f11471e2839",
+    "src/agent_memory/derived/service.py": "656253c25ecc2ef40598dcca288a6a7efe7f71570421c0e56bb6e3107539f356",
+    "src/agent_memory/operations/facet_refresh.py": "e0d633ed11f4cd2cf4c0d97235a893b3be2d978d274ac611bb050f28aa48d5c2",
+    "src/agent_memory/operations/sqlite_derived.py": "3001b88296f9a3fc667301274454548ae7ce37b13b44cf6f353c0652fd0a3e01",
+    "src/agent_memory/ports.py": "4e66843759eb446787c7e99976794195f8c6f5c46877d0c02d49082d34d1bdd4",
+    "src/agent_memory/sqlite.py": "7ee8c480116378fe12a44d87c9147c974f25389a6d9da92482e2c3380d0e5f58",
+    "examples/derived_parent_views.py": "8c8ab2021a4319796454902e587015f6dd7d6befde20577acf75b198a04da1fa",
+    "src/agent_memory/derived/parents.py": "608aa57adf0df4630d42d43ae2022ca8d8b0c67ecea44a1c1d663fb3b025b735",
+    "tests/test_derived_parents.py": "99ede8f68b97d35c5f9e608925cb65943fb1aec2e255582ea2edac7f6da79d2d"
+  },
+  "preserved_uncommitted_files_sha256": {
+    "docs/AGENT_MEMORY_ARCHITECTURE_PLAN.md": "81095de8aa02db4f59a643d0d6708b4fa9ee415bfb3f230bab4a7abf962fe849"
+  },
+  "frozen_designs_sha256": {
+    "6.1.0": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+    "6.0.0": "f16f0a3fb1da497b6ef73c96851de04b0cc42ac9353fa9f4278b26122dfe39d0",
+    "5.0.0": "83330a5c8e7921aa56ea76afbb9e8a9b255a5a22732ae4f7c20816deaf25517f"
+  },
+  "lint": {
+    "changed_python_files": 13,
+    "changed_line_findings": 0,
+    "preexisting_E501": 13,
+    "report_sha256": "bbb5a90a157ee1113a87cf6dc65199bc02e0e8a33c029c61db76cc58bc0a0dc2",
+    "git_diff_check": "passed"
+  },
+  "quality_evidence": "Synthetic retained-source and protocol/fault fixtures; no production extraction gold, external model, remote ACL freshness or persona inference quality claim.",
+  "not_enabled": [
+    "qualified derived parents",
+    "historical derived parents",
+    "cross-storage-scope composition",
+    "general predicate renderers",
+    "automatic L2 pages",
+    "L3 persona inference",
+    "model/multi-turn/few-shot/cache input composition",
+    "automatic declassification",
+    "remote ACL synchronization"
+  ],
+  "global_task_state": {
+    "DONE": 1,
+    "IN_PROGRESS": 29,
+    "TODO": 14
+  },
+  "next": "Stage 15: typed Scenario/Page/Block versions, deterministic full rebuild from fixed current parent inputs, atomic page/head/block/completion, permission/erasure/restore and readonly readiness. Planned, not implemented."
+}

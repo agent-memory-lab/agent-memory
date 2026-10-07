@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from secrets import token_urlsafe
 
 from ..derived.model import DerivedError, digest, identity, timestamp
+from ..derived.parents import waiting_for_parent
 from ..derived.service import open_derived
 from .worker_tasks import WorkerLease, WorkerQueueError, WorkerTask, WorkerTaskStatus
 
@@ -70,6 +71,9 @@ class FacetRefreshQueue:
 
     async def _job(self, uow, definition):
         unit = await self.service._unit(uow, definition)
+        await self.service.parents.inputs(
+            uow, definition["spec"], unit.parents, self.service.clock(), load_bodies=False
+        )
         key = unit.id
         row = await uow.derived_get(self.scope, "job", key)
         if row:
@@ -169,7 +173,7 @@ class FacetRefreshQueue:
                     try:
                         await self._job(uow, definition)
                     except DerivedError as error:
-                        if error.code not in {
+                        if not waiting_for_parent(error) and error.code not in {
                             "derived_refresh_backpressure",
                             "derived_authority_unavailable",
                             "derived_authority_expired",
@@ -212,6 +216,18 @@ class FacetRefreshQueue:
                     except DerivedError as error:
                         row.update(status="superseded", reason=error.code)
                     else:
+                        try:
+                            definition = await self.service._definition(
+                                uow, row["unit"]["facet_id"]
+                            )
+                            await self.service.parents.inputs(
+                                uow, definition["spec"], row["unit"].get("parents"), now,
+                                load_bodies=False,
+                            )
+                        except DerivedError as error:
+                            if not waiting_for_parent(error):
+                                raise
+                            continue  # Parent work runs first; keep this fixed target pending.
                         row.update(
                             status="running",
                             attempts=row["attempts"] + 1,

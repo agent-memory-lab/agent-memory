@@ -1,6 +1,6 @@
 # 第十四阶段执行任务
 
-版本 AM61-ST14-TASKS / 1.3；2026-10-07；IN_PROGRESS（A、B.1/B.2/B.3 有界组合已完成，C 尚未完成）。
+版本 AM61-ST14-TASKS / 1.4；2026-10-07；DONE（A/B/C 本阶段有界组合）。
 方案：[stage-14-plan.md](stage-14-plan.md)；A 实施：[stage-14a.md](stage-14a.md)；证据：[validation-stage-14a.json](validation-stage-14a.json)。
 全局任务状态继续保持，完整 M2 尚未验收。
 B.1 实施：[stage-14b.md](stage-14b.md)；证据：[validation-stage-14b.json](validation-stage-14b.json)。
@@ -22,9 +22,9 @@ B.3 实施：[stage-14b3.md](stage-14b3.md)；证据：[validation-stage-14b3.js
 | ST14-B02 | 完整/空检查点、稳定区间和上下文认知期限、历史资格合成；无法证明的缺口拒绝 | DONE |
 | ST14-B03 | 非条件/条件历史与当前权限/擦除双守卫、全部实际来源、上下文/授权/删除竞争 | DONE |
 | ST14-B04 | 双后端、真实进程/备份、只读固定双时间 SDK/MCP、显式能力与独立验证记录 | DONE |
-| ST14-C01 | 实际派生父 manifest、固定父版本、processing/support 分离 | TODO |
-| ST14-C02 | 传递权限交集、循环/深度/容量和父刷新失效 | TODO |
-| ST14-C03 | 传递物理擦除、恢复和实际输入证明，验收后开放派生父 | TODO |
+| ST14-C01 | 实际派生父 manifest、固定父版本、processing/support 分离 | DONE |
+| ST14-C02 | 传递权限交集、循环/深度/容量和父刷新失效 | DONE |
+| ST14-C03 | 传递物理擦除、恢复和实际输入证明，验收后开放派生父 | DONE |
 
 | B.1 子任务 | 验收边界 | 状态 |
 | --- | --- | --- |
@@ -50,6 +50,7 @@ B.3 实施：[stage-14b3.md](stage-14b3.md)；证据：[validation-stage-14b3.js
 | ST14-B.3-04 | 当前安全先于正文、真实来源撤回、独立连接/真实 SIGKILL、对象/范围备份擦除与 SDK/MCP | DONE |
 | ST14-B.3-05 | 981 项相关回归、136 项新增行为、构建/安装/示例、独立版本记录 | DONE |
 
-下一步 C01–C03 传递 processing 图；只有父许可、失效、擦除及恢复整体验收后开放派生父。
+C01–C03 同 scope 当前语言图已验收，见 [stage-14c.md](stage-14c.md) 与 [validation-stage-14c.json](validation-stage-14c.json)。
+已开放 locale-parents/1；条件/历史父保持 unsupported。下一阶段为 [L2 页面完整重建](stage-15-tasks.md)。
 B01–B04 的 DONE 限于本阶段两个语言 renderer 和已证实覆盖，完整 T28/M2 尚未验收。
 没有历史政策版本或可证实的完整覆盖时不返回历史 Observation。

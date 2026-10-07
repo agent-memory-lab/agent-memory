@@ -1,6 +1,6 @@
 # 第十四阶段方案：查询控制、权限与历史覆盖
 
-版本 AM61-ST14 / 1.3；2026-10-07；IN_PROGRESS；执行台账 revision 22。
+版本 AM61-ST14 / 1.4；2026-10-07；DONE（本阶段有界组合）；执行台账 revision 23。
 依据冻结 v6.1.0，推进 T25/T26/T28/T29 及协议、恢复与运行文档的必要切片。
 任务见 [stage-14-tasks.md](stage-14-tasks.md)，A 切片结果见 [stage-14a.md](stage-14a.md)，B.1 结果见 [stage-14b.md](stage-14b.md)，B.2 结果见 [stage-14b2.md](stage-14b2.md)，B.3 结果见 [stage-14b3.md](stage-14b3.md)。
 
@@ -75,21 +75,32 @@ B.3 已开放宿主显式绑定 `context_token` 的历史 `locale-context/1`，�
 5. 双后端实际来源撤回、政策迁移、跨连接上下文/发布竞争、真实 SIGKILL、备份删除回放及固定双时间 SDK/MCP 已验收。
    B01–B04 的本阶段有界语言组合标 DONE；完整 T28、一般谓词/跨存储范围、M2 及第十四阶段 C 仍待后续验收。
 
-## C：传递 processing 图（下一步，未实现）
+## C：有界传递 processing 图（已实现）
 
-显式绑定每个实际派生父版本及输入 manifest，验证当次实际使用而非事后支持引用。
-计算所有实际父/来源处理许可的交集，限制循环、深度、数量及输出容量；父变更/撤销/删除必须传递失效并物理擦除。
-不接受未知父、自己或当前未支持的派生父，验收通过后才允许新的依赖类型。
+C01–C03 已完成同 scope 当前语言视图的完整依赖闭环，见 [stage-14c.md](stage-14c.md) 和 [独立验证](validation-stage-14c.json)。
 
-实施顺序：C01 固定实际父输入 manifest 与版本并保持 support/processing 分离；
-C02 在同一 scope/UoW 内验证当前处理许可交集、循环/深度/容量及父变更阻断；
-C03 完成父擦除的传递物理清理、恢复回放和最终交付验收，再宣布派生父 capability。
+1. 宿主显式登记 `locale-parents/1` 与完整 `parent_facets`；v3 单元绑定具体父 audit revision、head/定义摘要。
+   manifest/2 保存直接父及完整传递 header census；空父也参与 processing，只有实际输出父参与 support。
+   纯组合保留原块、冲突、时间及来源，不从摘要重新认定事实或增加独立证据。
+2. 元数据遍历完整 DAG，授权所有父/来源后才读取正文；逐次检查当前读者、用途、authority/floor、grant 版本及期限。
+   子受众不得宽于实际输入交集；敏感级别/保留与期限继承全部父约束。发布核验存储实际版本，拒绝伪造或删减输入。
+3. 循环、未知/自身父拒绝；直接父 ≤4，路径节点 ≤4，图节点 ≤32（均含当前子），输入 ≤256 KiB，输出 ≤32 KiB。
+   父变化在原事务保留后继 dirty；子读动态复核全链立即阻断，队列等待有效父完成再调度子。
+4. 共享擦除闭包清理受影响 facet 的全部修订、manifest/header、历史覆盖及反向边；实际旧备份删除日志回放同样清理。
+   固定旧引用与配置订阅均参与闭包，空视图/未构建子不能漏掉。
+5. 后端声明 `processing-graph/1` 后才启用；升级全部写入、删除、恢复进程，不混跑旧二进制。
+   旧发布缺输入 header 时显式完整重发布，不事后读取旧正文伪造证明；旧 v1/v2 定义/单元身份保留。
+6. 只读 SDK/MCP 最终交付重查完整父链；父能力仅限当前 consumer，条件/历史父及跨存储范围保持不支持。
+   A/B/C 本阶段有界组合完成，不等于一般 T25/T28、完整 P3/M2 或 L2/L3 已验收。
+
+下一阶段见 [stage-15-plan.md](stage-15-plan.md) 与 [stage-15-tasks.md](stage-15-tasks.md)。
 
 ## 责任边界与退出条件
 
 - derived/contracts.py：QueryDefinition/HostGrantAuthority/HistoricalQuery 纯合同。
 - derived/registry.py：宿主登记、CAS、控制证明和权限交集；不依赖数据库实现或 renderer。
 - derived/model.py：facet/unit、可信上下文与历史认知期限合同、共享擦除计划。
+- derived/parents.py：有界传递图、元数据授权、固定实际父证明、纯组合与 dirty 后继。
 - derived/service.py：授权快照、纯准备、原子发布与最终交付；renderer 不管理 authority。
 - derived/history.py：不可变点/上下文证明、冻结历史语义重建与当前安全守卫；contextual.py 只负责纯条件与字段支持合成。
 - derived/coverage.py：元数据区间证明、首次变化关闭、版本一致性及可信时钟前沿；复用调用方 UoW 和锁。
