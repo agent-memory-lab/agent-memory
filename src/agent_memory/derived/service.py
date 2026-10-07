@@ -24,6 +24,7 @@ from .model import (
     validate_edges,
 )
 from .observation import compose
+from .pages import KnowledgePages, compose_page, is_page
 from .parents import (
     ParentGraph,
     compose_parents,
@@ -157,6 +158,7 @@ class ObservationService:
         self.history = PublishedHistory(self)
         self.registry = DerivedRegistry(self)
         self.parents = ParentGraph(self)
+        self.pages = KnowledgePages(self)
         predicates = {s["predicate"]: s for s in self.policy["predicates"]}
         if "locale" not in predicates or predicates["locale"]["value_type"] != "string":
             raise DerivedError("derived_predicate_unregistered")
@@ -178,20 +180,32 @@ class ObservationService:
     async def register(self, definition, *, expected_generation=0):
         if not isinstance(definition, FacetDefinition):
             raise TypeError("trusted FacetDefinition required")
-        if definition.subject_id != self.scope.user_id:
+        if definition.context is not None:
+            definition.context.current(self.clock())
+        return await self._register_spec(
+            definition.payload(), expected_generation=expected_generation,
+            definition_slots=([] if definition.parent_facets else
+                              slots(self.scope, definition.subject_id, definition.predicates)),
+        )
+
+    async def register_page(self, definition, *, expected_generation=0):
+        return await self.pages.register(definition, expected_generation=expected_generation)
+
+    async def _register_spec(self, spec, *, expected_generation, definition_slots):
+        if spec["subject_id"] != self.scope.user_id:
             raise DerivedError("derived_subject_scope_mismatch")
-        spec = definition.payload()
         if spec.get("history_mode") != self.history_mode:
             raise DerivedError("derived_history_configuration_mismatch")
         self._context_binding(spec)
-        if definition.context is not None:
-            definition.context.current(self.clock())
         fingerprint = digest(dict(definition=spec, policy=self.policy))
         async with self.repository.unit_of_work() as uow:
             epoch = await open_derived(uow, self.scope, self.history_mode)
+            await self.pages.check(uow, spec)
             await self.registry.bindings(uow, spec)
             await self.parents.validate_registration(uow, spec)
-            old = await uow.derived_get(self.scope, "definition", definition.id)
+            old = await uow.derived_get(self.scope, "definition", spec["id"])
+            if old and is_page(old["spec"]) != is_page(spec):
+                raise DerivedError("derived_resource_kind_conflict")
             if old and old["spec"].get("authority_id") not in {None, self.authority_id}:
                 raise DerivedError("derived_authority_mismatch")
             if old and not old.get("disabled") and old["fingerprint"] == fingerprint:
@@ -202,9 +216,7 @@ class ObservationService:
                 raise DerivedError("derived_definition_capacity")
             row = dict(
                 spec=spec,
-                facet_id=definition.id,
-                slots=([] if definition.parent_facets else
-                       slots(self.scope, definition.subject_id, definition.predicates)),
+                facet_id=spec["id"], slots=definition_slots,
                 fingerprint=fingerprint,
                 generation=(old["generation"] if old else 0) + 1,
                 epoch=epoch,
@@ -215,10 +227,10 @@ class ObservationService:
             )
             if old is not None:
                 await close_coverage(
-                    uow, self.scope, definition.id, at=self.clock(), reason="definition"
+                    uow, self.scope, spec["id"], at=self.clock(), reason="definition"
                 )
-            await uow.derived_put(self.scope, "definition", definition.id, row)
-            await invalidate_descendants(uow, self.scope, (definition.id,))
+            await uow.derived_put(self.scope, "definition", spec["id"], row)
+            await invalidate_descendants(uow, self.scope, (spec["id"],))
             return deepcopy(row)
 
     async def grant(self, grant, *, expected_version=0):
@@ -291,6 +303,7 @@ class ObservationService:
             raise DerivedError("derived_definition_unavailable")
         if digest(dict(definition=row["spec"], policy=self.policy)) != row["fingerprint"]:
             raise DerivedError("derived_definition_configuration_changed")
+        await self.pages.check(uow, row["spec"])
         self._context_binding(row["spec"])
         if row["spec"].get("history_mode") != self.history_mode:
             raise DerivedError("derived_history_configuration_mismatch")
@@ -471,15 +484,16 @@ class ObservationService:
         )
 
     def prepare(self, snapshot):
-        result = compose_parents(snapshot["definition"]["spec"], snapshot["parents"]) if (
-            snapshot["definition"]["spec"].get("parent_facets")
-        ) else compose(
-            snapshot["definition"]["spec"],
-            snapshot["records"],
-            snapshot["sources"],
-            snapshot["at"],
-            admission_policy=self.policy,
-        )
+        spec = snapshot["definition"]["spec"]
+        if is_page(spec):
+            result = compose_page(snapshot, self.scope)
+        elif spec.get("parent_facets"):
+            result = compose_parents(spec, snapshot["parents"])
+        else:
+            result = compose(
+                spec, snapshot["records"], snapshot["sources"], snapshot["at"],
+                admission_policy=self.policy,
+            )
         expiries = [g["expires_at"] for g in snapshot["grants"].values() if g.get("expires_at")]
         if snapshot.get("authority") is not None:
             expiries.append(snapshot["authority"]["spec"]["expires_at"])
@@ -659,7 +673,8 @@ class ObservationService:
             outcome = "applied"
             revision_id = None
             if not prepared["no_outputs"]:
-                revision_id = "observation:" + digest(
+                prefix = "page-version:" if is_page(definition["spec"]) else "observation:"
+                revision_id = prefix + digest(
                     [
                         self.scope.partition_key(),
                         task.id,
@@ -699,7 +714,8 @@ class ObservationService:
                     await uow.derived_edges(self.scope, revision_id, prepared["edges"])
             audit_revision_id = revision_id
             if prepared["no_outputs"]:
-                audit_revision_id = "observation-empty:" + digest(
+                prefix = "page-empty:" if is_page(definition["spec"]) else "observation-empty:"
+                audit_revision_id = prefix + digest(
                     [self.scope.partition_key(), task.id, prepared["manifest_sha256"]]
                 )
                 await uow.derived_put(
@@ -722,6 +738,7 @@ class ObservationService:
                     ),
                 )
                 await uow.derived_edges(self.scope, audit_revision_id, prepared["edges"])
+            await self.pages.persist(uow, snapshot, prepared, audit_revision_id)
             await self.history.persist(uow, task, snapshot, archive, audit_revision_id)
             header_proof = {}
             if supported(uow):
@@ -872,6 +889,9 @@ class ObservationService:
                 return await self.history.read(uow, facet_id, actor, purpose, query)
         async with self.repository.unit_of_work() as uow:
             await open_derived(uow, self.scope, self.history_mode)
+            definition = await self._definition(uow, facet_id)
+            if is_page(definition["spec"]):
+                raise DerivedError("derived_resource_kind_mismatch")
             return await self._read(uow, facet_id, actor, purpose)
 
     async def history_points(self, facet_id, *, actor, purpose="agent_context"):
@@ -884,6 +904,8 @@ class ObservationService:
             raise DerivedError("invalid_derived_request")
         if context.scope != self.scope:
             raise DerivedError("derived_scope_mismatch")
+        if operation.startswith("page_"):
+            return await self.pages.call(operation, payload, context)
         if not isinstance(payload, dict) or set(payload) - {
             "facet_id",
             "purpose",
@@ -896,12 +918,19 @@ class ObservationService:
             async with self.repository.unit_of_work() as uow:
                 await open_derived(uow, self.scope, self.history_mode)
                 parent_supported = supported(uow) and self.history_mode is None
+                from .pages import page_supported
+
+                pages_enabled = (page_supported(uow) and self.history_mode is None
+                                 and self.context_token is None)
             return dict(
                 schema="derived-capabilities/1",
                 readonly=True,
                 facets=["communication.language"],
                 operations=["capabilities", "read", "status", "derived_context"]
-                + (["history_points"] if self.history_mode else []),
+                + (["history_points"] if self.history_mode else [])
+                + (["page_capabilities", "page_read", "page_status", "page_context"]
+                   if pages_enabled else []),
+                pages=pages_enabled,
                 historical=self.history_mode is not None,
                 historical_mode=self.history_mode,
                 historical_coverage=(

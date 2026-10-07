@@ -99,6 +99,7 @@ async def forget(connection, request):
         "grant",
         "revision",
         "revision_header",
+        "page_block",
         "head",
         "definition",
         "job",

@@ -501,3 +501,4 @@ class DerivedCoverageUnitOfWork(DerivedUnitOfWork, Protocol):
 
     derived_coverage_contract: str
     derived_parent_contract: str
+    derived_page_contract: str

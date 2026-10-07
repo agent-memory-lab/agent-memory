@@ -44,6 +44,8 @@ def validate_graph(definitions, spec, *, check_readers=True):
         if len(visited) > MAX_NODES:
             raise DerivedError("derived_parent_capacity")
         row = definitions[key]
+        if key != spec["id"] and row.get("resource_kind") == "page":
+            raise DerivedError("derived_parent_page_unsupported")
         if row.get("history_mode") or row.get("context"):
             raise DerivedError("derived_parent_template_unsupported")
         if any(row.get(field) != spec.get(field) for field in (

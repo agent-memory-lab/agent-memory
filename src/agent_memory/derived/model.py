@@ -359,6 +359,16 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
         if r["kind"] == "history_point"
         and (all_in_scope or set(r["payload"].get("slots", ())).intersection(slots))
     )
+    affected.update(
+        r["identity"] for r in rows if r["kind"] == "definition"
+        and r["payload"]["spec"].get("resource_kind") == "page"
+        and "derived:" + r["identity"] in parents
+    )
+    affected.update(
+        r["payload"]["facet_id"] for r in rows if r["kind"] == "page_block"
+        and ({"derived:" + r["identity"], "derived:" + r["payload"].get("block_id", "")}
+             .intersection(parents))
+    )
     # Clear every version of an affected facet, then follow fixed processing
     # revision edges and configured subscriptions (including empty/unbuilt views).
     while True:
@@ -425,7 +435,7 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
                     },
                 )
             )
-        elif kind in {"revision", "revision_header"} and (
+        elif kind in {"revision", "revision_header", "page_block"} and (
             all_in_scope or row.get("facet_id") in affected
         ):
             result.append(
@@ -449,9 +459,14 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
             # Any deleted candidate in the query also invalidates zero-output views.
             row["dirty"] = True
             row["safety_generation"] += 1
-            if all_in_scope:
+            explicit_page = (row["spec"].get("resource_kind") == "page"
+                             and "derived:" + key in parents)
+            if all_in_scope or explicit_page:
                 row["disabled"] = True
                 row["spec"].pop("context", None)  # Erase retired host routing values too.
+                if row["spec"].get("resource_kind") == "page":
+                    row["spec"] = {key: row["spec"][key] for key in
+                                   ("id", "resource_kind", "authority_id") if key in row["spec"]}
             result.append((kind, key, row))
         elif kind == "job" and all_in_scope:
             result.append(

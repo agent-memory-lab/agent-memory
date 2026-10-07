@@ -182,6 +182,7 @@ class FacetRefreshQueue:
                             "trusted_authority_version_required",
                             "derived_query_unavailable",
                             "derived_query_configuration_changed",
+                            "page_backend_unsupported",
                         }:
                             raise
             rows = [item["payload"] for item in await uow.derived_records(self.scope, "job")]

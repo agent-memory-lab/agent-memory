@@ -56,6 +56,15 @@ def test_domain_contracts_do_not_depend_on_implementation(name):
             assert any(module == item or module.startswith(item + ".") for item in allowed)
 
 
+def test_page_contracts_only_depend_on_shared_contracts():
+    allowed = {
+        "dataclasses", "agent_memory.domain", "agent_memory.serialization",
+        "agent_memory.derived.model",
+    }
+    assert all(any(module == name or module.startswith(name + ".") for name in allowed)
+               for module in imports(SOURCE / "derived/page_model.py"))
+
+
 def test_runtime_does_not_depend_on_evaluation():
     for path in SOURCE.rglob("*.py"):
         if path.parent.name == "evaluation" or path.name in {"__init__.py", "_compat.py"}:

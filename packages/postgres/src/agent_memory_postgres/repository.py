@@ -86,6 +86,7 @@ def _scope_values(scope: MemoryScope) -> tuple[str | None, ...]:
 class PostgresMemoryUnitOfWork:
     derived_coverage_contract = "write-hooks/1"
     derived_parent_contract = "processing-graph/1"
+    derived_page_contract = "page-full-rebuild/1"
 
     def __init__(self, repository: PostgresMemoryRepository) -> None:
         self._repository = repository
