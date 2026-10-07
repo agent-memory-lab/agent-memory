@@ -1,10 +1,11 @@
 # 第十四阶段执行任务
 
-版本 AM61-ST14-TASKS / 1.2；2026-10-07；IN_PROGRESS（A、B.1/B.2 已完成，完整 B 与 C 尚未完成）。
+版本 AM61-ST14-TASKS / 1.3；2026-10-07；IN_PROGRESS（A、B.1/B.2/B.3 有界组合已完成，C 尚未完成）。
 方案：[stage-14-plan.md](stage-14-plan.md)；A 实施：[stage-14a.md](stage-14a.md)；证据：[validation-stage-14a.json](validation-stage-14a.json)。
 全局任务状态继续保持，完整 M2 尚未验收。
 B.1 实施：[stage-14b.md](stage-14b.md)；证据：[validation-stage-14b.json](validation-stage-14b.json)。
 B.2 实施：[stage-14b2.md](stage-14b2.md)；证据：[validation-stage-14b2.json](validation-stage-14b2.json)。
+B.3 实施：[stage-14b3.md](stage-14b3.md)；证据：[validation-stage-14b3.json](validation-stage-14b3.json)。
 
 | ID | 交付与验收 | 状态 |
 | --- | --- | --- |
@@ -17,10 +18,10 @@ B.2 实施：[stage-14b2.md](stage-14b2.md)；证据：[validation-stage-14b2.js
 | ST14-A07 | 双后端跨连接 CAS/发布竞争、真实 SIGKILL 前后原子控制/outbox | DONE |
 | ST14-A08 | 范围/对象擦除、新控制墓碑、真实 backup/pg_dump 删除日志回放与旧权限快照阻断 | DONE |
 | ST14-A09 | 示例、专项/相关回归、构建安装、版本记录和后续顺序 | DONE |
-| ST14-B01 | 固定历史请求身份、known_at/valid_at、定义/政策/上下文版本；B.1 非条件合同已交付，历史 context 待补 | IN_PROGRESS |
-| ST14-B02 | 历史候选全集、来源解释版本、连续/空 coverage 与历史重建；B.1/B.2 非条件完整/空检查点及稳定区间已交付，历史资格上下文待补 | IN_PROGRESS |
-| ST14-B03 | 历史解释与当前权限/擦除双守卫、授权变化和来源删除竞争；B.1/B.2 已验收，条件扩展继续验收 | IN_PROGRESS |
-| ST14-B04 | 双后端相关验收、历史能力 opt-in 和接口合同、独立验证记录；B.1/B.2 已验收，完整 B 未验收 | IN_PROGRESS |
+| ST14-B01 | 固定双时间与非条件/条件 renderer，冻结可信路由、定义/政策/资格版本；本阶段有界组合 | DONE |
+| ST14-B02 | 完整/空检查点、稳定区间和上下文认知期限、历史资格合成；无法证明的缺口拒绝 | DONE |
+| ST14-B03 | 非条件/条件历史与当前权限/擦除双守卫、全部实际来源、上下文/授权/删除竞争 | DONE |
+| ST14-B04 | 双后端、真实进程/备份、只读固定双时间 SDK/MCP、显式能力与独立验证记录 | DONE |
 | ST14-C01 | 实际派生父 manifest、固定父版本、processing/support 分离 | TODO |
 | ST14-C02 | 传递权限交集、循环/深度/容量和父刷新失效 | TODO |
 | ST14-C03 | 传递物理擦除、恢复和实际输入证明，验收后开放派生父 | TODO |
@@ -41,5 +42,14 @@ B.2 实施：[stage-14b2.md](stage-14b2.md)；证据：[validation-stage-14b2.js
 | ST14-B.2-04 | 双后端独立连接竞争、真实 SIGKILL、SDK/MCP 固定双时间与最终重检 | DONE |
 | ST14-B.2-05 | 818 项相关回归、78 项新增行为、构建/安装/示例及独立版本记录 | DONE |
 
-下一步 B.3 历史资格上下文，完成 B01–B04 整体验收后推进 C。
+| B.3 子任务 | 验收边界 | 状态 |
+| --- | --- | --- |
+| ST14-B.3-01 | 两种 mode 的冻结历史 QueryContext/政策/资格合同；请求属性不可注入 | DONE |
+| ST14-B.3-02 | 认知期限与独立有效时间、路由/上下文 CAS、到期区间上限不延长 | DONE |
+| ST14-B.3-03 | 条件/例外三值、weekday、AND/OR/point、争议/未知不回退与政策迁移 | DONE |
+| ST14-B.3-04 | 当前安全先于正文、真实来源撤回、独立连接/真实 SIGKILL、对象/范围备份擦除与 SDK/MCP | DONE |
+| ST14-B.3-05 | 981 项相关回归、136 项新增行为、构建/安装/示例、独立版本记录 | DONE |
+
+下一步 C01–C03 传递 processing 图；只有父许可、失效、擦除及恢复整体验收后开放派生父。
+B01–B04 的 DONE 限于本阶段两个语言 renderer 和已证实覆盖，完整 T28/M2 尚未验收。
 没有历史政策版本或可证实的完整覆盖时不返回历史 Observation。

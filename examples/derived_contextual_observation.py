@@ -13,7 +13,14 @@ from agent_memory.consolidation.admission import AdmissionPolicy, draft_from_pay
 from agent_memory.consolidation.admission_runtime import AdmissionEngine
 from agent_memory.consolidation.atom_extraction import AtomExtractionPipeline
 from agent_memory.consolidation.qualification import ContextualMemory, target_fingerprint
-from agent_memory.derived import FacetContext, FacetDefinition, ObservationService, ProcessingGrant
+from agent_memory.derived import (
+    FacetContext,
+    FacetDefinition,
+    HostGrantAuthority,
+    ObservationService,
+    ProcessingGrant,
+    QueryDefinition,
+)
 from agent_memory.domain import (
     AtomReview,
     MemoryEvent,
@@ -66,7 +73,7 @@ class LanguageExample:
         ]
 
 
-async def main():
+async def main(*, history=False):
     with TemporaryDirectory(prefix="memory-contextual-observation-") as directory:
         repository = SQLiteMemoryRepository(Path(directory) / "memory.db")
         kernel = MemoryKernel(
@@ -138,14 +145,30 @@ async def main():
                 snapshot_token="project-A-route",
             )
             derived = ObservationService(
-                repository, scope, policy, context_token=context.snapshot_token
+                repository,
+                scope,
+                policy,
+                context_token=context.snapshot_token,
+                authority_id="example-host" if history else None,
+                authority_min_version=0 if history else None,
+                history_mode="published-interval/1" if history else None,
             )
+            if history:
+                await derived.set_authority(
+                    HostGrantAuthority("example-host", ("alice",), now + timedelta(minutes=30))
+                )
+                await derived.register_query(
+                    QueryDefinition("language-inputs", scope, "alice", ("locale",))
+                )
             await derived.register(
                 FacetDefinition(
                     "language-A",
                     "alice",
                     template_version="locale-context/1",
                     context=FacetContext(context, projection, now + timedelta(minutes=30)),
+                    query_id="language-inputs" if history else None,
+                    authority_id="example-host" if history else None,
+                    history_mode="published-interval/1" if history else None,
                 )
             )
             await derived.grant(ProcessingGrant(source.id, ("alice",)))
@@ -167,6 +190,15 @@ async def main():
                 and block["exceptions"]
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
+            if history:
+                past = await client.derived_context(
+                    "language-A",
+                    known_at=utc_now().isoformat(),
+                    valid_at=source.occurred_at.isoformat(),
+                )
+                assert past["observations"][0]["body"]["blocks"][0]["qualified"]
+                assert past["observations"][0]["coverage"]["kind"] == "interval"
+                print(json.dumps(past, ensure_ascii=False, indent=2))
         finally:
             await kernel.close()
 

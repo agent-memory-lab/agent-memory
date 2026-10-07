@@ -215,7 +215,12 @@ async def main(config):
             )
         await pause()
     elif phase.startswith("coverage_"):
-        from agent_memory.derived import ObservationService, QueryDefinition
+        from agent_memory.derived import (
+            FacetContext,
+            FacetDefinition,
+            ObservationService,
+            QueryDefinition,
+        )
 
         if config["backend"] == "postgres":
             import agent_memory_postgres.admission as writer
@@ -223,6 +228,7 @@ async def main(config):
             import agent_memory.sqlite as writer
         writer.utc_now = lambda: now
         service = ObservationService(repository, scope, base.POLICY, clock=lambda: now,
+            context_token=config.get("context_token"),
             authority_id="local-host", authority_min_version=1, history_mode="published-interval/1")
         if phase.endswith("before_commit"):
             original = unit_type.derived_put
@@ -233,7 +239,13 @@ async def main(config):
                     await pause()
 
             unit_type.derived_put = before_commit
-        if phase.startswith("coverage_query_"):
+        if phase.startswith("coverage_context_"):
+            spec = dict(config["definition"])
+            spec["context"] = FacetContext.from_payload(spec["context"])
+            for key in ("predicates", "readers"):
+                spec[key] = tuple(spec[key])
+            await service.register(FacetDefinition(**spec), expected_generation=2)
+        elif phase.startswith("coverage_query_"):
             await service.register_query(
                 QueryDefinition("language-inputs", scope, "alice", ("locale",), version="2"),
                 expected_generation=1,
@@ -253,6 +265,7 @@ async def main(config):
 
         service = ObservationService(
             repository, scope, base.POLICY, clock=lambda: now,
+            context_token=config.get("context_token"),
             **(dict(authority_id="local-host", authority_min_version=1,
                     history_mode=("published-interval/1" if phase.startswith("interval_")
                                   else "published-point/1"))

@@ -55,11 +55,13 @@ def reviewed(payload, sources, binding, admission_policy):
     return q
 
 
-def compose_contextual(definition, records, sources, at, admission_policy):
+def compose_contextual(definition, records, sources, at, admission_policy, *, known_at=None):
     binding = FacetContext.from_payload(definition["context"])
-    context = binding.current(at)
+    context = (
+        binding.current(at) if known_at is None else binding.historical(known_at, at)
+    )
     items, ordinary, groups = [], [], {}
-    transitions = [binding.expires_at]
+    transitions = [binding.expires_at] if known_at is None else []
     for row in sorted(records, key=lambda r: r["id"]):
         p = row["payload"]
         draft = p.get("draft", {})
@@ -264,6 +266,10 @@ def compose_contextual(definition, records, sources, at, admission_policy):
         blocks=blocks,
         context=binding.payload(),
         context_sha256=digest(binding.payload()),
+        **(
+            dict(projection_context_sha256=context.context_hash)
+            if known_at is not None else {}
+        ),
         projection_status=status,
         policy_sha256=binding.policy.fingerprint,
     )
@@ -271,6 +277,6 @@ def compose_contextual(definition, records, sources, at, admission_policy):
         body=body,
         body_sha256=digest(body),
         support=sorted(set(support)),
-        next_transition_at=min(transitions).isoformat(),
+        next_transition_at=min(transitions).isoformat() if transitions else None,
         no_outputs=not blocks,
     )

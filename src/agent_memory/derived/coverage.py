@@ -61,9 +61,10 @@ async def close_coverage(uow, scope, facet_id, *, at, reason):
     else:
         for span in row["spans"]:
             if span["state"] == "open":
+                end = min(at, span["known_to"]) if span["known_to"] else at
                 span.update(
-                    known_to=at,
-                    state="sealed" if at > span["known_from"] else "uncertain",
+                    known_to=end,
+                    state="sealed" if end > span["known_from"] else "uncertain",
                     closed_by=reason,
                 )
         row["last_at"] = at
@@ -105,7 +106,8 @@ class PublishedCoverage:
                 ] == digest(point["input_versions"])
                 span.update(
                     state="sealed" if unchanged else "uncertain",
-                    known_to=point["known_at"],
+                    known_to=min(point["known_at"], span["known_to"])
+                    if span["known_to"] else point["known_at"],
                     closed_by="checkpoint" if unchanged else "untracked_change",
                 )
         row["spans"].append(
@@ -113,7 +115,7 @@ class PublishedCoverage:
                 point_id=point["id"],
                 point_sha256=point["sha256"],
                 known_from=point["known_at"],
-                known_to=None,
+                known_to=point.get("context", {}).get("known_to"),
                 state="open",
                 semantic_unit=semantic_unit(point["unit"]),
                 inputs_sha256=digest(point["input_versions"]),

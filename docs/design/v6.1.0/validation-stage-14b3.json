@@ -1,0 +1,174 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "date": "2026-10-07",
+  "design": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "ledger_revision": 22,
+  "base_commit": "0d63c4b8bfa8390cb58ccf757765e59760e87688",
+  "stage_plan": "AM61-ST14/1.3",
+  "stage_slice": "AM61-ST14-B.3/1.0",
+  "status": "passed",
+  "stage_tasks_completed": [
+    "ST14-B.3-01",
+    "ST14-B.3-02",
+    "ST14-B.3-03",
+    "ST14-B.3-04",
+    "ST14-B.3-05",
+    "ST14-B01",
+    "ST14-B02",
+    "ST14-B03",
+    "ST14-B04"
+  ],
+  "stage_tasks_completed_scope": "B01-B04: bounded language snapshot/context renderer combinations for published-point/1 and published-interval/1; not general T28/M2 completion",
+  "stage_tasks_remaining": [
+    "ST14-C01",
+    "ST14-C02",
+    "ST14-C03"
+  ],
+  "enabled_scope": "host/definition opt-in history plus matching current context_token, query and authority; frozen qualified locale-context/1 on published points or certified stable intervals; independent requested valid_at, current permission/erasure guards and explicit coverage gaps",
+  "proof": {
+    "context": "Immutable definition/generation/hash freezes principal, scope, routing attributes, timezone, snapshot token and ProjectionPolicy; point metadata attests context digest and knowledge lifetime without copying routing attributes.",
+    "time": "Requested known_at must lie inside the frozen context knowledge lifetime and published coverage. Requested valid_at is independent. Today's expiry blocks current processing but does not erase authorized old knowledge. Frozen routing is a query parameter, not evidence of past real-world routing facts.",
+    "boundary": "Interval end is the earlier of first semantic change and old context expiry. Later context changes or later checkpoints never extend old coverage.",
+    "qualification": "Frozen L1 row versions preserve conditions/exceptions, field AND/OR/point support, exact source spans/hashes, target hash and policy versions; old admission/projection policy is validated rather than borrowing today's interpretation.",
+    "access": "Current matching host route, authority/floor, past/current reader/purpose, all actual source grants and completion/erasure checks precede archived L1 and auxiliary evidence.",
+    "erase": "Shared object/scope deletion and real backup replay remove qualified archives, manifests, context certificates and interval proofs.",
+    "backend": "Reuse original SQLite/PostgreSQL UoW/scope locks, CAS, jobs and write-hooks/1. No DDL, extra queue, SDK/MCP write interface or mandatory dependencies."
+  },
+  "full_test_run": false,
+  "tests": {
+    "unique_targeted_cases": 981,
+    "passed": 981,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "new_behavior_cases": 136,
+    "new_backend_cases_each": 68,
+    "backends": [
+      "SQLite",
+      "PostgreSQL 17 (real isolated Unix-socket server)"
+    ],
+    "real_sigkill_cases": 12,
+    "real_sigkill_matrix": "qualified point/interval publication before/after commit × both backends (8); interval context rotation before/after commit × both backends (4); older fault/crash regressions also run",
+    "report": {
+      "file": "agent-memory-stage14b3-final-targeted.xml",
+      "cases": 981,
+      "sha256": "866a2fb4a6167d0bb48f24fceeb253fd63357aa514fee265e741ff84c6044edd"
+    },
+    "cases_sha256": "111ddc783e69d5b29d209e303f18eb3c46e9957862089fa74cc11d246e6d7807",
+    "modules": {
+      "tests.test_derived_context_history": 136,
+      "tests.test_derived_coverage": 78,
+      "tests.test_derived_history": 75,
+      "tests.test_derived_observations": 90,
+      "tests.test_derived_controls": 74,
+      "tests.test_derived_contextual": 71,
+      "tests.test_architecture": 92,
+      "tests.test_durable_purge": 34,
+      "tests.test_purge_restore": 64,
+      "tests.test_source_revisions": 13,
+      "tests.test_atom_admission": 30,
+      "tests.test_admission_sqlite_storage": 9,
+      "tests.test_fact_qualification": 10,
+      "tests.test_contextual_memory": 27,
+      "tests.test_publication_batches": 83,
+      "tests.test_durable_process_recovery": 14,
+      "tests.test_feedback_mcp_sdk": 2,
+      "tests.test_contribution_lifecycle": 40,
+      "packages.postgres.tests.test_admission": 7,
+      "packages.python-sdk.tests.test_capture_sink_integration": 3,
+      "packages.python-sdk.tests.test_embedded_contract": 1,
+      "packages.python-sdk.tests.test_plugin_error_contract": 9,
+      "packages.mcp-server.tests.test_capture_contract": 1,
+      "packages.mcp-server.tests.test_contract": 1,
+      "packages.mcp-server.tests.test_recovery_http_acceptance": 5,
+      "packages.mcp-server.tests.test_recovery_stdio": 6,
+      "packages.mcp-server.tests.test_tls_gateway_acceptance": 6
+    },
+    "accounting": "Final targeted run only; no prior-stage scores or installed repeats counted.",
+    "fixture_repair": "Weekday test advances beyond a one-hour authority; use a bounded 24-hour test authority so frozen weekday semantics and live authority expiry are tested separately. The original expiry denial was correct."
+  },
+  "build": {
+    "core": {
+      "verified_source_files": 147,
+      "mismatches": [],
+      "artifacts": {
+        "agent_memory-0.1.0-py3-none-any.whl": "238f8ba8d7f23eca8e1a277cdaff6a6e2943269f9a854f6821dd70c6eaa651f6",
+        "agent_memory-0.1.0.tar.gz": "6614f32cab0c5a7b1f13298d9b4b99cc3e4a44c35d5eade939fa79ea6e7a1414"
+      }
+    },
+    "postgres": {
+      "verified_source_files": 25,
+      "mismatches": [],
+      "artifacts": {
+        "agent_memory_postgres-0.1.0-py3-none-any.whl": "0cdbc90057ef844eea03311d6867b51f7d72ad8a99fdc563bd07ce8e1b796acc",
+        "agent_memory_postgres-0.1.0.tar.gz": "8b95f9195dd0bf1087a352401872082a81b334ea7ea54b0651b3b46137b79ae4"
+      }
+    }
+  },
+  "installed": {
+    "passed": 124,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "report_sha256": "780f0751d9a57cddfdc27774b05afd0ac5ece51d4a8765fd17b280770da440e6",
+    "source": "fresh core/PostgreSQL wheels in /tmp/agent-memory-stage14b3-installed; unchanged SDK/MCP from existing environment",
+    "exclusion": "12 actual SIGKILL cases excluded from installed rerun because the source helper controls subprocess PYTHONPATH; all 12 passed on real source processes",
+    "examples": [
+      "derived_context_history.py",
+      "derived_contextual_observation.py",
+      "derived_interval_history.py",
+      "derived_history.py",
+      "derived_controls.py",
+      "derived_observation.py"
+    ],
+    "imports_verified": true
+  },
+  "build_note": "Standard isolated sdist-to-wheel builds, hatchling 1.32.4; all production source and type markers match final tested code. PostgreSQL adapter, SDK and MCP production code is unchanged in this slice.",
+  "code_files_sha256": {
+    "examples/derived_contextual_observation.py": "7f5dc7708f7b4352b9d752a135cd8fcb08aebc5db9e0676cf5ca663e3c391181",
+    "src/agent_memory/derived/contextual.py": "06f5e541cc2cb876e55b473f1ca31304cb2a8f97f4040230727f701980aa32e8",
+    "src/agent_memory/derived/coverage.py": "7c3498b73e809f61cd3ef37aa7af57955651e6288fe372076925b6f9015fe382",
+    "src/agent_memory/derived/history.py": "268bec92e45c539fd29d3c20917a51afa1af8e7d08611c49d76fbf43adbffced",
+    "src/agent_memory/derived/model.py": "e7bd4dc4154a288ef69ad1ac34846d0c5129d4236eb2285b82ad503a416c1bf7",
+    "src/agent_memory/derived/observation.py": "b805e6e1f0c2a1569cf77e68a0518b1cbda9eacaca55b5487afd5cb6e6fad677",
+    "src/agent_memory/derived/service.py": "1e937275b30073b60701603e2cca94447673e278639a3cf27c4439cbbeb4d82b",
+    "tests/fixtures/durable_crash_child.py": "16da68f0e0a8a2260235056a614251dd4cbde385f5d137c3e11f502f7da81842",
+    "examples/derived_context_history.py": "082d53197275a0aa06b0ec20e3f5ff63f5ef536af720b577e46932f832c42185",
+    "tests/test_derived_context_history.py": "0bf2278131260d635a0c920eaee6c1ff94071751a0e5d90122a28233f89dee4d"
+  },
+  "preserved_uncommitted_files_sha256": {
+    "docs/AGENT_MEMORY_ARCHITECTURE_PLAN.md": "81095de8aa02db4f59a643d0d6708b4fa9ee415bfb3f230bab4a7abf962fe849"
+  },
+  "frozen_designs_sha256": {
+    "6.1.0": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+    "6.0.0": "f16f0a3fb1da497b6ef73c96851de04b0cc42ac9353fa9f4278b26122dfe39d0",
+    "5.0.0": "83330a5c8e7921aa56ea76afbb9e8a9b255a5a22732ae4f7c20816deaf25517f"
+  },
+  "lint": {
+    "changed_python_files": 10,
+    "findings": 0,
+    "git_diff_check": "passed",
+    "report_sha256": "39cd8b4912315fbeda25007de71a0987c0df5744a9a1efbf00ad2261da423963"
+  },
+  "quality_evidence": "Synthetic retained sources and protocol/fault fixtures; no production gold, external model or remote ACL quality claim.",
+  "not_enabled": [
+    "reconstruction inside coverage gaps",
+    "pre-migration/backfill history",
+    "caller/model-supplied historical context attributes",
+    "general predicate renderers",
+    "cross-storage-scope composition",
+    "general historical entity/policy registry",
+    "transitive derived parents",
+    "remote ACL freshness synchronization",
+    "external models",
+    "L2 pages",
+    "L3 persona inference"
+  ],
+  "global_task_state": {
+    "DONE": 1,
+    "IN_PROGRESS": 29,
+    "TODO": 14
+  },
+  "next": "C01 actual fixed parent manifest/version and processing/support separation; C02 transitive permission/loop/depth/capacity/change barriers; C03 physical erasure and restore/delivery acceptance before enabling derived parents."
+}

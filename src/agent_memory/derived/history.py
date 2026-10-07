@@ -15,6 +15,7 @@ from .model import (
     HISTORY_MODES,
     HISTORY_POINT,
     DerivedError,
+    FacetContext,
     digest,
     identity,
     source_ids,
@@ -41,6 +42,9 @@ class PublishedHistory:
     async def archive(self, uow, snapshot, *, definition, known_at):
         if definition["spec"].get("history_mode") not in HISTORY_MODES:
             return None
+        binding = self.service._context_binding(definition["spec"])
+        if binding is not None:
+            binding.current(known_at)
         query = await uow.derived_get(self.scope, "query", definition["spec"]["query_id"])
         archive = dict(
             schema="derived-history-snapshot/1",
@@ -90,6 +94,8 @@ class PublishedHistory:
             authority_id=spec["authority_id"],
             sources=sorted(snapshot["manifest"]["sources"]),
         )
+        if spec.get("context") is not None:
+            point["context"] = FacetContext.from_payload(spec["context"]).history_certificate()
         if self.service.history_mode == HISTORY_INTERVAL:
             point["input_versions"] = {}
             for source_id, source in snapshot["sources"].items():
@@ -124,6 +130,10 @@ class PublishedHistory:
         if (
             point["id"] != self.point_id(point["epoch"], point["facet_id"], known_at)
             or known_at > self.service.clock()
+            or (point.get("context") and not (
+                point["context"]["known_from"] <= point["known_at"]
+                < point["context"]["known_to"]
+            ))
         ):
             raise DerivedError("derived_history_integrity_failed")
         if actor not in definition["spec"]["readers"] or purpose != definition["spec"]["purpose"]:
@@ -192,6 +202,11 @@ class PublishedHistory:
             span, coverage = await self.coverage.select(uow, facet_id, definition, query.known_at)
             point = await uow.derived_get(self.scope, "history_point", span["point_id"])
         grants = await self._guard(uow, point, definition, actor, purpose)
+        if point.get("context") and not (
+            point["context"]["known_from"] <= iso(query.known_at)
+            < point["context"]["known_to"]
+        ):
+            raise DerivedError("derived_history_coverage_unavailable")
         if span is not None and (
             point["sha256"] != span["point_sha256"]
             or point["known_at"] != span["known_from"]
@@ -219,7 +234,9 @@ class PublishedHistory:
             or not manifest["query_complete"]
             or manifest["policy_sha256"] != digest(archive["policy"])
             or archive["definition"]["history_mode"] not in HISTORY_MODES
-            or archive["definition"]["template_version"] != "locale-snapshot/1"
+            or archive["definition"]["template_version"]
+            not in {"locale-snapshot/1", "locale-context/1"}
+            or archive["definition"]["template_version"] != manifest["template"]
             or (
                 revision["state"] == "ready"
                 and digest(revision.get("body")) != revision.get("body_sha256")
@@ -227,6 +244,18 @@ class PublishedHistory:
         ):
             raise DerivedError("derived_history_integrity_failed")
         spec, records = archive["definition"], archive["records"]
+        if spec["template_version"] == "locale-context/1":
+            binding = FacetContext.from_payload(spec["context"])
+            if (
+                binding.query.scope != self.scope
+                or binding.query.subject_id != spec["subject_id"]
+                or binding.query.purpose != purpose
+                or binding.history_certificate() != point.get("context")
+            ):
+                raise DerivedError("derived_history_integrity_failed")
+            binding.historical(query.known_at, query.valid_at)
+        elif spec.get("context") is not None or point.get("context") is not None:
+            raise DerivedError("derived_history_integrity_failed")
         if (
             spec["id"] != facet_id
             or spec["readers"] != point["readers"]
@@ -266,7 +295,10 @@ class PublishedHistory:
                 point["known_at"]
             ):
                 raise DerivedError("derived_history_integrity_failed")
-        result = compose(spec, records, sources, query.valid_at, admission_policy=archive["policy"])
+        result = compose(
+            spec, records, sources, query.valid_at,
+            admission_policy=archive["policy"], known_at=query.known_at,
+        )
         from .service import authorization_summary
 
         return dict(

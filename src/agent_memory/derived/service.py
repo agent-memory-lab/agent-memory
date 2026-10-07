@@ -817,7 +817,15 @@ class ObservationService:
                     if self.history_mode == HISTORY_INTERVAL
                     else (["published_points"] if self.history_mode else [])
                 ),
-                historical_templates=["locale-snapshot/1"] if self.history_mode else [],
+                historical_templates=(
+                    ["locale-snapshot/1"]
+                    + (["locale-context/1"] if self.context_token is not None else [])
+                    if self.history_mode else []
+                ),
+                historical_context=(
+                    "frozen-host-route/1"
+                    if self.history_mode and self.context_token is not None else None
+                ),
                 query_definitions="derived-query/1",
                 query_membership="all_candidates",
                 grant_authority="host-grant-authority/1" if self.authority_id else None,

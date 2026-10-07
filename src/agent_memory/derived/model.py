@@ -1,8 +1,8 @@
-"""Pure contracts for bounded, current-time, source-supported Observations."""
+"""Pure contracts for bounded, source-supported current and historical Observations."""
 
 import json
 from dataclasses import asdict, dataclass, replace
-from datetime import datetime
+from datetime import UTC, datetime
 from hashlib import sha256
 
 from ..conditions import ContextAttribute, ProjectionPolicy, QueryContext
@@ -42,7 +42,7 @@ def timestamp(value):
 
 @dataclass(frozen=True)
 class FacetContext:
-    """Expiring host routing binding, evaluated at the current time only."""
+    """Versioned host routing binding with a bounded knowledge-time lifetime."""
 
     query: QueryContext
     policy: ProjectionPolicy
@@ -93,6 +93,21 @@ class FacetContext:
         if at >= self.expires_at:
             raise DerivedError("derived_context_expired")
         return replace(self.query, valid_at=at, known_at=at)
+
+    def historical(self, known_at, valid_at):
+        """Freeze routing attributes; only the requested fact time is reprojected."""
+        timestamp(known_at)
+        timestamp(valid_at)
+        self.current(known_at)  # Expiry limits old knowledge, not today's access.
+        return replace(self.query, valid_at=valid_at, known_at=known_at)
+
+    def history_certificate(self):
+        # Routing attributes stay in the permission-guarded immutable archive.
+        return dict(
+            sha256=digest(self.payload()),
+            known_from=self.query.known_at.astimezone(UTC).isoformat(),
+            known_to=self.expires_at.astimezone(UTC).isoformat(),
+        )
 
 
 @dataclass(frozen=True)
@@ -145,8 +160,6 @@ class FacetDefinition:
             or self.authority_id is None
         ):
             raise DerivedError("invalid_derived_history_definition")
-        if self.history_mode is not None and self.template_version != "locale-snapshot/1":
-            raise DerivedError("derived_history_template_unsupported")
 
     def payload(self):
         values = to_jsonable(self)
