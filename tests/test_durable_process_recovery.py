@@ -23,7 +23,7 @@ CHILD = Path(__file__).parent / "fixtures" / "durable_crash_child.py"
 pytestmark = pytest.mark.skipif(not hasattr(signal, "SIGKILL"), reason="requires real SIGKILL")
 
 
-async def kill_at_boundary(engine, scope, clock, tmp_path, phase):
+async def kill_at_boundary(engine, scope, clock, tmp_path, phase, *, extra=None):
     repo = engine.repository
     config = {
         "backend": "postgres" if hasattr(repo, "pool") else "sqlite",
@@ -32,6 +32,7 @@ async def kill_at_boundary(engine, scope, clock, tmp_path, phase):
         "clock": clock[0].isoformat(),
         "phase": phase,
         "calls": str(tmp_path / "generation.log"),
+        **(extra or {}),
     }
     path = tmp_path / "child.json"
     path.write_text(json.dumps(config))

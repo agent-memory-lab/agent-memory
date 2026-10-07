@@ -61,6 +61,27 @@ async def main(config):
             unit_type.producer_put = before_commit
         await producer.append(event, session, sequence=1, actor="alice")
         await pause()
+    elif phase.startswith("purge_restore_"):
+        from agent_memory.operations.purge_restore import PurgeRestore
+
+        operator = PurgeRestore(
+            repository, scope, authority_id="authority", actor="operator",
+            secret=config["test_secret"].encode(), clock=lambda: now,
+        )
+        if phase.endswith("before_commit"):
+            original = unit_type.purge_restore_put
+
+            async def before_commit(uow, *args):
+                await original(uow, *args)
+                await pause()
+
+            unit_type.purge_restore_put = before_commit
+        snapshot = config["snapshot"]
+        await operator.replay(
+            snapshot, expected_checkpoint=snapshot["checkpoint"],
+            restore_id="restore", reason="offline-backup",
+        )
+        await pause()
     elif phase.startswith("recovery_"):
         from agent_memory.operations.index_recovery import CandidateIndexRecovery
         from agent_memory.operations.indexing import CandidateIndexChannel

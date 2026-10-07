@@ -97,7 +97,7 @@ def identity_owner(connection, scope, event_id, idempotency_key):
     return row[0] if row else None
 
 
-def forget(connection, request):
+def forget(connection, request, *, journal=True):
     """Runs inside the same lock/transaction as source archive or erasure."""
     key = request.scope.partition_key()
     if request.all_in_scope:
@@ -109,7 +109,8 @@ def forget(connection, request):
         return
     sqlite_refresh.forget(connection, request)
     sqlite_index.forget(connection, request)
-    sqlite_purge.record(connection, request, epoch(connection, request.scope))
+    if journal:
+        sqlite_purge.record(connection, request, epoch(connection, request.scope))
     condition = "partition_key=?"
     params = (key,)
     if not request.all_in_scope:

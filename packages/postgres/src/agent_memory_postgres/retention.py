@@ -72,7 +72,7 @@ async def identity_owner(connection, scope, event_id, idempotency_key):
     return row["request_id"] if row else None
 
 
-async def forget(connection, request):
+async def forget(connection, request, *, journal=True):
     # Caller holds admission.lock_scope until the surrounding deletion commits.
     key = request.scope.partition_key()
     if request.all_in_scope:
@@ -85,7 +85,8 @@ async def forget(connection, request):
         return
     await refresh.forget(connection, request)
     await index.forget(connection, request)
-    await purge.record(connection, request, await epoch(connection, request.scope))
+    if journal:
+        await purge.record(connection, request, await epoch(connection, request.scope))
     condition = "partition_key=%s"
     params = (key,)
     if not request.all_in_scope:

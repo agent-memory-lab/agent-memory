@@ -1,6 +1,9 @@
 """Identity-only purge journal under the caller's admission namespace lock."""
 
 
+from agent_memory.domain import canonical_json
+
+
 async def head(connection, scope):
     cursor = await connection.execute(
         "SELECT cursor FROM agent_memory_retention_purge_heads WHERE partition_key=%s",
@@ -47,3 +50,42 @@ async def erased(connection, scope, identity):
         (scope.partition_key(), identity),
     )
     return await cursor.fetchone() is not None
+
+
+async def import_entry(connection, scope, entry):
+    if await head(connection, scope) != entry["cursor"] - 1:
+        raise ValueError("purge import cursor conflict")
+    await connection.execute(
+        "INSERT INTO agent_memory_retention_purges VALUES (%s,%s,%s,%s,%s,%s)",
+        (scope.partition_key(), entry["cursor"], entry["source_event_id"], entry["epoch"],
+         entry["all_in_scope"], entry["mode"]),
+    )
+    await connection.execute(
+        "INSERT INTO agent_memory_retention_purge_heads VALUES (%s,%s) "
+        "ON CONFLICT(partition_key) DO UPDATE SET cursor=excluded.cursor",
+        (scope.partition_key(), entry["cursor"]),
+    )
+
+
+async def restore_get(connection, scope, identity):
+    cursor = await connection.execute(
+        "SELECT payload_json FROM agent_memory_retention_purge_restores "
+        "WHERE partition_key=%s AND identity=%s", (scope.partition_key(), identity),
+    )
+    row = await cursor.fetchone()
+    return row["payload_json"] if row else None
+
+
+async def restore_put(connection, scope, identity, payload):
+    await connection.execute(
+        "INSERT INTO agent_memory_retention_purge_restores VALUES (%s,%s,%s::jsonb)",
+        (scope.partition_key(), identity, canonical_json(payload)),
+    )
+
+
+async def restore_count(connection, scope):
+    cursor = await connection.execute(
+        "SELECT count(*) FROM agent_memory_retention_purge_restores WHERE partition_key=%s",
+        (scope.partition_key(),),
+    )
+    return (await cursor.fetchone())["count"]

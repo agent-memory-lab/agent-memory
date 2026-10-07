@@ -153,3 +153,11 @@ def test_index_recovery_depends_on_ports_and_authority_not_database_adapters():
         name.startswith(("sqlite3", "psycopg", "agent_memory.sqlite", "agent_memory_postgres"))
         for name in dependencies
     )
+
+
+def test_purge_restore_depends_on_ports_not_database_adapters():
+    dependencies = imports(SOURCE / "operations" / "purge_restore.py")
+    assert not any(
+        name.startswith(("sqlite3", "psycopg", "agent_memory.sqlite", "agent_memory_postgres"))
+        for name in dependencies
+    )

@@ -1,0 +1,100 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "date": "2026-10-07",
+  "ledger_revision": 14,
+  "design": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "base_commit": "fc20a869494f55285a11c81ea1f9e981359d8ce5",
+  "enabled_scope": "host-owned exact-scope offline consistent backup replay of a complete signed finite deletion journal, independently pinned to the latest trusted checkpoint; atomic content/history/task/index/refresh deletion, original purge cursor/scope epoch and finite audit receipt; host owns external journal custody, freshness and serving isolation",
+  "full_test_run": false,
+  "test_scope_reason": "User requested partial tests only; new offline backup replay plus affected complete deletion path, source/contribution/qualification/bitemporal history, indexing/refresh/reprocessing/crash/SDK/MCP/migration/architecture contracts.",
+  "tests": {
+    "runner": "pytest",
+    "targets": [
+      "tests/test_purge_restore.py",
+      "tests/test_durable_purge.py",
+      "tests/test_durable_retention.py",
+      "tests/test_index_recovery.py",
+      "tests/test_durable_indexing.py",
+      "tests/test_resource_refresh.py",
+      "tests/test_source_revisions.py",
+      "tests/test_reprocessing_readiness.py",
+      "tests/test_durable_process_recovery.py",
+      "tests/test_contribution_lifecycle.py",
+      "tests/test_fact_qualification.py",
+      "tests/test_feedback_forget_propagation.py",
+      "tests/test_bitemporal_claims.py",
+      "tests/test_architecture.py::test_purge_restore_depends_on_ports_not_database_adapters",
+      "tests/test_architecture.py::test_domain_contracts_do_not_depend_on_implementation",
+      "packages/postgres/tests/test_live_contract.py::test_live_postgres_additive_v1_to_v2_migration",
+      "packages/python-sdk/tests/test_embedded_contract.py",
+      "packages/mcp-server/tests/test_capture_contract.py"
+    ],
+    "unique_targeted_cases": 508,
+    "passed": 508,
+    "skipped": 0,
+    "duration_seconds": 24.682,
+    "new_behavior_cases": 64,
+    "new_architecture_cases": 1,
+    "backends": [
+      "SQLite",
+      "PostgreSQL 17"
+    ],
+    "real_backup": "SQLite connection.backup and consistent PostgreSQL 17 pg_dump --inserts of all tables/history/indexes, restored to independent stores/schemas; no mock backup",
+    "real_crash": "4 new replay SIGKILL cases before/after content/epoch/journal/receipt commit on both backends; existing indexing/recovery/refresh/processing real-process tests also rerun; database server not killed",
+    "repeat_note": "Incremental subsets and repeated runs are not added to the final 508 unique cases."
+  },
+  "example": "examples/purge_restore.py passed: actual old SQLite backup, separate control-plane journal/checkpoint files, replayed deletion, survivor retained, cursor 1 and stable duplicate receipt",
+  "lint": {
+    "changed_python_files": "F,I passed",
+    "new_restore_modules_tests_example_and_crash_fixtures": "full configured rules passed"
+  },
+  "wheels": [
+    {
+      "file": "agent_memory-0.1.0-py3-none-any.whl",
+      "sha256": "e7bd9b960a635645403e1d40fc1f77c4845aa45bda5eb9eadb89021090764399"
+    },
+    {
+      "file": "agent_memory_postgres-0.1.0-py3-none-any.whl",
+      "sha256": "2516d99955978ad8c15cc80933be51393b64c21bbfb1e6b4ca1de86190c8678f"
+    }
+  ],
+  "wheel_sources_match_final_files": true,
+  "postgres_migration_packaged": "014_purge_restore.sql",
+  "source_files_sha256": {
+    "packages/postgres/src/agent_memory_postgres/purge.py": "80fd6a3461de20a61ea6b59ac47cd5aad3e828f584be07e2e1f3f56ae9b6fd4c",
+    "packages/postgres/src/agent_memory_postgres/repository.py": "0955f3d6bd5b0208c0ff1d84cd9f2263075fa3c91f32effbb919c5966cb82727",
+    "packages/postgres/src/agent_memory_postgres/retention.py": "5830ca8998127c68dc69020e864f0251c1378d77b3c8fb0cca24e6f69ee3b9fb",
+    "src/agent_memory/operations/sqlite_purge.py": "beb05570c92fdef491daf9e1aaff5706fb5dd168f50e265773741724c932ea1f",
+    "src/agent_memory/operations/sqlite_retention.py": "33c39572eef336eabcac1b457ae9f262f6cf5706d8251615a2446e2e7fa4a2cf",
+    "src/agent_memory/ports.py": "8998b9947d5b14f7a4cd02557609b1fc49450a8fc3d4bd67076cebe27185c32a",
+    "src/agent_memory/sqlite.py": "44fd9bfd25b71d70e52275c3b3e36cd7583fd54eafe71fc802061934dcdd1b62",
+    "tests/fixtures/durable_crash_child.py": "23e67512bc0d94b248c697595cdbeafe1cb1463b07eb25413cd16fa4551df094",
+    "tests/test_architecture.py": "5fb367514ba46e721b697b3f84c3e1999b1e2e285ebbb4173465716c31d63e9a",
+    "tests/test_durable_process_recovery.py": "4bdbd4de338d96b3d01da9d071b7a8a204917e8ec118894394c220a4af1b0c7f",
+    "examples/purge_restore.py": "30e69a8ac5113659e2c0e2a634da4b4cce35d62a60ab3517be6c4ef1c4b0a061",
+    "packages/postgres/migrations/014_purge_restore.sql": "daa95a16e088db62a1a7326b5b001fe2a61aa639516d404e744547eb66c6fe2a",
+    "src/agent_memory/operations/purge_restore.py": "6c907a68bdd44eba0616c2425a9840025b094c2d380b83d64a41ff5f6894b9bb",
+    "tests/test_purge_restore.py": "cc05a9a91bedb459ffbc7f017915c2d5cc45769da7b3fc8ec061e9af731572cd"
+  },
+  "doc_validation": {
+    "frozen_design_hashes": "passed",
+    "task_links": "passed",
+    "task_count": 44,
+    "acceptance_rows": 66,
+    "statuses": {
+      "DONE": 1,
+      "IN_PROGRESS": 24,
+      "TODO": 19
+    }
+  },
+  "remaining": [
+    "multiple physical L1 publications in one processing request with explicit manifest closure",
+    "host deployment integration for independent protected journal/key storage, latest monotonic checkpoint and offline serving isolation; no automatic external replication/gateway claimed",
+    "large batched/cross-scope disaster recovery and remote cache/provider erasure contracts",
+    "pre-migration 009 deletion duties or mixed/corrupted backup contents cannot be reconstructed from this journal",
+    "resource definition migration and derived support/processing/query plus dynamic ACL contracts",
+    "real domain gold/calibration and governed external model activation",
+    "no full-suite regression claim for revision 14"
+  ]
+}

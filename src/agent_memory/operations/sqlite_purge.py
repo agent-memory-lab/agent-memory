@@ -1,5 +1,9 @@
 """Identity-only deletion journal, sharing the source deletion transaction."""
 
+import json
+
+from ..domain import canonical_json
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS retention_purge_heads (
     partition_key TEXT PRIMARY KEY, cursor INTEGER NOT NULL CHECK(cursor >= 0)
@@ -9,6 +13,10 @@ CREATE TABLE IF NOT EXISTS retention_purges (
     source_event_id TEXT NOT NULL, epoch INTEGER NOT NULL,
     all_in_scope INTEGER NOT NULL CHECK(all_in_scope IN (0,1)), mode TEXT NOT NULL,
     PRIMARY KEY(partition_key,cursor)
+);
+CREATE TABLE IF NOT EXISTS retention_purge_restores (
+    partition_key TEXT NOT NULL, identity TEXT NOT NULL, payload_json TEXT NOT NULL,
+    PRIMARY KEY(partition_key,identity)
 );
 CREATE INDEX IF NOT EXISTS retention_purge_source_idx
 ON retention_purges(partition_key,source_event_id);
@@ -67,3 +75,39 @@ def erased(connection, scope, identity):
         ).fetchone()
         is not None
     )
+
+
+def import_entry(connection, scope, entry):
+    if head(connection, scope) != entry["cursor"] - 1:
+        raise ValueError("purge import cursor conflict")
+    connection.execute(
+        "INSERT INTO retention_purges VALUES (?,?,?,?,?,?)",
+        (scope.partition_key(), entry["cursor"], entry["source_event_id"], entry["epoch"],
+         int(entry["all_in_scope"]), entry["mode"]),
+    )
+    connection.execute(
+        "INSERT INTO retention_purge_heads VALUES (?,?) ON CONFLICT(partition_key) "
+        "DO UPDATE SET cursor=excluded.cursor", (scope.partition_key(), entry["cursor"]),
+    )
+
+
+def restore_get(connection, scope, identity):
+    row = connection.execute(
+        "SELECT payload_json FROM retention_purge_restores WHERE partition_key=? AND identity=?",
+        (scope.partition_key(), identity),
+    ).fetchone()
+    return json.loads(row[0]) if row else None
+
+
+def restore_put(connection, scope, identity, payload):
+    connection.execute(
+        "INSERT INTO retention_purge_restores VALUES (?,?,?)",
+        (scope.partition_key(), identity, canonical_json(payload)),
+    )
+
+
+def restore_count(connection, scope):
+    return connection.execute(
+        "SELECT count(*) FROM retention_purge_restores WHERE partition_key=?",
+        (scope.partition_key(),),
+    ).fetchone()[0]

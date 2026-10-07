@@ -413,6 +413,31 @@ class SQLiteMemoryUnitOfWork:
         from .operations import sqlite_index
         return sqlite_index.lookup(self.connection, scope, channel, slot_key, limit)
 
+    async def forget_for_restore(self, request):
+        return self._repository._forget_on_connection(
+            self.connection, request, replay=True
+        )
+
+    async def purge_import(self, scope, entry):
+        from .operations import sqlite_purge
+
+        return sqlite_purge.import_entry(self.connection, scope, entry)
+
+    async def purge_restore_get(self, scope, identity):
+        from .operations import sqlite_purge
+
+        return sqlite_purge.restore_get(self.connection, scope, identity)
+
+    async def purge_restore_put(self, scope, identity, payload):
+        from .operations import sqlite_purge
+
+        return sqlite_purge.restore_put(self.connection, scope, identity, payload)
+
+    async def purge_restore_count(self, scope):
+        from .operations import sqlite_purge
+
+        return sqlite_purge.restore_count(self.connection, scope)
+
     async def purge_head(self, scope):
         from .operations import sqlite_purge
 
@@ -1889,300 +1914,26 @@ class SQLiteMemoryRepository:
     def _forget_sync(self, request: ForgetRequest) -> ForgetResult:
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            sqlite_retention.forget(connection, request)
-            dependent_claim_ids = self._forget_admission_records(connection, request)
+            return self._forget_on_connection(connection, request)
 
-            def finish(result: ForgetResult) -> ForgetResult:
-                return self._finish_admission_forget(
-                    connection, request, dependent_claim_ids, result
-                )
+    def _forget_on_connection(self, connection, request, *, replay=False):
+        sqlite_retention.forget(connection, request, journal=not replay)
+        dependent_claim_ids = self._forget_admission_records(connection, request)
 
-            if request.all_in_scope:
-                where = "partition_key = ?"
-                params: tuple[Any, ...] = (request.scope.partition_key(),)
-                counts = {
-                    table: connection.execute(
-                        f"SELECT COUNT(*) FROM {table} WHERE {where}", params
-                    ).fetchone()[0]
-                    for table in ("events", "claims", "artifacts")
-                }
-                if request.mode == ForgetMode.ARCHIVE:
-                    archived_at = _iso(utc_now())
-                    connection.execute(
-                        f"UPDATE events SET archived_at = ? WHERE {where}",
-                        (archived_at, *params),
-                    )
-                    connection.execute(
-                        f"UPDATE claims SET archived_at = ?, status = ? WHERE {where}",
-                        (archived_at, ClaimStatus.ARCHIVED, *params),
-                    )
-                    connection.execute(
-                        f"UPDATE artifacts SET archived_at = ?, status = ? WHERE {where}",
-                        (archived_at, ArtifactStatus.ARCHIVED, *params),
-                    )
-                    self._invalidate_feedback(
-                        connection,
-                        request.scope.partition_key(),
-                        set(request.memory_ids),
-                        erase=False,
-                        all_in_scope=True,
-                    )
-                else:
-                    self._invalidate_feedback(
-                        connection,
-                        request.scope.partition_key(),
-                        set(request.memory_ids),
-                        erase=True,
-                        all_in_scope=True,
-                    )
-                    connection.execute(f"DELETE FROM artifacts WHERE {where}", params)
-                    connection.execute(f"DELETE FROM claims WHERE {where}", params)
-                    connection.execute(f"DELETE FROM events WHERE {where}", params)
-                return finish(ForgetResult(
-                    affected_events=counts["events"],
-                    affected_claims=counts["claims"],
-                    affected_artifacts=counts["artifacts"],
-                    mode=request.mode,
-                ))
+        def finish(result: ForgetResult) -> ForgetResult:
+            return self._finish_admission_forget(
+                connection, request, dependent_claim_ids, result
+            )
 
-            if not request.memory_ids:
-                return finish(ForgetResult(0, 0, 0, request.mode))
-
-            placeholders = ",".join("?" for _ in request.memory_ids)
-            where = f"partition_key = ? AND id IN ({placeholders})"
-            params = (request.scope.partition_key(), *request.memory_ids)
-
-            event_rows = connection.execute(
-                f"SELECT id FROM events WHERE {where}", params
-            ).fetchall()
-            target_event_ids = tuple(row["id"] for row in event_rows)
-            if not target_event_ids:
-                counts = {
-                    table: connection.execute(
-                        f"SELECT COUNT(*) FROM {table} WHERE {where}", params
-                    ).fetchone()[0]
-                    for table in ("claims", "artifacts")
-                }
-                if request.mode == ForgetMode.ARCHIVE:
-                    archived_at = _iso(utc_now())
-                    connection.execute(
-                        f"UPDATE claims SET archived_at = ?, status = ? WHERE {where}",
-                        (archived_at, ClaimStatus.ARCHIVED, *params),
-                    )
-                    connection.execute(
-                        f"UPDATE artifacts SET archived_at = ?, status = ? WHERE {where}",
-                        (archived_at, ArtifactStatus.ARCHIVED, *params),
-                    )
-                else:
-                    connection.execute(f"DELETE FROM artifacts WHERE {where}", params)
-                    connection.execute(f"DELETE FROM claims WHERE {where}", params)
-                self._invalidate_feedback(
-                    connection,
-                    request.scope.partition_key(),
-                    set(request.memory_ids),
-                    erase=request.mode == ForgetMode.ERASE,
-                )
-                return finish(ForgetResult(0, counts["claims"], counts["artifacts"], request.mode))
-
-            target_event_set = set(target_event_ids)
-            event_placeholders = ",".join("?" for _ in target_event_ids)
-            impacted_claim_ids = {
-                row["claim_id"]
-                for row in connection.execute(
-                    "SELECT DISTINCT claim_id FROM claim_sources "
-                    f"WHERE event_id IN ({event_placeholders})",
-                    target_event_ids,
-                ).fetchall()
-            }
-            partition_claim_ids = {
-                row["id"]
-                for row in connection.execute(
-                    f"SELECT id FROM claims WHERE {where}", params
-                ).fetchall()
-            }
-            partition_artifact_ids = {
-                row["id"]
-                for row in connection.execute(
-                    f"SELECT id FROM artifacts WHERE {where}", params
-                ).fetchall()
-            }
-
-            claims_to_drop: set[str] = set()
-            for claim_id in impacted_claim_ids:
-                row = connection.execute(
-                    "SELECT provenance_json FROM claims WHERE id = ?", (claim_id,)
-                ).fetchone()
-                if row is None:
-                    continue
-                provenance = _provenance(row["provenance_json"])
-                updated_sources = tuple(
-                    source_id
-                    for source_id in provenance.source_event_ids
-                    if source_id not in target_event_set
-                )
-                if len(updated_sources) == len(provenance.source_event_ids):
-                    continue
-                if not updated_sources:
-                    claims_to_drop.add(claim_id)
-                    continue
-                scrubbed = [
-                    source_id
-                    for source_id in provenance.source_event_ids
-                    if source_id in target_event_set
-                ]
-                scrubbed_placeholders = ",".join("?" for _ in scrubbed)
-                connection.execute(
-                    "DELETE FROM claim_sources "
-                    f"WHERE claim_id = ? AND event_id IN ({scrubbed_placeholders})",
-                    (claim_id, *scrubbed),
-                )
-                updated = Provenance(
-                    source_event_ids=updated_sources,
-                    extractor=provenance.extractor,
-                    provider=provenance.provider,
-                    model=provenance.model,
-                    prompt_version=provenance.prompt_version,
-                    source_uri=provenance.source_uri,
-                    created_at=provenance.created_at,
-                )
-                connection.execute(
-                    "UPDATE claims SET provenance_json = ? WHERE id = ?",
-                    (_provenance_json(updated), claim_id),
-                )
-                self._sync_claim_source_json(connection, claim_id)
-                SQLiteClaimHistory(self).scrub_sources(connection, claim_id, target_event_set)
-
-            changed_block_ids: set[str] = set()
-            blocks_to_drop: set[str] = set()
-            block_rows = connection.execute(
-                """
-                SELECT * FROM artifacts
-                WHERE partition_key = ? AND kind = ? AND archived_at IS NULL
-                """,
-                (request.scope.partition_key(), MemoryKind.BLOCK),
-            ).fetchall()
-            for row in block_rows:
-                block = self._block_from_row(row)
-                remaining_event_ids = tuple(
-                    event_id for event_id in block.event_ids if event_id not in target_event_set
-                )
-                if len(remaining_event_ids) == len(block.event_ids):
-                    continue
-                changed_block_ids.add(block.id)
-                if not remaining_event_ids:
-                    blocks_to_drop.add(block.id)
-                    continue
-                updated_at = utc_now()
-                provenance = replace(
-                    block.provenance,
-                    source_event_ids=remaining_event_ids,
-                )
-                updated_block = replace(
-                    block,
-                    event_ids=remaining_event_ids,
-                    provenance=provenance,
-                    version=block.version + 1,
-                    updated_at=updated_at,
-                )
-                connection.execute(
-                    """
-                    UPDATE artifacts
-                    SET payload_json = ?, provenance_json = ?, version = ?, occurred_at = ?
-                    WHERE id = ? AND version = ? AND archived_at IS NULL
-                    """,
-                    (
-                        canonical_json(asdict(updated_block)),
-                        _provenance_json(provenance),
-                        updated_block.version,
-                        _iso(updated_at),
-                        block.id,
-                        block.version,
-                    ),
-                )
-
-            artifact_rows = connection.execute(
-                """
-                SELECT * FROM artifacts
-                WHERE partition_key = ? AND kind != ? AND archived_at IS NULL
-                """,
-                (request.scope.partition_key(), MemoryKind.BLOCK),
-            ).fetchall()
-            for row in artifact_rows:
-                provenance = _provenance(row["provenance_json"])
-                remaining_event_ids = tuple(
-                    event_id
-                    for event_id in provenance.source_event_ids
-                    if event_id not in target_event_set
-                )
-                if len(remaining_event_ids) == len(provenance.source_event_ids):
-                    continue
-                changed_block_ids.add(row["id"])
-                if not remaining_event_ids:
-                    blocks_to_drop.add(row["id"])
-                    continue
-                updated_provenance = replace(
-                    provenance,
-                    source_event_ids=remaining_event_ids,
-                )
-                payload = json.loads(row["payload_json"])
-                if isinstance(payload.get("provenance"), dict):
-                    payload["provenance"]["source_event_ids"] = list(remaining_event_ids)
-                connection.execute(
-                    """
-                    UPDATE artifacts
-                    SET payload_json = ?, provenance_json = ?, version = version + 1
-                    WHERE id = ? AND archived_at IS NULL
-                    """,
-                    (
-                        canonical_json(payload),
-                        _provenance_json(updated_provenance),
-                        row["id"],
-                    ),
-                )
-
+        if request.all_in_scope:
+            where = "partition_key = ?"
+            params: tuple[Any, ...] = (request.scope.partition_key(),)
             counts = {
                 table: connection.execute(
                     f"SELECT COUNT(*) FROM {table} WHERE {where}", params
                 ).fetchone()[0]
                 for table in ("events", "claims", "artifacts")
             }
-            if claims_to_drop:
-                extra_counts = len(claims_to_drop - partition_claim_ids)
-                if request.mode == ForgetMode.ARCHIVE:
-                    archived_at = _iso(utc_now())
-                    placeholders = ",".join("?" for _ in claims_to_drop)
-                    connection.execute(
-                        "UPDATE claims SET archived_at = ?, status = ? "
-                        f"WHERE id IN ({placeholders})",
-                        (archived_at, ClaimStatus.ARCHIVED, *tuple(claims_to_drop)),
-                    )
-                    connection.execute(
-                        f"DELETE FROM claim_sources WHERE claim_id IN ({placeholders})",
-                        tuple(claims_to_drop),
-                    )
-                else:
-                    self._delete_claim_rows(connection, claims_to_drop)
-            else:
-                extra_counts = 0
-
-            if blocks_to_drop:
-                block_placeholders = ",".join("?" for _ in blocks_to_drop)
-                if request.mode == ForgetMode.ARCHIVE:
-                    connection.execute(
-                        "UPDATE artifacts SET archived_at = ?, status = ? "
-                        f"WHERE id IN ({block_placeholders})",
-                        (
-                            _iso(utc_now()),
-                            ArtifactStatus.ARCHIVED,
-                            *tuple(blocks_to_drop),
-                        ),
-                    )
-                else:
-                    connection.execute(
-                        f"DELETE FROM artifacts WHERE id IN ({block_placeholders})",
-                        tuple(blocks_to_drop),
-                    )
-
             if request.mode == ForgetMode.ARCHIVE:
                 archived_at = _iso(utc_now())
                 connection.execute(
@@ -2197,40 +1948,317 @@ class SQLiteMemoryRepository:
                     f"UPDATE artifacts SET archived_at = ?, status = ? WHERE {where}",
                     (archived_at, ArtifactStatus.ARCHIVED, *params),
                 )
+                self._invalidate_feedback(
+                    connection,
+                    request.scope.partition_key(),
+                    set(request.memory_ids),
+                    erase=False,
+                    all_in_scope=True,
+                )
             else:
+                self._invalidate_feedback(
+                    connection,
+                    request.scope.partition_key(),
+                    set(request.memory_ids),
+                    erase=True,
+                    all_in_scope=True,
+                )
                 connection.execute(f"DELETE FROM artifacts WHERE {where}", params)
                 connection.execute(f"DELETE FROM claims WHERE {where}", params)
                 connection.execute(f"DELETE FROM events WHERE {where}", params)
+            return finish(ForgetResult(
+                affected_events=counts["events"],
+                affected_claims=counts["claims"],
+                affected_artifacts=counts["artifacts"],
+                mode=request.mode,
+            ))
 
-            impacted_memory_ids = (
-                set(request.memory_ids)
-                | target_event_set
-                | impacted_claim_ids
-                | changed_block_ids
-            )
+        if not request.memory_ids:
+            return finish(ForgetResult(0, 0, 0, request.mode))
+
+        placeholders = ",".join("?" for _ in request.memory_ids)
+        where = f"partition_key = ? AND id IN ({placeholders})"
+        params = (request.scope.partition_key(), *request.memory_ids)
+
+        event_rows = connection.execute(
+            f"SELECT id FROM events WHERE {where}", params
+        ).fetchall()
+        target_event_ids = tuple(row["id"] for row in event_rows)
+        if not target_event_ids:
+            counts = {
+                table: connection.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE {where}", params
+                ).fetchone()[0]
+                for table in ("claims", "artifacts")
+            }
+            if request.mode == ForgetMode.ARCHIVE:
+                archived_at = _iso(utc_now())
+                connection.execute(
+                    f"UPDATE claims SET archived_at = ?, status = ? WHERE {where}",
+                    (archived_at, ClaimStatus.ARCHIVED, *params),
+                )
+                connection.execute(
+                    f"UPDATE artifacts SET archived_at = ?, status = ? WHERE {where}",
+                    (archived_at, ArtifactStatus.ARCHIVED, *params),
+                )
+            else:
+                connection.execute(f"DELETE FROM artifacts WHERE {where}", params)
+                connection.execute(f"DELETE FROM claims WHERE {where}", params)
             self._invalidate_feedback(
                 connection,
                 request.scope.partition_key(),
-                impacted_memory_ids,
+                set(request.memory_ids),
                 erase=request.mode == ForgetMode.ERASE,
             )
+            return finish(ForgetResult(0, counts["claims"], counts["artifacts"], request.mode))
 
-            affected_claims = counts["claims"] + extra_counts
-            if request.mode == ForgetMode.ARCHIVE:
-                for claim_id in claims_to_drop:
-                    if claim_id in partition_claim_ids:
-                        # already counted by claims WHERE ... in counts["claims"]
-                        continue
-                    affected_claims += 1
-            return finish(ForgetResult(
-                affected_events=counts["events"],
-                affected_claims=affected_claims,
-                affected_artifacts=(
-                    counts["artifacts"]
-                    + len(changed_block_ids - partition_artifact_ids)
+        target_event_set = set(target_event_ids)
+        event_placeholders = ",".join("?" for _ in target_event_ids)
+        impacted_claim_ids = {
+            row["claim_id"]
+            for row in connection.execute(
+                "SELECT DISTINCT claim_id FROM claim_sources "
+                f"WHERE event_id IN ({event_placeholders})",
+                target_event_ids,
+            ).fetchall()
+        }
+        partition_claim_ids = {
+            row["id"]
+            for row in connection.execute(
+                f"SELECT id FROM claims WHERE {where}", params
+            ).fetchall()
+        }
+        partition_artifact_ids = {
+            row["id"]
+            for row in connection.execute(
+                f"SELECT id FROM artifacts WHERE {where}", params
+            ).fetchall()
+        }
+
+        claims_to_drop: set[str] = set()
+        for claim_id in impacted_claim_ids:
+            row = connection.execute(
+                "SELECT provenance_json FROM claims WHERE id = ?", (claim_id,)
+            ).fetchone()
+            if row is None:
+                continue
+            provenance = _provenance(row["provenance_json"])
+            updated_sources = tuple(
+                source_id
+                for source_id in provenance.source_event_ids
+                if source_id not in target_event_set
+            )
+            if len(updated_sources) == len(provenance.source_event_ids):
+                continue
+            if not updated_sources:
+                claims_to_drop.add(claim_id)
+                continue
+            scrubbed = [
+                source_id
+                for source_id in provenance.source_event_ids
+                if source_id in target_event_set
+            ]
+            scrubbed_placeholders = ",".join("?" for _ in scrubbed)
+            connection.execute(
+                "DELETE FROM claim_sources "
+                f"WHERE claim_id = ? AND event_id IN ({scrubbed_placeholders})",
+                (claim_id, *scrubbed),
+            )
+            updated = Provenance(
+                source_event_ids=updated_sources,
+                extractor=provenance.extractor,
+                provider=provenance.provider,
+                model=provenance.model,
+                prompt_version=provenance.prompt_version,
+                source_uri=provenance.source_uri,
+                created_at=provenance.created_at,
+            )
+            connection.execute(
+                "UPDATE claims SET provenance_json = ? WHERE id = ?",
+                (_provenance_json(updated), claim_id),
+            )
+            self._sync_claim_source_json(connection, claim_id)
+            SQLiteClaimHistory(self).scrub_sources(connection, claim_id, target_event_set)
+
+        changed_block_ids: set[str] = set()
+        blocks_to_drop: set[str] = set()
+        block_rows = connection.execute(
+            """
+            SELECT * FROM artifacts
+            WHERE partition_key = ? AND kind = ? AND archived_at IS NULL
+            """,
+            (request.scope.partition_key(), MemoryKind.BLOCK),
+        ).fetchall()
+        for row in block_rows:
+            block = self._block_from_row(row)
+            remaining_event_ids = tuple(
+                event_id for event_id in block.event_ids if event_id not in target_event_set
+            )
+            if len(remaining_event_ids) == len(block.event_ids):
+                continue
+            changed_block_ids.add(block.id)
+            if not remaining_event_ids:
+                blocks_to_drop.add(block.id)
+                continue
+            updated_at = utc_now()
+            provenance = replace(
+                block.provenance,
+                source_event_ids=remaining_event_ids,
+            )
+            updated_block = replace(
+                block,
+                event_ids=remaining_event_ids,
+                provenance=provenance,
+                version=block.version + 1,
+                updated_at=updated_at,
+            )
+            connection.execute(
+                """
+                UPDATE artifacts
+                SET payload_json = ?, provenance_json = ?, version = ?, occurred_at = ?
+                WHERE id = ? AND version = ? AND archived_at IS NULL
+                """,
+                (
+                    canonical_json(asdict(updated_block)),
+                    _provenance_json(provenance),
+                    updated_block.version,
+                    _iso(updated_at),
+                    block.id,
+                    block.version,
                 ),
-                mode=request.mode,
-            ))
+            )
+
+        artifact_rows = connection.execute(
+            """
+            SELECT * FROM artifacts
+            WHERE partition_key = ? AND kind != ? AND archived_at IS NULL
+            """,
+            (request.scope.partition_key(), MemoryKind.BLOCK),
+        ).fetchall()
+        for row in artifact_rows:
+            provenance = _provenance(row["provenance_json"])
+            remaining_event_ids = tuple(
+                event_id
+                for event_id in provenance.source_event_ids
+                if event_id not in target_event_set
+            )
+            if len(remaining_event_ids) == len(provenance.source_event_ids):
+                continue
+            changed_block_ids.add(row["id"])
+            if not remaining_event_ids:
+                blocks_to_drop.add(row["id"])
+                continue
+            updated_provenance = replace(
+                provenance,
+                source_event_ids=remaining_event_ids,
+            )
+            payload = json.loads(row["payload_json"])
+            if isinstance(payload.get("provenance"), dict):
+                payload["provenance"]["source_event_ids"] = list(remaining_event_ids)
+            connection.execute(
+                """
+                UPDATE artifacts
+                SET payload_json = ?, provenance_json = ?, version = version + 1
+                WHERE id = ? AND archived_at IS NULL
+                """,
+                (
+                    canonical_json(payload),
+                    _provenance_json(updated_provenance),
+                    row["id"],
+                ),
+            )
+
+        counts = {
+            table: connection.execute(
+                f"SELECT COUNT(*) FROM {table} WHERE {where}", params
+            ).fetchone()[0]
+            for table in ("events", "claims", "artifacts")
+        }
+        if claims_to_drop:
+            extra_counts = len(claims_to_drop - partition_claim_ids)
+            if request.mode == ForgetMode.ARCHIVE:
+                archived_at = _iso(utc_now())
+                placeholders = ",".join("?" for _ in claims_to_drop)
+                connection.execute(
+                    "UPDATE claims SET archived_at = ?, status = ? "
+                    f"WHERE id IN ({placeholders})",
+                    (archived_at, ClaimStatus.ARCHIVED, *tuple(claims_to_drop)),
+                )
+                connection.execute(
+                    f"DELETE FROM claim_sources WHERE claim_id IN ({placeholders})",
+                    tuple(claims_to_drop),
+                )
+            else:
+                self._delete_claim_rows(connection, claims_to_drop)
+        else:
+            extra_counts = 0
+
+        if blocks_to_drop:
+            block_placeholders = ",".join("?" for _ in blocks_to_drop)
+            if request.mode == ForgetMode.ARCHIVE:
+                connection.execute(
+                    "UPDATE artifacts SET archived_at = ?, status = ? "
+                    f"WHERE id IN ({block_placeholders})",
+                    (
+                        _iso(utc_now()),
+                        ArtifactStatus.ARCHIVED,
+                        *tuple(blocks_to_drop),
+                    ),
+                )
+            else:
+                connection.execute(
+                    f"DELETE FROM artifacts WHERE id IN ({block_placeholders})",
+                    tuple(blocks_to_drop),
+                )
+
+        if request.mode == ForgetMode.ARCHIVE:
+            archived_at = _iso(utc_now())
+            connection.execute(
+                f"UPDATE events SET archived_at = ? WHERE {where}",
+                (archived_at, *params),
+            )
+            connection.execute(
+                f"UPDATE claims SET archived_at = ?, status = ? WHERE {where}",
+                (archived_at, ClaimStatus.ARCHIVED, *params),
+            )
+            connection.execute(
+                f"UPDATE artifacts SET archived_at = ?, status = ? WHERE {where}",
+                (archived_at, ArtifactStatus.ARCHIVED, *params),
+            )
+        else:
+            connection.execute(f"DELETE FROM artifacts WHERE {where}", params)
+            connection.execute(f"DELETE FROM claims WHERE {where}", params)
+            connection.execute(f"DELETE FROM events WHERE {where}", params)
+
+        impacted_memory_ids = (
+            set(request.memory_ids)
+            | target_event_set
+            | impacted_claim_ids
+            | changed_block_ids
+        )
+        self._invalidate_feedback(
+            connection,
+            request.scope.partition_key(),
+            impacted_memory_ids,
+            erase=request.mode == ForgetMode.ERASE,
+        )
+
+        affected_claims = counts["claims"] + extra_counts
+        if request.mode == ForgetMode.ARCHIVE:
+            for claim_id in claims_to_drop:
+                if claim_id in partition_claim_ids:
+                    # already counted by claims WHERE ... in counts["claims"]
+                    continue
+                affected_claims += 1
+        return finish(ForgetResult(
+            affected_events=counts["events"],
+            affected_claims=affected_claims,
+            affected_artifacts=(
+                counts["artifacts"]
+                + len(changed_block_ids - partition_artifact_ids)
+            ),
+            mode=request.mode,
+        ))
 
 
     def _finish_admission_forget(

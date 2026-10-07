@@ -251,6 +251,24 @@ class RetentionRepository(MemoryRepository, Protocol):
     def unit_of_work(self) -> RetentionUnitOfWork: ...
 
 
+class PurgeRestoreUnitOfWork(RetentionUnitOfWork, Protocol):
+    """Offline host recovery in one deletion/source/index/journal transaction."""
+
+    async def forget_for_restore(self, request: ForgetRequest) -> ForgetResult: ...
+
+    async def purge_import(self, scope: MemoryScope, entry: dict[str, Any]) -> None: ...
+
+    async def purge_restore_get(
+        self, scope: MemoryScope, identity: str,
+    ) -> dict[str, Any] | None: ...
+
+    async def purge_restore_put(
+        self, scope: MemoryScope, identity: str, payload: dict[str, Any],
+    ) -> None: ...
+
+    async def purge_restore_count(self, scope: MemoryScope) -> int: ...
+
+
 class CandidateIndexUnitOfWork(RetentionUnitOfWork, Protocol):
     """Optional publication outbox and candidate locator on the same transaction."""
 

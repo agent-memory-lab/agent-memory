@@ -413,6 +413,31 @@ class PostgresMemoryUnitOfWork:
         from . import index
         return await index.lookup(self.connection, scope, channel, slot_key, limit)
 
+    async def forget_for_restore(self, request):
+        return await self._repository._forget_on_connection(
+            self.connection, request, replay=True
+        )
+
+    async def purge_import(self, scope, entry):
+        from . import purge
+
+        return await purge.import_entry(self.connection, scope, entry)
+
+    async def purge_restore_get(self, scope, identity):
+        from . import purge
+
+        return await purge.restore_get(self.connection, scope, identity)
+
+    async def purge_restore_put(self, scope, identity, payload):
+        from . import purge
+
+        return await purge.restore_put(self.connection, scope, identity, payload)
+
+    async def purge_restore_count(self, scope):
+        from . import purge
+
+        return await purge.restore_count(self.connection, scope)
+
     async def purge_head(self, scope):
         from . import purge
 
@@ -1016,217 +1041,218 @@ class PostgresMemoryRepository:
         )[:limit]
 
     async def forget(self, request: ForgetRequest) -> ForgetResult:
-        table_names = (
-            "agent_memory_events",
-            "agent_memory_claims",
-            "agent_memory_artifacts",
-        )
         async with self.pool.connection() as connection:
             async with connection.transaction():
-                await admission.lock_scope(connection, request.scope)
-                await retention.forget(connection, request)
-                admission_claim_ids, extra_admission_claims = await admission.forget_records(
-                    connection, request
-                )
-                if request.all_in_scope:
-                    where = "partition_key = %s"
-                    params: tuple[Any, ...] = (request.scope.partition_key(),)
-                else:
-                    where = "partition_key = %s AND id = ANY(%s)"
-                    params = (request.scope.partition_key(), list(request.memory_ids))
-                counts: dict[str, int] = {}
-                for table in table_names:
-                    cursor = await connection.execute(
-                        f"SELECT count(*) AS count FROM {table} WHERE {where}", params
-                    )
-                    counts[table] = (await cursor.fetchone())["count"]
+                return await self._forget_on_connection(connection, request)
 
-                impacted_memory_ids = set(request.memory_ids) | admission_claim_ids
-                if request.all_in_scope:
-                    target_event_ids: set[str] = set()
-                else:
+    async def _forget_on_connection(self, connection, request, *, replay=False):
+        table_names = (
+            "agent_memory_events", "agent_memory_claims", "agent_memory_artifacts",
+        )
+        await admission.lock_scope(connection, request.scope)
+        await retention.forget(connection, request, journal=not replay)
+        admission_claim_ids, extra_admission_claims = await admission.forget_records(
+            connection, request
+        )
+        if request.all_in_scope:
+            where = "partition_key = %s"
+            params: tuple[Any, ...] = (request.scope.partition_key(),)
+        else:
+            where = "partition_key = %s AND id = ANY(%s)"
+            params = (request.scope.partition_key(), list(request.memory_ids))
+        counts: dict[str, int] = {}
+        for table in table_names:
+            cursor = await connection.execute(
+                f"SELECT count(*) AS count FROM {table} WHERE {where}", params
+            )
+            counts[table] = (await cursor.fetchone())["count"]
+
+        impacted_memory_ids = set(request.memory_ids) | admission_claim_ids
+        if request.all_in_scope:
+            target_event_ids: set[str] = set()
+        else:
+            cursor = await connection.execute(
+                """
+                SELECT id FROM agent_memory_events
+                WHERE partition_key = %s AND id = ANY(%s)
+                """,
+                (request.scope.partition_key(), list(request.memory_ids)),
+            )
+            target_event_ids = {row["id"] for row in await cursor.fetchall()}
+            if target_event_ids:
+                for table in ("agent_memory_claims", "agent_memory_artifacts"):
                     cursor = await connection.execute(
-                        """
-                        SELECT id FROM agent_memory_events
-                        WHERE partition_key = %s AND id = ANY(%s)
+                        f"""
+                        SELECT id FROM {table}
+                        WHERE partition_key = %s
+                          AND provenance_json -> 'source_event_ids' ?| %s
                         """,
-                        (request.scope.partition_key(), list(request.memory_ids)),
+                        (request.scope.partition_key(), list(target_event_ids)),
                     )
-                    target_event_ids = {row["id"] for row in await cursor.fetchall()}
-                    if target_event_ids:
-                        for table in ("agent_memory_claims", "agent_memory_artifacts"):
-                            cursor = await connection.execute(
-                                f"""
-                                SELECT id FROM {table}
-                                WHERE partition_key = %s
-                                  AND provenance_json -> 'source_event_ids' ?| %s
-                                """,
-                                (request.scope.partition_key(), list(target_event_ids)),
-                            )
-                            impacted_memory_ids.update(
-                                row["id"] for row in await cursor.fetchall()
-                            )
-                impacted_memory_ids.update(target_event_ids)
-
-                changed_block_ids: set[str] = set()
-                blocks_to_drop: set[str] = set()
-                if not request.all_in_scope:
-                    cursor = await connection.execute(
-                        f"SELECT id FROM agent_memory_events WHERE {where}", params
+                    impacted_memory_ids.update(
+                        row["id"] for row in await cursor.fetchall()
                     )
-                    target_event_ids = {row["id"] for row in await cursor.fetchall()}
-                    if target_event_ids:
-                        cursor = await connection.execute(
-                            """
-                            SELECT * FROM agent_memory_artifacts
-                            WHERE partition_key = %s AND kind = %s AND archived_at IS NULL
-                            FOR UPDATE
-                            """,
-                            (request.scope.partition_key(), str(MemoryKind.BLOCK)),
-                        )
-                        for row in await cursor.fetchall():
-                            block = self._block_from_row(row)
-                            remaining_event_ids = tuple(
-                                event_id
-                                for event_id in block.event_ids
-                                if event_id not in target_event_ids
-                            )
-                            if len(remaining_event_ids) == len(block.event_ids):
-                                continue
-                            changed_block_ids.add(block.id)
-                            if not remaining_event_ids:
-                                blocks_to_drop.add(block.id)
-                                continue
-                            updated_at = utc_now()
-                            provenance = replace(
-                                block.provenance,
-                                source_event_ids=remaining_event_ids,
-                            )
-                            updated_block = replace(
-                                block,
-                                event_ids=remaining_event_ids,
-                                provenance=provenance,
-                                version=block.version + 1,
-                                updated_at=updated_at,
-                            )
-                            await connection.execute(
-                                """
-                                UPDATE agent_memory_artifacts
-                                SET payload_json = %s::jsonb, provenance_json = %s::jsonb,
-                                    version = %s, occurred_at = %s
-                                WHERE id = %s AND version = %s AND archived_at IS NULL
-                                """,
-                                (
-                                    _json(updated_block),
-                                    _json(provenance),
-                                    updated_block.version,
-                                    updated_at,
-                                    block.id,
-                                    block.version,
-                                ),
-                            )
+        impacted_memory_ids.update(target_event_ids)
 
-                if blocks_to_drop:
-                    if request.mode == ForgetMode.ARCHIVE:
+        changed_block_ids: set[str] = set()
+        blocks_to_drop: set[str] = set()
+        if not request.all_in_scope:
+            cursor = await connection.execute(
+                f"SELECT id FROM agent_memory_events WHERE {where}", params
+            )
+            target_event_ids = {row["id"] for row in await cursor.fetchall()}
+            if target_event_ids:
+                cursor = await connection.execute(
+                    """
+                    SELECT * FROM agent_memory_artifacts
+                    WHERE partition_key = %s AND kind = %s AND archived_at IS NULL
+                    FOR UPDATE
+                    """,
+                    (request.scope.partition_key(), str(MemoryKind.BLOCK)),
+                )
+                for row in await cursor.fetchall():
+                    block = self._block_from_row(row)
+                    remaining_event_ids = tuple(
+                        event_id
+                        for event_id in block.event_ids
+                        if event_id not in target_event_ids
+                    )
+                    if len(remaining_event_ids) == len(block.event_ids):
+                        continue
+                    changed_block_ids.add(block.id)
+                    if not remaining_event_ids:
+                        blocks_to_drop.add(block.id)
+                        continue
+                    updated_at = utc_now()
+                    provenance = replace(
+                        block.provenance,
+                        source_event_ids=remaining_event_ids,
+                    )
+                    updated_block = replace(
+                        block,
+                        event_ids=remaining_event_ids,
+                        provenance=provenance,
+                        version=block.version + 1,
+                        updated_at=updated_at,
+                    )
+                    await connection.execute(
+                        """
+                        UPDATE agent_memory_artifacts
+                        SET payload_json = %s::jsonb, provenance_json = %s::jsonb,
+                            version = %s, occurred_at = %s
+                        WHERE id = %s AND version = %s AND archived_at IS NULL
+                        """,
+                        (
+                            _json(updated_block),
+                            _json(provenance),
+                            updated_block.version,
+                            updated_at,
+                            block.id,
+                            block.version,
+                        ),
+                    )
+
+        if blocks_to_drop:
+            if request.mode == ForgetMode.ARCHIVE:
+                await connection.execute(
+                    """
+                    UPDATE agent_memory_artifacts
+                    SET archived_at = now(), status = 'archived'
+                    WHERE id = ANY(%s)
+                    """,
+                    (list(blocks_to_drop),),
+                )
+            else:
+                await connection.execute(
+                    "DELETE FROM agent_memory_artifacts WHERE id = ANY(%s)",
+                    (list(blocks_to_drop),),
+                )
+
+        if request.mode == ForgetMode.ARCHIVE:
+            await connection.execute(
+                f"UPDATE agent_memory_events SET archived_at = now() WHERE {where}", params
+            )
+            await connection.execute(
+                f"""
+                UPDATE agent_memory_claims
+                SET archived_at = now(), status = 'archived' WHERE {where}
+                """,
+                params,
+            )
+            await connection.execute(
+                f"""
+                UPDATE agent_memory_artifacts
+                SET archived_at = now(), status = 'archived' WHERE {where}
+                """,
+                params,
+            )
+        else:
+            await connection.execute(
+                f"DELETE FROM agent_memory_artifacts WHERE {where}", params
+            )
+            await connection.execute(
+                f"DELETE FROM agent_memory_claims WHERE {where}", params
+            )
+            await connection.execute(
+                f"DELETE FROM agent_memory_events WHERE {where}", params
+            )
+        # Events are gone or archived, but JSON provenance has no FK.
+        # Scrub dependent claims in the same transaction, in bounded
+        # pages. Directly targeted claims are already counted above.
+        if target_event_ids and not request.all_in_scope:
+            after_id = None
+            while True:
+                cursor = await connection.execute(
+                    """SELECT id, provenance_json FROM agent_memory_claims
+                    WHERE partition_key = %s
+                      AND provenance_json -> 'source_event_ids' ?| %s
+                      AND NOT (id = ANY(%s))
+                      AND (%s::text IS NULL OR id > %s)
+                    ORDER BY id LIMIT 128 FOR UPDATE""",
+                    (request.scope.partition_key(), list(target_event_ids),
+                     list(request.memory_ids), after_id, after_id),
+                )
+                rows = await cursor.fetchall()
+                if not rows:
+                    break
+                for row in rows:
+                    await PostgresClaimHistory(self).scrub_sources(connection, row["id"], target_event_ids)
+                    provenance = _provenance(row["provenance_json"])
+                    remaining = tuple(event_id for event_id in provenance.source_event_ids
+                                      if event_id not in target_event_ids)
+                    if not remaining and request.mode == ForgetMode.ERASE:
                         await connection.execute(
-                            """
-                            UPDATE agent_memory_artifacts
-                            SET archived_at = now(), status = 'archived'
-                            WHERE id = ANY(%s)
-                            """,
-                            (list(blocks_to_drop),),
+                            "DELETE FROM agent_memory_claims WHERE id = %s",
+                            (row["id"],),
                         )
                     else:
                         await connection.execute(
-                            "DELETE FROM agent_memory_artifacts WHERE id = ANY(%s)",
-                            (list(blocks_to_drop),),
+                            """UPDATE agent_memory_claims
+                            SET provenance_json = %s::jsonb,
+                                archived_at = CASE WHEN %s THEN now() ELSE archived_at END,
+                                status = CASE WHEN %s THEN 'archived' ELSE status END
+                            WHERE id = %s""",
+                            (_json(replace(provenance, source_event_ids=remaining)),
+                             not remaining, not remaining, row["id"]),
                         )
-
-                if request.mode == ForgetMode.ARCHIVE:
-                    await connection.execute(
-                        f"UPDATE agent_memory_events SET archived_at = now() WHERE {where}", params
-                    )
-                    await connection.execute(
-                        f"""
-                        UPDATE agent_memory_claims
-                        SET archived_at = now(), status = 'archived' WHERE {where}
-                        """,
-                        params,
-                    )
-                    await connection.execute(
-                        f"""
-                        UPDATE agent_memory_artifacts
-                        SET archived_at = now(), status = 'archived' WHERE {where}
-                        """,
-                        params,
-                    )
-                else:
-                    await connection.execute(
-                        f"DELETE FROM agent_memory_artifacts WHERE {where}", params
-                    )
-                    await connection.execute(
-                        f"DELETE FROM agent_memory_claims WHERE {where}", params
-                    )
-                    await connection.execute(
-                        f"DELETE FROM agent_memory_events WHERE {where}", params
-                    )
-                # Events are gone or archived, but JSON provenance has no FK.
-                # Scrub dependent claims in the same transaction, in bounded
-                # pages. Directly targeted claims are already counted above.
-                if target_event_ids and not request.all_in_scope:
-                    after_id = None
-                    while True:
-                        cursor = await connection.execute(
-                            """SELECT id, provenance_json FROM agent_memory_claims
-                            WHERE partition_key = %s
-                              AND provenance_json -> 'source_event_ids' ?| %s
-                              AND NOT (id = ANY(%s))
-                              AND (%s::text IS NULL OR id > %s)
-                            ORDER BY id LIMIT 128 FOR UPDATE""",
-                            (request.scope.partition_key(), list(target_event_ids),
-                             list(request.memory_ids), after_id, after_id),
-                        )
-                        rows = await cursor.fetchall()
-                        if not rows:
-                            break
-                        for row in rows:
-                            await PostgresClaimHistory(self).scrub_sources(connection, row["id"], target_event_ids)
-                            provenance = _provenance(row["provenance_json"])
-                            remaining = tuple(event_id for event_id in provenance.source_event_ids
-                                              if event_id not in target_event_ids)
-                            if not remaining and request.mode == ForgetMode.ERASE:
-                                await connection.execute(
-                                    "DELETE FROM agent_memory_claims WHERE id = %s",
-                                    (row["id"],),
-                                )
-                            else:
-                                await connection.execute(
-                                    """UPDATE agent_memory_claims
-                                    SET provenance_json = %s::jsonb,
-                                        archived_at = CASE WHEN %s THEN now() ELSE archived_at END,
-                                        status = CASE WHEN %s THEN 'archived' ELSE status END
-                                    WHERE id = %s""",
-                                    (_json(replace(provenance, source_event_ids=remaining)),
-                                     not remaining, not remaining, row["id"]),
-                                )
-                            counts["agent_memory_claims"] += 1
-                        after_id = rows[-1]["id"]
-                await self._invalidate_feedback(
-                    connection,
-                    request.scope.partition_key(),
-                    impacted_memory_ids,
-                    erase=request.mode == ForgetMode.ERASE,
-                    all_in_scope=request.all_in_scope,
-                )
-                return ForgetResult(
-                    affected_events=counts["agent_memory_events"],
-                    affected_claims=counts["agent_memory_claims"] + extra_admission_claims,
-                    affected_artifacts=(
-                        counts["agent_memory_artifacts"]
-                        + len(changed_block_ids - set(request.memory_ids))
-                    ),
-                    mode=request.mode,
-                )
+                    counts["agent_memory_claims"] += 1
+                after_id = rows[-1]["id"]
+        await self._invalidate_feedback(
+            connection,
+            request.scope.partition_key(),
+            impacted_memory_ids,
+            erase=request.mode == ForgetMode.ERASE,
+            all_in_scope=request.all_in_scope,
+        )
+        return ForgetResult(
+            affected_events=counts["agent_memory_events"],
+            affected_claims=counts["agent_memory_claims"] + extra_admission_claims,
+            affected_artifacts=(
+                counts["agent_memory_artifacts"]
+                + len(changed_block_ids - set(request.memory_ids))
+            ),
+            mode=request.mode,
+        )
 
     @staticmethod
     async def _invalidate_feedback(
