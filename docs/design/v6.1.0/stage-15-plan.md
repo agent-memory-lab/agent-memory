@@ -1,8 +1,8 @@
 # 第十五阶段方案：版本化 L2 页面与完整重建
 
-版本 AM61-ST15 / 1.0；2026-10-07；PLANNED（未实现）；执行台账 revision 23。
+版本 AM61-ST15 / 1.1；2026-10-07；DONE（本阶段有界 full rebuild）；执行台账 revision 24。
 依据冻结 v6.1.0 第 17 节与 T30–T32，复用已验收的 [传递处理图](stage-14c.md)。
-任务：[stage-15-tasks.md](stage-15-tasks.md)。本文件的规划不增加任何功能或验收声明。
+任务：[stage-15-tasks.md](stage-15-tasks.md)。实施：[stage-15.md](stage-15.md)；独立验收：[validation-stage-15.json](validation-stage-15.json)。
 
 ## 首个交付闭环
 
@@ -23,8 +23,8 @@
 
 优先在既有 derived 目录内按合同、纯 renderer、事务编排划分责任；后端只负责原 UoW 持久化。
 若页面合同无法复用当前 facet schema，则增加独立类型及 ledger kind，避免把页面字段塞进语言 FacetDefinition。
-容量、父更改/删除与跨连接原子性必须在开放前验收；逐项新增与受影响测试，不默认全量运行。
-T30–T32 在首个切片通过后才推进 IN_PROGRESS；本阶段规划时仍为 TODO。
+容量、父更改/删除与跨连接原子性必须在开放前验收；开发中运行专项测试；本阶段按用户最新要求，交付前运行整个仓库与所有包的全量测试。
+本阶段 ST15-01–07 完成；一般 T30–T33 推进 IN_PROGRESS，delta、一般 L2/L3 及复杂页面尚未整体验收。
 
 本阶段不启用 delta、LLM 自由页面生成、条件/历史父合成、跨范围页面或自动 L3 人格推断。
 先验收完整重建与生命周期，再评估 delta 的实际收益和继承全部输入的合同；历史/条件父另外设计冻结版本证明。
