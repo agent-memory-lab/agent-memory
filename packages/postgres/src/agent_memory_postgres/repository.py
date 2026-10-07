@@ -311,13 +311,49 @@ class PostgresMemoryUnitOfWork:
             ),
         )
 
+    async def derived_get(self, scope, kind, identity):
+        from . import derived
+
+        return await derived.get(self.connection, scope, kind, identity)
+
+    async def derived_put(self, scope, kind, identity, payload):
+        from . import derived
+
+        return await derived.put(self.connection, scope, kind, identity, payload)
+
+    async def derived_records(self, scope, kind):
+        from . import derived
+
+        return await derived.records(self.connection, scope, kind)
+
+    async def derived_candidates(self, scope, slots):
+        from . import derived
+
+        return await derived.candidates(self.connection, scope, slots)
+
+    async def derived_edges(self, scope, revision_id, values):
+        from . import derived
+
+        return await derived.edges(self.connection, scope, revision_id, values)
+
+    async def derived_reverse(self, scope, parent):
+        from . import derived
+
+        return await derived.reverse(self.connection, scope, parent)
+
     async def retention_head_get(self, scope, kind, identity):
         return await retention.head_get(self.connection, scope, kind, identity)
 
     async def retention_head_put(self, scope, kind, identity, payload, expected_generation):
-        return await retention.head_put(
+        await self.lock_admission_scope(scope)
+        result = await retention.head_put(
             self.connection, scope, kind, identity, payload, expected_generation
         )
+        if kind == "interpretation":
+            from agent_memory.derived.service import interpretation_changed
+
+            await interpretation_changed(self, scope, identity)
+        return result
 
     async def get_source_event(self, scope, event_id):
         cursor = await self.connection.execute(
@@ -498,15 +534,23 @@ class PostgresMemoryUnitOfWork:
         self, scope: MemoryScope, record_id: str, event_id: str, slot_key: str,
         payload: dict[str, Any], expected_version: int,
     ) -> int:
+        await self.lock_admission_scope(scope)
         namespace = (scope.tenant_id, scope.namespace)
         if namespace not in self._admission_batch_times:
             self._admission_batch_times[namespace] = await admission.publication_time(
                 self.connection, scope
             )
-        return await admission.save_record(
+        result = await admission.save_record(
             self.connection, scope, record_id, event_id, slot_key, payload, expected_version,
             recorded_at=self._admission_batch_times[namespace],
         )
+        from agent_memory.derived.service import mark_slot_changed
+
+        from . import derived
+
+        await derived.header(self.connection, scope, record_id, event_id, slot_key, payload, result)
+        await mark_slot_changed(self, scope, slot_key)
+        return result
 
     async def find_current_claim(self, scope: MemoryScope, key: str) -> Claim | None:
         # Match ingest and deletion: namespace lock must precede Claim locks.
@@ -810,6 +854,22 @@ class PostgresMemoryRepository:
                         migration.read_text(encoding="utf-8"), prepare=False
                     )
                 await PostgresClaimHistory(self).initialize(connection)
+                from . import derived
+
+                cursor = await connection.execute(
+                    "SELECT r.* FROM agent_memory_admission_records r LEFT JOIN agent_memory_derived_atom_headers h "
+                    "ON r.partition_key=h.partition_key AND r.record_id=h.identity WHERE h.identity IS NULL"
+                )
+                for row in await cursor.fetchall():
+                    await derived.header(
+                        connection,
+                        MemoryScope(**row["scope_json"]),
+                        row["record_id"],
+                        row["event_id"],
+                        row["slot_key"],
+                        row["payload_json"],
+                        row["version"],
+                    )
 
     async def close(self) -> None:
         await self.pool.close()
@@ -1050,10 +1110,14 @@ class PostgresMemoryRepository:
             "agent_memory_events", "agent_memory_claims", "agent_memory_artifacts",
         )
         await admission.lock_scope(connection, request.scope)
+        from . import derived
+
+        await derived.forget(connection, request)
         await retention.forget(connection, request, journal=not replay)
         admission_claim_ids, extra_admission_claims = await admission.forget_records(
             connection, request
         )
+        await derived.reconcile_headers(connection, request.scope)
         if request.all_in_scope:
             where = "partition_key = %s"
             params: tuple[Any, ...] = (request.scope.partition_key(),)

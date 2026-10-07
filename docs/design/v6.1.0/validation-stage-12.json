@@ -1,0 +1,134 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "date": "2026-10-07",
+  "ledger_revision": 17,
+  "design": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "base_commit": "6100db02598ac0ffae49a5dccd9295d43bb728a9",
+  "stage_plan": "AM61-ST12/1.1",
+  "implementation_steps_completed": [
+    "D01",
+    "D02",
+    "D03",
+    "D04",
+    "D05",
+    "D06",
+    "D07"
+  ],
+  "stage_tasks_completed": [
+    "ST12-01",
+    "ST12-02",
+    "ST12-03",
+    "ST12-04",
+    "ST12-05",
+    "ST12-06",
+    "ST12-07",
+    "ST12-08",
+    "ST12-09",
+    "ST12-10"
+  ],
+  "enabled_scope": "opt-in exact-scope current deterministic full communication.language/locale Observation from closed primary L1; trusted grants for all actual L0/L1 inputs including independent termination context; three dependency kinds, atomic query/safety/time/epoch barriers, finite typed facet units and guarded readonly SDK/MCP derived_context; no historical or derived-parent delivery",
+  "full_test_run": false,
+  "test_scope_reason": "User requested partial tests only: new complete Observation stage and affected admission, qualification, source/reprocessing, publication, refresh, indexing/deletion/backup, SDK/MCP, architecture and migration contracts.",
+  "tests": {
+    "unique_targeted_cases": 558,
+    "passed": 558,
+    "skipped": 0,
+    "new_behavior_cases": 90,
+    "new_architecture_cases": 1,
+    "new_migration_cases": 1,
+    "new_storage_cases_per_backend": 43,
+    "pure_new_behavior_contract_cases": 4,
+    "backends": [
+      "SQLite",
+      "PostgreSQL 17"
+    ],
+    "real_crash": "4 new actual SIGKILL cases before/after atomic Observation publication on both backends; no database-server power-loss claim",
+    "real_backup": "4 new actual SQLite connection.backup and PostgreSQL 17 pg_dump restores replay pinned object/scope purge logs over ready derived history",
+    "concurrency": "2 new independent-repository/connection publisher-vs-delete cases, plus fixed successor/member/empty snapshot and lease fencing behavior",
+    "result_accounting": "Latest result per (classname,name), no repeated-run inflation. Initial new-contract failures were repaired before final acceptance; a SQLite competition-test cleanup incorrectly called nonexistent repository.close, then both backend competition cases were rerun. Deletion reconciliation, serialized budgets, immutable-revision integrity and permission summary validation received affected reruns.",
+    "targets": [
+      "tests/test_derived_observations.py",
+      "tests/test_architecture.py",
+      "tests/test_resource_refresh.py",
+      "tests/test_atom_admission.py",
+      "tests/test_fact_qualification.py",
+      "tests/test_reprocessing.py",
+      "tests/test_source_revisions.py",
+      "tests/test_publication_batches.py",
+      "tests/test_durable_indexing.py",
+      "tests/test_purge_restore.py",
+      "tests/test_durable_transport.py",
+      "packages/python-sdk/tests",
+      "packages/mcp-server/tests",
+      "packages/postgres/tests/test_migration_contract.py"
+    ]
+  },
+  "build": {
+    "distributions": [
+      "core",
+      "postgres",
+      "sdk",
+      "mcp"
+    ],
+    "status": "passed",
+    "migration": "015_derived_observations.sql",
+    "changed_packaged_sources_match_wheels": true,
+    "source_files_sha256": {
+      "src/agent_memory/derived/__init__.py": "b89cb540ef95805ea8c94a2cd21c54789a69af83327e55f71605753f6d24d198",
+      "src/agent_memory/derived/model.py": "41d57562fe22cb0cb8f5a19d17dd9f7fd5173b78d4efacf3153743dadba3ed0a",
+      "src/agent_memory/derived/observation.py": "933808962ef1dc14bfb51092f02d94f5af03af1876723a13f8edebc441521806",
+      "src/agent_memory/derived/service.py": "0c2fca8347e6c07b1d8f99ca45804ad40b716cf202f6b3ffed2e6e03fe14c9e5",
+      "src/agent_memory/mcp.py": "dd120c2c0a25243bd665b55c14df67f57d87c39226b31b76faf6b2ad5eb3cb30",
+      "src/agent_memory/operations/facet_refresh.py": "a0a4317aa3b077255146cf7cd326400129fddbf4626eedb3c1961dd5cf54ce0c",
+      "src/agent_memory/operations/sqlite_derived.py": "e064835c07127a6a620cbbdef07a89b3ac091830ba33a887edf83f8eb7b8020c",
+      "src/agent_memory/ports.py": "fe1b371571799c2a81c2b54fc5f481968ae3be3a151b6d2d5e71ed3bba11baa9",
+      "src/agent_memory/sqlite.py": "a8ccc031883b49f67fb9e050d769b3113699d0f113c97b52eaf87185d29bc12f",
+      "packages/mcp-server/src/agent_memory_mcp/server.py": "151c2fff2d4268fb7d7ae21a8584d11b88f8c198dbb5a9dbac6847264382efa0",
+      "packages/postgres/src/agent_memory_postgres/derived.py": "1bf190e9dd1c48aca5e7b2c4a98a9412b21bece058118448dad7c2e7ee5867bc",
+      "packages/postgres/src/agent_memory_postgres/repository.py": "1e50c43988b1a9ab733b5431709b37aeeae9e2d7b5486d202b349025959107a7",
+      "packages/postgres/migrations/015_derived_observations.sql": "c5dfebf9086d499c97ec464d08500e468898729db85fff41c0d486ad518151c5",
+      "packages/python-sdk/src/agent_memory_sdk/client.py": "b4ce912ef2543c8468e87588d0419282d7a1865e904a69a2047801df44a8c318"
+    },
+    "installed_wheel_smoke": "Imports verified from extracted wheels; SQLite full example and real PostgreSQL repeat initialize + empty facet publication/status/read passed.",
+    "example": "examples/derived_observation.py"
+  },
+  "checks": {
+    "frozen_design_hashes": "passed",
+    "pre_existing_user_edits_preserved": "passed",
+    "relative_links": "passed",
+    "global_tasks": 44,
+    "global_acceptance_rows": 66,
+    "global_task_statuses": {
+      "DONE": 1,
+      "IN_PROGRESS": 29,
+      "TODO": 14
+    }
+  },
+  "implementation_refinements": [
+    "Separate FacetRefreshQueue preserves legacy live-source refresh guards while reusing BoundedWorker.",
+    "Preparation is ephemeral and regenerated from newly authorized snapshots, never stored in legacy checkpoints.",
+    "Zero-output publications persist empty audit manifest/dependency proofs and clear readable head.",
+    "Primary deletion effects reconcile metadata headers in the original UoW, including conservative same-slot tombstones."
+  ],
+  "unsupported": [
+    "other facets/predicates/templates",
+    "qualified or conditional Observation",
+    "cross-scope input",
+    "derived parents and general transitive graph",
+    "historical derived delivery",
+    "dynamic ACL service",
+    "L2/L3",
+    "delta pages",
+    "external LLM dispatch",
+    "production extraction quality certification"
+  ],
+  "documents_sha256": {
+    "plan.md": "2374f0b0bab7dd31bbf2df6df4c9864408c6d684b7cdba32fb0f97f9ed58bae4",
+    "task.md": "3c0d480eaae06c2f6da236aec3205b7748c3130a4d6876465c24ab6f25be8ffb",
+    "next-steps.md": "a7ea38230d10cc494417b189c9317799bce6220c0aeca06d9c58be8d395bdad9",
+    "stage-12.md": "ec9893835c4773db01840f3a4af151fd242ac44503bf9347b26aaeddbb97c375",
+    "stage-12-plan.md": "0cdd771844474533ec21cb68c5e9f17464f5215d3c793a3090da61f9de79d873",
+    "stage-12-tasks.md": "4c5d1194211fe44649b3bbc78e13cce83f0814817ceed97c823534a36ada2538"
+  }
+}

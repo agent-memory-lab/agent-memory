@@ -33,3 +33,12 @@ def test_feedback_migration_is_additive_and_indexed():
     assert "agent_memory_evolution_idempotency_idx" in sql
     assert "agent_memory_evolution_parent_idx" in sql
     assert "values (2)" in sql
+
+
+def test_derived_migration_is_additive_and_reverse_indexed():
+    sql = (Path(__file__).parents[1] / "migrations" / "015_derived_observations.sql").read_text().lower()
+    assert "agent_memory_derived_reverse_idx" in sql
+    assert "edge_kind in ('support','processing','query')" in sql
+    assert "agent_memory_derived_atom_slot_idx" in sql
+    assert "alter table agent_memory_claims" not in sql
+    assert "drop table" not in sql

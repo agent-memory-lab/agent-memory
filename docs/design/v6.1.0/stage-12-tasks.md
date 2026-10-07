@@ -1,21 +1,21 @@
 # 第十二阶段执行任务清单
 
-版本 AM61-ST12-TASK / 1.0，2026-10-07；计划台账 revision 16；全部 PLANNED，尚未开发。
+版本 AM61-ST12-TASK / 1.1，2026-10-07；计划台账 revision 17；ST12-01–ST12-10 已完成，证据见 [stage-12.md](stage-12.md)。
 依据：[stage-12-plan.md](stage-12-plan.md)，实现基线 `f70eec434b57dd0cf40d198c80daa5bd2d1bf0ae`。
 本清单展开一个完整阶段，不替代全局 44 项任务或修改冻结设计的 66 项验收。
 
 | ID / 顺序 | 对应主任务 | 开发任务与完成条件 | 状态 |
 | --- | --- | --- | --- |
-| ST12-01 / D01 | T02/T13/T25–T27 | 冻结 definition/revision、support/processing/query、grant、时间覆盖、outcome/target 和版本能力；显式禁用不支持组合 | TODO |
-| ST12-02 / D02 | T25/T26/T24 | 双后端同事务端口、反向依赖、facet/head/safety CAS、bootstrap 和 additive migration；重复初始化与旧库升级通过 | TODO |
-| ST12-03 / D02 | T16/T23/T26/T29 | 接纳、资格/终止、更正/重处理、初次 closure、修订、删除及可信许可更新推进对应 barrier；一次变化原子形成刷新责任 | TODO |
-| ST12-04 / D03 | T18/T22/T25 | 新增兼容 facet 工作单元，空查询/删除最后来源可刷新；旧 source 单元维持全部守卫；去重、serialization、领取/后继集合不漂移 | TODO |
-| ST12-05 / D03 | T13/T25/T26 | 锁内固定完整合格快照、query 代次、上下文、许可和全部实际输入；先授权再取正文；预算/故障保持 incomplete | TODO |
-| ST12-06 / D04 | T22/T27 | communication.language 首个确定性 Observation，按主体/facet 保持条件/来源/时间和冲突；输出逐项验证，不回写 L1 | TODO |
-| ST12-07 / D04 | T16/T18/T22/T27 | 原子发布修订/head/三类边/输入清单/完成覆盖；CAS、随机租约、定义代次、有限结果与经过验证的 noop | TODO |
-| ST12-08 / D05 | T13/T23/T28/T29 | semantic/current safety 与时间守卫、反向失效、正文/历史/准备完整擦除、PurgeRestore 联动；重建失败不复活旧内容 | TODO |
-| ST12-09 / D06 | T24/T34/T44 | 宿主注册/触发和只读 SDK/MCP 查询、明确 capability、显式 derived_context 路由与最终交付复查；历史请求具名 unsupported | TODO |
-| ST12-10 / D07 | T04/T24/T44 | 下面全部必需矩阵、双后端专项、必要真实 SIGKILL、旧库迁移、wheel/源码一致、可运行示例、记录与提交推送 | TODO |
+| ST12-01 / D01 | T02/T13/T25–T27 | 冻结 definition/revision、support/processing/query、grant、时间覆盖、outcome/target 和版本能力；显式禁用不支持组合 | DONE |
+| ST12-02 / D02 | T25/T26/T24 | 双后端同事务端口、反向依赖、facet/head/safety CAS、bootstrap 和 additive migration；重复初始化与旧库升级通过 | DONE |
+| ST12-03 / D02 | T16/T23/T26/T29 | 接纳、资格/终止、更正/重处理、初次 closure、修订、删除及可信许可更新推进对应 barrier；一次变化原子形成刷新责任 | DONE |
+| ST12-04 / D03 | T18/T22/T25 | 新增兼容 facet 工作单元，空查询/删除最后来源可刷新；旧 source 单元维持全部守卫；去重、serialization、领取/后继集合不漂移 | DONE |
+| ST12-05 / D03 | T13/T25/T26 | 锁内固定完整合格快照、query 代次、上下文、许可和全部实际输入；先授权再取正文；预算/故障保持 incomplete | DONE |
+| ST12-06 / D04 | T22/T27 | communication.language 首个确定性 Observation，按主体/facet 保持条件/来源/时间和冲突；输出逐项验证，不回写 L1 | DONE |
+| ST12-07 / D04 | T16/T18/T22/T27 | 原子发布修订/head/三类边/输入清单/完成覆盖；CAS、随机租约、定义代次、有限结果与经过验证的 noop | DONE |
+| ST12-08 / D05 | T13/T23/T28/T29 | semantic/current safety 与时间守卫、反向失效、正文/历史/准备完整擦除、PurgeRestore 联动；重建失败不复活旧内容 | DONE |
+| ST12-09 / D06 | T24/T34/T44 | 宿主注册/触发和只读 SDK/MCP 查询、明确 capability、显式 derived_context 路由与最终交付复查；历史请求具名 unsupported | DONE |
+| ST12-10 / D07 | T04/T24/T44 | 下面全部必需矩阵、双后端专项、必要真实 SIGKILL、旧库迁移、wheel/源码一致、可运行示例、记录与提交推送 | DONE |
 
 ## 必须通过的验收矩阵
 
@@ -47,12 +47,12 @@
 
 ## 阶段交付检查
 
-- [ ] ST12-01 至 ST12-10 全部达到完成条件；新能力仅按本阶段明确支持矩阵启用。
-- [ ] 所有必需矩阵在 SQLite 与真实 PostgreSQL 执行；缺环境/跳过项单列，不能计作通过。
-- [ ] SDK/MCP 与真实存储和既有刷新 runner 贯通；不是只测生成器输出。
-- [ ] 只运行新增及受影响专项；不自动全量测试；重复运行不累加通过用例数。
-- [ ] 冻结设计校验、架构依赖、旧 API/账本兼容和包内迁移/源码一致性完成。
-- [ ] 新增 stage-12.md 与 validation-stage-12.json，更新全局 plan/task/next-steps 的实际证据。
-- [ ] 本轮代码提交/推送；保留用户已有未提交修改；确认远端提交一致。
+- [x] ST12-01 至 ST12-10 全部达到完成条件；新能力仅按本阶段明确支持矩阵启用。
+- [x] 所有必需矩阵在 SQLite 与真实 PostgreSQL 执行；缺环境/跳过项单列，不能计作通过。
+- [x] SDK/MCP 与真实存储和既有刷新 runner 贯通；不是只测生成器输出。
+- [x] 只运行新增及受影响专项；不自动全量测试；重复运行不累加通过用例数。
+- [x] 冻结设计校验、架构依赖、旧 API/账本兼容和包内迁移/源码一致性完成。
+- [x] 新增 stage-12.md 与 validation-stage-12.json，更新全局 plan/task/next-steps 的实际证据。
+- [x] 本轮代码提交/推送；保留用户已有未提交修改；确认远端提交一致。
 
-验收前不把规划任务勾选 DONE；开发中发现必须扩大语义或授权边界时先更新本阶段方案版本与验收矩阵。
+本轮只勾选本阶段限定交付；纯合同拒绝检查独立执行，支持的存储组合在 SQLite/PostgreSQL 验证。条件化能力、通用传递图和历史派生仍关闭；见方案 1.1 与实施记录，不将拒绝测试记作这些能力实现。

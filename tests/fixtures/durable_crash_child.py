@@ -181,6 +181,24 @@ async def main(config):
                 reason="operator",
             )
         await pause()
+    elif phase.startswith("derived_"):
+        from agent_memory.derived import ObservationService
+        from agent_memory.operations.facet_refresh import FacetRefreshQueue
+
+        service = ObservationService(repository, scope, base.POLICY, clock=lambda: now)
+        queue = FacetRefreshQueue(service)
+        lease = await queue.claim("crashed-derived-worker", lease_seconds=5)
+        if phase == "derived_before_commit":
+            original = unit_type.derived_put
+
+            async def before_commit(uow, scope, kind, identity, row):
+                await original(uow, scope, kind, identity, row)
+                if kind == "job" and row["status"] == "completed":
+                    await pause()
+
+            unit_type.derived_put = before_commit
+        await service.apply(lease.task)
+        await pause()
     elif phase.startswith("refresh_"):
         from agent_memory.operations.resource_refresh import ResourceRefreshQueue
 

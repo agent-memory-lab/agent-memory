@@ -30,12 +30,14 @@ def create_server(
     ontology=None,
     recovery_tools=None,
     durable_capture=None,
+    derived=None,
 ) -> MCPServer:
     """Create an MCP v2 server while retaining one core business contract."""
     server = MCPServer(name)
     if recovery_tools is not None and (
         capture_sink is not None
         or durable_capture is not None
+        or derived is not None
         or recovery_tools.memory.provider is not provider
     ):
         raise ValueError("recovery requires its own provider and capture gate")
@@ -44,6 +46,7 @@ def create_server(
         doctor=doctor,
         deletion_auditor=deletion_auditor,
         ontology=ontology,
+        derived=derived,
     )
 
     async def call(ctx: Context, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -215,6 +218,15 @@ def create_server(
         if view != "manifest":
             raise ValueError("capability resource view must be 'manifest'")
         return await call(ctx, "memory_capabilities", {})
+
+    if derived is not None:
+
+        @server.tool()
+        async def memory_derived(
+            ctx: Context, operation: str, payload: dict[str, Any]
+        ) -> dict[str, Any]:
+            """Read current guarded Observations; registration and grants belong to the host."""
+            return await call(ctx, "memory_derived", {"operation": operation, "payload": payload})
 
     if durable_capture is not None:
         @server.tool()

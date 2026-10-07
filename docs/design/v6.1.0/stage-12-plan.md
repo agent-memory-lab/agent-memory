@@ -2,10 +2,10 @@
 
 | 元数据 | 值 |
 | --- | --- |
-| 方案标识 / 版本 | AM61-ST12 / 1.0，2026-10-07 |
-| 状态 | PLANNED；尚未实现，本文不构成能力启用或测试通过声明 |
+| 方案标识 / 版本 | AM61-ST12 / 1.1，2026-10-07 |
+| 状态 | IMPLEMENTED；D01–D07 完成；仅启用本阶段限定组合，证据见 [stage-12.md](stage-12.md) |
 | 实现基线 | `f70eec434b57dd0cf40d198c80daa5bd2d1bf0ae`，第十一阶段 |
-| 规范 / 台账 | [设计 v6.1.0](../AGENT_MEMORY_DESIGN_V6.1.0.md)；执行台账 revision 16 |
+| 规范 / 台账 | [设计 v6.1.0](../AGENT_MEMORY_DESIGN_V6.1.0.md)；执行台账 revision 17 |
 | 主任务 | T25 support/processing 依赖、T26 查询覆盖屏障、T27 facet Observation |
 | 必须配套的切片 | T13 输入/交付守卫、T18 刷新、T22 有限回执、T23/T29 派生删除、T28 当前安全守卫、T24/T44 验收与手册 |
 | 执行清单 | [stage-12-tasks.md](stage-12-tasks.md) |
@@ -15,7 +15,7 @@
 完整交付一个可追溯、会立即失效、可恢复重建的本地 Observation，而不是只保存一段摘要。
 首个真实运行样例：在同 exact scope 内，为 canonical subject=alice、facet=communication.language 整理已登记 `locale` 谓词。
 使用确定性整理器表达合格 L1 中明确的语言偏好；不把它推断成性格、团队规则或跨项目偏好。
-可由宿主登记其他已验收谓词，但每个新增 facet 必须有对应语义与覆盖测试。
+首版注册器仅开放此 facet/predicate/template；其他组合具名拒绝，扩展须先补合同与语义/覆盖测试。
 
 本阶段支持：多来源但同 exact scope、当前状态快照、版本化 full rebuild、显式宿主查询及可选 `derived_context` 接入。
 采用受控本地处理，不接外部 LLM，不做跨 scope 合成、派生页面再生成、delta 页面补丁、演化叙事或历史 Observation 交付。
@@ -27,13 +27,13 @@ T25–T29 只按此组合声明完成切片，不把整个 B07/M2 或真实抽�
 
 ## 2. 代码架构与复用
 
-| 位置（拟定） | 职责 |
+| 实际位置 | 职责 |
 | --- | --- |
 | `derived/model.py` | 纯契约：定义、版本、support/processing/query 边、输入清单、状态、构建结果及时间/限制 |
 | `derived/service.py` | 单一编排入口：宿主定义注册、快照、准备、发布 CAS、读取/交付守卫、失效与清理协调 |
 | `derived/observation.py` | facet 分组、确定性 full 整理、逐项事实依据校验；不掌管事务、授权或调度 |
 | `ports.py` | 新增 DerivedUnitOfWork 能力：版本/head、依赖反查、facet barrier、可信处理许可与同事务变更/outbox |
-| `operations/resource_refresh.py` | 兼容扩展版本化 facet 工作单元，复用资源租约、去重、运行中新工作合并与有限回执 |
+| `operations/facet_refresh.py` | 独立的版本化 facet 单元/有限回执，复用 BoundedWorker；旧 `resource_refresh.py` 来源合同和守卫不变 |
 | `operations/sqlite_derived.py` / PostgreSQL `derived.py` | 同等 SQL 持久化、锁、CAS、代次与清理；不判断事实语义 |
 | 既有接纳/资格/终止/修订/删除写入边界 | 在原 UoW 中记录变化并推进受影响 barrier，不能在提交后补写失效信号 |
 | SDK/MCP 与 governed retrieval | 只读、宿主启用、完整最终守卫；不提供模型登记定义、解除失效或发布派生事实的权力 |
@@ -136,12 +136,20 @@ D01/D02 定义会合点后才能扩展其他 facet。最后以所有本阶段用
 重点矩阵见 [执行清单](stage-12-tasks.md)：少引用的私有输入、新成员/冲突、全部来源删除、时间到期、并发刷新、提交强杀与旧备份。
 独立报告确定性协议正确性与真实质量；本轮不设置没有 gold 依据的模型质量阈值。
 
-拟定首版安全容量：每快照最多 64 条 L1、128 个实际内容输入、512 条依赖边、16 个输出块、32768 字符输出、
-262144 字节 manifest；每 facet 最多 128 个保留修订，达到上限明确拒绝并保持失效。
+冻结首版安全容量：每快照最多 64 条 L1、128 个实际内容输入、512 条依赖边、16 个输出块、32768 个 canonical JSON 字符输出、
+262144 个 canonical JSON 字节 manifest；每 facet 最多 128 个保留修订，每 scope 最多 4096 个修订，达到上限明确拒绝并保持失效。
 这些是资源边界，不是质量阈值；D01 结合既有端口预算冻结，不能截断后仍宣称完整。
 沿用刷新任务的活跃/重试/寿命限制，分别核对现有来源单元的 256 来源和 checkpoint 8192 字节上限；大准备数据不塞进旧 checkpoint。
-采用新增 additive migration（拟 PostgreSQL 015，编号实现前再核对）；原事实/索引账本不重写。
+采用新增 additive migration PostgreSQL 015；原事实/索引账本不重写。
 升级前备份及重复初始化要验证；存在新派生账本/安全屏障时不能盲目降级，只关闭派生 capability 保留 L1 读取。
 
 本阶段通过后，再按依赖推进：通用 query/动态 ACL 和历史派生读取 → L2 Scenario / L3 Core-Persona → 版本化知识页面与 delta。
 独立 journal 部署/规模恢复、真实领域 gold 和外部模型治理继续单独验收。
+
+## 9. 1.1 实施落点与验收
+
+D01–D07 全部完成，详见 [实施记录](stage-12.md) 和 [机器验证记录](validation-stage-12.json)。
+facet 单元采用 sibling FacetRefreshQueue，避免旧 source 单元错误依赖已经删除的来源；执行器仍是原 BoundedWorker。
+准备数据不落 checkpoint，确定性重建重取授权输入；完整零输出保留无正文的审计修订及依赖证明。
+语言 facet 没有 QueryContext，条件/例外/否定明确 unsupported；此限制不计作条件化能力通过。
+本版细化执行落点，不修改冻结设计，不声明通用 DAG、历史派生或完整 P3/M2 已完成。

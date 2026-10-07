@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-import json
 from typing import Any
 
 from .domain import (
@@ -24,12 +24,12 @@ from .domain import (
     RewardSignal,
     ScopeLevel,
 )
+from .extensions.registry import PluginError, PluginErrorCode
 from .operations.deletion_audit import DeletionAuditError, DeletionAuditService
 from .operations.doctor import MemoryDoctorProvider, build_memory_repair_plan
 from .ports import MemoryProvider
-from .extensions.registry import PluginError, PluginErrorCode
-from .serialization import to_jsonable
 from .retrieval.temporal_history import TemporalHistoryUnavailable
+from .serialization import to_jsonable
 
 MCP_ERROR_PREFIX = "agent-memory-error:"
 
@@ -112,11 +112,13 @@ class MCPMemoryTools:
         doctor: MemoryDoctorProvider | None = None,
         deletion_auditor: DeletionAuditService | None = None,
         ontology=None,
+        derived=None,
     ) -> None:
         self._provider = provider
         self._doctor = doctor
         self._deletion_auditor = deletion_auditor
         self._ontology = ontology
+        self._derived = derived
 
     def list_tools(self) -> tuple[dict[str, Any], ...]:
         scope_note = "Scope is derived from the authenticated request and is not an argument."
@@ -352,6 +354,21 @@ class MCPMemoryTools:
             )
         if self._ontology is not None:
             tools += self._ontology.tools()
+        if self._derived is not None:
+            tools += (
+                self._tool(
+                    "memory_derived",
+                    "Read guarded current Observations or explicit derived context.",
+                    {
+                        "operation": {
+                            "type": "string",
+                            "enum": ["capabilities", "read", "status", "derived_context"],
+                        },
+                        "payload": {"type": "object"},
+                    },
+                    ("operation", "payload"),
+                ),
+            )
         capabilities = self._provider.manifest().capabilities
         enabled = list(tools)
         if not capabilities.bitemporal_claims:
@@ -379,6 +396,17 @@ class MCPMemoryTools:
         context: MCPRequestContext,
     ) -> dict[str, Any]:
         try:
+            if name == "memory_derived":
+                from .derived.model import DerivedError
+
+                if self._derived is None:
+                    raise MCPToolError("derived memory is disabled", code="derived_disabled")
+                try:
+                    return await self._derived.call(
+                        arguments.get("operation"), arguments.get("payload", {}), context
+                    )
+                except DerivedError as error:
+                    raise MCPToolError(error.code, code=error.code) from None
             if name.startswith("memory_ontology_"):
                 if self._ontology is None:
                     raise MCPToolError("ontology is not configured", code="ontology_unavailable")

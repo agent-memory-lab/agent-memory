@@ -313,13 +313,49 @@ class SQLiteMemoryUnitOfWork:
             ),
         )
 
+    async def derived_get(self, scope, kind, identity):
+        from .operations import sqlite_derived
+
+        return sqlite_derived.get(self.connection, scope, kind, identity)
+
+    async def derived_put(self, scope, kind, identity, payload):
+        from .operations import sqlite_derived
+
+        return sqlite_derived.put(self.connection, scope, kind, identity, payload)
+
+    async def derived_records(self, scope, kind):
+        from .operations import sqlite_derived
+
+        return sqlite_derived.records(self.connection, scope, kind)
+
+    async def derived_candidates(self, scope, slots):
+        from .operations import sqlite_derived
+
+        return sqlite_derived.candidates(self.connection, scope, slots)
+
+    async def derived_edges(self, scope, revision_id, values):
+        from .operations import sqlite_derived
+
+        return sqlite_derived.edges(self.connection, scope, revision_id, values)
+
+    async def derived_reverse(self, scope, parent):
+        from .operations import sqlite_derived
+
+        return sqlite_derived.reverse(self.connection, scope, parent)
+
     async def retention_head_get(self, scope, kind, identity):
         return sqlite_retention.head_get(self.connection, scope, kind, identity)
 
     async def retention_head_put(self, scope, kind, identity, payload, expected_generation):
-        return sqlite_retention.head_put(
+        await self.lock_admission_scope(scope)
+        result = sqlite_retention.head_put(
             self.connection, scope, kind, identity, payload, expected_generation
         )
+        if kind == "interpretation":
+            from agent_memory.derived.service import interpretation_changed
+
+            await interpretation_changed(self, scope, identity)
+        return result
 
     async def get_source_event(self, scope, event_id):
         row = self.connection.execute(
@@ -592,6 +628,13 @@ class SQLiteMemoryUnitOfWork:
                VALUES (?, ?, ?, ?, ?)""",
             (record_id, version, scope.partition_key(), payload_json, recorded_at),
         )
+        from .derived.service import mark_slot_changed
+        from .operations import sqlite_derived
+
+        sqlite_derived.header(
+            self.connection, scope, record_id, event_id, slot_key, payload, version
+        )
+        await mark_slot_changed(self, scope, slot_key)
         return version
 
     async def find_current_claim(self, scope: MemoryScope, key: str) -> Claim | None:
@@ -892,6 +935,9 @@ class SQLiteMemoryRepository:
         self._enable_wal()
         with self._connection() as connection:
             connection.executescript(sqlite_retention.SCHEMA)
+            from .operations import sqlite_derived
+
+            connection.executescript(sqlite_derived.SCHEMA)
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS memory_schema (
@@ -1097,6 +1143,19 @@ class SQLiteMemoryRepository:
             self._migrate_evolution_records(connection)
             self._ensure_current_claim_index(connection)
             SQLiteClaimHistory(self).initialize(connection)
+            for row in connection.execute(
+                "SELECT r.* FROM admission_records r LEFT JOIN derived_atom_headers h "
+                "ON r.partition_key=h.partition_key AND r.record_id=h.identity WHERE h.identity IS NULL"
+            ).fetchall():
+                sqlite_derived.header(
+                    connection,
+                    MemoryScope(**json.loads(row["scope_json"])),
+                    row["record_id"],
+                    row["event_id"],
+                    row["slot_key"],
+                    json.loads(row["payload_json"]),
+                    row["version"],
+                )
 
     def _enable_wal(self) -> None:
         for attempt in range(8):
@@ -1917,8 +1976,12 @@ class SQLiteMemoryRepository:
             return self._forget_on_connection(connection, request)
 
     def _forget_on_connection(self, connection, request, *, replay=False):
+        from .operations import sqlite_derived
+
+        sqlite_derived.forget(connection, request)
         sqlite_retention.forget(connection, request, journal=not replay)
         dependent_claim_ids = self._forget_admission_records(connection, request)
+        sqlite_derived.reconcile_headers(connection, request.scope)
 
         def finish(result: ForgetResult) -> ForgetResult:
             return self._finish_admission_forget(

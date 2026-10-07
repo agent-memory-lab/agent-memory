@@ -1,0 +1,238 @@
+"""Pure contracts for bounded, current-time, source-supported Observations."""
+
+import json
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from hashlib import sha256
+
+
+class DerivedError(ValueError):
+    def __init__(self, code):
+        self.code = code
+        super().__init__(code)
+
+
+def digest(value):
+    return sha256(
+        json.dumps(
+            value, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False
+        ).encode()
+    ).hexdigest()
+
+
+def identity(value):
+    if not isinstance(value, str) or not value.strip() or len(value) > 256:
+        raise DerivedError("invalid_derived_identity")
+    return value
+
+
+def timestamp(value):
+    if not isinstance(value, datetime) or value.utcoffset() is None:
+        raise DerivedError("derived_timezone_required")
+    return value
+
+
+@dataclass(frozen=True)
+class FacetDefinition:
+    id: str
+    subject_id: str
+    predicates: tuple[str, ...] = ("locale",)
+    facet: str = "communication.language"
+    version: str = "1"
+    purpose: str = "agent_context"
+    readers: tuple[str, ...] = ("alice",)
+    template_version: str = "locale-snapshot/1"
+
+    def __post_init__(self):
+        for value in (self.id, self.subject_id, self.facet, self.version, self.purpose):
+            identity(value)
+        if (
+            self.facet != "communication.language"
+            or self.predicates != ("locale",)
+            or (self.template_version != "locale-snapshot/1")
+        ):
+            raise DerivedError("unsupported_derived_facet")
+        if (
+            not self.readers
+            or len(self.readers) > 16
+            or len(set(self.readers)) != len(self.readers)
+        ):
+            raise DerivedError("invalid_derived_readers")
+        for reader in self.readers:
+            identity(reader)
+
+    def payload(self):
+        return json.loads(json.dumps(asdict(self)))
+
+
+@dataclass(frozen=True)
+class ProcessingGrant:
+    source_id: str
+    readers: tuple[str, ...]
+    purposes: tuple[str, ...] = ("agent_context",)
+    sensitivity: str = "private"
+    retention_class: str = "session"
+    expires_at: datetime | None = None
+    revoked: bool = False
+
+    def __post_init__(self):
+        identity(self.source_id)
+        if type(self.revoked) is not bool:
+            raise DerivedError("invalid_processing_grant")
+        if (
+            not self.readers
+            or len(self.readers) > 16
+            or not self.purposes
+            or len(self.purposes) > 16
+        ):
+            raise DerivedError("invalid_processing_grant")
+        for value in (*self.readers, *self.purposes):
+            identity(value)
+        if self.sensitivity not in {"public", "private", "restricted"} or (
+            self.retention_class not in {"session", "persistent", "ephemeral"}
+        ):
+            raise DerivedError("invalid_processing_grant")
+        if self.expires_at is not None:
+            timestamp(self.expires_at)
+
+    def payload(self):
+        values = asdict(self)
+        values["expires_at"] = self.expires_at.isoformat() if self.expires_at else None
+        return json.loads(json.dumps(values))
+
+
+@dataclass(frozen=True)
+class FacetRefreshUnit:
+    """Fixed query target, independent of whether any sources remain."""
+
+    facet_id: str
+    definition_sha256: str
+    definition_generation: int
+    epoch: int
+    query_generation: dict[str, int]
+    safety_generation: int
+    time_generation: int
+    schema: str = "facet-refresh-unit/1"
+
+    def __post_init__(self):
+        identity(self.facet_id)
+        if (
+            self.schema != "facet-refresh-unit/1"
+            or len(self.definition_sha256) != 64
+            or any(c not in "0123456789abcdef" for c in self.definition_sha256)
+        ):
+            raise DerivedError("invalid_facet_refresh_unit")
+        for value in (
+            self.definition_generation,
+            self.epoch,
+            self.safety_generation,
+            self.time_generation,
+        ):
+            if type(value) is not int or value < 0:
+                raise DerivedError("invalid_facet_refresh_unit")
+        if not 1 <= len(self.query_generation) <= 16:
+            raise DerivedError("invalid_facet_refresh_unit")
+        for key, value in self.query_generation.items():
+            identity(key)
+            if type(value) is not int or value < 0:
+                raise DerivedError("invalid_facet_refresh_unit")
+
+    def payload(self):
+        return asdict(self)
+
+    @property
+    def id(self):
+        return "facet-unit:" + digest(self.payload())
+
+
+def source_ids(payload):
+    result = set()
+
+    def visit(value):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                if key == "source_event_id" and isinstance(item, str):
+                    result.add(item)
+                elif key == "source_event_ids" and isinstance(item, list):
+                    result.update(v for v in item if isinstance(v, str))
+                elif isinstance(item, (dict, list)):
+                    visit(item)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+
+    visit(payload)
+    return sorted(result)
+
+
+def erase_rows(rows, parents, all_in_scope, slots=()):
+    """Physical erasure plan, shared by live deletion and backup purge replay."""
+    affected = {
+        r["payload"].get("facet_id", r["identity"])
+        for r in rows
+        if r["kind"] == "revision"
+        and (
+            all_in_scope
+            or "derived:" + r["identity"] in parents
+            or parents.intersection(r["payload"].get("parents", []))
+        )
+    }
+    # Active jobs carry identities only; they remain useful after object deletion.
+    result = []
+    for item in rows:
+        kind, key, row = item["kind"], item["identity"], item["payload"]
+        if kind == "grant" and (all_in_scope or "source:" + key in parents):
+            result.append(
+                (kind, key, {"source_id": key, "version": row["version"] + 1, "revoked": True})
+            )
+        elif kind == "revision" and (all_in_scope or row.get("facet_id") in affected):
+            result.append(
+                (
+                    kind,
+                    key,
+                    {
+                        "id": key,
+                        "facet_id": row["facet_id"],
+                        "state": "erased",
+                        "parents": [],
+                        "reason": "deleted",
+                    },
+                )
+            )
+        elif kind == "head" and (all_in_scope or key in affected):
+            result.append((kind, key, {"facet_id": key, "state": "erased", "revision_id": None}))
+        elif kind == "definition" and (
+            all_in_scope or key in affected or set(row["slots"]).intersection(slots)
+        ):
+            # Any deleted candidate in the query also invalidates zero-output views.
+            row["dirty"] = True
+            row["safety_generation"] += 1
+            if all_in_scope:
+                row["disabled"] = True
+            result.append((kind, key, row))
+        elif kind == "job" and all_in_scope:
+            result.append(
+                (
+                    kind,
+                    key,
+                    {"id": key, "status": "cancelled", "unit": {}, "reason": "scope_erased"},
+                )
+            )
+        elif kind == "request" and all_in_scope:
+            result.append((kind, key, {"id": key, "invalidated": True}))
+    return result, affected
+
+
+def validate_edges(values, *, atom_ids, source_event_ids, slot_ids):
+    """This release has no derived parents; every edge must name a snapshot input."""
+    allowed = {
+        "support": {"atom:" + key for key in atom_ids},
+        "processing": {"atom:" + key for key in atom_ids}
+        | {"source:" + key for key in source_event_ids},
+        "query": {"facet:" + key for key in slot_ids},
+    }
+    if len(values) > 512:
+        raise DerivedError("derived_dependency_capacity")
+    for kind, parent in values:
+        if kind not in allowed or parent not in allowed[kind]:
+            raise DerivedError("derived_parent_unsupported")

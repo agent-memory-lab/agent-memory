@@ -358,6 +358,38 @@ class _Operations(RecoveryClientOperations):
     async def capabilities(self) -> dict[str, Any]:
         return await self._call("memory_capabilities", {})
 
+    async def derived_capabilities(self) -> dict[str, Any]:
+        return await self._call("memory_derived", {"operation": "capabilities", "payload": {}})
+
+    async def derived_read(
+        self, facet_id: str, *, purpose: str = "agent_context", known_at=None, valid_at=None
+    ) -> dict[str, Any]:
+        return await self._call(
+            "memory_derived",
+            {
+                "operation": "read",
+                "payload": {
+                    "facet_id": facet_id,
+                    "purpose": purpose,
+                    "known_at": known_at,
+                    "valid_at": valid_at,
+                },
+            },
+        )
+
+    async def derived_status(self, target_id: str) -> dict[str, Any]:
+        return await self._call(
+            "memory_derived", {"operation": "status", "payload": {"target_id": target_id}}
+        )
+
+    async def derived_context(
+        self, facet_id: str, *, purpose: str = "agent_context"
+    ) -> dict[str, Any]:
+        return await self._call(
+            "memory_derived",
+            {"operation": "derived_context", "payload": {"facet_id": facet_id, "purpose": purpose}},
+        )
+
     async def deletion_audit(self, *, limit: int = 100) -> dict[str, Any]:
         return await self._call("memory_deletion_audit", {"limit": limit})
 
@@ -376,17 +408,19 @@ class EmbeddedMemoryClient(_Operations):
         ontology=None,
         recovery_tools=None,
         durable_capture=None,
+        derived=None,
     ) -> None:
         if recovery_tools is not None and (
             capture_sink is not None
             or durable_capture is not None
+            or derived is not None
             or recovery_tools.memory.provider is not provider
         ):
             raise ValueError("recovery requires its own provider and capture gate")
         self._durable_capture = durable_capture
         self._recovery_tools = recovery_tools
         self._provider = provider
-        self._tools = MCPMemoryTools(provider, deletion_auditor=deletion_auditor, ontology=ontology)
+        self._tools = MCPMemoryTools(provider, deletion_auditor=deletion_auditor, ontology=ontology, derived=derived)
         self._context = context
         self._capture_sink = capture_sink
         self._capture_timeout_seconds = _capture_deadline(capture_timeout_seconds)
