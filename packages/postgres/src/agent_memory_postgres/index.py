@@ -142,3 +142,40 @@ async def invalidate_records(connection, candidate_ids):
                     row["token"]["id"],
                 ),
             )
+
+
+async def recovery_get(connection, scope, channel, epoch, kind, identity):
+    cursor = await connection.execute(
+        "SELECT payload_json FROM agent_memory_index_recovery WHERE partition_key=%s "
+        "AND channel=%s "
+        "AND epoch=%s AND kind=%s AND identity=%s",
+        (scope.partition_key(), channel, epoch, kind, identity),
+    )
+    row = await cursor.fetchone()
+    return row["payload_json"] if row else None
+
+
+async def recovery_put(connection, scope, channel, epoch, kind, identity, payload):
+    await connection.execute(
+        "INSERT INTO agent_memory_index_recovery VALUES (%s,%s,%s,%s,%s,%s::jsonb) "
+        "ON CONFLICT(partition_key,channel,epoch,kind,identity) "
+        "DO UPDATE SET payload_json=excluded.payload_json",
+        (scope.partition_key(), channel, epoch, kind, identity, canonical_json(payload)),
+    )
+
+
+async def recovery_count(connection, scope, channel, epoch, kind):
+    cursor = await connection.execute(
+        "SELECT count(*) FROM agent_memory_index_recovery WHERE partition_key=%s AND channel=%s "
+        "AND epoch=%s AND kind=%s", (scope.partition_key(), channel, epoch, kind),
+    )
+    return (await cursor.fetchone())["count"]
+
+
+async def position(connection, scope, channel, epoch, publication_id):
+    cursor = await connection.execute(
+        "SELECT sequence FROM agent_memory_index_jobs WHERE partition_key=%s AND channel=%s "
+        "AND epoch=%s AND token_id=%s", (scope.partition_key(), channel, epoch, publication_id),
+    )
+    row = await cursor.fetchone()
+    return row["sequence"] if row else None

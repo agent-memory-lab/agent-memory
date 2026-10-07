@@ -217,6 +217,11 @@ class DurableReadiness:
     async def _save_target(self, uow, scope, payload):
         if self.producer.index_channel is not None:
             payload["index_channel"] = self.producer.index_channel.payload()
+            from .index_recovery import active_stream
+
+            stream = await active_stream(uow, scope, self.producer.index_channel)
+            if stream["generation"]:
+                payload["index_stream"] = stream
         target_id = target_identity(payload)
         if await uow.delivery_get(scope, "target", target_id) is None:
             if await uow.delivery_count(scope, "target") >= 1000:
@@ -388,7 +393,9 @@ class DurableReadiness:
             if stage == "index_visible":
                 from .indexing import coverage
 
-                result = await coverage(uow, scope, rows, target.get("index_channel"))
+                result = await coverage(
+                    uow, scope, rows, target.get("index_channel"), target.get("index_stream")
+                )
             else:
                 result = project(rows, stage)
             if reprocessing:

@@ -227,7 +227,8 @@ class DurableProducer:
                     ["source_persisted", "l1_decided"] + (["index_visible"] if indexed else [])
                 ) if supported else [],
                 "index_visible": "candidate-locator/1" if indexed else "unsupported",
-                **({"index_channel": self.index_channel.payload()} if indexed else {}),
+                **({"index_channel": self.index_channel.payload(),
+                    "index_stream": await self._index_stream(uow, scope)} if indexed else {}),
                 "target_limit": 128,
                 "sync_purges": row.get("sync_purges", False),
                 "sequence_dispositions": row.get("sequence_dispositions", False),
@@ -242,6 +243,11 @@ class DurableProducer:
         return await cancel(
             self, scope, session, sequence=sequence, source_event_id=source_event_id, actor=actor
         )
+
+    async def _index_stream(self, uow, scope):
+        from ..operations.index_recovery import active_stream
+
+        return await active_stream(uow, scope, self.index_channel)
 
     async def freeze_target(self, scope, session, *, sequences, actor):
         from ..operations.readiness import DurableReadiness

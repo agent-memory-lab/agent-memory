@@ -203,3 +203,13 @@ def head_put(connection, scope, head_kind, identity, payload, expected_generatio
     if cursor.rowcount != 1:
         raise RetentionError(head_kind + "_head_changed")
     return expected_generation + 1
+
+
+def requests(connection, scope):
+    rows = connection.execute(
+        "SELECT payload_json FROM retention_entries WHERE partition_key=? AND kind='request' "
+        "ORDER BY request_id LIMIT 10001", (scope.partition_key(),),
+    ).fetchall()
+    if len(rows) > 10000:
+        raise ValueError("index recovery request capacity exceeded")
+    return tuple(json.loads(row[0]) for row in rows)

@@ -277,6 +277,26 @@ class CandidateIndexUnitOfWork(RetentionUnitOfWork, Protocol):
     ) -> tuple[dict[str, Any], ...]: ...
 
 
+    async def index_job_position(
+        self, scope: MemoryScope, channel: str, epoch: int, publication_id: str
+    ) -> int | None: ...
+
+    async def index_recovery_get(
+        self, scope: MemoryScope, channel: str, epoch: int, kind: str, identity: str
+    ) -> dict[str, Any] | None: ...
+
+    async def index_recovery_put(
+        self, scope: MemoryScope, channel: str, epoch: int, kind: str,
+        identity: str, payload: dict[str, Any]
+    ) -> None: ...
+
+    async def index_recovery_count(
+        self, scope: MemoryScope, channel: str, epoch: int, kind: str
+    ) -> int: ...
+
+    async def retention_requests(self, scope: MemoryScope) -> tuple[dict[str, Any], ...]: ...
+
+
 class ResourceRefreshUnitOfWork(RetentionUnitOfWork, Protocol):
     """Optional resource queue, receipts and progress sharing output transactions."""
 

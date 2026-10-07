@@ -364,6 +364,31 @@ class PostgresMemoryUnitOfWork:
 
         return await refresh.records(self.connection, scope, kind)
 
+    async def index_recovery_get(self, scope, channel, epoch, kind, identity):
+        from . import index
+
+        return await index.recovery_get(self.connection, scope, channel, epoch, kind, identity)
+
+    async def index_recovery_put(self, scope, channel, epoch, kind, identity, payload):
+        from . import index
+
+        return await index.recovery_put(
+            self.connection, scope, channel, epoch, kind, identity, payload
+        )
+
+    async def index_recovery_count(self, scope, channel, epoch, kind):
+        from . import index
+
+        return await index.recovery_count(self.connection, scope, channel, epoch, kind)
+
+    async def retention_requests(self, scope):
+        return await retention.requests(self.connection, scope)
+
+    async def index_job_position(self, scope, channel, epoch, publication_id):
+        from . import index
+
+        return await index.position(self.connection, scope, channel, epoch, publication_id)
+
     async def index_job_get(self, scope, channel, epoch, token_id):
         from . import index
         return await index.job_get(self.connection, scope, channel, epoch, token_id)

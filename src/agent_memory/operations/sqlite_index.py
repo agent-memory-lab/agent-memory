@@ -5,6 +5,12 @@ import json
 from ..domain import canonical_json
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS index_recovery (
+    partition_key TEXT NOT NULL, channel TEXT NOT NULL, epoch INTEGER NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN ('head','stream','rollover','repair')),
+    identity TEXT NOT NULL, payload_json TEXT NOT NULL,
+    PRIMARY KEY(partition_key,channel,epoch,kind,identity)
+);
 CREATE TABLE IF NOT EXISTS index_jobs (
     partition_key TEXT NOT NULL, channel TEXT NOT NULL, epoch INTEGER NOT NULL,
     token_id TEXT NOT NULL, sequence INTEGER NOT NULL, event_id TEXT NOT NULL,
@@ -153,3 +159,36 @@ def invalidate_records(connection, candidate_ids):
                     row["token"]["id"],
                 ),
             )
+
+
+def recovery_get(connection, scope, channel, epoch, kind, identity):
+    row = connection.execute(
+        "SELECT payload_json FROM index_recovery WHERE partition_key=? AND channel=? "
+        "AND epoch=? AND kind=? AND identity=?",
+        (scope.partition_key(), channel, epoch, kind, identity),
+    ).fetchone()
+    return json.loads(row[0]) if row else None
+
+
+def recovery_put(connection, scope, channel, epoch, kind, identity, payload):
+    connection.execute(
+        "INSERT INTO index_recovery VALUES (?,?,?,?,?,?) "
+        "ON CONFLICT(partition_key,channel,epoch,kind,identity) "
+        "DO UPDATE SET payload_json=excluded.payload_json",
+        (scope.partition_key(), channel, epoch, kind, identity, canonical_json(payload)),
+    )
+
+
+def recovery_count(connection, scope, channel, epoch, kind):
+    return connection.execute(
+        "SELECT count(*) FROM index_recovery WHERE partition_key=? AND channel=? "
+        "AND epoch=? AND kind=?", (scope.partition_key(), channel, epoch, kind),
+    ).fetchone()[0]
+
+
+def position(connection, scope, channel, epoch, publication_id):
+    row = connection.execute(
+        "SELECT sequence FROM index_jobs WHERE partition_key=? AND channel=? "
+        "AND epoch=? AND token_id=?", (scope.partition_key(), channel, epoch, publication_id),
+    ).fetchone()
+    return row[0] if row else None

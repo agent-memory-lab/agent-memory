@@ -145,3 +145,11 @@ def test_resource_refresh_orchestration_does_not_import_storage_adapters():
         name.startswith(("sqlite3", "psycopg", "agent_memory.sqlite", "agent_memory_postgres"))
         for name in dependencies
     )
+
+
+def test_index_recovery_depends_on_ports_and_authority_not_database_adapters():
+    dependencies = imports(SOURCE / "operations" / "index_recovery.py")
+    assert not any(
+        name.startswith(("sqlite3", "psycopg", "agent_memory.sqlite", "agent_memory_postgres"))
+        for name in dependencies
+    )

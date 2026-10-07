@@ -1,0 +1,98 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "date": "2026-10-07",
+  "ledger_revision": 13,
+  "design": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "base_commit": "02ea4c1c748fc621f38c099f088b32b5b967e0c4",
+  "enabled_scope": "host-owned exact-scope bounded local candidate-index repair and authoritative stream rollover with actual projection/proof writes, atomic activation, finite target bindings, audit and old lease fencing; logical extraction configuration and capture epoch unchanged",
+  "full_test_run": false,
+  "test_scope_reason": "User requested partial tests only; new index recovery and affected indexing/reprocessing/readiness/retention/deletion/source revision/worker/migration/SDK/MCP/architecture contracts.",
+  "tests": {
+    "runner": "pytest",
+    "targets": [
+      "tests/test_index_recovery.py",
+      "tests/test_durable_indexing.py",
+      "tests/test_reprocessing_readiness.py",
+      "tests/test_durable_readiness.py",
+      "tests/test_durable_retention.py",
+      "tests/test_durable_purge.py",
+      "tests/test_source_revisions.py",
+      "tests/test_worker_runtime.py",
+      "tests/test_architecture.py::test_index_recovery_depends_on_ports_and_authority_not_database_adapters",
+      "tests/test_architecture.py::test_index_orchestration_does_not_import_storage_adapters",
+      "tests/test_architecture.py::test_domain_contracts_do_not_depend_on_implementation",
+      "packages/postgres/tests/test_live_contract.py::test_live_postgres_additive_v1_to_v2_migration",
+      "packages/python-sdk/tests/test_embedded_contract.py",
+      "packages/mcp-server/tests/test_capture_contract.py"
+    ],
+    "unique_targeted_cases": 301,
+    "passed": 301,
+    "skipped": 0,
+    "duration_seconds": 13.374,
+    "new_behavior_cases": 76,
+    "new_architecture_cases": 1,
+    "backends": [
+      "SQLite",
+      "PostgreSQL 17"
+    ],
+    "real_crash": "8 new repair/rollover SIGKILL cases before/after actual projection/proof/audit/head commit on both backends; 4 existing index SIGKILL cases also rerun; database server not killed",
+    "repeat_note": "Incremental subsets and repeated runs are not added to the final 301 unique cases."
+  },
+  "example": "examples/index_recovery.py passed: actual repair; stream 1 fresh target visible, incomplete legacy target retired; capture epoch unchanged",
+  "lint": {
+    "changed_python_files": "F,I passed",
+    "new_recovery_module_tests_example_and_crash_fixture": "full configured rules passed"
+  },
+  "wheels": [
+    {
+      "file": "agent_memory-0.1.0-py3-none-any.whl",
+      "sha256": "34b5b7c0cb1c707690b22b382aa7b87207114b54b6c1aa838ab2c55bd84cc925"
+    },
+    {
+      "file": "agent_memory_postgres-0.1.0-py3-none-any.whl",
+      "sha256": "f3a06ad5b4523b2e47e98f5a4e811cb08ff4164fb831a480ae1d2c2161e6c336"
+    }
+  ],
+  "wheel_sources_match_final_files": true,
+  "postgres_migration_packaged": "013_index_recovery.sql",
+  "source_files_sha256": {
+    "packages/postgres/src/agent_memory_postgres/index.py": "f3a36dfcdae02617ad3c01b3ce6324205a3e48673ce95ded54439bd4db558cb3",
+    "packages/postgres/src/agent_memory_postgres/repository.py": "570222ad0b04fb463c2dafa0360ab8ac931be35df894f3bfdd9faedb194fab62",
+    "packages/postgres/src/agent_memory_postgres/retention.py": "492ac683cdcc4a60ba0c3807c1b0071fb302b1a84b65d002019686c7775ece67",
+    "src/agent_memory/capture/producer.py": "bb2f15973c6828ebe0bf154cbbc2759692da2ae5b54c28d370d13ae9e3f9ae96",
+    "src/agent_memory/operations/indexing.py": "4ae818da6e3f7476c78f1d2481aac09de3f09abe8c6d0e55418286454320c642",
+    "src/agent_memory/operations/readiness.py": "038854a40bf34c80cfd1a80878e4e6687bf327f2b835a3ea4833eeb736546190",
+    "src/agent_memory/operations/sqlite_index.py": "d77a652aeafafb5c063f17999cda318740394772c783ec195bbbe334ba3ce933",
+    "src/agent_memory/operations/sqlite_retention.py": "e19cf9435e177719217fa59bf3dc1550908787bf5b740b192b591c0e8c99eaae",
+    "src/agent_memory/ports.py": "377e7a1f82286bc35b2e25144e1abfc54467ed98b2d7dd24262bc05ba1742341",
+    "src/agent_memory/sqlite.py": "0245e67d4eb9e521b86da275db40941dc0f5dc49ae2665e8fbdf8f779843ba50",
+    "tests/fixtures/durable_crash_child.py": "3326291bbac2d91d6d7eb5023574bd6ffdb021b77718c625c378d470b604fb9d",
+    "tests/test_architecture.py": "4290a12dcd2ac9d9194366e9d1cdefb405aaf37534c6bfffd2dfa9c7fba454ab",
+    "examples/index_recovery.py": "5228c19b28836443fc40dad758f7470e15345d2ac2aee52aa00808dde5affac8",
+    "packages/postgres/migrations/013_index_recovery.sql": "966d5c3f01f5e28206e7d4ea44b73272a32d4a5c1fcb07799fc240bfdd2e3961",
+    "src/agent_memory/operations/index_recovery.py": "46895bc1ef4524e204206bf330ca23f853395f3be1f2ce83c2dcd3e9d1ce7735",
+    "tests/test_index_recovery.py": "aa915a0a89a45b8c99a45ca17589333fb022c829f60261dd061ffbbbb16c6dc3"
+  },
+  "doc_validation": {
+    "frozen_design_hashes": "passed",
+    "task_links": "passed",
+    "task_count": 44,
+    "acceptance_rows": 66,
+    "statuses": {
+      "DONE": 1,
+      "IN_PROGRESS": 24,
+      "TODO": 19
+    }
+  },
+  "remaining": [
+    "authoritative latest deletion log replay over restored backup before serving reads or writes",
+    "multiple physical L1 publications in one processing request",
+    "large paginated/asynchronous index rebuild, history compaction and external index migration",
+    "trusted recovery of damaged stream metadata remains an operator restore responsibility",
+    "resource definition migration, generic refresh target deletion mapping and cross-scope quotas",
+    "derived support/processing/query and dynamic ACL contracts, Observation/view activation",
+    "real domain gold/calibration and governed external model activation",
+    "no full-suite regression claim for revision 13"
+  ]
+}

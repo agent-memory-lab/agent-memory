@@ -41,11 +41,15 @@ async def enqueue(uow, scope, row, channel):
     """Called inside transaction B, after closing the publication manifest."""
     if not callable(getattr(uow, "index_job_put", None)):
         raise RetentionError("index_storage_unsupported")
+    from .index_recovery import active_stream, physical_channel
+
+    stream = await active_stream(uow, scope, channel)
+    key = physical_channel(channel, stream)
     manifest = row["publication_manifest"]
     manifest["index_channel"] = channel.payload()
-    jobs = await uow.index_jobs(scope, channel.key, row["epoch"])
+    jobs = await uow.index_jobs(scope, key, row["epoch"])
     for token in manifest["publication_commit_tokens"]:
-        existing = await uow.index_job_get(scope, channel.key, row["epoch"], token["id"])
+        existing = await uow.index_job_get(scope, key, row["epoch"], token["id"])
         if existing is not None:
             if existing["token"] != token or existing["dispositions"] != manifest["dispositions"]:
                 raise RetentionError("index_publication_conflict")
@@ -57,7 +61,7 @@ async def enqueue(uow, scope, row, channel):
             raise RetentionError("index_outbox_capacity")
         job = {
             "schema": "index-publication/1",
-            "channel": channel.key,
+            "channel": key,
             "epoch": row["epoch"],
             "token": token,
             "sequence": max((j["sequence"] for j in jobs), default=0) + 1,
@@ -131,7 +135,7 @@ async def verified(uow, scope, job):
     return receipt_valid(job) and not await stale_candidates(uow, scope, job)
 
 
-async def coverage(uow, scope, rows, channel):
+async def coverage(uow, scope, rows, channel, index_stream=None):
     from .readiness import project
 
     result = project(rows, "l1_decided")
@@ -153,10 +157,19 @@ async def coverage(uow, scope, rows, channel):
             "index_visible": "unsupported",
             "reason": "index_history_unavailable",
         }
+    from .index_recovery import frozen_stream, physical_channel
+
+    try:
+        stream, is_current = await frozen_stream(
+            uow, scope, selected, rows[0]["epoch"], index_stream
+        )
+    except RetentionError as error:
+        return {**result, "state": "blocked", "index_visible": False, "reason": error.code}
+    key = physical_channel(selected, stream)
     tokens = result["publication_commit_tokens"]
     missing, failed, invalid, applied = [], [], [], []
     coordinates, versions = {}, []
-    jobs = await uow.index_jobs(scope, selected.key, rows[0]["epoch"])
+    jobs = await uow.index_jobs(scope, key, rows[0]["epoch"])
     token_jobs = {j["token"]["id"]: j for j in jobs}
     bound = max(
         (token_jobs[t["id"]]["sequence"] for t in tokens if t["id"] in token_jobs), default=0
@@ -177,7 +190,7 @@ async def coverage(uow, scope, rows, channel):
     by_request = {r["request_id"]: r for r in rows}
     for token in tokens:
         request = by_request[token["generation"]]
-        job = await uow.index_job_get(scope, selected.key, token["epoch"], token["id"])
+        job = await uow.index_job_get(scope, key, token["epoch"], token["id"])
         if job is not None:
             versions.append(
                 {
@@ -190,7 +203,7 @@ async def coverage(uow, scope, rows, channel):
         if (
             job is None
             or job["token"] != token
-            or job["channel"] != selected.key
+            or job["channel"] != key
             or job["epoch"] != token["epoch"]
             or job["request_id"] != token["generation"]
             or job["event_id"] != request["event_id"]
@@ -242,8 +255,13 @@ async def coverage(uow, scope, rows, channel):
         if missing or prefix_waiting
         else "reached"
     )
+    retired = not is_current and state != "reached"
+    if retired:
+        state = "blocked"
     return {
         **result,
+        "index_stream": stream,
+        "index_stream_current": is_current,
         "state": state,
         "index_visible": state == "reached",
         "coverage_mode": "continuous_index",
@@ -254,7 +272,13 @@ async def coverage(uow, scope, rows, channel):
         "uncovered_publication_ids": [*missing, *failed, *invalid, *prefix_waiting],
         "target_visible_through": target_through,
         "continuous_visible_through": through,
-        **({"reason": "index_proof_unavailable"} if invalid or prefix_invalid else {}),
+        **(
+            {"reason": "index_stream_retired"}
+            if retired
+            else {"reason": "index_proof_unavailable"}
+            if invalid or prefix_invalid
+            else {}
+        ),
     }
 
 
@@ -273,6 +297,11 @@ class CandidateIndexQueue:
         self.repository, self.scope, self.channel = repository, scope, channel
         self.clock, self.max_attempts, self.retry_seconds = clock, max_attempts, retry_seconds
 
+    async def active_key(self, uow):
+        from .index_recovery import active_stream, physical_channel
+
+        return physical_channel(self.channel, await active_stream(uow, self.scope, self.channel))
+
     async def live(self, uow, job):
         if job is None or job["epoch"] != await uow.retention_epoch(self.scope):
             return False
@@ -282,7 +311,7 @@ class CandidateIndexQueue:
     async def checked(self, uow, identity, token, *, completed=False):
         await DurableReceiver._check_support(uow, self.scope)
         epoch = await uow.retention_epoch(self.scope)
-        job = await uow.index_job_get(self.scope, self.channel.key, epoch, identity)
+        job = await uow.index_job_get(self.scope, await self.active_key(uow), epoch, identity)
         if (
             not await self.live(uow, job)
             or job.get("lease_token") != token
@@ -302,7 +331,7 @@ class CandidateIndexQueue:
         async with self.repository.unit_of_work() as uow:
             await DurableReceiver._check_support(uow, self.scope)
             epoch = await uow.retention_epoch(self.scope)
-            for job in await uow.index_jobs(self.scope, self.channel.key, epoch):
+            for job in await uow.index_jobs(self.scope, await self.active_key(uow), epoch):
                 if job["status"] not in {"pending", "running", "retry_wait"}:
                     continue
                 if not await self.live(uow, job):
@@ -391,7 +420,7 @@ class CandidateIndexQueue:
             for disposition in job["dispositions"]:
                 identity = disposition["candidate_id"]
                 document = await current_document(uow, self.scope, identity)
-                await uow.index_document_put(self.scope, self.channel.key, identity, document)
+                await uow.index_document_put(self.scope, job["channel"], identity, document)
                 applied.append({"candidate_id": identity, "document": document})
             job.update(status="completed", applied=applied, proof=proof(job, applied))
             await uow.index_job_put(self.scope, job)
@@ -403,7 +432,9 @@ class CandidateIndexQueue:
             raise ValueError("invalid index lookup limit")
         async with self.repository.unit_of_work() as uow:
             await DurableReceiver._check_support(uow, self.scope)
-            documents = await uow.index_lookup(self.scope, self.channel.key, slot_key, limit + 1)
+            documents = await uow.index_lookup(
+                self.scope, await self.active_key(uow), slot_key, limit + 1
+            )
             if len(documents) > limit:
                 raise RetentionError("index_lookup_capacity")
             return tuple(

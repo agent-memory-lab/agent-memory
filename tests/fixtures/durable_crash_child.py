@@ -61,6 +61,38 @@ async def main(config):
             unit_type.producer_put = before_commit
         await producer.append(event, session, sequence=1, actor="alice")
         await pause()
+    elif phase.startswith("recovery_"):
+        from agent_memory.operations.index_recovery import CandidateIndexRecovery
+        from agent_memory.operations.indexing import CandidateIndexChannel
+
+        recovery = CandidateIndexRecovery(
+            repository, scope, CandidateIndexChannel("local"), actor="operator", clock=lambda: now
+        )
+        rollover = "rollover" in phase
+        if phase.endswith("before_commit"):
+            original = unit_type.index_recovery_put
+
+            async def before_commit(uow, scope, channel, epoch, kind, identity, row):
+                await original(uow, scope, channel, epoch, kind, identity, row)
+                if kind == ("head" if rollover else "repair"):
+                    await pause()
+
+            unit_type.index_recovery_put = before_commit
+        if rollover:
+            await recovery.rollover(recovery_id="crash", expected_generation=0, reason="operator")
+        else:
+            async with repository.unit_of_work() as uow:
+                jobs = await uow.index_jobs(scope, recovery.channel.key, 0)
+            publication = jobs[0]["token"]["id"]
+            snapshot = await recovery.inspect(publication)
+            await recovery.repair(
+                publication,
+                recovery_id="crash",
+                expected_job_sha256=snapshot["job_sha256"],
+                stream=snapshot["stream"],
+                reason="operator",
+            )
+        await pause()
     elif phase.startswith("refresh_"):
         from agent_memory.operations.resource_refresh import ResourceRefreshQueue
 

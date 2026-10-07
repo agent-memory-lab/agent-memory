@@ -6,7 +6,7 @@
 | 规范依据 | [完整设计 v6.1.0](../AGENT_MEMORY_DESIGN_V6.1.0.md)；设计规定语义，本文件安排实施 |
 | 设计 SHA-256 | `ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b` |
 | 实现基线 | `5cff9f47b7061351fd725c3b8e0a89bf5cb51517` |
-| 台账版本 | revision 12；2026-10-07；可随实施更新 |
+| 台账版本 | revision 13；2026-10-07；可随实施更新 |
 | 当前状态 | DONE 1 项；IN_PROGRESS 24 项；TODO 19 项；本地持久 L1、宿主恢复与事实资格切片已验证，M0/M1 未整体验收 |
 | 范围 | P0–P6 能力阶段；基础能力与可选扩展分别发布 |
 
@@ -49,6 +49,7 @@
 ### AM61-T02 — 领域模型与版本化协议合同
 
 - [ ] 状态/阶段：IN_PROGRESS / P0。依赖：T01 的入口/模型盘点；可提前起草。
+- revision 13 证据：新增 candidate-index-stream/1、repair/1、rollover/1；流 0 保留旧目标身份，切流后新目标显式绑定新流，逻辑通道/处理配置不变。见 [stage-09](stage-09.md)。
 - revision 12 证据：新增 resource-refresh-request/1 与 readiness/1、固定工作集合和刷新提交 token；旧 capture/reprocess 入口不变。见 [stage-08](stage-08.md)。
 - revision 11 证据：新增 durable-target/2 的 reprocessing 固定成员和 processing token；capture schema/1 身份不变，契约发现声明两种目标。见 [stage-07](stage-07.md)。
 - revision 10 证据：新增可选 candidate-locator/1 通道身份、配置指纹、有限目标通道绑定和索引阶段覆盖字段；旧协议默认不变。见 [stage-06](stage-06.md)。
@@ -73,6 +74,7 @@
 ### AM61-T04 — 确定性回放与故障夹具
 
 - [ ] 状态/阶段：IN_PROGRESS / P0。依赖：T02 合同、T03 场景；回放框架可先搭建。
+- revision 13 证据：修复与切流写入/激活回滚、CAS/并发、元数据损坏、删除与旧租约均有专项；双后端实际 SIGKILL 覆盖两个操作提交前后。见 [stage-09](stage-09.md)。
 - revision 12 证据：新增运行中新工作、跨连接租约、提交/删除回滚、暂缓与独立时限；真实刷新进程 SIGKILL 提交前后在双后端执行。见 [stage-08](stage-08.md)。
 - revision 11 证据：新增双后端所有权、合同/目标损坏、并发冻结、容量与事务回滚用例；索引合法积压与证明损坏分开判断。见 [stage-07](stage-07.md)。
 - revision 10 证据：新增索引写入/证明回滚、前缀缺口、租约/删除及真实 SIGKILL 索引事务提交前后恢复专项，双后端共同执行。见 [stage-06](stage-06.md)。
@@ -197,6 +199,7 @@
 ### AM61-T16 — L0 与处理任务原子事务
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T02、T04、T15；先支持当前有限候选类型。
+- revision 13 证据：修复在一个事务内实际写定位条目、完成证明和审计；切流从当前有效权威发布清单重建，最后原子激活 head；不改 L1 发布或 capture epoch。见 [stage-09](stage-09.md)。
 - revision 12 证据：刷新输出与固定集合覆盖同 UoW 提交；失败一起回滚，提交后原子检查剩余单元并保留后继调度。见 [stage-08](stage-08.md)。
 - revision 11 证据：重处理请求持久化时记录 processing token；查询复用既有事务与发布清单，无新增来源或接收序号。见 [stage-07](stage-07.md)。
 - revision 10 证据：事务 B 原子提交 L1、closed manifest 与索引 outbox；实际身份条目与证明同事务提交；容量失败一起回滚。见 [stage-06](stage-06.md)。
@@ -225,6 +228,7 @@
 ### AM61-T18 — 任务去重、资源租约与运行中新工作
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T02、T04、T16。
+- revision 13 证据：原流租约在切流后不能 apply/complete/fail，原流任务不迁移；新提交进入新流，终止缺口显式处置，未增加后台循环。见 [stage-09](stage-09.md)。
 - revision 12 证据：宿主资源刷新已区分 dedupe/serialization/generation，固定 claimed 与合并 requested 集合；排他租约、心跳、暂缓、重试、取消与有界周期已测。见 [stage-08](stage-08.md)。
 - revision 10 证据：索引消费复用 BoundedWorker，发布 token 幂等、原子领取、重试/旧租约阻断及有界背压已测；通用资源刷新与运行中新工作仍待补。见 [stage-06](stage-06.md)。
 - revision 8 证据：真实 worker 强杀覆盖领取、保存阶段、发布事务与完成确认边界；通用资源刷新/运行中新工作仍待补。见 [stage-04](stage-04.md)。
@@ -263,6 +267,7 @@
 ### AM61-T22 — 分阶段回执与有限目标就绪
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T16、T18；L1/index 切片接入相应 T19/T20 发布能力。
+- revision 13 证据：旧目标不漂移；未达成的退役流目标 blocked，新冻结 capture/reprocess 目标绑定新流；有效旧完成目标可保持 reached，并报告非当前流。见 [stage-09](stage-09.md)。
 - revision 12 证据：宿主刷新回执绑定原始单元集合，完成/剩余范围和提交证明分别报告，运行中新单元不扩张旧回执；派生/公开目标扩展仍待补。见 [stage-08](stage-08.md)。
 - revision 11 证据：显式 reprocess 有限目标入口、SDK/MCP 阶段查询/有界等待及索引等待已测；单请求多发布与通用刷新仍待补。见 [stage-07](stage-07.md)。
 - revision 10 证据：显式本地候选索引通道的固定目标与连续覆盖已测；最大已完成序号不能越过缺口，零输出与无新 Claim 分开；全文/向量/派生、显式 reprocess 目标入口及单请求多发布仍待补。见 [stage-06](stage-06.md)。
@@ -276,6 +281,7 @@
 ### AM61-T23 — 擦除、撤回与恢复屏障
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T13、T15、T16、T18；为每种已启用写入路径逐步接入。
+- revision 13 证据：删除事务清理各代定位条目与相关任务证明；修复/切流复查来源与修订，不能复活已删来源。权威最新删除日志备份回放仍待补。见 [stage-09](stage-09.md)。
 - revision 12 证据：来源/scope 删除事务同步清理刷新依赖、证明、checkpoint 与 fencing；来源修订阻断旧任务；备份权威删除回放仍待补。见 [stage-08](stage-08.md)。
 - revision 10 证据：删除事务同步清理来源/候选/Claim 及同槽连带失效的定位条目、任务/证明/租约；清理失败原子回滚，旧任务不复活已删对象。完整备份权威删除回放仍待补。见 [stage-06](stage-06.md)。
 - revision 8 证据：删除事务原子写无正文 purge 日志、未知离线来源阻断、双端 opt-in 本地清理/游标事务与确认重试已测；升级前对象历史不回填，完整备份删除 replay 待补。见 [stage-04](stage-04.md)。
@@ -289,6 +295,7 @@
 ### AM61-T24 — 双后端与 SDK/MCP 纵向集成
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T14 及 T15–T23 中本次启用能力所需切片；持续接入，不等待可选扩展。
+- revision 13 证据：76 项新增行为与 1 项新增架构检查；最终相关回归 301 passed、0 skipped，SQLite/真实 PostgreSQL 17、SDK/MCP 与 migration 013 已验证，未运行全量测试。见 [stage-09](stage-09.md)。
 - revision 12 证据：新增刷新双后端、真实进程终止、迁移与受影响接口专项；按用户要求未运行全量测试。见 [stage-08](stage-08.md)。
 - revision 11 证据：新增及受影响回归共 182 passed、0 skipped（SQLite/真实 PostgreSQL）；未运行全量测试。见 [stage-07](stage-07.md)。
 - revision 10 证据：本轮仅新增专项及受影响的 SQLite/真实 PostgreSQL、SDK/MCP、worker/恢复回归；未运行全量测试。见 [stage-06](stage-06.md)。
@@ -468,6 +475,7 @@
 ### AM61-T44 — 运行手册与最终交付汇总
 
 - [ ] 状态/阶段：TODO / P6；从首个运行能力开始持续更新。依赖：拟交付子集已通过 T39；不要求 DEFERRED 扩展实现。
+- revision 13 证据：增加操作示例、修复/切流容量、配套升级和不可直接降级说明；源码/wheel/冻结设计指纹记录在第九阶段验证文件。见 [stage-09](stage-09.md)。
 - revision 12 证据：补充 module/端口/存储责任、migration 012、host-only 启用边界、容量/停止限制及可运行 Block 刷新示例。见 [stage-08](stage-08.md)。
 - revision 11 证据：补充版本兼容、旧请求缺少 processing token 的拒绝策略、无新增 DDL 的升级说明和可运行示例。见 [stage-07](stage-07.md)。
 - 已有落点：`docs/single-host-deployment.md`、`docs/recovery-operations.md`、`docs/RESOURCE_BASELINE.md`、`operations/doctor.py`、本目录 plan/task。
@@ -542,7 +550,7 @@
 | R10-01 | 入口ticket签发后、事务A前scope擦除 | AM61-T15 | T17/T23/T24 | 部分：ticket/scope epoch 屏障、事务 A 真正强杀前后原子恢复已测；外部远端在途交付守卫待补 |
 | R10-02 | 新授权输入与旧离线重传 | AM61-T15 | T17/T23/T24 | 通过（受控 SDK/MCP）：旧 producer/ticket 撤销；新授权 epoch 输入可接收，旧离线正文先清理、旧身份禁止搬入新会话；revise 沿用确认合同 |
 | R11-01 | capture token到位、publication manifest未闭合且为空 | AM61-T22 | T16/T24/T33 | 通过（有限捕获请求）：空未闭合清单不达到 L1；闭合零发布明确 no_outputs；opt-in 本地候选索引需闭合和连续覆盖，未配置通道仍 unsupported |
-| R11-02 | 多个发布token与不连续索引完成 | AM61-T22 | T16/T24/T33 | 通过（opt-in 本地候选索引）：多请求固定令牌集合全部闭合，逐令牌实际证明与连续前缀均到位才 reached；后续序号先完成不越缺口。单请求多发布与外部索引仍待补 |
+| R11-02 | 多个发布token与不连续索引完成 | AM61-T22 | T16/T24/T33 | 通过（opt-in 本地候选索引）：多请求固定令牌集合全部闭合，逐令牌实际证明与连续前缀均到位才 reached；后续序号先完成不越缺口。显式实际修复/新流基线切换已测，旧目标不漂移；单请求多发布与外部索引仍待补 |
 | R12-01 | 十个worker竞争多层账户最后一次调用额度 | AM61-T21 | T04/T13/T23 | 未执行 |
 | R12-02 | 供应商接受后、本地dispatched前崩溃，费用未知、账单重放 | AM61-T21 | T04/T13/T23 | 未执行 |
 | R13-01 | 全部拒答换取安全分、检索有效覆盖退化 | AM61-T39 | T03/T05/T34/T38 | 部分：质量门回归，实际适配器待接入 |
@@ -586,3 +594,4 @@ AcceptanceProfile、scorer、实验 manifest 与结果文件：
 | 10 | 2026-10-06 | [本地候选索引 outbox 与连续覆盖](stage-06.md) | DONE 1；IN_PROGRESS 24；TODO 19；受影响专项通过，无全量回归声明 |
 | 11 | 2026-10-06 | [显式重处理有限目标](stage-07.md) | DONE 1；IN_PROGRESS 24；TODO 19；182 项相关测试通过，未运行全量测试 |
 | 12 | 2026-10-07 | [资源刷新合并与运行中新工作](stage-08.md) | DONE 1；IN_PROGRESS 24；TODO 19；新增及受影响专项通过，无全量回归声明 |
+| 13 | 2026-10-07 | [索引显式修复与流切换](stage-09.md) | DONE 1；IN_PROGRESS 24；TODO 19；301 项相关测试通过，未运行全量测试 |

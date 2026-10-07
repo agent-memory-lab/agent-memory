@@ -187,3 +187,14 @@ async def head_put(connection, scope, head_kind, identity, payload, expected_gen
     if cursor.rowcount != 1:
         raise RetentionError(head_kind + "_head_changed")
     return expected_generation + 1
+
+
+async def requests(connection, scope):
+    cursor = await connection.execute(
+        "SELECT payload_json FROM agent_memory_retention_entries WHERE partition_key=%s "
+        "AND kind='request' ORDER BY request_id LIMIT 10001", (scope.partition_key(),),
+    )
+    rows = await cursor.fetchall()
+    if len(rows) > 10000:
+        raise ValueError("index recovery request capacity exceeded")
+    return tuple(row["payload_json"] for row in rows)

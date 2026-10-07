@@ -364,6 +364,31 @@ class SQLiteMemoryUnitOfWork:
 
         return sqlite_refresh.records(self.connection, scope, kind)
 
+    async def index_recovery_get(self, scope, channel, epoch, kind, identity):
+        from .operations import sqlite_index
+
+        return sqlite_index.recovery_get(self.connection, scope, channel, epoch, kind, identity)
+
+    async def index_recovery_put(self, scope, channel, epoch, kind, identity, payload):
+        from .operations import sqlite_index
+
+        return sqlite_index.recovery_put(
+            self.connection, scope, channel, epoch, kind, identity, payload
+        )
+
+    async def index_recovery_count(self, scope, channel, epoch, kind):
+        from .operations import sqlite_index
+
+        return sqlite_index.recovery_count(self.connection, scope, channel, epoch, kind)
+
+    async def retention_requests(self, scope):
+        return sqlite_retention.requests(self.connection, scope)
+
+    async def index_job_position(self, scope, channel, epoch, publication_id):
+        from .operations import sqlite_index
+
+        return sqlite_index.position(self.connection, scope, channel, epoch, publication_id)
+
     async def index_job_get(self, scope, channel, epoch, token_id):
         from .operations import sqlite_index
         return sqlite_index.job_get(self.connection, scope, channel, epoch, token_id)
