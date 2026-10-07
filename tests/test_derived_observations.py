@@ -591,11 +591,10 @@ def test_snapshot_budget_never_marks_empty_completion_and_backpressure_keeps_dir
 
 @pytest.mark.parametrize("transport", ["embedded", "mcp"])
 def test_readonly_transports_and_final_delivery_recheck(store, transport, monkeypatch):
+    sdk = pytest.importorskip("agent_memory_sdk")
+
     async def run():
         async with store() as (engine, kernel, scope, clock):
-            import agent_memory_mcp as mcp
-            import agent_memory_sdk as sdk
-
             derived, queue, _ = await setup(engine, kernel, scope, clock)
             receipt = await build(queue)
             context = MCPRequestContext(scope, actor="alice")
@@ -625,6 +624,7 @@ def test_readonly_transports_and_final_delivery_recheck(store, transport, monkey
             if transport == "embedded":
                 await exercise(sdk.EmbeddedMemoryClient(kernel, context, derived=derived))
             else:
+                mcp = pytest.importorskip("agent_memory_mcp")
                 server = mcp.create_server(
                     kernel, mcp.StaticIdentityResolver(context), derived=derived
                 )

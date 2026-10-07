@@ -127,8 +127,8 @@ def test_every_token_and_continuous_prefix_must_be_covered(store, transport):
             if transport == "embedded":
                 await exercise(embedded)
             else:
-                import agent_memory_mcp as mcp
-                import agent_memory_sdk as sdk
+                mcp = pytest.importorskip("agent_memory_mcp")
+                sdk = pytest.importorskip("agent_memory_sdk")
 
                 from agent_memory.mcp import MCPRequestContext
 

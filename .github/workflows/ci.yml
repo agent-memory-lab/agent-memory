@@ -44,6 +44,8 @@ jobs:
           packages/langgraph/tests
           packages/python-sdk/tests
           packages/mcp-server/tests
+          tests/test_derived_observations.py::test_readonly_transports_and_final_delivery_recheck
+          tests/test_publication_batches.py::test_every_token_and_continuous_prefix_must_be_covered
 
   packages:
     runs-on: ubuntu-latest
