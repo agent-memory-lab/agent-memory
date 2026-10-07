@@ -108,7 +108,7 @@ def reverse(connection, scope, parent):
 
 def forget(connection, request):
     rows = []
-    for kind in ("grant", "revision", "head", "definition", "job", "request"):
+    for kind in ("authority", "query", "grant", "revision", "head", "definition", "job", "request"):
         rows.extend(dict(kind=kind, **r) for r in records(connection, request.scope, kind))
     ids = set(request.memory_ids)
     headers = connection.execute(

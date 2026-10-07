@@ -93,7 +93,7 @@ async def reverse(connection, scope, parent):
 
 async def forget(connection, request):
     rows = []
-    for kind in ("grant", "revision", "head", "definition", "job", "request"):
+    for kind in ("authority", "query", "grant", "revision", "head", "definition", "job", "request"):
         rows.extend(dict(kind=kind, **r) for r in await records(connection, request.scope, kind))
     ids = set(request.memory_ids)
     cursor = await connection.execute(

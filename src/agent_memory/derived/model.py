@@ -102,6 +102,8 @@ class FacetDefinition:
     readers: tuple[str, ...] = ("alice",)
     template_version: str = "locale-snapshot/1"
     context: FacetContext | None = None
+    query_id: str | None = None
+    authority_id: str | None = None
 
     def __post_init__(self):
         for value in (self.id, self.subject_id, self.facet, self.version, self.purpose):
@@ -129,11 +131,17 @@ class FacetDefinition:
             raise DerivedError("invalid_derived_readers")
         for reader in self.readers:
             identity(reader)
+        for value in (self.query_id, self.authority_id):
+            if value is not None:
+                identity(value)
 
     def payload(self):
         values = to_jsonable(self)
         if self.context is None:
             values.pop("context")  # Preserve the deployed v1 definition fingerprint.
+        for key in ("query_id", "authority_id"):
+            if values[key] is None:
+                values.pop(key)
         return values
 
 
@@ -185,15 +193,40 @@ class FacetRefreshUnit:
     safety_generation: int
     time_generation: int
     schema: str = "facet-refresh-unit/1"
+    bindings: dict | None = None
 
     def __post_init__(self):
         identity(self.facet_id)
         if (
-            self.schema != "facet-refresh-unit/1"
+            self.schema not in {"facet-refresh-unit/1", "facet-refresh-unit/2"}
             or len(self.definition_sha256) != 64
             or any(c not in "0123456789abcdef" for c in self.definition_sha256)
         ):
             raise DerivedError("invalid_facet_refresh_unit")
+        if (self.schema == "facet-refresh-unit/2") != (self.bindings is not None):
+            raise DerivedError("invalid_facet_refresh_unit")
+        if self.bindings is not None:
+            if (
+                not isinstance(self.bindings, dict)
+                or not self.bindings
+                or set(self.bindings) - {"query", "authority"}
+            ):
+                raise DerivedError("invalid_facet_refresh_unit")
+            for kind, binding in self.bindings.items():
+                generation = "generation" if kind == "query" else "version"
+                if (
+                    not isinstance(binding, dict)
+                    or set(binding) != {"id", generation, "sha256"}
+                    or (
+                        type(binding[generation]) is not int
+                        or binding[generation] < 1
+                        or not isinstance(binding["sha256"], str)
+                        or len(binding["sha256"]) != 64
+                        or any(c not in "0123456789abcdef" for c in binding["sha256"])
+                    )
+                ):
+                    raise DerivedError("invalid_facet_refresh_unit")
+                identity(binding["id"])
         for value in (
             self.definition_generation,
             self.epoch,
@@ -210,7 +243,10 @@ class FacetRefreshUnit:
                 raise DerivedError("invalid_facet_refresh_unit")
 
     def payload(self):
-        return asdict(self)
+        values = asdict(self)
+        if self.bindings is None:
+            values.pop("bindings")
+        return values
 
     @property
     def id(self):
@@ -253,9 +289,45 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
     result = []
     for item in rows:
         kind, key, row = item["kind"], item["identity"], item["payload"]
-        if kind == "grant" and (all_in_scope or "source:" + key in parents):
+        if kind == "authority" and all_in_scope:
             result.append(
-                (kind, key, {"source_id": key, "version": row["version"] + 1, "revoked": True})
+                (
+                    kind,
+                    key,
+                    dict(
+                        spec={"id": key, "revoked": True},
+                        version=row["version"] + 1,
+                        epoch=row["epoch"],
+                        fingerprint=digest({"id": key, "revoked": True}),
+                    ),
+                )
+            )
+        elif kind == "query" and all_in_scope:
+            result.append(
+                (
+                    kind,
+                    key,
+                    dict(
+                        generation=row["generation"] + 1,
+                        disabled=True,
+                        epoch=row["epoch"],
+                    ),
+                )
+            )
+        elif kind == "grant" and (all_in_scope or "source:" + key in parents):
+            result.append(
+                (
+                    kind,
+                    key,
+                    {
+                        "source_id": key,
+                        "version": row["version"] + 1,
+                        "revoked": True,
+                        **(
+                            {"authority_id": row["authority_id"]} if row.get("authority_id") else {}
+                        ),
+                    },
+                )
             )
         elif kind == "revision" and (all_in_scope or row.get("facet_id") in affected):
             result.append(

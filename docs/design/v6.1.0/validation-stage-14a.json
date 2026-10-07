@@ -1,0 +1,152 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "date": "2026-10-07",
+  "design": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "ledger_revision": 19,
+  "initial_base_commit": "2013223968565cf9eccf2ff8816297f5686a9b70",
+  "base_commit": "272c9a0044ba475cc1bdf3910f0712960ae1fdb0",
+  "baseline_note": "272c9a0 landed independently during work; the six baseline files remained byte-identical. Only this stage owns the code/docs paths in its commit.",
+  "stage_plan": "AM61-ST14/1.0",
+  "stage_slice": "AM61-ST14-A/1.0",
+  "status": "passed",
+  "stage_tasks_completed": [
+    "ST14-A01",
+    "ST14-A02",
+    "ST14-A03",
+    "ST14-A04",
+    "ST14-A05",
+    "ST14-A06",
+    "ST14-A07",
+    "ST14-A08",
+    "ST14-A09"
+  ],
+  "stage_tasks_remaining": [
+    "ST14-B01",
+    "ST14-B02",
+    "ST14-B03",
+    "ST14-B04",
+    "ST14-C01",
+    "ST14-C02",
+    "ST14-C03"
+  ],
+  "enabled_scope": "opt-in exact-scope complete current candidate query census, language consumer, local expiring host authority and independent host version floor; current source grant/authority intersection and atomic refresh guards",
+  "full_test_run": false,
+  "tests": {
+    "unique_targeted_cases": 693,
+    "passed": 693,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "new_behavior_cases": 74,
+    "new_backend_cases_each": 32,
+    "new_pure_contract_cases": 10,
+    "backends": [
+      "SQLite",
+      "PostgreSQL 17 (real isolated Unix-socket server)"
+    ],
+    "real_sigkill_cases": 8,
+    "real_sigkill_matrix": "query/authority × before/after commit × both backends",
+    "accounting": "Latest passed result per (classname,name) across targeted, packages, guard-regression and controls-final. Repeats and installed-wheel reruns are not added.",
+    "reports": {
+      "agent-memory-stage14-targeted.xml": {
+        "cases": 664,
+        "sha256": "6ea9ef80796e4e74c3e63af079b1078aa842d7a61a25763853bcba1dc85ade45"
+      },
+      "agent-memory-stage14-packages.xml": {
+        "cases": 15,
+        "sha256": "1e9ee5a56c74edbbacdc0322733aa6e206b52652ca49d979825bb1a907879ece"
+      },
+      "agent-memory-stage14-guard-regression.xml": {
+        "cases": 330,
+        "sha256": "ebce3a0603d2146fafa4aac16d7d6542304d9f1620c20af0e62d28b8d7feb145"
+      },
+      "agent-memory-stage14-controls-final.xml": {
+        "cases": 74,
+        "sha256": "9eb5d41e1e018645bbc82a38fe9146493a1389c4d085a35f2703919531f93371"
+      }
+    },
+    "cases_sha256": "5cb1c40ce04d93b1ac3d3a7c16f06a26b8235ac36f51fa2967168d57e4a138e6",
+    "initial_repairs": [
+      "Include authority/query ledger kinds in both backend erasure enumerations.",
+      "Forge an internally consistent omitted-input manifest fixture to reach publication authorization.",
+      "Run synchronous competing SQLite BEGIN on an independent thread, rather than blocking the publishing event loop."
+    ],
+    "final_review_repair": "Require independent host authority_min_version; bootstrap floor 0 cannot open existing authority and rolled-back control snapshots fail before L0/L1 reads."
+  },
+  "build": {
+    "core": {
+      "verified_source_files": 145,
+      "mismatches": [],
+      "artifacts": {
+        "agent_memory-0.1.0-py3-none-any.whl": "c63d4d59616f45b6e4cb1a8db0473e81f41cfe0e771c51cf1f4ea422e268e49d",
+        "agent_memory-0.1.0.tar.gz": "d7071ba142bbac0277598ffc16f0956a59c2dcb00792a9f7321909ffd6404ba3"
+      }
+    },
+    "postgres": {
+      "verified_source_files": 25,
+      "mismatches": [],
+      "artifacts": {
+        "agent_memory_postgres-0.1.0-py3-none-any.whl": "0d329e012d91e8e270da8ea49d2f4c225b97e9747b7d2be10b6c29dad4ec25aa",
+        "agent_memory_postgres-0.1.0.tar.gz": "f0ed9f98938222c28e1b9ddd9b3e30f2158471a97585c74b3adbe9d0d5fc16b1"
+      }
+    }
+  },
+  "installed": {
+    "passed": 66,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "report_sha256": "5ffe29936ae2a3d994faad886fb634fafd390de332371bc59cba0face6c3a24b",
+    "source": "fresh core/PostgreSQL wheels in /tmp/agent-memory-stage14-installed; unchanged SDK/MCP from existing installed environment",
+    "exclusion": "8 real SIGKILL cases excluded from installed rerun because the source helper controls subprocess PYTHONPATH; their real source-process verification passed separately",
+    "examples": [
+      "examples/derived_controls.py passed from source and installed wheels"
+    ]
+  },
+  "build_note": "No-isolation attempt lacked hatchling; standard isolated build installed declared hatchling 1.32.4 and produced both sdist/wheel pairs. Core wheel metadata uses the preserved pre-existing README edits; all 170 package source files exactly match tested workspace code.",
+  "code_files_sha256": {
+    "src/agent_memory/derived/__init__.py": "0a43e650a8a1cd76c495b56f12f8191f97da849efd5936969b6be00fa1a3a702",
+    "src/agent_memory/derived/contracts.py": "f59eb5a7cc385602e1344d59a6b6142d536b86a1d5de45024541f7d01d4ae3ca",
+    "src/agent_memory/derived/registry.py": "590691d910159eec5eba6171d09d1dac617592958623df6de96bcfeac6a536a3",
+    "src/agent_memory/derived/model.py": "a7ab9c59ccfe99156c7185a6a0bf02643d60807b3cd140a3437698388a22378e",
+    "src/agent_memory/derived/service.py": "c8327d5fb2d0dbab6b215b9fbc5b520804db5be47017c2ea4d87b3b95d79cd01",
+    "src/agent_memory/operations/facet_refresh.py": "c2882f4476590dc3d19ec07c7119d8fc4674bc9c7326a52042693917e343020d",
+    "src/agent_memory/operations/sqlite_derived.py": "8deaa28f723ddd1ecfaf134c9b25da29e71dc28bd1949ace360b858caf4e1754",
+    "packages/postgres/src/agent_memory_postgres/derived.py": "d56386ed527701c4fb01b8b9982d070a28979ab7a8576a5c68fdcbe7aa36971f",
+    "tests/test_derived_controls.py": "f0c4e0393b40c1051eb5346f722d0a2ce19f43bc3798c75dc18cd6fa4780a04d",
+    "tests/fixtures/durable_crash_child.py": "0054b8dd9c5e9d8d7de7fbe6b4d2673da39cbfa21621f247509f6f7ecdfa519c",
+    "examples/derived_observation.py": "7b2a6168f68e5a953241c92d5edcbc4ba89f4b0327f0201bd74703949ecc57d8",
+    "examples/derived_controls.py": "45f248f58264777279cfc199d24375c42231a0e5fce180ee31bf8862e5df3cf0"
+  },
+  "preserved_baseline_files_sha256": {
+    ".github/workflows/ci.yml": "34f5713cb48186864a7ed90fc9b095b1973c407cca600b81eb3cfdb0e7e843f7",
+    "README.md": "ed51cc999553888d4a525c74256e24f42b9f94a97412ca4011bb8f09b3c445fe",
+    "README.zh-CN.md": "edf7e58624d41d7cf2b8ce2b69754eb3ef5a09654ce089314dcaf71d3f121474",
+    "docs/AGENT_MEMORY_ARCHITECTURE_PLAN.md": "81095de8aa02db4f59a643d0d6708b4fa9ee415bfb3f230bab4a7abf962fe849",
+    "tests/test_derived_observations.py": "b0ed3b19fe2b8622299c808e09e27859a646762210cab8e1a9c47571fbcb2bf8",
+    "tests/test_publication_batches.py": "1b77660dc30873ed24f79ab18078286a30f68d45bf4e48521fa006a04e7491fb"
+  },
+  "frozen_designs_sha256": {
+    "6.1.0": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+    "6.0.0": "f16f0a3fb1da497b6ef73c96851de04b0cc42ac9353fa9f4278b26122dfe39d0",
+    "5.0.0": "83330a5c8e7921aa56ea76afbb9e8a9b255a5a22732ae4f7c20816deaf25517f"
+  },
+  "lint": "ruff check on every changed Python file and git diff --check passed",
+  "quality_evidence": "Deterministic synthetic retained sources and protocol/fault fixtures; no production gold or external model/remote ACL quality claim.",
+  "not_enabled": [
+    "historical derived reads",
+    "transitive derived parents",
+    "arbitrary predicate renderers",
+    "remote ACL freshness synchronization",
+    "external models",
+    "L2 pages",
+    "L3 persona inference"
+  ],
+  "global_task_state": {
+    "DONE": 1,
+    "IN_PROGRESS": 29,
+    "TODO": 14
+  },
+  "next": "ST14-B01 through ST14-B04: immutable historical definition/policy/context and fixed known_at/valid_at coverage with current permissions and erasure guards."
+}

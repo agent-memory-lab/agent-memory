@@ -4,7 +4,7 @@ import asyncio
 import json
 import sys
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -179,6 +179,39 @@ async def main(config):
                 expected_job_sha256=snapshot["job_sha256"],
                 stream=snapshot["stream"],
                 reason="operator",
+            )
+        await pause()
+    elif phase.startswith("control_"):
+        from agent_memory.derived import HostGrantAuthority, ObservationService, QueryDefinition
+
+        service = ObservationService(
+            repository,
+            scope,
+            base.POLICY,
+            clock=lambda: now,
+            authority_id="local-host",
+            authority_min_version=1,
+        )
+        if phase.endswith("before_commit"):
+            original = unit_type.derived_put
+
+            async def before_commit(uow, scope, kind, identity, row):
+                await original(uow, scope, kind, identity, row)
+                if kind == "definition":  # Control replacement and outbox are still uncommitted.
+                    await pause()
+
+            unit_type.derived_put = before_commit
+        if phase.startswith("control_query_"):
+            await service.register_query(
+                QueryDefinition("language-inputs", scope, "alice", ("locale",), version="2"),
+                expected_generation=1,
+            )
+        else:
+            await service.set_authority(
+                HostGrantAuthority(
+                    "local-host", ("alice",), now + timedelta(hours=1), revoked=True
+                ),
+                expected_version=1,
             )
         await pause()
     elif phase.startswith("derived_"):

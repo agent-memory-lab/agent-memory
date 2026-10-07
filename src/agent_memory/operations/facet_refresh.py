@@ -129,6 +129,8 @@ class FacetRefreshQueue:
             )
             if definition["spec"].get("context"):
                 receipt["context_token"] = self.service.context_token
+            if definition["spec"].get("authority_id"):
+                receipt["authority_id"] = self.service.authority_id
             await uow.derived_put(self.scope, "request", target_id, receipt)
             return receipt
 
@@ -167,7 +169,16 @@ class FacetRefreshQueue:
                     try:
                         await self._job(uow, definition)
                     except DerivedError as error:
-                        if error.code != "derived_refresh_backpressure":
+                        if error.code not in {
+                            "derived_refresh_backpressure",
+                            "derived_authority_unavailable",
+                            "derived_authority_expired",
+                            "derived_authority_denied",
+                            "derived_authority_rollback",
+                            "trusted_authority_version_required",
+                            "derived_query_unavailable",
+                            "derived_query_configuration_changed",
+                        }:
                             raise
             rows = [item["payload"] for item in await uow.derived_records(self.scope, "job")]
             now = self.service.clock()
@@ -270,6 +281,8 @@ class FacetRefreshQueue:
                 raise DerivedError("derived_target_unavailable")
             if actor not in receipt["readers"]:
                 raise DerivedError("derived_read_denied")
+            authority = await self.service.registry.authority(uow, receipt.get("authority_id"))
+            self.service.registry.permission(authority, (actor,), ())
             if (
                 receipt.get("context_token") is not None
                 and receipt["context_token"] != self.service.context_token

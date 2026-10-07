@@ -3,8 +3,7 @@
 from copy import deepcopy
 from datetime import datetime
 
-from ..consolidation.admission import slot_key
-from ..domain import AtomDraft, ScopeLevel, canonical_json, utc_now
+from ..domain import canonical_json, utc_now
 from ..operations.retention import RetentionError
 from ..operations.source_revisions import source_is_current
 from .model import (
@@ -20,6 +19,7 @@ from .model import (
     validate_edges,
 )
 from .observation import compose
+from .registry import DerivedRegistry, slots
 
 
 async def open_derived(uow, scope):
@@ -97,13 +97,46 @@ def authorization_summary(spec, sources, grants):
 class ObservationService:
     """Trusted host API. Transport exposes only call(), never these write methods."""
 
-    def __init__(self, repository, scope, policy, *, clock=utc_now, context_token=None):
+    def __init__(
+        self,
+        repository,
+        scope,
+        policy,
+        *,
+        clock=utc_now,
+        context_token=None,
+        authority_id=None,
+        authority_min_version=None,
+    ):
         self.repository, self.scope, self.clock = repository, scope, clock
         self.policy = policy.config_payload()
         self.context_token = identity(context_token) if context_token is not None else None
+        self.authority_id = identity(authority_id) if authority_id is not None else None
+        if self.authority_id is not None and (
+            type(authority_min_version) is not int or authority_min_version < 0
+        ):
+            raise DerivedError("trusted_authority_version_required")
+        if self.authority_id is None and authority_min_version is not None:
+            raise DerivedError("derived_authority_mismatch")
+        self.authority_min_version = authority_min_version
+        self.registry = DerivedRegistry(self)
         predicates = {s["predicate"]: s for s in self.policy["predicates"]}
         if "locale" not in predicates or predicates["locale"]["value_type"] != "string":
             raise DerivedError("derived_predicate_unregistered")
+
+    async def register_query(self, definition, *, expected_generation=0):
+        async with self.repository.unit_of_work() as uow:
+            epoch = await open_derived(uow, self.scope)
+            return await self.registry.register_query(uow, epoch, definition, expected_generation)
+
+    async def set_authority(self, authority, *, expected_version=0):
+        async with self.repository.unit_of_work() as uow:
+            epoch = await open_derived(uow, self.scope)
+            row = await self.registry.set_authority(uow, epoch, authority, expected_version)
+        # Advance the host floor only after a successful commit. Persist this floor
+        # outside restored database snapshots before using the new ACL revision.
+        self.authority_min_version = max(self.authority_min_version, row["version"])
+        return row
 
     async def register(self, definition, *, expected_generation=0):
         if not isinstance(definition, FacetDefinition):
@@ -117,36 +150,20 @@ class ObservationService:
         fingerprint = digest(dict(definition=spec, policy=self.policy))
         async with self.repository.unit_of_work() as uow:
             epoch = await open_derived(uow, self.scope)
+            await self.registry.bindings(uow, spec)
             old = await uow.derived_get(self.scope, "definition", definition.id)
+            if old and old["spec"].get("authority_id") not in {None, self.authority_id}:
+                raise DerivedError("derived_authority_mismatch")
             if old and not old.get("disabled") and old["fingerprint"] == fingerprint:
                 return deepcopy(old)
             if (old["generation"] if old else 0) != expected_generation:
                 raise DerivedError("derived_definition_conflict")
             if not old and len(await uow.derived_records(self.scope, "definition")) >= 128:
                 raise DerivedError("derived_definition_capacity")
-            level = None
-            for candidate_level in ScopeLevel:
-                try:
-                    if self.scope.project(candidate_level) == self.scope:
-                        level = candidate_level
-                        break
-                except ValueError:
-                    continue
-            if level is None:
-                raise DerivedError("derived_scope_unsupported")
-            slots = [
-                slot_key(
-                    self.scope,
-                    AtomDraft(
-                        definition.subject_id, predicate, "slot", "slot", "slot", scope_level=level
-                    ),
-                )
-                for predicate in definition.predicates
-            ]
             row = dict(
                 spec=spec,
                 facet_id=definition.id,
-                slots=slots,
+                slots=slots(self.scope, definition.subject_id, definition.predicates),
                 fingerprint=fingerprint,
                 generation=(old["generation"] if old else 0) + 1,
                 epoch=epoch,
@@ -163,7 +180,11 @@ class ObservationService:
             raise TypeError("trusted ProcessingGrant required")
         async with self.repository.unit_of_work() as uow:
             await open_derived(uow, self.scope)
+            authority = await self.registry.authority(uow, self.authority_id)
+            self.registry.permission(authority, grant.readers, grant.purposes)
             old = await uow.derived_get(self.scope, "grant", grant.source_id)
+            if old and old.get("authority_id") not in {None, self.authority_id}:
+                raise DerivedError("derived_authority_mismatch")
             if (old["version"] if old else 0) != expected_version:
                 raise DerivedError("derived_grant_conflict")
             if old is None and len(await uow.derived_records(self.scope, "grant")) >= 4096:
@@ -172,6 +193,8 @@ class ObservationService:
             if source is None:
                 raise DerivedError("derived_grant_source_missing")
             row = dict(**grant.payload(), version=expected_version + 1)
+            if authority is not None:
+                row.update(authority_id=self.authority_id, authority_version=authority["version"])
             await uow.derived_put(self.scope, "grant", grant.source_id, row)
             for item in await uow.derived_records(self.scope, "definition"):
                 definition = item["payload"]
@@ -185,6 +208,7 @@ class ObservationService:
 
     async def _unit(self, uow, row):
         epoch = await uow.retention_epoch(self.scope)
+        bindings, _ = await self.registry.bindings(uow, row["spec"])
         query = {
             key: (await uow.derived_get(self.scope, "barrier", key) or {"generation": 0})[
                 "generation"
@@ -199,6 +223,8 @@ class ObservationService:
             query,
             row["safety_generation"],
             row["time_generation"],
+            schema="facet-refresh-unit/2" if bindings is not None else "facet-refresh-unit/1",
+            bindings=bindings,
         )
 
     async def _definition(self, uow, facet_id):
@@ -212,11 +238,14 @@ class ObservationService:
         if digest(dict(definition=row["spec"], policy=self.policy)) != row["fingerprint"]:
             raise DerivedError("derived_definition_configuration_changed")
         self._context_binding(row["spec"])
+        await self.registry.bindings(uow, row["spec"])
         return row
 
     def accepts_definition(self, row):
         binding = row["spec"].get("context")
-        return binding is None or binding["query"]["snapshot_token"] == self.context_token
+        return row["spec"].get("authority_id") == self.authority_id and (
+            binding is None or binding["query"]["snapshot_token"] == self.context_token
+        )
 
     def _context_binding(self, spec):
         if spec.get("context") is None:
@@ -237,7 +266,8 @@ class ObservationService:
             raise DerivedError("derived_snapshot_changed")
         return row
 
-    def _permission(self, grant, readers, purpose, at):
+    def _permission(self, grant, readers, purpose, at, authority=None):
+        self.registry.grant_binding(grant, authority)
         if grant is None or grant.get("revoked"):
             raise DerivedError("derived_processing_denied")
         if not set(readers).issubset(grant["readers"]) or purpose not in grant["purposes"]:
@@ -255,6 +285,7 @@ class ObservationService:
             unit = task.payload["unit"]
             definition = await self._check_unit(uow, unit)
             at = self.clock()
+            _, authority = await self.registry.bindings(uow, definition["spec"])
             binding = self._context_binding(definition["spec"])
             if binding is not None:
                 binding.current(at)  # Expired routing must not fetch source bodies.
@@ -269,7 +300,11 @@ class ObservationService:
             for key in ids:
                 grant = await uow.derived_get(self.scope, "grant", key)
                 self._permission(
-                    grant, definition["spec"]["readers"], definition["spec"]["purpose"], at
+                    grant,
+                    definition["spec"]["readers"],
+                    definition["spec"]["purpose"],
+                    at,
+                    authority,
                 )
                 grants[key] = grant
             primary_ids = {header["event_id"] for header in headers}
@@ -350,6 +385,7 @@ class ObservationService:
                 grants=grants,
                 manifest=manifest,
                 expected_head=head,
+                authority=authority,
             )
 
     def prepare(self, snapshot):
@@ -361,6 +397,8 @@ class ObservationService:
             admission_policy=self.policy,
         )
         expiries = [g["expires_at"] for g in snapshot["grants"].values() if g.get("expires_at")]
+        if snapshot.get("authority") is not None:
+            expiries.append(snapshot["authority"]["spec"]["expires_at"])
         transitions = [v for v in [result["next_transition_at"], *expiries] if v]
         result["next_transition_at"] = (
             min(transitions, key=datetime.fromisoformat) if transitions else None
@@ -392,7 +430,26 @@ class ObservationService:
 
             job = await checked_job(self, uow, task)
             definition = await self._check_unit(uow, task.payload["unit"])
+            _, authority = await self.registry.bindings(uow, definition["spec"])
+            if snapshot.get("authority") != authority:
+                raise DerivedError("derived_safety_changed")
             now = self.clock()
+            headers = await uow.derived_candidates(self.scope, definition["slots"])
+            if len(headers) > 64:
+                raise DerivedError("derived_snapshot_capacity")
+            # Re-authorize the actual census, not a caller-supplied subset of a manifest.
+            actual_sources = {key for h in headers for key in h["source_ids"]}
+            if len(actual_sources) + len(headers) > 128:
+                raise DerivedError("derived_input_capacity")
+            for key in sorted(actual_sources):
+                grant = await uow.derived_get(self.scope, "grant", key)
+                self._permission(
+                    grant,
+                    definition["spec"]["readers"],
+                    definition["spec"]["purpose"],
+                    now,
+                    authority,
+                )
             if now < snapshot["at"] or (
                 prepared["next_transition_at"]
                 and datetime.fromisoformat(prepared["next_transition_at"]) <= now
@@ -410,7 +467,11 @@ class ObservationService:
             for key, data in snapshot["manifest"]["sources"].items():
                 grant = await uow.derived_get(self.scope, "grant", key)
                 self._permission(
-                    grant, definition["spec"]["readers"], definition["spec"]["purpose"], now
+                    grant,
+                    definition["spec"]["readers"],
+                    definition["spec"]["purpose"],
+                    now,
+                    authority,
                 )
                 if grant["version"] != data["grant_version"]:
                     raise DerivedError("derived_safety_changed")
@@ -429,7 +490,6 @@ class ObservationService:
                     )
                 ):
                     raise DerivedError("derived_source_changed")
-            headers = await uow.derived_candidates(self.scope, definition["slots"])
             manifest = snapshot["manifest"]
             if (
                 set(manifest)
@@ -594,6 +654,7 @@ class ObservationService:
 
     async def _read(self, uow, facet_id, actor, purpose):
         definition = await self._definition(uow, facet_id)
+        _, authority = await self.registry.bindings(uow, definition["spec"])
         if actor not in definition["spec"]["readers"] or purpose != definition["spec"]["purpose"]:
             raise DerivedError("derived_read_denied")
         binding = self._context_binding(definition["spec"])
@@ -634,7 +695,7 @@ class ObservationService:
             return dict(facet_id=facet_id, state="invalid", body=None, reason="future_knowledge")
         for key, data in revision["manifest"]["sources"].items():
             grant = await uow.derived_get(self.scope, "grant", key)
-            self._permission(grant, (actor,), purpose, now)
+            self._permission(grant, (actor,), purpose, now, authority)
             if grant["version"] != data["grant_version"]:
                 return dict(facet_id=facet_id, state="invalid", body=None, reason="safety_changed")
         for key, data in revision["manifest"]["sources"].items():
@@ -693,6 +754,11 @@ class ObservationService:
                 facets=["communication.language"],
                 operations=["capabilities", "read", "status", "derived_context"],
                 historical=False,
+                query_definitions="derived-query/1",
+                query_membership="all_candidates",
+                grant_authority="host-grant-authority/1" if self.authority_id else None,
+                authority_restore_pin="host_min_version" if self.authority_id else None,
+                remote_acl=False,
                 qualified_inputs=self.context_token is not None,
                 qualified_templates=["locale-context/1"] if self.context_token is not None else [],
                 context_attributes=["project", "holiday"] if self.context_token is not None else [],

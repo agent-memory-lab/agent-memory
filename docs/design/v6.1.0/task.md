@@ -6,7 +6,7 @@
 | 规范依据 | [完整设计 v6.1.0](../AGENT_MEMORY_DESIGN_V6.1.0.md)；设计规定语义，本文件安排实施 |
 | 设计 SHA-256 | `ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b` |
 | 实现基线 | `5cff9f47b7061351fd725c3b8e0a89bf5cb51517` |
-| 台账版本 | revision 18；2026-10-07；可随实施更新 |
+| 台账版本 | revision 19；2026-10-07；可随实施更新 |
 | 当前状态 | DONE 1 项；IN_PROGRESS 29 项；TODO 14 项；本地持久 L1、宿主恢复与事实资格切片已验证，M0/M1 未整体验收 |
 | 范围 | P0–P6 能力阶段；基础能力与可选扩展分别发布 |
 
@@ -49,6 +49,7 @@
 ### AM61-T02 — 领域模型与版本化协议合同
 
 - [ ] 状态/阶段：IN_PROGRESS / P0。依赖：T01 的入口/模型盘点；可提前起草。
+- revision 19 证据：新增 derived-query/1、host-grant-authority/1 与 opt-in facet-refresh-unit/2；未绑定时保留旧序列化与 fingerprint。见 [stage-14a](stage-14a.md) 与 [验证记录](validation-stage-14a.json)。
 - revision 15 证据：新增兼容 publication-manifest/2、宿主 PublicationPolicy 与 schema 能力协商；不改既有配置摘要或 v1 清单。见 [stage-11](stage-11.md)。
 - revision 14 证据：新增 purge-restore-journal/1、checkpoint/1、receipt/1；HMAC 校验与独立最新检查点分开，保持原删除游标/epoch，SDK/MCP 无新增模型恢复入口。见 [stage-10](stage-10.md)。
 - revision 13 证据：新增 candidate-index-stream/1、repair/1、rollover/1；流 0 保留旧目标身份，切流后新目标显式绑定新流，逻辑通道/处理配置不变。见 [stage-09](stage-09.md)。
@@ -76,6 +77,7 @@
 ### AM61-T04 — 确定性回放与故障夹具
 
 - [ ] 状态/阶段：IN_PROGRESS / P0。依赖：T02 合同、T03 场景；回放框架可先搭建。
+- revision 19 证据：新增双后端跨连接 CAS/发布竞争、查询与 authority 提交前后真实 SIGKILL、受保护备份擦除回放。见 [stage-14a](stage-14a.md) 与 [验证记录](validation-stage-14a.json)。
 - revision 15 证据：补充批次、闭合及原子替代提交前后 12 项真实 SIGKILL，阶段数据复用和逐批完整性守卫。见 [stage-11](stage-11.md)。
 - revision 14 证据：真实 SQLite backup/PostgreSQL pg_dump 副本覆盖对象/范围删除、完整前缀、缺页/回退/分叉、事务回滚和跨连接竞争；双后端新增提交前后 SIGKILL。见 [stage-10](stage-10.md)。
 - revision 13 证据：修复与切流写入/激活回滚、CAS/并发、元数据损坏、删除与旧租约均有专项；双后端实际 SIGKILL 覆盖两个操作提交前后。见 [stage-09](stage-09.md)。
@@ -330,6 +332,7 @@
 ### AM61-T25 — 事实支持与全部生成输入依赖
 
 - [ ] 状态/阶段：IN_PROGRESS / P3。依赖：T09、T13、T16、T23；L1 模型输入清单基础从 T13 提前落地。
+- revision 19 证据：宿主权限 authority 与来源 grant 版本绑定；发布重新授权实际查询全集，包含未被引用和反例来源，先检查权限再读 L0/L1。传递父输入仍未启用。见 [stage-14a](stage-14a.md) 与 [验证记录](validation-stage-14a.json)。
 - revision 17 证据：见 [第十二阶段实施](stage-12.md) 与 [验证记录](validation-stage-12.json)；多来源当前语言 facet、query 屏障、可信处理交集、当前安全/时间守卫、完整重建与派生擦除切片已验证。通用传递图、动态 ACL、条件化 facet 与历史派生保持关闭。
 - revision 4 证据：单来源输入清单与 exact-scope 输出、在途删除阻断；多来源权限传播和依赖图未实现。 详见 [batch-03-05](batch-03-05.md)。
 - revision 18 证据：新增 [资格保持的语言 facet](stage-13.md) 与 [验证记录](validation-stage-13.json)：可信路由/期限、三值条件/例外、字段时间支持、同域争议/偏序、原子上下文 CAS、当前交付和擦除；仅声明 locale-context/1，通用 query/ACL/history/derived-parent 仍关闭。
@@ -341,6 +344,7 @@
 ### AM61-T26 — 查询覆盖依赖与发布屏障
 
 - [ ] 状态/阶段：IN_PROGRESS / P3。依赖：T10、T11、T16、T25。
+- revision 19 证据：登记单 exact scope 的版本化完整查询；完整候选槽、query generation/hash 和当前上下文 generation 进入固定工作单元，更新与 dirty outbox 原子提交。多谓词定义可登记，语言 consumer 只接受完整 locale 查询。见 [stage-14a](stage-14a.md) 与 [验证记录](validation-stage-14a.json)。
 - revision 17 证据：见 [第十二阶段实施](stage-12.md) 与 [验证记录](validation-stage-12.json)；多来源当前语言 facet、query 屏障、可信处理交集、当前安全/时间守卫、完整重建与派生擦除切片已验证。通用传递图、动态 ACL、条件化 facet 与历史派生保持关闭。
 - revision 18 证据：新增 [资格保持的语言 facet](stage-13.md) 与 [验证记录](validation-stage-13.json)：可信路由/期限、三值条件/例外、字段时间支持、同域争议/偏序、原子上下文 CAS、当前交付和擦除；仅声明 locale-context/1，通用 query/ACL/history/derived-parent 仍关闭。
 - 已有落点：`retrieval/governed.py`、`ontology/queries.py`、`ontology/delta.py`、`consolidation/`、两种存储事务适配器。
@@ -351,6 +355,7 @@
 ### AM61-T27 — 按 facet 组织 Observation
 
 - [ ] 状态/阶段：IN_PROGRESS / P3。依赖：T18、T22、T25、T26；输入类型取已验收 T07–T11 子集。
+- revision 19 证据：现有语言 facet 接入查询/authority 控制证明和到期边界；与资格上下文组合通过，未新增通用 renderer。见 [stage-14a](stage-14a.md) 与 [验证记录](validation-stage-14a.json)。
 - revision 17 证据：见 [第十二阶段实施](stage-12.md) 与 [验证记录](validation-stage-12.json)；多来源当前语言 facet、query 屏障、可信处理交集、当前安全/时间守卫、完整重建与派生擦除切片已验证。通用传递图、动态 ACL、条件化 facet 与历史派生保持关闭。
 - revision 18 证据：新增 [资格保持的语言 facet](stage-13.md) 与 [验证记录](validation-stage-13.json)：可信路由/期限、三值条件/例外、字段时间支持、同域争议/偏序、原子上下文 CAS、当前交付和擦除；仅声明 locale-context/1，通用 query/ACL/history/derived-parent 仍关闭。
 - 已有落点：`consolidation/` 内部整理实现、`ontology/layers.py`、`domain.py`、`operations/worker_tasks.py`。
@@ -370,6 +375,7 @@
 ### AM61-T29 — 派生删除与依赖失效传播
 
 - [ ] 状态/阶段：IN_PROGRESS / P3。依赖：T23、T25、T26、T27；历史路径接 T28。
+- revision 19 证据：本地 authority CAS、独立于备份的宿主当前版本 floor、当前 audience/purpose 交集、撤销/期限、旧授权重新确认、只读 SDK/MCP 最终交付、擦除和恢复已验证；未声明远端 ACL 同步保证。见 [stage-14a](stage-14a.md) 与 [验证记录](validation-stage-14a.json)。
 - revision 17 证据：见 [第十二阶段实施](stage-12.md) 与 [验证记录](validation-stage-12.json)；多来源当前语言 facet、query 屏障、可信处理交集、当前安全/时间守卫、完整重建与派生擦除切片已验证。通用传递图、动态 ACL、条件化 facet 与历史派生保持关闭。
 - revision 18 证据：新增 [资格保持的语言 facet](stage-13.md) 与 [验证记录](validation-stage-13.json)：可信路由/期限、三值条件/例外、字段时间支持、同域争议/偏序、原子上下文 CAS、当前交付和擦除；仅声明 locale-context/1，通用 query/ACL/history/derived-parent 仍关闭。
 - 已有落点：`lifecycle.py`、`operations/deletion_audit.py`、`retrieval/guard.py`、`consolidation/`、两种存储反向依赖查询。
@@ -501,6 +507,7 @@
 ### AM61-T44 — 运行手册与最终交付汇总
 
 - [ ] 状态/阶段：IN_PROGRESS / P6；从首个运行能力开始持续更新。依赖：拟交付子集已通过 T39；不要求 DEFERRED 扩展实现。
+- revision 19 证据：新增第十四阶段版本方案/任务、可运行宿主控制示例及相关测试/安装证据，下一步明确为历史 coverage。见 [stage-14a](stage-14a.md) 与 [验证记录](validation-stage-14a.json)。
 - revision 15 证据：记录新协议/执行职责、宿主启用与显式续跑、部分可见/原子替代边界、容量、升级/降级和可运行示例。见 [stage-11](stage-11.md)。
 - revision 14 证据：增加独立日志/检查点保管、离线恢复与服务提升操作顺序、容量、journal-era 限制、升级/降级说明及可运行示例；指纹见第十阶段验证记录。见 [stage-10](stage-10.md)。
 - revision 13 证据：增加操作示例、修复/切流容量、配套升级和不可直接降级说明；源码/wheel/冻结设计指纹记录在第九阶段验证文件。见 [stage-09](stage-09.md)。
@@ -630,3 +637,4 @@ AcceptanceProfile、scorer、实验 manifest 与结果文件：
 | 16 | 2026-10-07 | [受控 Observation 阶段规划](stage-12-plan.md) | DONE 1；IN_PROGRESS 24；TODO 19；新增实施方案/任务，未增加实现与测试通过声明 |
 | 17 | 2026-10-07 | [受控 Observation 完整阶段](stage-12.md) | DONE 1；IN_PROGRESS 29；TODO 14；558 项唯一相关用例通过，未运行全量测试 |
 | 18 | 2026-10-07 | [资格保持的语言 facet](stage-13.md)；[第十二阶段全量补充](stage-12-full-test.md) | DONE 1；IN_PROGRESS 29；TODO 14；限定组合已验证，新代码仅相关测试，完整 M2 待补 |
+| 19 | 2026-10-07 | [版本化查询与本地宿主 authority](stage-14a.md) | DONE 1；IN_PROGRESS 29；TODO 14；第十四阶段 A 已验证，B/C 尚未实现，未运行全量测试 |

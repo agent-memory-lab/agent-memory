@@ -7,6 +7,7 @@ not production extraction quality or externally verified preferences.
 
 import asyncio
 import json
+from datetime import timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -14,8 +15,21 @@ from agent_memory_sdk import EmbeddedMemoryClient
 
 from agent_memory.consolidation.admission import AdmissionPolicy
 from agent_memory.consolidation.atom_extraction import AtomExtractionPipeline
-from agent_memory.derived import FacetDefinition, ObservationService, ProcessingGrant
-from agent_memory.domain import AtomReview, MemoryEvent, MemoryScope, PredicateSpec, SourceAuthority
+from agent_memory.derived import (
+    FacetDefinition,
+    HostGrantAuthority,
+    ObservationService,
+    ProcessingGrant,
+    QueryDefinition,
+)
+from agent_memory.domain import (
+    AtomReview,
+    MemoryEvent,
+    MemoryScope,
+    PredicateSpec,
+    SourceAuthority,
+    utc_now,
+)
 from agent_memory.kernel import MemoryKernel
 from agent_memory.mcp import MCPRequestContext
 from agent_memory.operations.extraction_worker import (
@@ -56,7 +70,7 @@ class LocaleExample:
         ]
 
 
-async def main():
+async def main(*, host_controls=False):
     with TemporaryDirectory(prefix="memory-observation-") as directory:
         repository = SQLiteMemoryRepository(Path(directory) / "memory.db")
         kernel = MemoryKernel(
@@ -86,8 +100,28 @@ async def main():
             assert await BoundedWorker(
                 extraction, {"memory.extract": handler}, worker_id="extract"
             ).run_once()
-            derived = ObservationService(repository, scope, policy)
-            await derived.register(FacetDefinition("language", "alice"))
+            authority_id = "example-host" if host_controls else None
+            query_id = "language-inputs" if host_controls else None
+            derived = ObservationService(
+                repository,
+                scope,
+                policy,
+                authority_id=authority_id,
+                authority_min_version=0 if host_controls else None,
+            )
+            if host_controls:
+                await derived.set_authority(
+                    HostGrantAuthority(authority_id, ("alice",), utc_now() + timedelta(hours=1))
+                )
+                await derived.register_query(QueryDefinition(query_id, scope, "alice", ("locale",)))
+            await derived.register(
+                FacetDefinition(
+                    "language",
+                    "alice",
+                    query_id=query_id,
+                    authority_id=authority_id,
+                )
+            )
             await derived.grant(ProcessingGrant(source.id, ("alice",)))
             queue = FacetRefreshQueue(derived)
             target = await queue.request("language", dedupe_key="example")
