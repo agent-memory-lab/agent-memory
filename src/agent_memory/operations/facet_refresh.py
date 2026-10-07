@@ -102,7 +102,7 @@ class FacetRefreshQueue:
     async def request(self, facet_id, *, dedupe_key, force=False):
         identity(dedupe_key)
         async with self.repository.unit_of_work() as uow:
-            epoch = await open_derived(uow, self.scope)
+            epoch = await open_derived(uow, self.scope, self.service.history_mode)
             target_id = "facet-target:" + digest([self.scope.partition_key(), epoch, dedupe_key])
             definition = await self.service._definition(uow, facet_id)
             old = await uow.derived_get(self.scope, "request", target_id)
@@ -149,7 +149,7 @@ class FacetRefreshQueue:
         if type(lease_seconds) is not int or not 5 <= lease_seconds <= 86400:
             raise ValueError("invalid facet lease duration")
         async with self.repository.unit_of_work() as uow:
-            epoch = await open_derived(uow, self.scope)
+            epoch = await open_derived(uow, self.scope, self.service.history_mode)
             definitions = await uow.derived_records(self.scope, "definition")
             owned = {
                 item["identity"]
@@ -247,21 +247,21 @@ class FacetRefreshQueue:
         if value:
             raise DerivedError("derived_checkpoint_unsupported")
         async with self.repository.unit_of_work() as uow:
-            await open_derived(uow, self.scope)
+            await open_derived(uow, self.scope, self.service.history_mode)
             await checked_job(self.service, uow, lease.task)
 
     async def complete(self, lease):
         if lease.token != lease.task.payload.get("fence"):
             raise stale()
         async with self.repository.unit_of_work() as uow:
-            await open_derived(uow, self.scope)
+            await open_derived(uow, self.scope, self.service.history_mode)
             row = await checked_job(self.service, uow, lease.task, completed=True)
             if not valid_completion(self.scope, row):
                 raise DerivedError("derived_output_not_committed")
 
     async def fail(self, lease, error):
         async with self.repository.unit_of_work() as uow:
-            await open_derived(uow, self.scope)
+            await open_derived(uow, self.scope, self.service.history_mode)
             row = await checked_job(self.service, uow, lease.task)
             code = getattr(error, "code", "derived_processing_failed")
             row.update(
@@ -275,7 +275,7 @@ class FacetRefreshQueue:
 
     async def status(self, target_id, *, actor):
         async with self.repository.unit_of_work() as uow:
-            epoch = await open_derived(uow, self.scope)
+            epoch = await open_derived(uow, self.scope, self.service.history_mode)
             receipt = await uow.derived_get(self.scope, "request", identity(target_id))
             if not receipt or receipt.get("invalidated") or receipt.get("epoch") != epoch:
                 raise DerivedError("derived_target_unavailable")

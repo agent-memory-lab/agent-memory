@@ -7,9 +7,11 @@ from ..domain import canonical_json, utc_now
 from ..operations.retention import RetentionError
 from ..operations.source_revisions import source_is_current
 from .contracts import HistoricalQuery
-from .history import MODE as HISTORY_MODE
+from .coverage import close_coverage
 from .history import PublishedHistory
 from .model import (
+    HISTORY_INTERVAL,
+    HISTORY_MODES,
     DerivedError,
     FacetContext,
     FacetDefinition,
@@ -25,7 +27,7 @@ from .observation import compose
 from .registry import DerivedRegistry, slots
 
 
-async def open_derived(uow, scope):
+async def open_derived(uow, scope, history_mode=None):
     required = (
         "derived_get",
         "derived_put",
@@ -40,22 +42,27 @@ async def open_derived(uow, scope):
     )
     if any(not callable(getattr(uow, name, None)) for name in required):
         raise DerivedError("derived_backend_unsupported")
+    if history_mode == HISTORY_INTERVAL and (
+        getattr(uow, "derived_coverage_contract", None) != "write-hooks/1"
+    ):
+        raise DerivedError("derived_history_coverage_backend_unsupported")
     await uow.lock_admission_scope(scope)
     return await uow.retention_epoch(scope)
 
 
-async def mark_slot_changed(uow, scope, key):
+async def mark_slot_changed(uow, scope, key, *, at=None, reason="candidate"):
     """Always maintained, including slots with no registered subscribers yet."""
     barrier = await uow.derived_get(scope, "barrier", key) or {"generation": 0}
     await uow.derived_put(scope, "barrier", key, {"generation": barrier["generation"] + 1})
     for item in await uow.derived_records(scope, "definition"):
         row = item["payload"]
         if key in row["slots"] and not row.get("disabled"):
+            await close_coverage(uow, scope, row["facet_id"], at=at or utc_now(), reason=reason)
             row["dirty"] = True  # durable refresh responsibility in original write UoW
             await uow.derived_put(scope, "definition", item["identity"], row)
 
 
-async def interpretation_changed(uow, scope, source_id):
+async def interpretation_changed(uow, scope, source_id, *, at=None):
     # Query membership includes every candidate, not just already cited parents.
     changed_slots = set()
     for item in await uow.derived_records(scope, "definition"):
@@ -64,7 +71,14 @@ async def interpretation_changed(uow, scope, source_id):
         if any(source_id in h["source_ids"] for h in headers):
             changed_slots.update(row["slots"])
     for key in sorted(changed_slots):
-        await mark_slot_changed(uow, scope, key)
+        await mark_slot_changed(uow, scope, key, at=at, reason="interpretation")
+
+
+async def document_changed(uow, scope, *, at):
+    # A document head can alter an old source's active interpretation even before
+    # new candidates exist. Conservatively close this scope's tracked intervals.
+    for item in await uow.derived_records(scope, "definition"):
+        await close_coverage(uow, scope, item["identity"], at=at, reason="document")
 
 
 async def source_document(uow, source):
@@ -123,7 +137,7 @@ class ObservationService:
         if self.authority_id is None and authority_min_version is not None:
             raise DerivedError("derived_authority_mismatch")
         self.authority_min_version = authority_min_version
-        if history_mode not in {None, HISTORY_MODE}:
+        if history_mode is not None and history_mode not in HISTORY_MODES:
             raise DerivedError("unsupported_derived_history_mode")
         if history_mode is not None and self.authority_id is None:
             raise DerivedError("trusted_history_authority_required")
@@ -136,12 +150,12 @@ class ObservationService:
 
     async def register_query(self, definition, *, expected_generation=0):
         async with self.repository.unit_of_work() as uow:
-            epoch = await open_derived(uow, self.scope)
+            epoch = await open_derived(uow, self.scope, self.history_mode)
             return await self.registry.register_query(uow, epoch, definition, expected_generation)
 
     async def set_authority(self, authority, *, expected_version=0):
         async with self.repository.unit_of_work() as uow:
-            epoch = await open_derived(uow, self.scope)
+            epoch = await open_derived(uow, self.scope, self.history_mode)
             row = await self.registry.set_authority(uow, epoch, authority, expected_version)
         # Advance the host floor only after a successful commit. Persist this floor
         # outside restored database snapshots before using the new ACL revision.
@@ -161,7 +175,7 @@ class ObservationService:
             definition.context.current(self.clock())
         fingerprint = digest(dict(definition=spec, policy=self.policy))
         async with self.repository.unit_of_work() as uow:
-            epoch = await open_derived(uow, self.scope)
+            epoch = await open_derived(uow, self.scope, self.history_mode)
             await self.registry.bindings(uow, spec)
             old = await uow.derived_get(self.scope, "definition", definition.id)
             if old and old["spec"].get("authority_id") not in {None, self.authority_id}:
@@ -184,6 +198,10 @@ class ObservationService:
                 dirty=True,
                 disabled=False,
             )
+            if old is not None:
+                await close_coverage(
+                    uow, self.scope, definition.id, at=self.clock(), reason="definition"
+                )
             await uow.derived_put(self.scope, "definition", definition.id, row)
             return deepcopy(row)
 
@@ -191,7 +209,7 @@ class ObservationService:
         if not isinstance(grant, ProcessingGrant):
             raise TypeError("trusted ProcessingGrant required")
         async with self.repository.unit_of_work() as uow:
-            await open_derived(uow, self.scope)
+            await open_derived(uow, self.scope, self.history_mode)
             authority = await self.registry.authority(uow, self.authority_id)
             self.registry.permission(authority, grant.readers, grant.purposes)
             old = await uow.derived_get(self.scope, "grant", grant.source_id)
@@ -294,7 +312,7 @@ class ObservationService:
     async def snapshot(self, task):
         timestamp(self.clock())
         async with self.repository.unit_of_work() as uow:
-            await open_derived(uow, self.scope)
+            await open_derived(uow, self.scope, self.history_mode)
             from ..operations.facet_refresh import checked_job
 
             await checked_job(self, uow, task)
@@ -441,7 +459,7 @@ class ObservationService:
         if prepared != self.prepare(snapshot):
             raise DerivedError("derived_output_invalid")
         async with self.repository.unit_of_work() as uow:
-            await open_derived(uow, self.scope)
+            await open_derived(uow, self.scope, self.history_mode)
             from ..operations.facet_refresh import checked_job
 
             job = await checked_job(self, uow, task)
@@ -759,15 +777,15 @@ class ObservationService:
                 raise DerivedError("derived_history_unsupported")
             query = HistoricalQuery.parse(known_at, valid_at)
             async with self.repository.unit_of_work() as uow:
-                await open_derived(uow, self.scope)
+                await open_derived(uow, self.scope, self.history_mode)
                 return await self.history.read(uow, facet_id, actor, purpose, query)
         async with self.repository.unit_of_work() as uow:
-            await open_derived(uow, self.scope)
+            await open_derived(uow, self.scope, self.history_mode)
             return await self._read(uow, facet_id, actor, purpose)
 
     async def history_points(self, facet_id, *, actor, purpose="agent_context"):
         async with self.repository.unit_of_work() as uow:
-            await open_derived(uow, self.scope)
+            await open_derived(uow, self.scope, self.history_mode)
             return await self.history.points(uow, facet_id, actor, purpose)
 
     async def call(self, operation, payload, context):
@@ -785,7 +803,7 @@ class ObservationService:
             raise DerivedError("invalid_derived_request")
         if operation == "capabilities":
             async with self.repository.unit_of_work() as uow:
-                await open_derived(uow, self.scope)
+                await open_derived(uow, self.scope, self.history_mode)
             return dict(
                 schema="derived-capabilities/1",
                 readonly=True,
@@ -794,6 +812,11 @@ class ObservationService:
                 + (["history_points"] if self.history_mode else []),
                 historical=self.history_mode is not None,
                 historical_mode=self.history_mode,
+                historical_coverage=(
+                    ["published_points", "certified_intervals"]
+                    if self.history_mode == HISTORY_INTERVAL
+                    else (["published_points"] if self.history_mode else [])
+                ),
                 historical_templates=["locale-snapshot/1"] if self.history_mode else [],
                 query_definitions="derived-query/1",
                 query_membership="all_candidates",

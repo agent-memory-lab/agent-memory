@@ -1,8 +1,8 @@
 # 第十四阶段方案：查询控制、权限与历史覆盖
 
-版本 AM61-ST14 / 1.1；2026-10-07；IN_PROGRESS；执行台账 revision 20。
+版本 AM61-ST14 / 1.2；2026-10-07；IN_PROGRESS；执行台账 revision 21。
 依据冻结 v6.1.0，推进 T25/T26/T28/T29 及协议、恢复与运行文档的必要切片。
-任务见 [stage-14-tasks.md](stage-14-tasks.md)，A 切片结果见 [stage-14a.md](stage-14a.md)，B.1 结果见 [stage-14b.md](stage-14b.md)。
+任务见 [stage-14-tasks.md](stage-14-tasks.md)，A 切片结果见 [stage-14a.md](stage-14a.md)，B.1 结果见 [stage-14b.md](stage-14b.md)，B.2 结果见 [stage-14b2.md](stage-14b2.md)。
 
 ## A：当前查询与本地 authority（已实现）
 
@@ -30,7 +30,7 @@
    两个后端的擦除枚举包含新 ledger kinds；原删除日志备份回放复用同一擦除计划。
    本切片验证旧权限备份被独立 floor 阻断；当前 authority 控制状态的恢复须走宿主受信恢复流程，不提供降低 pin 的自动修复。
 
-## B：历史 coverage（B.1 已实现，完整 B 尚未完成）
+## B：历史 coverage（B.1/B.2 已实现，完整 B 尚未完成）
 
 B.1 开放宿主显式启用的 `published-point/1`：
 
@@ -49,11 +49,20 @@ B.1 开放宿主显式启用的 `published-point/1`：
 5. 每 facet 最多 128 个覆盖点，每 scope 最多 4096 个；每检查点归档上限 256 KiB，保留既有候选/来源/输出上限。
    容量不足拒绝整笔发布，墓碑不能被重新分配；分页/压缩属于后续规模任务。
 
-B.2 下一步补足连续知识时间覆盖：先设计候选、解释、query/definition/policy 的版本区间及事务起点，
-再证明已发布点之间的完整成员变化和空区间；无法证明的区间仍返回 coverage_unavailable。
+B.2 已开放显式 `published-interval/1`，仍仅支持非条件 `locale-snapshot/1`：
+
+1. 完整发布开启 `[known_from, known_to)`，候选、解释、文档、query 或定义/政策的首次变更在原 UoW 内关闭它。
+   变化发生后到下一次完整发布之间是缺口；空全集也使用同样证明，不能把缺口当作没有事实。
+2. 覆盖点与输入版本摘要、查询屏障、区间证明同事务提交。当前开放区间复核语义单元和来源 head 摘要；
+   连续两个检查点之间只有版本一致才封存覆盖，检测到未跟踪变化则标为 uncertain。
+3. 当前权限/续授权与 valid-time 边界不改写旧语义区间；交付仍先复核当前 authority、完整来源 grant 和删除屏障。
+   擦除及真实备份回放清除相关 facet 的全部区间证明，包括此前空覆盖。
+4. 后端必须声明 `write-hooks/1`。启用前同一存储的所有写入进程必须升级；不支持旧/新写入二进制混跑或绕过 UoW。
+   发布/写入使用同一可信 UTC 时钟域；时钟倒退使已有区间 uncertain，写入前沿领先读取时钟则拒绝区间。
+   不从迁移前状态回填历史；原点模式仍保持原义，完整 B/T28/M2 尚未验收。
 B.3 随后定义历史 QueryContext、适用范围/偏序及资格证据版本；复用当前 authority 与删除守卫，
 验证条件历史及政策迁移矩阵后才开放 `locale-context/1` 的历史读取。
-因此 B01–B04 的完整上下文/连续覆盖验收仍是 IN_PROGRESS，B.1 不等于完整 T28 或 M2。
+因此 B01–B04 的历史资格上下文与完整组合验收仍是 IN_PROGRESS，B.1/B.2 不等于完整 T28 或 M2。
 
 ## C：传递 processing 图（B 后，未实现）
 
@@ -67,7 +76,8 @@ B.3 随后定义历史 QueryContext、适用范围/偏序及资格证据版本�
 - derived/registry.py：宿主登记、CAS、控制证明和权限交集；不依赖数据库实现或 renderer。
 - derived/model.py：facet/unit 合同与共享擦除计划。
 - derived/service.py：授权快照、纯准备、原子发布与最终交付；renderer 不管理 authority。
-- derived/history.py：有界不可变检查点、历史语义重建与当前安全守卫；复用同一 UoW，不新增数据库适配器。
+- derived/history.py：有界不可变检查点、历史语义重建与当前安全守卫。
+- derived/coverage.py：元数据区间证明、首次变化关闭、版本一致性及可信时钟前沿；复用调用方 UoW 和锁。
 - operations/facet_refresh.py：既有有限单元队列、路由、租约和固定回执。
 - SQLite/PostgreSQL：复用原 ledger/UoW/锁和索引，当前无需新表或 DDL migration。
 

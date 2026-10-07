@@ -489,3 +489,14 @@ class DerivedUnitOfWork(RetentionUnitOfWork, Protocol):
         self, scope: MemoryScope, revision_id: str, values: Sequence[tuple[str, str]]
     ) -> None: ...
     async def derived_reverse(self, scope: MemoryScope, parent: str) -> tuple[str, ...]: ...
+
+
+class DerivedCoverageUnitOfWork(DerivedUnitOfWork, Protocol):
+    """Optional continuous coverage extension, beyond checkpoint-only history.
+
+    `write-hooks/1` promises that candidate, interpretation and document mutations
+    close affected coverage in the same namespace-locked transaction. Clock
+    boundaries must use the same trusted UTC domain as derived publication.
+    """
+
+    derived_coverage_contract: str

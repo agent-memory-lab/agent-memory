@@ -84,6 +84,8 @@ def _scope_values(scope: MemoryScope) -> tuple[str | None, ...]:
 
 
 class PostgresMemoryUnitOfWork:
+    derived_coverage_contract = "write-hooks/1"
+
     def __init__(self, repository: PostgresMemoryRepository) -> None:
         self._repository = repository
         self._connection_context: Any = None
@@ -352,7 +354,14 @@ class PostgresMemoryUnitOfWork:
         if kind == "interpretation":
             from agent_memory.derived.service import interpretation_changed
 
-            await interpretation_changed(self, scope, identity)
+            batch_at = self._admission_batch_times.get((scope.tenant_id, scope.namespace))
+            await interpretation_changed(
+                self, scope, identity, at=max(utc_now(), batch_at) if batch_at else utc_now()
+            )
+        elif kind == "document":
+            from agent_memory.derived.service import document_changed
+
+            await document_changed(self, scope, at=utc_now())
         return result
 
     async def get_source_event(self, scope, event_id):
@@ -549,7 +558,7 @@ class PostgresMemoryUnitOfWork:
         from . import derived
 
         await derived.header(self.connection, scope, record_id, event_id, slot_key, payload, result)
-        await mark_slot_changed(self, scope, slot_key)
+        await mark_slot_changed(self, scope, slot_key, at=self._admission_batch_times[namespace])
         return result
 
     async def find_current_claim(self, scope: MemoryScope, key: str) -> Claim | None:

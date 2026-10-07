@@ -103,6 +103,7 @@ async def forget(connection, request):
         "job",
         "request",
         "history_point",
+        "history_interval",
     ):
         rows.extend(dict(kind=kind, **r) for r in await records(connection, request.scope, kind))
     ids = set(request.memory_ids)

@@ -1,0 +1,185 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "date": "2026-10-07",
+  "design": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "ledger_revision": 21,
+  "base_commit": "fac9eb41c6a75e147821862b4ebb6c43014cdede",
+  "stage_plan": "AM61-ST14/1.2",
+  "stage_slice": "AM61-ST14-B.2/1.0",
+  "status": "passed",
+  "stage_tasks_completed": [
+    "ST14-B.2-01",
+    "ST14-B.2-02",
+    "ST14-B.2-03",
+    "ST14-B.2-04",
+    "ST14-B.2-05"
+  ],
+  "stage_tasks_remaining": [
+    "ST14-B01",
+    "ST14-B02",
+    "ST14-B03",
+    "ST14-B04",
+    "ST14-C01",
+    "ST14-C02",
+    "ST14-C03"
+  ],
+  "enabled_scope": "host and definition opt-in published-interval/1; non-qualified locale-snapshot/1; complete/empty publication to first tracked semantic change; half-open certified interval, honest gap rejection, independent valid_at projection and current permission/erasure guards",
+  "proof": {
+    "boundary": "Original candidate/interpretation/document/query/definition-policy write UoW closes old coverage; metadata and semantic write commit or roll back together.",
+    "inputs": "Open interval binds immutable point, semantic unit, query slot barriers and actual source interpretation/document head digests. A later publication cannot seal a changed, untracked input as unchanged.",
+    "clock": "Trusted common UTC domain for writers/publication. Backdated writer invalidates prior intervals, reader behind ledger frontier rejects intervals, and publication before frontier rolls back. Exact immutable checkpoints remain available under their original current-security contract.",
+    "no_change": "Current authority/grant renewal and valid-time transitions do not change historical semantic coverage.",
+    "access": "Current authority/floor, past/current reader and purpose, every actual source grant, completion and erase checks precede archived L1/L0 bodies.",
+    "erase": "Shared object/scope deletion and backup replay erase all affected facet interval certificates, including earlier empty coverage.",
+    "backend_contract": "Optional DerivedCoverageUnitOfWork/write-hooks/1; all writers must be upgraded and share the clock domain before enablement. No old/new mixed writers or direct low-level SQL mutations are supported."
+  },
+  "full_test_run": false,
+  "tests": {
+    "unique_targeted_cases": 818,
+    "passed": 818,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "new_behavior_cases": 78,
+    "new_backend_cases_each": 39,
+    "architecture": "Existing history orchestration boundary case now covers both history.py and coverage.py.",
+    "backends": [
+      "SQLite",
+      "PostgreSQL 17 (real isolated Unix-socket server)"
+    ],
+    "real_sigkill_cases": 12,
+    "real_sigkill_matrix": "candidate/query/publication before/after commit × both backends; older fault and crash regressions also run",
+    "report": {
+      "file": "agent-memory-stage14b2-final-targeted.xml",
+      "cases": 818,
+      "sha256": "6e293f826e05a5b7402396b16757dde965804b49d18452791ca7186d204e4ca5"
+    },
+    "cases_sha256": "1e2ade4c6047b446c0c9b77527594446598bb19cc5b98b752f1089da315c1fe3",
+    "modules": {
+      "tests.test_derived_coverage": 78,
+      "tests.test_derived_history": 75,
+      "tests.test_derived_observations": 90,
+      "tests.test_derived_controls": 74,
+      "tests.test_derived_contextual": 71,
+      "tests.test_architecture": 92,
+      "tests.test_durable_purge": 34,
+      "tests.test_purge_restore": 64,
+      "tests.test_source_revisions": 13,
+      "tests.test_atom_admission": 30,
+      "tests.test_admission_sqlite_storage": 9,
+      "tests.test_fact_qualification": 10,
+      "tests.test_publication_batches": 83,
+      "tests.test_durable_process_recovery": 14,
+      "tests.test_feedback_mcp_sdk": 2,
+      "tests.test_contribution_lifecycle": 40,
+      "packages.postgres.tests.test_admission": 7,
+      "packages.python-sdk.tests.test_capture_sink_integration": 3,
+      "packages.python-sdk.tests.test_embedded_contract": 1,
+      "packages.python-sdk.tests.test_plugin_error_contract": 9,
+      "packages.mcp-server.tests.test_capture_contract": 1,
+      "packages.mcp-server.tests.test_contract": 1,
+      "packages.mcp-server.tests.test_recovery_http_acceptance": 5,
+      "packages.mcp-server.tests.test_recovery_stdio": 6,
+      "packages.mcp-server.tests.test_tls_gateway_acceptance": 6
+    },
+    "accounting": "Final targeted run only; no prior-stage or obsolete architecture parameter names counted. Installed reruns are separate.",
+    "repairs": [
+      "Reject interval reads when reader clock is behind writer frontier.",
+      "Candidate/interpretation closure uses the original monotonic admission time; crash fixture writer clocks share publication clock.",
+      "Validate interval backend contract before announcing or using the mode.",
+      "Untracked source heads or candidate barriers make open coverage unavailable and cannot become sealed coverage at a later checkpoint."
+    ]
+  },
+  "build": {
+    "core": {
+      "verified_source_files": 147,
+      "mismatches": [],
+      "artifacts": {
+        "agent_memory-0.1.0-py3-none-any.whl": "9a0d96f5edbc3820d1832590b60d8626b88651bff2ecb2ed29119fddbad07bba",
+        "agent_memory-0.1.0.tar.gz": "bebeaee3eadfa2d9e73295b94418d83ee38eef8e5676cea1fc13ac1d8b7eb83c"
+      }
+    },
+    "postgres": {
+      "verified_source_files": 25,
+      "mismatches": [],
+      "artifacts": {
+        "agent_memory_postgres-0.1.0-py3-none-any.whl": "0cdbc90057ef844eea03311d6867b51f7d72ad8a99fdc563bd07ce8e1b796acc",
+        "agent_memory_postgres-0.1.0.tar.gz": "8b95f9195dd0bf1087a352401872082a81b334ea7ea54b0651b3b46137b79ae4"
+      }
+    }
+  },
+  "installed": {
+    "passed": 66,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "report_sha256": "01765f6c2210e851e6b019348b36a172f54b9042f35f2bd0aabb3e48feb633be",
+    "source": "fresh core/PostgreSQL wheels in /tmp/agent-memory-stage14b2-installed; unchanged SDK/MCP from existing environment",
+    "exclusion": "12 actual SIGKILL cases excluded from installed rerun because the source helper controls subprocess PYTHONPATH; all 12 passed on real source processes",
+    "examples": [
+      "derived_interval_history.py",
+      "derived_history.py",
+      "derived_controls.py",
+      "derived_observation.py"
+    ],
+    "imports_verified": true
+  },
+  "build_note": "Standard isolated sdist-to-wheel builds, hatchling 1.32.4; every production source and type marker matches final tested code. SDK/MCP have no production changes this slice.",
+  "code_files_sha256": {
+    "examples/derived_observation.py": "7970904c6604c8a643761fd67affc761be52d39bf718fb2498308b9974ec321c",
+    "packages/postgres/src/agent_memory_postgres/derived.py": "01e5346b8c7e9a5b1ae6f21947f03dd4653ef3d887ea9dd79b6c9072fae684c2",
+    "packages/postgres/src/agent_memory_postgres/repository.py": "5682f55ee8044668361d9ec1969c48a4da24c0ea7d32fddba7364361e838b367",
+    "src/agent_memory/derived/history.py": "af92060c29aa120470bae3f33be681b503aaa931504c72904a3cb2cbd454d694",
+    "src/agent_memory/derived/model.py": "26f5f180c5f48f26607a3a9fad7d8c750a955eab9383c76cc551e5f6f9582648",
+    "src/agent_memory/derived/registry.py": "fbfd3cd2b56e141de2ef4026dd6e8f6c90c820d5de8822504505957d9989ed8f",
+    "src/agent_memory/derived/service.py": "69375de2368fc5ade9ef61b7461e5e66402536e8e5d1105cb637a5685628f965",
+    "src/agent_memory/operations/facet_refresh.py": "20110c221b43f9a42f473bffe1f3a6a48bdfedc595def7259103f41f769909ed",
+    "src/agent_memory/operations/sqlite_derived.py": "5675fe7daa629982d65f5bf874a459c8959df44a78ae057602b5eccd66346bf6",
+    "src/agent_memory/ports.py": "08aa49ecf7106d9b5e3b41c2a80590426e91cbd6db7cfa3ecff02c77e7064366",
+    "src/agent_memory/sqlite.py": "e2e3a3d91605791f85b26a5831e140f1e2ca3c04cd9624ebb3d876411b92f50d",
+    "tests/fixtures/durable_crash_child.py": "99526a89cef0d34d838fa19941fcb74d59309ab7f1374683aa9daa6e71815d50",
+    "tests/test_architecture.py": "5c4b85cbe6d1a667b644ad68864d0d5875da9ffe0d2c61bab0c3e3382533f462",
+    "examples/derived_interval_history.py": "88317a1465749c77941bb49bf89b6123ef5ba8c3ad23e02f48e1f1d7e55fceb5",
+    "src/agent_memory/derived/coverage.py": "8e2a8354f8c81bfcfb4665cb8883540ac43c43738a434a422a0642074e4feb78",
+    "tests/test_derived_coverage.py": "10933035f641e8357f262b8ee5a8fc7d4d9aa02dfd91e8b8365c627e84e2262c"
+  },
+  "preserved_uncommitted_files_sha256": {
+    "docs/AGENT_MEMORY_ARCHITECTURE_PLAN.md": "81095de8aa02db4f59a643d0d6708b4fa9ee415bfb3f230bab4a7abf962fe849"
+  },
+  "baseline_files_unchanged_sha256": {
+    "README.md": "334f088344cb43a3e0a92d95d633bce72f84dc9130a85fd6d0a68d9b0895eec1",
+    "README.zh-CN.md": "a654c795f16f1119b751c56953ad13ff49d808097a4bd423efa9abe90cbed7c4",
+    "docs/assets/agent-memory-overview.svg": "643456d1bce4125b87dbfa43af8e34e6dfc80ea26358d57d6bdc6be4117e25af"
+  },
+  "frozen_designs_sha256": {
+    "6.1.0": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+    "6.0.0": "f16f0a3fb1da497b6ef73c96851de04b0cc42ac9353fa9f4278b26122dfe39d0",
+    "5.0.0": "83330a5c8e7921aa56ea76afbb9e8a9b255a5a22732ae4f7c20816deaf25517f"
+  },
+  "lint": {
+    "changed_line_findings": 0,
+    "non_E501_findings": 0,
+    "preexisting_E501": 15,
+    "report_sha256": "36c211e3793a64781441a96f9e8c1127baa4ff65e27f85c73c79d09795bcb5c3",
+    "git_diff_check": "passed"
+  },
+  "quality_evidence": "Deterministic synthetic retained sources and protocol/fault fixtures; no production gold, external model or remote ACL quality claim.",
+  "not_enabled": [
+    "reconstruction inside known coverage gaps",
+    "pre-migration/backfill history",
+    "qualified historical context",
+    "transitive derived parents",
+    "arbitrary predicate renderers",
+    "remote ACL freshness synchronization",
+    "external models",
+    "L2 pages",
+    "L3 persona inference"
+  ],
+  "global_task_state": {
+    "DONE": 1,
+    "IN_PROGRESS": 29,
+    "TODO": 14
+  },
+  "next": "B.3 historical QueryContext, qualification/scope/precedence versions and policy/current-security matrix; complete B acceptance before C."
+}

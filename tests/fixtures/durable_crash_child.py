@@ -214,23 +214,60 @@ async def main(config):
                 expected_version=1,
             )
         await pause()
-    elif phase.startswith(("derived_", "history_")):
+    elif phase.startswith("coverage_"):
+        from agent_memory.derived import ObservationService, QueryDefinition
+
+        if config["backend"] == "postgres":
+            import agent_memory_postgres.admission as writer
+        else:
+            import agent_memory.sqlite as writer
+        writer.utc_now = lambda: now
+        service = ObservationService(repository, scope, base.POLICY, clock=lambda: now,
+            authority_id="local-host", authority_min_version=1, history_mode="published-interval/1")
+        if phase.endswith("before_commit"):
+            original = unit_type.derived_put
+
+            async def before_commit(uow, scope, kind, identity, row):
+                await original(uow, scope, kind, identity, row)
+                if kind == "history_interval":
+                    await pause()
+
+            unit_type.derived_put = before_commit
+        if phase.startswith("coverage_query_"):
+            await service.register_query(
+                QueryDefinition("language-inputs", scope, "alice", ("locale",), version="2"),
+                expected_generation=1,
+            )
+        else:
+            async with repository.unit_of_work() as uow:
+                atom = next(r for r in await uow.list_admission_records(scope)
+                            if r["payload"]["draft"]["predicate"] == "locale")
+                payload = dict(atom["payload"], action="REJECT")
+                await uow.save_admission_record(
+                    scope, atom["id"], atom["event_id"], atom["slot_key"], payload, atom["version"]
+                )
+        await pause()
+    elif phase.startswith(("derived_", "history_", "interval_")):
         from agent_memory.derived import ObservationService
         from agent_memory.operations.facet_refresh import FacetRefreshQueue
 
         service = ObservationService(
             repository, scope, base.POLICY, clock=lambda: now,
             **(dict(authority_id="local-host", authority_min_version=1,
-                    history_mode="published-point/1") if phase.startswith("history_") else {}),
+                    history_mode=("published-interval/1" if phase.startswith("interval_")
+                                  else "published-point/1"))
+               if phase.startswith(("history_", "interval_")) else {}),
         )
         queue = FacetRefreshQueue(service)
         lease = await queue.claim("crashed-derived-worker", lease_seconds=5)
-        if phase in {"derived_before_commit", "history_before_commit"}:
+        if phase in {"derived_before_commit", "history_before_commit", "interval_before_commit"}:
             original = unit_type.derived_put
 
             async def before_commit(uow, scope, kind, identity, row):
                 await original(uow, scope, kind, identity, row)
                 if (phase == "history_before_commit" and kind == "history_point") or (
+                    phase == "interval_before_commit" and kind == "history_interval"
+                ) or (
                     phase == "derived_before_commit"
                     and kind == "job"
                     and row["status"] == "completed"

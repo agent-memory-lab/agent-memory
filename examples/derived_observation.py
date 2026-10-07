@@ -70,8 +70,12 @@ class LocaleExample:
         ]
 
 
-async def main(*, host_controls=False, history=False):
+async def main(*, host_controls=False, history=False, continuous=False):
+    history = history or continuous
     host_controls = host_controls or history
+    history_mode = (
+        "published-interval/1" if continuous else ("published-point/1" if history else None)
+    )
     with TemporaryDirectory(prefix="memory-observation-") as directory:
         repository = SQLiteMemoryRepository(Path(directory) / "memory.db")
         kernel = MemoryKernel(
@@ -109,7 +113,7 @@ async def main(*, host_controls=False, history=False):
                 policy,
                 authority_id=authority_id,
                 authority_min_version=0 if host_controls else None,
-                history_mode="published-point/1" if history else None,
+                history_mode=history_mode,
             )
             if host_controls:
                 await derived.set_authority(
@@ -122,7 +126,7 @@ async def main(*, host_controls=False, history=False):
                     "alice",
                     query_id=query_id,
                     authority_id=authority_id,
-                    history_mode="published-point/1" if history else None,
+                    history_mode=history_mode,
                 )
             )
             await derived.grant(ProcessingGrant(source.id, ("alice",)))
@@ -151,6 +155,18 @@ async def main(*, host_controls=False, history=False):
                             indent=2,
                         )
                     )
+            if continuous:
+                print(
+                    json.dumps(
+                        await client.derived_context(
+                            "language",
+                            known_at=utc_now().isoformat(),
+                            valid_at=source.occurred_at.isoformat(),
+                        ),
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                )
         finally:
             await kernel.close()
 

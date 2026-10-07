@@ -1,7 +1,7 @@
-"""Published-point history, with current permissions and physical-erasure guards.
+"""Published history, with current permissions and physical-erasure guards.
 
-Only a successfully published complete census certifies a knowledge-time point.
-No interpolation, current-policy reinterpretation or migration backfill is used.
+A complete published census certifies a point and, with atomic write hooks, an
+unchanged interval. No gap interpolation or migration backfill is used.
 """
 
 from copy import deepcopy
@@ -9,10 +9,19 @@ from datetime import UTC, datetime
 
 from ..domain import canonical_json
 from .contracts import HistoricalQuery
-from .model import DerivedError, digest, identity, source_ids
+from .coverage import PublishedCoverage, semantic_unit
+from .model import (
+    HISTORY_INTERVAL,
+    HISTORY_MODES,
+    HISTORY_POINT,
+    DerivedError,
+    digest,
+    identity,
+    source_ids,
+)
 from .observation import compose
 
-MODE = "published-point/1"
+MODE = HISTORY_POINT
 
 
 def iso(value):
@@ -22,6 +31,7 @@ def iso(value):
 class PublishedHistory:
     def __init__(self, service):
         self.service, self.scope = service, service.scope
+        self.coverage = PublishedCoverage(service)
 
     def point_id(self, epoch, facet_id, known_at):
         return "history-point:" + digest(
@@ -29,7 +39,7 @@ class PublishedHistory:
         )
 
     async def archive(self, uow, snapshot, *, definition, known_at):
-        if definition["spec"].get("history_mode") != MODE:
+        if definition["spec"].get("history_mode") not in HISTORY_MODES:
             return None
         query = await uow.derived_get(self.scope, "query", definition["spec"]["query_id"])
         archive = dict(
@@ -56,6 +66,7 @@ class PublishedHistory:
         if old:
             if old.get("state") != "published" or old["history_sha256"] != digest(archive):
                 raise DerivedError("derived_history_point_conflict")
+            await self.coverage.publish(uow, old)
             return  # Identical semantic checkpoint; keep the first immutable certificate.
         points = await uow.derived_records(self.scope, "history_point")
         if (
@@ -79,8 +90,27 @@ class PublishedHistory:
             authority_id=spec["authority_id"],
             sources=sorted(snapshot["manifest"]["sources"]),
         )
+        if self.service.history_mode == HISTORY_INTERVAL:
+            point["input_versions"] = {}
+            for source_id, source in snapshot["sources"].items():
+                retained = source.metadata.get("_retention")
+                document_id = (
+                    retained.get("document_id", source_id) if isinstance(retained, dict) else None
+                )
+                point["input_versions"][source_id] = dict(
+                    interpretation=digest(
+                        await uow.retention_head_get(self.scope, "interpretation", source_id)
+                    ),
+                    document_id=document_id,
+                    document=digest(
+                        await uow.retention_head_get(self.scope, "document", document_id)
+                        if document_id
+                        else None
+                    ),
+                )
         point["sha256"] = digest(point)
         await uow.derived_put(self.scope, "history_point", key, point)
+        await self.coverage.publish(uow, point)
 
     async def _guard(self, uow, point, definition, actor, purpose):
         if not point or point.get("state") != "published":
@@ -118,10 +148,10 @@ class PublishedHistory:
         return grants
 
     async def _definition(self, uow, facet_id):
-        if self.service.history_mode != MODE:
+        if self.service.history_mode not in HISTORY_MODES:
             raise DerivedError("derived_history_unsupported")
         definition = await self.service._definition(uow, identity(facet_id))
-        if definition["spec"].get("history_mode") != MODE:
+        if definition["spec"].get("history_mode") not in HISTORY_MODES:
             raise DerivedError("derived_history_unsupported")
         return definition
 
@@ -134,9 +164,17 @@ class PublishedHistory:
                 continue
             await self._guard(uow, point, definition, actor, purpose)
             points.append(dict(known_at=point["known_at"], revision_id=point["revision_id"]))
+        if self.service.history_mode == HISTORY_INTERVAL:
+            spans = await self.coverage.describe(uow, facet_id)
+            for point in points:
+                key = self.point_id(
+                    definition["epoch"], facet_id, datetime.fromisoformat(point["known_at"])
+                )
+                if key in spans:
+                    point["coverage"] = spans[key]
         return dict(
             schema="derived-history-points/1",
-            mode=MODE,
+            mode=self.service.history_mode,
             facet_id=facet_id,
             points=sorted(points, key=lambda p: p["known_at"]),
         )
@@ -148,7 +186,21 @@ class PublishedHistory:
         epoch = await uow.retention_epoch(self.scope)
         key = self.point_id(epoch, facet_id, query.known_at)
         point = await uow.derived_get(self.scope, "history_point", key)
+        span = None
+        coverage = dict(known_at=iso(query.known_at), kind="point", query_complete=True)
+        if point is None and self.service.history_mode == HISTORY_INTERVAL:
+            span, coverage = await self.coverage.select(uow, facet_id, definition, query.known_at)
+            point = await uow.derived_get(self.scope, "history_point", span["point_id"])
         grants = await self._guard(uow, point, definition, actor, purpose)
+        if span is not None and (
+            point["sha256"] != span["point_sha256"]
+            or point["known_at"] != span["known_from"]
+            or semantic_unit(point["unit"]) != span["semantic_unit"]
+            or digest(point.get("input_versions")) != span["inputs_sha256"]
+        ):
+            raise DerivedError("derived_history_integrity_failed")
+        if span is not None:
+            await self.coverage.verify_inputs(uow, span, point)
         # Only now may the archive containing old L1 bodies be loaded.
         revision = await uow.derived_get(self.scope, "revision", point["revision_id"])
         if not revision or revision.get("state") not in {"ready", "empty"}:
@@ -162,11 +214,11 @@ class PublishedHistory:
             or revision.get("unit") != point["unit"]
             or revision.get("id") != point["revision_id"]
             or manifest["unit"] != point["unit"]
-            or archive["known_at"] != iso(query.known_at)
+            or archive["known_at"] != point["known_at"]
             or archive["schema"] != "derived-history-snapshot/1"
             or not manifest["query_complete"]
             or manifest["policy_sha256"] != digest(archive["policy"])
-            or archive["definition"]["history_mode"] != MODE
+            or archive["definition"]["history_mode"] not in HISTORY_MODES
             or archive["definition"]["template_version"] != "locale-snapshot/1"
             or (
                 revision["state"] == "ready"
@@ -210,7 +262,9 @@ class PublishedHistory:
             current = await uow.get_admission_record(self.scope, row["id"])
             if current is None or current["payload"].get("deleted"):
                 raise DerivedError("derived_history_input_erased")
-            if datetime.fromisoformat(row["recorded_at"]) > query.known_at:
+            if datetime.fromisoformat(row["recorded_at"]) > datetime.fromisoformat(
+                point["known_at"]
+            ):
                 raise DerivedError("derived_history_integrity_failed")
         result = compose(spec, records, sources, query.valid_at, admission_policy=archive["policy"])
         from .service import authorization_summary
@@ -221,9 +275,9 @@ class PublishedHistory:
             revision_id=point["revision_id"],
             known_at=iso(query.known_at),
             valid_at=iso(query.valid_at),
-            history_mode=MODE,
+            history_mode=self.service.history_mode,
             body=None if result["no_outputs"] else result["body"],
-            coverage=dict(known_at=point["known_at"], kind="point", query_complete=True),
+            coverage=coverage,
             authorization=authorization_summary(
                 dict(readers=[actor], purpose=purpose), sources, grants
             ),

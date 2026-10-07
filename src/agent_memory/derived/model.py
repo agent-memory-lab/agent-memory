@@ -9,6 +9,10 @@ from ..conditions import ContextAttribute, ProjectionPolicy, QueryContext
 from ..domain import MemoryScope
 from ..serialization import to_jsonable
 
+HISTORY_POINT = "published-point/1"
+HISTORY_INTERVAL = "published-interval/1"
+HISTORY_MODES = {HISTORY_POINT, HISTORY_INTERVAL}
+
 
 class DerivedError(ValueError):
     def __init__(self, code):
@@ -136,7 +140,7 @@ class FacetDefinition:
             if value is not None:
                 identity(value)
         if self.history_mode is not None and (
-            self.history_mode != "published-point/1"
+            self.history_mode not in HISTORY_MODES
             or self.query_id is None
             or self.authority_id is None
         ):
@@ -306,7 +310,9 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
     result = []
     for item in rows:
         kind, key, row = item["kind"], item["identity"], item["payload"]
-        if kind == "history_point" and (all_in_scope or row.get("facet_id") in affected):
+        if kind in {"history_point", "history_interval"} and (
+            all_in_scope or row.get("facet_id") in affected
+        ):
             result.append((kind, key, {"id": key, "facet_id": row["facet_id"], "state": "erased"}))
         elif kind == "authority" and all_in_scope:
             result.append(

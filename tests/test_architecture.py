@@ -163,8 +163,9 @@ def test_purge_restore_depends_on_ports_not_database_adapters():
     )
 
 
-def test_historical_observation_orchestration_does_not_import_storage_adapters():
-    dependencies = imports(SOURCE / "derived" / "history.py")
+@pytest.mark.parametrize("name", ["history.py", "coverage.py"])
+def test_historical_observation_orchestration_does_not_import_storage_adapters(name):
+    dependencies = imports(SOURCE / "derived" / name)
     assert not any(
         name.startswith(("sqlite3", "psycopg", "agent_memory.sqlite", "agent_memory_postgres"))
         for name in dependencies

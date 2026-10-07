@@ -6,6 +6,7 @@ from datetime import datetime
 from ..consolidation.admission import slot_key
 from ..domain import AtomDraft, ScopeLevel
 from .contracts import HostGrantAuthority, QueryDefinition
+from .coverage import close_coverage
 from .model import DerivedError, digest
 
 
@@ -39,6 +40,10 @@ class DerivedRegistry:
         for item in await uow.derived_records(self.scope, "definition"):
             row = item["payload"]
             if row["spec"].get(field) == key and not row.get("disabled"):
+                if not safety:
+                    await close_coverage(
+                        uow, self.scope, item["identity"], at=self.service.clock(), reason="query"
+                    )
                 row["dirty"] = True
                 if safety:
                     row["safety_generation"] += 1

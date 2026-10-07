@@ -91,6 +91,8 @@ def _provenance(value: str) -> Provenance:
 
 
 class SQLiteMemoryUnitOfWork:
+    derived_coverage_contract = "write-hooks/1"
+
     def __init__(self, repository: SQLiteMemoryRepository) -> None:
         self._repository = repository
         self._connection: sqlite3.Connection | None = None
@@ -354,7 +356,15 @@ class SQLiteMemoryUnitOfWork:
         if kind == "interpretation":
             from agent_memory.derived.service import interpretation_changed
 
-            await interpretation_changed(self, scope, identity)
+            batch_at = self._admission_batch_times.get((scope.tenant_id, scope.namespace))
+            await interpretation_changed(
+                self, scope, identity,
+                at=max(utc_now(), datetime.fromisoformat(batch_at)) if batch_at else utc_now(),
+            )
+        elif kind == "document":
+            from .derived.service import document_changed
+
+            await document_changed(self, scope, at=utc_now())
         return result
 
     async def get_source_event(self, scope, event_id):
@@ -634,7 +644,7 @@ class SQLiteMemoryUnitOfWork:
         sqlite_derived.header(
             self.connection, scope, record_id, event_id, slot_key, payload, version
         )
-        await mark_slot_changed(self, scope, slot_key)
+        await mark_slot_changed(self, scope, slot_key, at=datetime.fromisoformat(recorded_at))
         return version
 
     async def find_current_claim(self, scope: MemoryScope, key: str) -> Claim | None:
