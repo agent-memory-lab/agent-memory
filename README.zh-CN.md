@@ -243,7 +243,7 @@ Observation 只开放文档规定的语言模板。发布点和可证明稳定�
 
 这些记录验证协议、事务和恢复行为；合成输入不能代替真实对话 gold、抽取质量评测或生产验收。
 
-**最新目标方案是 [v7.0.0](docs/design/AGENT_MEMORY_DESIGN_V7.0.0.md)。** 它包含完整算法架构与数据流，设计受治理问题视图、合并刷新、确定性增量和精确答案复用。这些新增能力仍待实现，上述运行基线不变。[第十五阶段审计](docs/design/v6.1.0/stage-15-audit.md)及[独立验证](docs/design/v6.1.0/validation-stage-15-audit.json)记录后续修复与代码 `583e20d` 的全量测试。发布时另承接远端 `2b7c4f7` 的[擦除与集成修复](CHANGELOG.md#fixed)；本轮文档更新未重跑其运行测试，前序通过数不覆盖该新提交。
+**最新目标方案是 [v7.0.0](docs/design/AGENT_MEMORY_DESIGN_V7.0.0.md)。** 它包含完整算法架构与数据流，设计受治理问题视图、合并刷新、确定性增量和精确答案复用。B0/B1 基础与按需启用的 B2 调度已按有限切片交付；项目 QuestionView、增量与模型复用继续分批实施。[第十五阶段审计](docs/design/v6.1.0/stage-15-audit.md)及[独立验证](docs/design/v6.1.0/validation-stage-15-audit.json)记录后续修复与代码 `583e20d` 的全量测试。发布时另承接远端 `2b7c4f7` 的[擦除与集成修复](CHANGELOG.md#fixed)；本轮文档更新未重跑其运行测试，前序通过数不覆盖该新提交。
 
 后续见 [v7 实施计划](docs/design/v7.0.0/plan.md)与[任务台账](docs/design/v7.0.0/task.md)：
 
@@ -257,6 +257,8 @@ v7 台账保留原有 44 项任务状态，跟踪 15 项新增任务。[B0 实�
 [B1](docs/design/v7.0.0/batch-b1.md)为既有 admitted-L1 派生运行时新增索引失效、订阅证明及跨受影响投影范围的事务擦除。升级必须协调停止旧写进程；项目 QuestionView 和 publication-manifest 问题读取仍关闭。
 
 高级检索和可选的只读 Reflect 继续按[任务台账](docs/design/v6.1.0/task.md)推进。远程部署见[安全策略](SECURITY.md)和[威胁模型](docs/THREAT_MODEL.md)；外部缓存、远端 ACL 和供应商副本需要各自完成集成合同。
+
+[B2](docs/design/v7.0.0/batch-b2.md) 为当前 Observation/父图/页面提供显式启用的持久合并刷新、有限 coverage 回执、统一确定性资源限额、租户公平/aging、持久 due 与可重启宿主。双后端验证实际强杀、时钟和擦除恢复。冷热策略由宿主控制；本切片不代表模型金额预算或已验证的生产节省。
 
 ## 文档导航
 

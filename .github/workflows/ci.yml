@@ -116,3 +116,4 @@ jobs:
           tests/test_contextual_memory.py tests/test_artifact_erasure.py
           tests/test_derived_*.py tests/test_purge_restore.py tests/test_durable_purge.py
           tests/test_v7_subscriptions.py tests/test_v7_backend_lifecycle.py
+          tests/test_refresh*.py

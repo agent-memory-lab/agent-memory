@@ -2,9 +2,18 @@
 
 import json
 
+from agent_memory.operations.refresh_schedule_contract import (
+    KINDS,
+    checked_record,
+    immutable,
+    projection,
+    snapshot,
+)
+
 from ..derived.model import erase_rows
 from ..derived.subscriptions import HEADER_SCHEMA, candidate_owner, header_data, source_key
 from ..domain import MemoryScope, canonical_json
+from . import sqlite_refresh_schedule as refresh_schedule
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS derived_entries (
@@ -25,20 +34,32 @@ CREATE INDEX IF NOT EXISTS derived_atom_slot_idx ON derived_atom_headers(partiti
 """
 
 
+SCHEMA += refresh_schedule.SCHEMA
+
+
 def get(connection, scope, kind, identity):
     row = connection.execute(
         "SELECT payload_json FROM derived_entries WHERE partition_key=? AND kind=? AND identity=?",
         (scope.partition_key(), kind, identity),
     ).fetchone()
-    return json.loads(row[0]) if row else None
+    return checked_record(kind, json.loads(row[0]) if row else None)
 
 
 def put(connection, scope, kind, identity, payload):
+    if kind in KINDS:
+        payload = checked_record(kind, snapshot(payload))
+    if kind == "refresh_demand":
+        projection(scope, identity, payload)
+    if kind == "refresh_execution":
+        immutable(get(connection, scope, kind, identity), payload)
     connection.execute(
         "INSERT INTO derived_entries VALUES (?,?,?,?) ON CONFLICT "
         "(partition_key,kind,identity) DO UPDATE SET payload_json=excluded.payload_json",
         (scope.partition_key(), kind, identity, canonical_json(payload)),
     )
+
+    if kind == "refresh_demand":
+        refresh_schedule.project(connection, scope, identity, payload)
 
 
 def records(connection, scope, kind):
@@ -49,7 +70,7 @@ def records(connection, scope, kind):
     ).fetchall()
     if len(rows) > 4096:
         raise ValueError("derived ledger capacity exceeded")
-    return tuple(dict(identity=r[0], payload=json.loads(r[1])) for r in rows)
+    return tuple(dict(identity=r[0], payload=checked_record(kind, json.loads(r[1]))) for r in rows)
 
 
 def get_header(connection, scope, record_id):

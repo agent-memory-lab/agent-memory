@@ -504,3 +504,52 @@ class DerivedCoverageUnitOfWork(DerivedUnitOfWork, Protocol):
     derived_coverage_contract: str
     derived_parent_contract: str
     derived_page_contract: str
+
+
+class RefreshSchedulerUnitOfWork(DerivedCoverageUnitOfWork, Protocol):
+    """Opt-in durable-coalescing/1 with shared deterministic resource-unit limits.
+
+    Lock the namespace before the common scheduler lock. Candidate discovery is
+    only a hint; callers re-read demand, epoch, capability and parent readiness
+    inside the locked transaction before reserving. Monetary spend is unsupported.
+    Upgrading requires all lifecycle writers, including restore/deletion writers.
+    """
+
+    refresh_scheduler_contract: str
+
+    async def refresh_scheduler_lock(self, scope: MemoryScope) -> None: ...
+
+    async def refresh_scheduler_observe_clock(
+        self, scope: MemoryScope, *, now: str,
+    ) -> bool:
+        """Reject rollback against the durable database-global UTC high-water."""
+        ...
+
+    async def refresh_scheduler_clock(self, scope: MemoryScope) -> str | None:
+        """Read the content-free floor for independently pinned restore metadata."""
+        ...
+
+    async def refresh_scheduler_config(self, limits: dict[str, Any]) -> None: ...
+
+    async def refresh_scheduler_due(
+        self, *, now: str, adapter_keys: tuple[str, ...], limit: int = 128,
+    ) -> tuple[dict[str, Any], ...]: ...
+
+    async def refresh_scheduler_expired(
+        self, *, now: str, adapter_keys: tuple[str, ...], limit: int = 128,
+    ) -> tuple[dict[str, Any], ...]: ...
+
+    async def refresh_scheduler_usage(
+        self, *, now: str, tenant_id: str, instance_key: str,
+    ) -> dict[str, int]: ...
+
+    async def refresh_scheduler_reserve(
+        self, scope: MemoryScope, execution_id: str, *, instance_key: str,
+        units: int = 1, limits: dict[str, Any],
+    ) -> bool: ...
+
+    async def refresh_scheduler_release(
+        self, scope: MemoryScope, execution_id: str,
+    ) -> None: ...
+
+    async def refresh_scheduler_turn(self, scope: MemoryScope) -> None: ...

@@ -79,7 +79,8 @@ class FacetRefreshQueue:
         key = unit.id
         row = await uow.derived_get(self.scope, "job", key)
         if row:
-            definition["dirty"] = False
+            if not definition.get("refresh_managed"):
+                definition["dirty"] = False
             await uow.derived_put(self.scope, "definition", definition["facet_id"], definition)
             return row
         jobs = await uow.derived_records(self.scope, "job")
@@ -101,7 +102,8 @@ class FacetRefreshQueue:
             next_attempt_at=now,
         )
         await uow.derived_put(self.scope, "job", key, row)
-        definition["dirty"] = False
+        if not definition.get("refresh_managed"):
+            definition["dirty"] = False
         await uow.derived_put(self.scope, "definition", definition["facet_id"], definition)
         return row
 
@@ -123,7 +125,16 @@ class FacetRefreshQueue:
             await self._time_transition(uow, definition)
             if force:
                 definition.update(time_generation=definition["time_generation"] + 1, dirty=True)
+                from .refresh_demand import record_dirty
+
+                await record_dirty(
+                    uow, self.scope, definition, at=self.service.clock(), reason="force"
+                )
             job = await self._job(uow, definition)
+            if definition.get("refresh_managed") and not valid_completion(self.scope, job):
+                from .refresh_demand import activate_exact_request
+
+                await activate_exact_request(uow, self.scope, definition, at=self.service.clock())
             receipt = dict(
                 target_id=target_id,
                 force=force,
@@ -149,6 +160,11 @@ class FacetRefreshQueue:
                 next_transition_at=None,
             )
             await uow.derived_put(self.scope, "definition", definition["facet_id"], definition)
+            from .refresh_demand import record_dirty
+
+            await record_dirty(
+                uow, self.scope, definition, at=self.service.clock(), reason="time_boundary"
+            )
 
     async def claim(self, worker_id, *, lease_seconds):
         identity(worker_id)
@@ -160,7 +176,8 @@ class FacetRefreshQueue:
             owned = {
                 item["identity"]
                 for item in definitions
-                if self.service.accepts_definition(item["payload"])
+                if not item["payload"].get("refresh_managed")
+                and self.service.accepts_definition(item["payload"])
                 and (not is_page(item["payload"]["spec"]) or page_supported(uow))
             }
             for item in definitions:

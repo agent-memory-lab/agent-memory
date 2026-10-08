@@ -142,6 +142,9 @@ async def ensure_index(uow, scope):
                 )
             definition["dirty"] = True
             await uow.derived_put(scope, "definition", item["identity"], definition)
+            from ..operations.refresh_demand import record_dirty
+
+            await record_dirty(uow, scope, definition, reason="subscription_backfill")
     headers = await uow.derived_headers(scope)
     mode = "indexed" if len(headers) <= MAX_HEADERS else "scope"
     if mode == "indexed":
@@ -217,6 +220,9 @@ async def invalidate(uow, scope, keys, *, at=None, reason="candidate", safety=Fa
             if safety:
                 definition["safety_generation"] += 1
             await uow.derived_put(scope, "definition", facet_id, definition)
+            from ..operations.refresh_demand import record_dirty
+
+            await record_dirty(uow, scope, definition, at=at, reason=reason)
             next_keys.append(parent_key(facet_id))
         rows = await consumers(uow, scope, next_keys) if next_keys else {}
     return affected

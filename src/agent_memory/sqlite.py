@@ -98,6 +98,7 @@ def _provenance(value: str) -> Provenance:
 
 class SQLiteMemoryUnitOfWork:
     derived_coverage_contract = "write-hooks/1"
+    refresh_scheduler_contract = "durable-coalescing/1"
     derived_parent_contract = "processing-graph/1"
     derived_page_contract = "page-full-rebuild/1"
 
@@ -112,6 +113,7 @@ class SQLiteMemoryUnitOfWork:
             self._connection = self._repository._connect()
             self._connection.execute("BEGIN IMMEDIATE")
             self._admission_batch_times = {}
+            self._refresh_scheduler_namespace = None
             return self
         except BaseException:
             self._repository._write_lock.release()
@@ -337,6 +339,11 @@ class SQLiteMemoryUnitOfWork:
         return sqlite_derived.get(self.connection, scope, kind, identity)
 
     async def derived_put(self, scope, kind, identity, payload):
+        from agent_memory.operations.refresh_schedule_contract import KINDS, snapshot
+
+        if kind in KINDS:
+            payload = snapshot(payload)
+            await self.refresh_scheduler_lock(scope)
         payload = deepcopy(payload)
         from .operations import sqlite_derived
 
@@ -424,6 +431,80 @@ class SQLiteMemoryUnitOfWork:
         from .operations import sqlite_delivery
 
         return sqlite_delivery.count(self.connection, scope, kind)
+
+    async def refresh_scheduler_lock(self, scope):
+        namespace = (scope.tenant_id, scope.namespace)
+        previous = getattr(self, "_refresh_scheduler_namespace", None)
+        if previous is not None and previous != namespace:
+            raise ValueError("scheduler transaction cannot acquire a second namespace")
+        await self.lock_admission_scope(scope)
+        self._refresh_scheduler_namespace = namespace
+
+    async def refresh_scheduler_observe_clock(self, scope, *, now):
+        from .operations import sqlite_refresh_schedule as schedule
+
+        await self.refresh_scheduler_lock(scope)
+        return schedule.observe_clock(self.connection, now=now)
+
+    async def refresh_scheduler_clock(self, scope):
+        from .operations import sqlite_refresh_schedule as schedule
+
+        await self.refresh_scheduler_lock(scope)
+        return schedule.clock(self.connection)
+
+    async def refresh_scheduler_config(self, limits):
+        from .operations import sqlite_refresh_schedule as schedule
+
+        if getattr(self, "_refresh_scheduler_namespace", None) is None:
+            raise ValueError("scheduler scope lock required before configuration")
+        return schedule.config(self.connection, limits)
+
+    async def refresh_scheduler_due(self, *, now, adapter_keys, limit=128):
+        from .operations import sqlite_refresh_schedule as schedule
+
+        return schedule.due(
+            self.connection, now=now, adapter_keys=adapter_keys, limit=limit
+        )
+
+    async def refresh_scheduler_expired(self, *, now, adapter_keys, limit=128):
+        from .operations import sqlite_refresh_schedule as schedule
+
+        return schedule.due(
+            self.connection, now=now, adapter_keys=adapter_keys, limit=limit, expired=True
+        )
+
+    async def refresh_scheduler_usage(self, *, now, tenant_id, instance_key):
+        from .operations import sqlite_refresh_schedule as schedule
+
+        return schedule.usage(
+            self.connection, now=now, tenant_id=tenant_id, instance_key=instance_key
+        )
+
+    async def refresh_scheduler_reserve(
+        self, scope, execution_id, *, instance_key, units=1, limits
+    ):
+        from agent_memory.operations.refresh_schedule_contract import snapshot
+
+        limits = snapshot(limits)
+        from .operations import sqlite_refresh_schedule as schedule
+
+        await self.refresh_scheduler_lock(scope)
+        return schedule.reserve(
+            self.connection, scope, execution_id, instance_key=instance_key,
+            units=units, limits=limits,
+        )
+
+    async def refresh_scheduler_release(self, scope, execution_id):
+        from .operations import sqlite_refresh_schedule as schedule
+
+        await self.refresh_scheduler_lock(scope)
+        return schedule.release(self.connection, scope, execution_id)
+
+    async def refresh_scheduler_turn(self, scope):
+        from .operations import sqlite_refresh_schedule as schedule
+
+        await self.refresh_scheduler_lock(scope)
+        return schedule.turn(self.connection, scope)
 
     async def refresh_get(self, scope, kind, identity):
         from .operations import sqlite_refresh
@@ -988,6 +1069,9 @@ class SQLiteMemoryRepository:
             from .operations import sqlite_derived
 
             connection.executescript(sqlite_derived.SCHEMA)
+            from .operations import sqlite_refresh_schedule
+
+            sqlite_refresh_schedule.initialize(connection)
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS memory_schema (
@@ -2221,6 +2305,12 @@ class SQLiteMemoryRepository:
         for target in sorted(affected_scopes, key=lambda value: value.partition_key()):
             sqlite_derived.reconcile_headers(connection, target)
             sqlite_derived.scrub_routes(connection, target)
+            if request.all_in_scope or request.memory_ids:
+                from .operations import sqlite_refresh_schedule
+
+                sqlite_refresh_schedule.forget(
+                    connection, replace(request, scope=target, all_in_scope=True, memory_ids=())
+                )
         dependent_artifacts = self._forget_artifact_dependencies(
             connection, request, dependent_claim_ids, dependency_rows
         )

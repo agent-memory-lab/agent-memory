@@ -10,6 +10,15 @@ from agent_memory.derived.subscriptions import (
     source_key,
 )
 from agent_memory.domain import MemoryScope, canonical_json
+from agent_memory.operations.refresh_schedule_contract import (
+    KINDS,
+    checked_record,
+    immutable,
+    projection,
+    snapshot,
+)
+
+from . import refresh_schedule
 
 
 async def get(connection, scope, kind, identity):
@@ -19,16 +28,27 @@ async def get(connection, scope, kind, identity):
         (scope.partition_key(), kind, identity),
     )
     row = await cursor.fetchone()
-    return row["payload_json"] if row else None
+    return checked_record(kind, row["payload_json"] if row else None)
 
 
 async def put(connection, scope, kind, identity, payload):
+    if kind in KINDS:
+        payload = checked_record(kind, snapshot(payload))
+    if kind == "refresh_demand":
+        projection(scope, identity, payload)
+    if kind in KINDS:
+        await refresh_schedule.lock(connection, scope)
+    if kind == "refresh_execution":
+        immutable(await get(connection, scope, kind, identity), payload)
     await connection.execute(
         "INSERT INTO agent_memory_derived_entries VALUES (%s,%s,%s,%s::jsonb) "
         "ON CONFLICT (partition_key,kind,identity) DO UPDATE SET "
         "payload_json=excluded.payload_json",
         (scope.partition_key(), kind, identity, canonical_json(payload)),
     )
+
+    if kind == "refresh_demand":
+        await refresh_schedule.project(connection, scope, identity, payload)
 
 
 async def records(connection, scope, kind):
@@ -40,7 +60,10 @@ async def records(connection, scope, kind):
     rows = await cursor.fetchall()
     if len(rows) > 4096:
         raise ValueError("derived ledger capacity exceeded")
-    return tuple(dict(identity=r["identity"], payload=r["payload_json"]) for r in rows)
+    return tuple(
+        dict(identity=r["identity"], payload=checked_record(kind, r["payload_json"]))
+        for r in rows
+    )
 
 
 async def get_header(connection, scope, record_id):

@@ -91,6 +91,7 @@ def _scope_values(scope: MemoryScope) -> tuple[str | None, ...]:
 
 class PostgresMemoryUnitOfWork:
     derived_coverage_contract = "write-hooks/1"
+    refresh_scheduler_contract = "durable-coalescing/1"
     derived_parent_contract = "processing-graph/1"
     derived_page_contract = "page-full-rebuild/1"
 
@@ -107,6 +108,7 @@ class PostgresMemoryUnitOfWork:
         self._transaction_context = self.connection.transaction()
         await self._transaction_context.__aenter__()
         self._admission_batch_times = {}
+        self._refresh_scheduler_namespace = None
         return self
 
     async def __aexit__(
@@ -339,6 +341,11 @@ class PostgresMemoryUnitOfWork:
         return await derived.get(self.connection, scope, kind, identity)
 
     async def derived_put(self, scope, kind, identity, payload):
+        from agent_memory.operations.refresh_schedule_contract import KINDS, snapshot
+
+        if kind in KINDS:
+            payload = snapshot(payload)
+            await self.refresh_scheduler_lock(scope)
         payload = deepcopy(payload)
         from . import derived
 
@@ -427,6 +434,83 @@ class PostgresMemoryUnitOfWork:
         from . import delivery
 
         return await delivery.count(self.connection, scope, kind)
+
+    async def refresh_scheduler_lock(self, scope):
+        from . import refresh_schedule as schedule
+
+        namespace = (scope.tenant_id, scope.namespace)
+        previous = getattr(self, "_refresh_scheduler_namespace", None)
+        if previous is not None and previous != namespace:
+            raise ValueError("scheduler transaction cannot acquire a second namespace")
+        await self.lock_admission_scope(scope)
+        await schedule.lock(self.connection, scope)
+        self._refresh_scheduler_namespace = namespace
+
+    async def refresh_scheduler_observe_clock(self, scope, *, now):
+        from . import refresh_schedule as schedule
+
+        await self.refresh_scheduler_lock(scope)
+        return await schedule.observe_clock(self.connection, now=now)
+
+    async def refresh_scheduler_clock(self, scope):
+        from . import refresh_schedule as schedule
+
+        await self.refresh_scheduler_lock(scope)
+        return await schedule.clock(self.connection)
+
+    async def refresh_scheduler_config(self, limits):
+        from . import refresh_schedule as schedule
+
+        if getattr(self, "_refresh_scheduler_namespace", None) is None:
+            raise ValueError("scheduler scope lock required before configuration")
+        return await schedule.config(self.connection, limits)
+
+    async def refresh_scheduler_due(self, *, now, adapter_keys, limit=128):
+        from . import refresh_schedule as schedule
+
+        return await schedule.due(
+            self.connection, now=now, adapter_keys=adapter_keys, limit=limit
+        )
+
+    async def refresh_scheduler_expired(self, *, now, adapter_keys, limit=128):
+        from . import refresh_schedule as schedule
+
+        return await schedule.due(
+            self.connection, now=now, adapter_keys=adapter_keys, limit=limit, expired=True
+        )
+
+    async def refresh_scheduler_usage(self, *, now, tenant_id, instance_key):
+        from . import refresh_schedule as schedule
+
+        return await schedule.usage(
+            self.connection, now=now, tenant_id=tenant_id, instance_key=instance_key
+        )
+
+    async def refresh_scheduler_reserve(
+        self, scope, execution_id, *, instance_key, units=1, limits
+    ):
+        from agent_memory.operations.refresh_schedule_contract import snapshot
+
+        limits = snapshot(limits)
+        from . import refresh_schedule as schedule
+
+        await self.refresh_scheduler_lock(scope)
+        return await schedule.reserve(
+            self.connection, scope, execution_id, instance_key=instance_key,
+            units=units, limits=limits,
+        )
+
+    async def refresh_scheduler_release(self, scope, execution_id):
+        from . import refresh_schedule as schedule
+
+        await self.refresh_scheduler_lock(scope)
+        return await schedule.release(self.connection, scope, execution_id)
+
+    async def refresh_scheduler_turn(self, scope):
+        from . import refresh_schedule as schedule
+
+        await self.refresh_scheduler_lock(scope)
+        return await schedule.turn(self.connection, scope)
 
     async def refresh_get(self, scope, kind, identity):
         from . import refresh
@@ -916,6 +1000,12 @@ class PostgresMemoryRepository:
         await self.pool.open()
         async with self.pool.connection() as connection:
             async with connection.transaction():
+                # Independent workers may initialize the same schema together.
+                # Replayed additive DDL can upgrade relation locks and deadlock;
+                # serialize this transaction before acquiring any table locks.
+                from .migration import SCHEMA_LOCK_PARAMS, SCHEMA_LOCK_SQL
+
+                await connection.execute(SCHEMA_LOCK_SQL, SCHEMA_LOCK_PARAMS)
                 for migration in sorted(self._migrations_path.glob("*.sql")):
                     if migration.name == "002_pgvector.sql":
                         continue
@@ -1402,6 +1492,12 @@ class PostgresMemoryRepository:
         for target in sorted(affected_scopes, key=lambda value: value.partition_key()):
             await derived.reconcile_headers(connection, target)
             await derived.scrub_routes(connection, target)
+            if request.all_in_scope or request.memory_ids:
+                from . import refresh_schedule
+
+                await refresh_schedule.forget(
+                    connection, replace(request, scope=target, all_in_scope=True, memory_ids=())
+                )
         dependent_artifacts = await self._forget_artifact_dependencies(
             connection, request, admission_claim_ids, dependency_rows
         )
