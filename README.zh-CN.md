@@ -122,7 +122,7 @@ source event: <event-id>
 ## 从原始证据到可用知识
 
 <p align="center">
-  <img src="docs/assets/agent-memory-overview.svg" alt="从 L0 来源证据到 L1 原子记忆和 Observation；L2 场景与 L3 画像为后续目标" width="100%">
+  <img src="docs/assets/agent-memory-overview.svg" alt="从 L0 来源证据到 L1 原子记忆和语言 Observation；支持有界历史与同 scope 当前语言 L2 页面，L3 仍为后续目标" width="100%">
 </p>
 
 [v6.1 设计](docs/design/AGENT_MEMORY_DESIGN_V6.1.0.md) 分别组织原始来源、被接纳的解释和基于它们构建的视图：
@@ -131,8 +131,8 @@ source event: <event-id>
 | --- | --- | --- |
 | **L0 · 来源证据** | 原话是什么？何时发生、何时收到？ | 已实现来源保存、幂等接收、修订与删除屏障。 |
 | **L1 · 原子记忆** | 当前适用什么？当时知道什么？ | 已实现声明与候选接纳、双时态查询，以及限定范围的条件、更正和撤回。 |
-| **Observation · 派生视图** | 同一主题的证据目前支持什么？ | 已实现同 scope 的语言 facet、条件/例外、全量重建、当前权限与失效检查。 |
-| **L2 · Scenario** | 一个项目的目标、进展、决定与待办是什么？ | 路线图：可刷新、可删除的场景与版本化知识页面。 |
+| **Observation · 派生视图** | 同一主题的证据支持什么？ | 已实现同 scope 语言模板、有界历史读取、当前非条件父视图和版本化宿主权限。 |
+| **L2 · Scenario** | 如何组织版本化场景页面和块？ | 当前 `language-scenario/1` 页面支持基于固定的同 scope、非条件语言父完整重建；一般场景模板仍在路线图中。 |
 | **L3 · Core / Persona** | 哪些长期偏好或跨场景模式值得保留？ | 路线图：区分明确指令与推断画像，单独验证依据、稳定性和反例。 |
 
 Observation 是可供 L2/L3 使用的派生构件，L1 也直接参与检索。派生视图保留依赖与资格，其输出不会自动变成独立的 L1 事实；现有内容容器也不代表完整 L2/L3 生命周期已经交付。
@@ -173,6 +173,8 @@ October 6: unknown
 | --- | --- | --- |
 | [持久记忆](examples/durable_memory.py) | 来源接收、处理请求、L1 发布与来源修订 | Core + SDK |
 | [条件事实](examples/contextual_memory.py) | 基于字段、时间证据和可信上下文查询 | Core |
+| [派生父视图](examples/derived_parent_views.py) | 固定当前父版本、传递访问权限与撤销 | Core + SDK |
+| [版本化 L2 页面](examples/derived_scenario_page.py) | 完整重建、稳定块身份和受守卫保护的当前页面就绪 | Core + SDK |
 | [语言 Observation](examples/derived_observation.py) | 从闭合 L1 构建当前语言视图 | Core + SDK |
 | [离线删除同步](examples/durable_purge.py) | 参与同步的待发队列清理旧内容，再投递新事件 | Core + SDK |
 | [L1 就绪](examples/durable_readiness.py) | 等待固定请求集合，显式取消已删除的离线序列 | Core + SDK |
@@ -212,7 +214,7 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 
 ## 能力状态与路线图
 
-**v0.1.0 是软件版本，v6.1.0 是目标架构版本。** 以下以已提交的[第十四阶段 A](docs/design/v6.1.0/stage-14a.md)为能力基线。Alpha 表示仍在补齐合同与验收；M0/M1/M2 尚未整体验收，单个阶段完成也不代表完整设计已交付。
+**v0.1.0 是软件版本，v6.1.0 是目标架构版本。** 以下以已提交的[第十五阶段：有界当前语言 L2 页面](docs/design/v6.1.0/stage-15.md)为能力基线。Alpha 表示仍在补齐合同与验收；M0/M1/M2 尚未整体验收，单个阶段完成也不代表完整设计已交付。
 
 | 领域 | 已交付范围 | 实施证据 |
 | --- | --- | --- |
@@ -220,10 +222,15 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 | 恢复与就绪 | 固定处理目标、有界等待、分批闭合、本地候选索引、显式修复与流切换 | [索引恢复](docs/design/v6.1.0/stage-09.md) · [分批发布](docs/design/v6.1.0/stage-11.md) |
 | 擦除与备份回放 | 参与同步的待发队列删除同步，以及使用独立权威检查点的受控离线回放 | [删除同步](docs/design/v6.1.0/stage-04.md) · [备份回放](docs/design/v6.1.0/stage-10.md) |
 | 当前 Observation | 同 scope 语言 facet、完整输入依赖、失效、全量重建及条件模板 | [生命周期](docs/design/v6.1.0/stage-12.md) · [条件语义](docs/design/v6.1.0/stage-13.md) |
+| 历史 Observation | 冻结语言快照与上下文、独立认知/有效时间、覆盖证明及当前权限/擦除检查 | [历史读取](docs/design/v6.1.0/stage-14b3.md) |
+| 派生父输入 | 固定当前语言修订、完整处理谱系、交付守卫及传递物理擦除 | [第十四阶段 C](docs/design/v6.1.0/stage-14c.md) |
 | 查询与宿主权限 | 版本化当前查询、有期限本地授权、来源 grant 绑定和最终交付检查 | [第十四阶段 A](docs/design/v6.1.0/stage-14a.md) |
+| 当前语言 L2 页面 | 类型化 Scenario/Page/Block 版本、稳定块身份、原子完整重建、固定就绪目标、交付守卫及传递擦除 | [第十五阶段](docs/design/v6.1.0/stage-15.md) |
 | 检索与反馈基础 | 受范围和预算约束的检索、可选 lexical/hybrid 候选、关联结果的 Episode/Procedure 与受控 Evolution 组件 | [代码架构](docs/ARCHITECTURE.md) · [反馈契约](docs/FEEDBACK_CONTRACT.md) |
 
-当前 Observation 只开放文档规定的语言 facet。历史 Observation、派生父输入、远端 ACL 同步及完整 L2/L3 生命周期仍未启用；L1 已有的双时态查询可独立使用。`l1_decided` 只说明处理完成，不代表事实正确。
+Observation 只开放文档规定的语言模板。发布点和可证明稳定区间的历史保留冻结政策/上下文，并检查当前权限；覆盖缺口明确拒绝。当前 `locale-parents/1` 视图固定实际父版本及传递处理许可。当前 `language-scenario/1` 页面组合同一 exact scope 下 1–4 个非条件语言 Observation 父，要求主体、用途与 authority 兼容。
+
+条件/历史父、页面作父、历史页面、delta 更新、一般场景模板、跨 scope 合成、远端 ACL 同步和 L3 仍未启用或处于规划中。有界页面交付不代表完整 L2/L3 生命周期完成。L1 已有的双时态查询可独立使用；`l1_decided` 只说明处理完成，不代表事实正确。
 
 工程证据按被测版本和范围分别记录，不累计跨阶段测试成绩：
 
@@ -231,15 +238,16 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 | --- | --- |
 | [第十二阶段全量验证](docs/design/v6.1.0/stage-12-full-test.md) | 提交 `9d4201c` 的核心与扩展包全量验证、构建安装和双后端恢复；这是旧基线 |
 | [第十三阶段](docs/design/v6.1.0/stage-13.md) | 条件语言 facet 的专项与受影响回归；未重新运行全量 |
-| [第十四阶段 A](docs/design/v6.1.0/stage-14a.md) | 当前查询/权限专项、相关回归、双后端竞争、真实 SIGKILL 与安装验证；未运行全量 |
+| 第十四阶段 [A](docs/design/v6.1.0/stage-14a.md) / [B.3](docs/design/v6.1.0/stage-14b3.md) / [C](docs/design/v6.1.0/stage-14c.md) | 查询/权限、历史与父图的专项及受影响回归；未运行全量 |
+| [第十五阶段](docs/design/v6.1.0/stage-15.md) · [独立证据](docs/design/v6.1.0/validation-stage-15.json) | 对记录的代码基线执行仓库及扩展包全量测试、构建安装验证，覆盖双后端、跨连接竞争、真实 SIGKILL 和备份回放 |
 
 这些记录验证协议、事务和恢复行为；合成输入不能代替真实对话 gold、抽取质量评测或生产验收。
 
 后续按依赖推进，详细任务见[实施计划](docs/design/v6.1.0/plan.md)、[任务台账](docs/design/v6.1.0/task.md)与[后续步骤](docs/design/v6.1.0/next-steps.md)：
 
-1. **第十四阶段 B：历史派生。** 固定历史时间、定义、政策与上下文版本，证明完整覆盖，并继续检查当前权限和擦除；当前接口明确拒绝历史 Observation。
-2. **第十四阶段 C：传递依赖。** 固定派生父版本，验证实际输入、权限交集、循环/深度限制及传递擦除。
-3. **L2，再到 L3。** 先实现 Scenario 与版本化知识页面的全量重建、刷新和删除，再单独验收 delta 与画像推断。
+1. **资格保持的当前父与页面。** [第十六阶段计划](docs/design/v6.1.0/stage-16-plan.md) 定义兼容的宿主路由与资格合同，保留条件和例外；尚未实现或验收。
+2. **进一步合成。** 历史父/页面与更广模板需要各自的冻结输入合同和验收；跨 scope 合成仍关闭。
+3. **增量视图与 L3。** delta 暂缓，先证明收益并定义版本化补丁合同；画像推断需独立通过稳定性、反例与质量验收。
 4. **持续质量与模型治理。** 补充可用真实 gold、复杂事实领域、规模恢复，以及外部模型的用途许可、派发与费用约束。
 
 高级检索和可选的只读 Reflect 继续按[任务台账](docs/design/v6.1.0/task.md)推进。远程部署见[安全策略](SECURITY.md)和[威胁模型](docs/THREAT_MODEL.md)；外部缓存、远端 ACL 和供应商副本需要各自完成集成合同。
@@ -252,6 +260,7 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 | 事实接纳与自动抽取 | [Atom 接纳](docs/ATOM_ADMISSION.md) · [自动抽取](docs/ATOM_EXTRACTION.md) |
 | 历史事实查询 | [双时态记忆](docs/BITEMPORAL_MEMORY.md) |
 | 当前派生记忆 | [Observation](docs/design/v6.1.0/stage-12.md) · [条件 facet](docs/design/v6.1.0/stage-13.md) · [查询与权限](docs/design/v6.1.0/stage-14a.md) |
+| 历史视图与当前页面合成 | [有界历史](docs/design/v6.1.0/stage-14b3.md) · [父输入](docs/design/v6.1.0/stage-14c.md) · [当前 L2 页面](docs/design/v6.1.0/stage-15.md) |
 | 任务结果反馈与演化 | [反馈契约](docs/FEEDBACK_CONTRACT.md) · [Evolution 包](packages/evolution/README.md) |
 | 部署配置与故障恢复 | [单机部署](docs/single-host-deployment.md) · [恢复操作](docs/recovery-operations.md) |
 | 评测与资源测量 | [评测方法](docs/LOCAL_MEMORY_COMPARISON_EVAL.md) · [资源基线](docs/RESOURCE_BASELINE.md) |

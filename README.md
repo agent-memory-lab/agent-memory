@@ -122,7 +122,7 @@ This example supplies the structured claim from host code. It demonstrates persi
 ## From source evidence to usable knowledge
 
 <p align="center">
-  <img src="docs/assets/agent-memory-overview.svg" alt="Agent Memory: host events flow through L0 source evidence, typed admission, and L1 versioned facts to a bounded MemoryBundle. Optional current language Observations feed planned L2 and L3 views. Evidence, time, scope, and erasure govern the flow." width="100%">
+  <img src="docs/assets/agent-memory-overview.svg" alt="Agent Memory: host events flow through L0 source evidence, typed admission, and L1 versioned facts to a bounded MemoryBundle. Optional language Observations support bounded history and current same-scope L2 language pages. L3 remains planned. Evidence, time, scope, and erasure govern the flow." width="100%">
 </p>
 
 The [v6.1 design](docs/design/AGENT_MEMORY_DESIGN_V6.1.0.md) separates the source, the accepted interpretation, and the views built from it:
@@ -131,8 +131,8 @@ The [v6.1 design](docs/design/AGENT_MEMORY_DESIGN_V6.1.0.md) separates the sourc
 | --- | --- | --- |
 | **L0 · Source evidence** | Preserve captured content, source identity, revisions, and processing requests | Durable receive, deduplication, explicit source revisions, and replay |
 | **L1 · Atomic memory** | Decide what can be used, with evidence, conditions, and time | Typed admission; accepted, pending, or contested outcomes; supported corrections and dual-time queries |
-| **Observation · Derived views** | Organize a facet across sources and rebuild when its inputs change | Current language preferences in one exact scope; conditional templates and versioned host permissions |
-| **L2 · Scenario** | Assemble project goals, decisions, progress, and open questions | Planned under the unified dependency and refresh contract |
+| **Observation · Derived views** | Organize a facet across sources and rebuild when its inputs change | Same-scope language templates, bounded historical reads, current non-conditional parent views, and versioned host permissions |
+| **L2 · Scenario** | Organize versioned scenario pages and blocks | Current `language-scenario/1` pages support full rebuild from fixed same-scope, non-conditional language parents; general scenario templates remain planned |
 | **L3 · Core / Persona** | Organize explicit long-term preferences and carefully evaluated patterns | Planned under the unified contract; inferred profiles require separate acceptance |
 
 Observation is a derived building block that can support L2 or L3. L1 also feeds retrieval directly. A summary's position in this structure never increases the authority of its evidence.
@@ -214,7 +214,7 @@ The public boundary is `MemoryProvider`. Optional packages use lazy discovery; i
 
 ## Capability status and roadmap
 
-The current documented delivery baseline is **stage 14 bounded A/B/C delivery of the v6.1 architecture plan**. The software package is **v0.1.0 / Alpha**; architecture, protocol, and package versions are tracked separately.
+The current documented delivery baseline is **[stage 15: bounded current language L2 pages](docs/design/v6.1.0/stage-15.md)** of the v6.1 architecture plan. The software package is **v0.1.0 / Alpha**; architecture, protocol, and package versions are tracked separately.
 
 | Capability | Current implementation | Evidence |
 | --- | --- | --- |
@@ -225,17 +225,20 @@ The current documented delivery baseline is **stage 14 bounded A/B/C delivery of
 | Historical Observation | Frozen language snapshots/context, independent known/valid time, certified coverage and current permission/erasure checks | [History](docs/design/v6.1.0/stage-14b3.md) |
 | Derived parent inputs | Fixed current language revisions, complete processing lineage, guarded delivery and transitive physical erasure | [Stage 14C](docs/design/v6.1.0/stage-14c.md) |
 | Query and host permissions | Versioned current queries, expiring local authority, source-grant binding, and checks before final delivery | [Stage 14A](docs/design/v6.1.0/stage-14a.md) |
+| Current language L2 pages | Typed Scenario/Page/Block versions, stable block identities, atomic full rebuild, fixed readiness targets, guarded delivery, and transitive erasure | [Stage 15](docs/design/v6.1.0/stage-15.md) |
 | Retrieval and feedback foundations | Scoped, bounded recall; optional lexical/hybrid candidates; outcome-linked Episode/Procedure and gated Evolution components | [Architecture](docs/ARCHITECTURE.md) · [Feedback](docs/FEEDBACK_CONTRACT.md) |
 
-Observation remains limited to documented language templates. Published-point and certified-interval history preserve frozen policies/context and current access checks. Current `locale-parents/1` views bind fixed parent revisions and transitive processing permissions. Conditional/historical parents, remote ACL synchronization, and the unified L2/L3 lifecycle remain future work.
+Observation remains limited to documented language templates. Published-point and certified-interval history preserve frozen policies/context and current access checks; gaps are rejected. Current `locale-parents/1` views bind fixed parent revisions and transitive processing permissions. Current `language-scenario/1` pages combine 1–4 non-conditional language Observation parents in the same exact scope, with compatible subject, purpose, and authority.
 
-Validation records include SQLite and real PostgreSQL contracts, cross-connection races, process-kill recovery, and backup replay. The [stage 12 full-suite report](docs/design/v6.1.0/stage-12-full-test.md) belongs to its recorded code baseline; [stage 13](docs/design/v6.1.0/stage-13.md) and [stage 14](docs/design/v6.1.0/stage-14c.md) record targeted and affected regression runs. Production acceptance, real-domain extraction quality, and full M0/M1/M2 milestone acceptance remain open.
+Conditional/historical parents, pages as parents, historical pages, delta updates, general scenario templates, cross-scope composition, remote ACL synchronization, and L3 remain disabled or planned. The bounded page delivery does not complete the full L2/L3 lifecycle. L1's existing bitemporal queries remain independently available; `l1_decided` means processing completed, not that a fact is true.
+
+Validation records include SQLite and real PostgreSQL contracts, cross-connection races, process-kill recovery, and backup replay. The [stage 12 full-suite report](docs/design/v6.1.0/stage-12-full-test.md) is an older baseline; [stage 13](docs/design/v6.1.0/stage-13.md) and stage 14 [A](docs/design/v6.1.0/stage-14a.md)/[B.3](docs/design/v6.1.0/stage-14b3.md)/[C](docs/design/v6.1.0/stage-14c.md) record targeted and affected regression runs. [Stage 15](docs/design/v6.1.0/stage-15.md) records a full repository/package run and build/install verification, with [independent evidence](docs/design/v6.1.0/validation-stage-15.json). Each report applies to its recorded code baseline; counts are not cumulative. Production acceptance, real-domain extraction quality, and full M0/M1/M2 milestone acceptance remain open.
 
 **Next in the [implementation plan](docs/design/v6.1.0/next-steps.md):**
 
-1. **L2 pages:** typed scenario/page/block versions, full rebuild, fixed readiness targets, guarded reads and erasure.
-2. **Further composition:** qualified/historical parents and broader predicates need their own frozen-input contracts and acceptance.
-3. **Incremental views and L3:** evaluate delta after page full rebuild is proven; inferred profiles remain gated.
+1. **Qualified current parents and pages:** the [stage 16 plan](docs/design/v6.1.0/stage-16-plan.md) defines compatible host routing and qualification contracts that preserve conditions and exceptions; it is not yet implemented or accepted.
+2. **Further composition:** historical parents/pages and broader templates need their own frozen-input contracts and acceptance; cross-scope composition remains disabled.
+3. **Incremental views and L3:** delta is deferred pending evidence of benefit and a versioned patch contract; inferred profiles require independent stability, counterexample, and quality acceptance.
 4. **Real-world validation:** domain gold, model input and delivery controls, dispatch budgets, and reproducible quality/cost comparisons.
 
 Advanced retrieval and optional read-only Reflect remain on the [task ledger](docs/design/v6.1.0/task.md). Remote deployments use the [security policy](SECURITY.md) and [threat model](docs/THREAT_MODEL.md); external caches, remote ACL systems, and provider-held copies need their own integration contracts.
@@ -248,6 +251,7 @@ Advanced retrieval and optional read-only Reflect remain on the [task ledger](do
 | Admit or extract facts | [Atom admission](docs/ATOM_ADMISSION.md) · [Automatic extraction](docs/ATOM_EXTRACTION.md) |
 | Read facts across time | [Bitemporal memory](docs/BITEMPORAL_MEMORY.md) |
 | Build a controlled language view | [Observation lifecycle](docs/design/v6.1.0/stage-12.md) · [Conditional view](docs/design/v6.1.0/stage-13.md) · [Query and permissions](docs/design/v6.1.0/stage-14a.md) |
+| Read historical views or compose current pages | [Bounded history](docs/design/v6.1.0/stage-14b3.md) · [Parent inputs](docs/design/v6.1.0/stage-14c.md) · [Current L2 pages](docs/design/v6.1.0/stage-15.md) |
 | Connect feedback and evolution | [Feedback contract](docs/FEEDBACK_CONTRACT.md) · [Evolution package](packages/evolution/README.md) |
 | Deploy and recover | [Single-host deployment](docs/single-host-deployment.md) · [Recovery operations](docs/recovery-operations.md) |
 | Inspect evaluation evidence | [Evaluation methodology](docs/LOCAL_MEMORY_COMPARISON_EVAL.md) · [Resource baseline](docs/RESOURCE_BASELINE.md) |
