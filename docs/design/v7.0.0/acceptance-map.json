@@ -1,0 +1,775 @@
+{
+  "schema": "v7-acceptance-map/1",
+  "baseline": "7f824dd49b18935c6b47f5eb32aa32efdbd8cf01",
+  "batch": "B0",
+  "runtime_capabilities": [],
+  "notes": [
+    "Protocol unit tests do not establish full runtime acceptance.",
+    "Inherited status is a verbatim snapshot, not a new V7 test result.",
+    "Unsupported, deferred, not_run and insufficient_data are never passes."
+  ],
+  "cases": [
+    {
+      "id": "R01-01",
+      "scenario": "用户中文，项目 A 英文，批准覆盖；另测同用户存储槽分别适用 A/B 的两条偏好",
+      "owner": "AM61-T11",
+      "inherited_status": "部分：同存储槽项目 A/B 条件分段与显式偏序已测；跨存储范围路由待补",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R01-02",
+      "scenario": "不可比较范围异值；交换入库/候选顺序；循环优先政策",
+      "owner": "AM61-T11",
+      "inherited_status": "部分：顺序无关、不可比较异值、循环优先政策拒绝已测；跨范围完整矩阵待补",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R01-03",
+      "scenario": "高优先项分别为争议、无记录、到期、block_inheritance",
+      "owner": "AM61-T11",
+      "inherited_status": "部分：高优先争议/未知不回退，到期不恢复旧值；可配置 fallback/block_inheritance 待补",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R01-04",
+      "scenario": "用户周五例外与团队维护禁止同时适用；时区未知",
+      "owner": "AM61-T11",
+      "inherited_status": "部分：例外三值与时区未知已测；团队约束合取保持 unsupported",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R01-05",
+      "scenario": "Python/SQL 部分成员观察与 Python 反证",
+      "owner": "AM61-T11",
+      "inherited_status": "未执行",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R01-06",
+      "scenario": "K1/K2 合成政策不同，今天撤权；历史政策缺失",
+      "owner": "AM61-T11",
+      "inherited_status": "部分：政策版本不符拒绝、历史/当前擦除分开；动态 ACL/实体政策历史注册待补",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R02-01",
+      "scenario": "新提取零候选，但旧候选逐项复核仍 supported",
+      "owner": "AM61-T20",
+      "inherited_status": "通过（整来源模式）：零候选逐项复核仍 supported，保留身份且不增加独立证据",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R02-02",
+      "scenario": "旧误提被明确判为 unsupported，新解释通过",
+      "owner": "AM61-T20",
+      "inherited_status": "通过（同槽普通贡献）：明确 unsupported 退出，新解释原子接替；历史 known_at 保留",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R02-03",
+      "scenario": "生成截断/审查缺项；完整审查但资格未知",
+      "owner": "AM61-T20",
+      "inherited_status": "部分：复核缺项/未知与 allow_pending 已测；复杂生成完整性和局部覆盖待扩展",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R02-04",
+      "scenario": "撤去来源 A 支持，独立来源 B 仍支持同值",
+      "owner": "AM61-T20",
+      "inherited_status": "部分：来源 A 的独立记录退出不影响 B；组合贡献 AND/OR 待扩展",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R02-05",
+      "scenario": "覆盖重叠或不相交的两个替代及并发 additive",
+      "owner": "AM61-T20",
+      "inherited_status": "部分：整来源 additive/replace 共享 CAS，失败不改基线；部分覆盖明确拒绝",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R02-06",
+      "scenario": "对账期间删除/撤权、提交崩溃或回执丢失",
+      "owner": "AM61-T20",
+      "inherited_status": "部分：删除、贡献版本改变、事务异常与阶段重用已测；动态撤权/真实进程强杀待补",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R03-01",
+      "scenario": "旧索引命中已撤权正文，拟送外部精排",
+      "owner": "AM61-T13",
+      "inherited_status": "未执行",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R03-02",
+      "scenario": "有读取权但无指定供应商/区域处理权",
+      "owner": "AM61-T13",
+      "inherited_status": "未执行",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R03-03",
+      "scenario": "Reflect 读取后、交付授权前擦除；缓存命中也同样",
+      "owner": "AM61-T13",
+      "inherited_status": "未执行",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R03-04",
+      "scenario": "删除分别发生在 dispatch/交付授权点前后",
+      "owner": "AM61-T13",
+      "inherited_status": "未执行",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R03-05",
+      "scenario": "输出中途撤权、适配器无逐 chunk 授权",
+      "owner": "AM61-T13",
+      "inherited_status": "未执行",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R03-06",
+      "scenario": "外部 ACL 不可验证、远程模型暗含额外上下文",
+      "owner": "AM61-T13",
+      "inherited_status": "未执行",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R04-01",
+      "scenario": "模型读 P 公开与 S 私有，但只引用 P 或将 S 标可选",
+      "owner": "AM61-T25",
+      "inherited_status": "第十二阶段当前本地 facet 切片通过；完整扩展未验收",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R04-02",
+      "scenario": "多轮、旧摘要、few-shot、缓存、L1 解释携带私有输入",
+      "owner": "AM61-T25",
+      "inherited_status": "未执行",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R04-03",
+      "scenario": "delta 仅改一个块，提示词含私有资料",
+      "owner": "AM61-T25",
+      "inherited_status": "未执行",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R04-04",
+      "scenario": "因省略引用而不再“必要”的来源撤权/擦除",
+      "owner": "AM61-T25",
+      "inherited_status": "第十二阶段当前本地 facet 切片通过；完整扩展未验收",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R04-05",
+      "scenario": "仅公开输入的全新上下文重新生成",
+      "owner": "AM61-T25",
+      "inherited_status": "未执行",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R04-06",
+      "scenario": "模型自称已脱敏与独立获准级别转换",
+      "owner": "AM61-T25",
+      "inherited_status": "未执行",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N01-01",
+      "scenario": "纯工具响应、多块内容、流中断",
+      "owner": "AM61-T06",
+      "inherited_status": "部分：工具结果/省略，未覆盖多块",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N01-02",
+      "scenario": "注入记忆再回流及已知改写",
+      "owner": "AM61-T06",
+      "inherited_status": "部分：宿主标记与三条接纳入口，未覆盖完整谱系",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N01-03",
+      "scenario": "无宿主事件全集或伪造来源角色",
+      "owner": "AM61-T06",
+      "inherited_status": "部分：宿主 origin/actor/scope 绑定及 SDK/MCP 同合同已测；完整事件全集适配待补",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N02-01",
+      "scenario": "确认丢失、重复投递、同ID异载荷",
+      "owner": "AM61-T17",
+      "inherited_status": "部分：SDK/MCP append/revise 丢确认与异载荷冲突、真实接收进程强杀恢复、purge 确认丢失重启已测；完整生命周期仍待补",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N02-02",
+      "scenario": "乱序ack、多个生产者并发追加",
+      "owner": "AM61-T17",
+      "inherited_status": "通过（受控 producer）：多 producer 乱序/重复与双后端竞争已测；新 opt-in received/settled 分开，取消不伪造接收",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N02-03",
+      "scenario": "离线outbox遇scope擦除",
+      "owner": "AM61-T17",
+      "inherited_status": "通过（双端 opt-in SDK/MCP）：旧 epoch 离线正文先清理再拒绝上传，未知对象删除同步、新 epoch 与旧会话分离已测；历史设备范围见 stage-04",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N03-01",
+      "scenario": "整理运行中收到新变更",
+      "owner": "AM61-T18",
+      "inherited_status": "通过（受控本地刷新集合）：固定领取、合并新责任、原子覆盖与后继调度、固定请求回执已测；具体 Observation/视图仍待专属验收",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N03-02",
+      "scenario": "同资源多worker及旧租约回报",
+      "owner": "AM61-T18",
+      "inherited_status": "通过（受控本地刷新）：跨连接资源排他、不同资源可前进、旧 fencing 与真实 SIGKILL 提交恢复已测；派生/外部处理仍待专属验收",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N03-03",
+      "scenario": "背压defer、心跳无提交、部分提交后取消",
+      "owner": "AM61-T18",
+      "inherited_status": "通过（受控本地刷新）：defer 不占故障次数且单独计数、心跳/checkpoint 不推进进度、独立年龄/无进度时限、已提交范围与剩余取消已测",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N04-01",
+      "scenario": "source query/模板语义变化",
+      "owner": "AM61-T31",
+      "inherited_status": "第十五阶段有界 full：定义/query 变化使旧页面失效，实际父与完整输入 CAS 已验证；一般模板/delta 未验收",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N04-02",
+      "scenario": "零edits、补丁无效、待撤回内容",
+      "owner": "AM61-T31",
+      "inherited_status": "第十五阶段 full 空输出有完整证书，失效/失败不交付旧页；delta/补丁未启用",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N04-03",
+      "scenario": "刷新期间新增相关成员",
+      "owner": "AM61-T31",
+      "inherited_status": "第十五阶段当前语言页：新增成员阻断固定旧发布并父优先刷新通过；一般场景/跨范围未验收",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N05-01",
+      "scenario": "来源接收但提取未完成",
+      "owner": "AM61-T22",
+      "inherited_status": "通过（有限捕获请求）：source_persisted 可 reached 而 L1 清单未闭合，固定目标与原接收令牌已测",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N05-02",
+      "scenario": "全部待决、多次发布、部分索引落后",
+      "owner": "AM61-T22",
+      "inherited_status": "部分：闭合零输出/全部待决、跨请求发布汇总、本地索引连续覆盖/部分落后及显式重处理目标已测；单请求整槽分批及闭合/逐令牌覆盖已测；派生/外部索引仍待补",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N05-03",
+      "scenario": "持续新增、deadline、权限撤回",
+      "owner": "AM61-T22",
+      "inherited_status": "部分：新输入/新 generation 不扩大旧目标、deadline 不取消及 scope/source 删除阻断已测；通用动态 ACL/外部用途守卫待补",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N06-01",
+      "scenario": "gold分别在候选/精排/装包阶段丢失",
+      "owner": "AM61-T34",
+      "inherited_status": "未执行",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N06-02",
+      "scenario": "gold需要多个桥梁证据或有替代支持",
+      "owner": "AM61-T34",
+      "inherited_status": "部分：离线 AND/OR，运行 trace 待补",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N06-03",
+      "scenario": "无权/过期来源被过滤",
+      "owner": "AM61-T34",
+      "inherited_status": "部分：gold 资格，实时读取资格待补",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N07-01",
+      "scenario": "长中文/emoji/尾部否定及例外",
+      "owner": "AM61-T36",
+      "inherited_status": "未执行",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N07-02",
+      "scenario": "相对rerank分数、provider failover",
+      "owner": "AM61-T36",
+      "inherited_status": "未执行",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N07-03",
+      "scenario": "同维度embedding模型替换",
+      "owner": "AM61-T36",
+      "inherited_status": "未执行",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N08-01",
+      "scenario": "冻结L1检索与原事件端到端两组",
+      "owner": "AM61-T38",
+      "inherited_status": "未执行",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N08-02",
+      "scenario": "17事件/20检查适配",
+      "owner": "AM61-T38",
+      "inherited_status": "部分：17/20 已适配，端到端未执行",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "N08-03",
+      "scenario": "抽取达标但最终召回/任务退化",
+      "owner": "AM61-T38",
+      "inherited_status": "未执行",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R05-01",
+      "scenario": "部分字段/时间核验",
+      "owner": "AM61-T09",
+      "inherited_status": "部分：必要字段/限定完整性、点证据不延长、跨来源时间 AND/OR 已测；部分字段独立持久发布未启用",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R05-02",
+      "scenario": "联合证据不同业务版本、OR时段不重合、AND无共同区间、撤项",
+      "owner": "AM61-T09",
+      "inherited_status": "部分：辅助 OR 分支擦除幸存、AND 缺项失效、业务版本与来源族核验已测；完整异步核验待补",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R06-01",
+      "scenario": "A被B替换，撤回B支持但结束A依据幸存",
+      "owner": "AM61-T10",
+      "inherited_status": "已测同 scope 单值：独立终止依据、B 撤证、终止证据丢失均不复活 A",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R06-02",
+      "scenario": "明确纠正错误transition及其起点",
+      "owner": "AM61-T10",
+      "inherited_status": "部分：新证据显式延长/取消错误终止、历史及撤证已测；移动起点未启用",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R07-01",
+      "scenario": "E1误提家庭地址，E2独立支持家庭地址；更正E1为工作地址",
+      "owner": "AM61-T12",
+      "inherited_status": "跨槽未启用且整项拒绝已测；同槽 E1 更正保留 E2 的对应切片通过",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R07-02",
+      "scenario": "一个贡献或槽版本变化、目标越权、隔离域不支持",
+      "owner": "AM61-T12",
+      "inherited_status": "同槽 CAS/新增贡献/竞争/越权/失败回滚已测；跨槽明确拒绝",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R08-01",
+      "scenario": "首次订阅前、查询中、发布检查后分别新增阻塞",
+      "owner": "AM61-T26",
+      "inherited_status": "第十二阶段当前本地 facet 切片通过；完整扩展未验收",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R08-02",
+      "scenario": "查询截断、删除成员、无写入时间边界",
+      "owner": "AM61-T26",
+      "inherited_status": "第十二阶段当前本地 facet 切片通过；完整扩展未验收",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R09-01",
+      "scenario": "K20更正A1后查询K15历史派生",
+      "owner": "AM61-T28",
+      "inherited_status": "部分：B.1–B.3 语言条件/非条件检查点与稳定区间、旧上下文/政策/资格、更正/撤回及缺口拒绝已测；一般谓词/跨范围历史待补",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R09-02",
+      "scenario": "今天撤权/擦除后查询任意known_at",
+      "owner": "AM61-T28",
+      "inherited_status": "部分：B.1–B.3 条件/非条件点与区间的当前撤权/期限/floor、字段证据擦除与最终交付已测；通用父传播待补",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R10-01",
+      "scenario": "入口ticket签发后、事务A前scope擦除",
+      "owner": "AM61-T15",
+      "inherited_status": "部分：ticket/scope epoch 屏障、事务 A 真正强杀前后原子恢复已测；外部远端在途交付守卫待补",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R10-02",
+      "scenario": "新授权输入与旧离线重传",
+      "owner": "AM61-T15",
+      "inherited_status": "通过（受控 SDK/MCP）：旧 producer/ticket 撤销；新授权 epoch 输入可接收，旧离线正文先清理、旧身份禁止搬入新会话；revise 沿用确认合同",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R11-01",
+      "scenario": "capture token到位、publication manifest未闭合且为空",
+      "owner": "AM61-T22",
+      "inherited_status": "通过（有限捕获请求）：空未闭合清单不达到 L1；闭合零发布明确 no_outputs；opt-in 本地候选索引需闭合和连续覆盖，未配置通道仍 unsupported",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R11-02",
+      "scenario": "多个发布token与不连续索引完成",
+      "owner": "AM61-T22",
+      "inherited_status": "通过（opt-in 本地候选索引）：多请求固定令牌集合全部闭合，逐令牌实际证明与连续前缀均到位才 reached；后续序号先完成不越缺口。显式实际修复/新流基线切换已测，旧目标不漂移；单请求多发布、部分提交续跑、闭合和逐批修复/切流已测；外部索引仍待补",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R12-01",
+      "scenario": "十个worker竞争多层账户最后一次调用额度",
+      "owner": "AM61-T21",
+      "inherited_status": "未执行",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R12-02",
+      "scenario": "供应商接受后、本地dispatched前崩溃，费用未知、账单重放",
+      "owner": "AM61-T21",
+      "inherited_status": "未执行",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R13-01",
+      "scenario": "全部拒答换取安全分、检索有效覆盖退化",
+      "owner": "AM61-T39",
+      "inherited_status": "部分：质量门回归，实际适配器待接入",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "R13-02",
+      "scenario": "缺门槛配置/数据量不足/事后改裁判",
+      "owner": "AM61-T39",
+      "inherited_status": "部分：冻结/样本/配置检查，真实校准待补",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-01",
+      "scenario": "首次订阅与新增成员并发",
+      "owner": "AM70-T03",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-02",
+      "scenario": "成员跨项目/字段移动及删除",
+      "owner": "AM70-T03",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-03",
+      "scenario": "查询谓词无法精确反查",
+      "owner": "AM70-T03",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-04",
+      "scenario": "订阅索引重建/升级时发生写入",
+      "owner": "AM70-T14",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-05",
+      "scenario": "多请求/worker 对同一兼容目标刷新",
+      "owner": "AM70-T05",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-06",
+      "scenario": "旧目标运行中不断到达新变更",
+      "owner": "AM70-T05",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-07",
+      "scenario": "连续变更超过 debounce 等待窗",
+      "owner": "AM70-T05",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-08",
+      "scenario": "时间边界、重启与系统时钟跳变",
+      "owner": "AM70-T07",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-09",
+      "scenario": "冷视图长时间无人读取",
+      "owner": "AM70-T06",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-10",
+      "scenario": "热门页面依赖冷父视图",
+      "owner": "AM70-T06",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-11",
+      "scenario": "大租户与小租户争抢预算",
+      "owner": "AM70-T06",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-12",
+      "scenario": "不支持处理器的 worker 领取任务",
+      "owner": "AM70-T07",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-13",
+      "scenario": "来源已接收但事实发布未闭合",
+      "owner": "AM70-T04",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-14",
+      "scenario": "注册字段查询及模板说明",
+      "owner": "AM70-T08",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-15",
+      "scenario": "自然语言指向不明或参数冲突",
+      "owner": "AM70-T08",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-16",
+      "scenario": "无 completion、无 risk 命中或 top-k 截断",
+      "owner": "AM70-T02",
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "tests/test_project_questions_v7.py",
+          "scope": "Protocol-only deterministic oracle. Integrated trusted admission and live query census remain B3 work."
+        }
+      ]
+    },
+    {
+      "id": "Q7-17",
+      "scenario": "集合/聚合加入、修改、删除和时间变化",
+      "owner": "AM70-T10",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-18",
+      "scenario": "定义、政策、schema 或算子不兼容变化",
+      "owner": "AM70-T10",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-19",
+      "scenario": "delta 日志有缺口、重复、乱序",
+      "owner": "AM70-T10",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-20",
+      "scenario": "迟到有效期与新的系统认知",
+      "owner": "AM70-T04",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-21",
+      "scenario": "业务结果不变但证据修订变化",
+      "owner": "AM70-T11",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-22",
+      "scenario": "旧私有生成输入撤权而公开来源同文",
+      "owner": "AM70-T11",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-23",
+      "scenario": "部分块编辑和整页输出",
+      "owner": "AM70-T09",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-24",
+      "scenario": "计算后来源/查询变化及调用者修改输入",
+      "owner": "AM70-T04",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-25",
+      "scenario": "不同用户/项目/时间/用途的相似答案",
+      "owner": "AM70-T12",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-26",
+      "scenario": "缓存命中后撤权或擦除",
+      "owner": "AM70-T12",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-27",
+      "scenario": "模型 failover、prompt/参数/格式变化",
+      "owner": "AM70-T12",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-28",
+      "scenario": "预算已派发但回执丢失、worker 崩溃",
+      "owner": "AM70-T12",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-29",
+      "scenario": "刷新提交前后强杀及通知丢失",
+      "owner": "AM70-T07",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-30",
+      "scenario": "带 V7 对象的备份恢复/擦除/回滚",
+      "owner": "AM70-T14",
+      "v7_status": "not_run",
+      "evidence": []
+    },
+    {
+      "id": "Q7-31",
+      "scenario": "后台预热、失败调用与零命中维护",
+      "owner": "AM70-T13",
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "tests/test_question_cost_v7.py",
+          "scope": "Evaluation-only accounting contracts. Production instrumentation, licensed real workload and provider billing remain unverified."
+        }
+      ]
+    },
+    {
+      "id": "Q7-32",
+      "scenario": "真实领域数据及模型质量/成本对照",
+      "owner": "AM70-T15",
+      "v7_status": "not_run",
+      "evidence": []
+    }
+  ]
+}

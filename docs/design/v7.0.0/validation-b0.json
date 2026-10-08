@@ -1,0 +1,81 @@
+{
+  "schema": "v7-batch-validation/1",
+  "batch": "V7-B0",
+  "date": "2026-10-08",
+  "base_commit": "7f824dd49b18935c6b47f5eb32aa32efdbd8cf01",
+  "source_manifest": {
+    "src/agent_memory/derived/question_model.py": "4dc4eddba73d967df57a6485c166e4a23b723a1167ac0355c4505afe41256e9c",
+    "src/agent_memory/derived/project_questions.py": "c6dcaf9f480bdc69daed2f25c384ac20ca5f27242df75615edef2c943ed45eb9",
+    "src/agent_memory/evaluation/question_cost.py": "77f26c49ecc34451da4be75d2db206ab7792062d3df7d6a354d1b1974c54a784",
+    "tests/test_question_model_v7.py": "df240d21f41e9ad11e47f92e8d5e4812050890e6b8758b6e5a3b512f15638685",
+    "tests/test_project_questions_v7.py": "9b4a3477f8b37f8be7c109a5ad2dc1ef26432ea3e285d00235087d43c91e41ad",
+    "tests/test_question_cost_v7.py": "e1afaca7bf3e826f3411b640fb9d5d23142f461b393b405bdeae6327e27b8d06",
+    "tests/test_v7_acceptance_inventory.py": "c397426c1f946723af873f0dfdb086beb0019da23fe67098afe57685e22021bf"
+  },
+  "source_manifest_sha256": "42ae00a988280420e8e31a308c0c77f7085be6c3895eb915e7cb5ef4af87538a",
+  "environment": {
+    "python": "3.13.5",
+    "pytest": "8.4.2",
+    "postgresql": "17.11",
+    "pgvector": "0.8.0",
+    "tiktoken": "0.14.0",
+    "database": "isolated disposable PostgreSQL; both test DSN variables configured; no production data"
+  },
+  "commands": [
+    {
+      "command": ".venv/bin/python -m pytest -o addopts=\"\" -q tests packages/evolution/tests packages/langgraph/tests packages/python-sdk/tests packages/mcp-server/tests packages/postgres/tests",
+      "passed": 2843,
+      "failed": 0,
+      "skipped": 0,
+      "duration_seconds": 254.723,
+      "junit_sha256": "36c41e478abb231542b005101f0d6f8f56c16c32498b91cbdcb077140a0fac93"
+    },
+    {
+      "command": ".venv/bin/python -m pytest -o addopts=\"\" -q tests/test_question_model_v7.py tests/test_project_questions_v7.py tests/test_question_cost_v7.py tests/test_v7_acceptance_inventory.py",
+      "passed": 299,
+      "failed": 0,
+      "skipped": 0
+    },
+    {
+      "command": "ruff check and format --check on all seven new Python files",
+      "result": "passed"
+    },
+    {
+      "command": "python -m build --no-isolation for core and five extension packages; install six wheels into a fresh Python 3.13 venv; import all six packages and new contracts",
+      "result": "passed"
+    }
+  ],
+  "review": {
+    "independent": true,
+    "remaining_blockers": [],
+    "verified_repairs": [
+      "lossless numeric identity",
+      "NFC normalization before maxLength check",
+      "unsupported qualifier/time cannot exclude counterexample",
+      "unsupported membership predicate yields incomplete",
+      "mutable scope rejection",
+      "model role/configuration evidence consistency",
+      "idempotent late usage settlement"
+    ]
+  },
+  "runtime_capabilities_enabled": [],
+  "claims": {
+    "real_model_benefit": false,
+    "licensed_domain_quality": false,
+    "full_v7_acceptance": false,
+    "schema_migration_performed": false
+  },
+  "task_status": {
+    "AM70-T01": "DONE",
+    "AM70-T02": "IN_PROGRESS",
+    "AM70-T13": "IN_PROGRESS",
+    "AM70-T14": "IN_PROGRESS",
+    "AM70-T15": "IN_PROGRESS"
+  },
+  "limitations": [
+    "Q7-16 and Q7-31 have protocol-only partial evidence; remaining runtime Q7 scenarios are not accepted by this batch.",
+    "Real licensed data, actual models/provider billing and calibrated quality/cost thresholds remain missing.",
+    "No new persisted V7 records or live question execution are enabled.",
+    "Old AM61 statuses are preserved; a regression pass does not complete their remaining scope."
+  ]
+}

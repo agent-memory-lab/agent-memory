@@ -1,0 +1,98 @@
+{
+  "schema_version": "question-cost-profile-document/1",
+  "task": "AM70-T13",
+  "stage": "V7-B0 accounting and acceptance contract only",
+  "design_reference": "../AGENT_MEMORY_DESIGN_V7.0.0.md#2511-全链路成本与效用实验算法-a9",
+  "default_enablement": false,
+  "production_benefit_claim": false,
+  "profile": {
+    "profile_id": "v7-question-cost-baseline",
+    "version": "1-uncalibrated",
+    "minimum_requests": null,
+    "minimum_groups": null,
+    "confidence_level": null,
+    "dataset_sha256": null,
+    "dataset_license_reference": null,
+    "workload_sha256": null,
+    "candidate_configuration_sha256": null,
+    "baseline_report_sha256": null,
+    "judge_sha256": null,
+    "semantic_model": null,
+    "generation_model": null,
+    "thresholds": null,
+    "calibration_reference": null,
+    "statistics_protocol_sha256": null,
+    "contract_version": "question-cost/1",
+    "allocation_rule": "equal_triggering_requests_else_all_requests/1"
+  },
+  "calibration_gaps": [
+    "minimum_requests",
+    "minimum_groups",
+    "confidence_level",
+    "dataset_sha256",
+    "dataset_license_reference",
+    "workload_sha256",
+    "candidate_configuration_sha256",
+    "baseline_report_sha256",
+    "judge_sha256",
+    "semantic_model",
+    "generation_model",
+    "thresholds",
+    "calibration_reference",
+    "statistics_protocol_sha256"
+  ],
+  "gap_explanations": {
+    "data": "No licensed, de-identified held-out project/status/commitment/risk dataset, gold manifest or independently justified sample/group counts has been supplied. Synthetic test fixtures are contract evidence only.",
+    "models": "No real semantic or generation provider configuration, request payload evidence, usage receipt, price contract or repeated-run output has been supplied. A frozen not_used declaration is allowed only for a genuinely deterministic experiment arm; stubs do not establish real-model effects.",
+    "judge": "No frozen versioned semantic judge, deterministic checks, human review protocol or annotation evidence has been supplied.",
+    "thresholds": "Domain floors, allowed non-regression, error limits, latency/cost SLOs and calibration rationale remain unresolved. Design suggestions are not accepted measurements or automatically selected thresholds.",
+    "statistics": "No precommitted grouped paired-resampling protocol, confidence level, sample sufficiency rule or comparison artifact exists yet. The B0 gate verifies artifact binding and interval conditions, not the resampling calculation itself.",
+    "execution": "No full event/request workload, baseline report, candidate configuration or end-to-end production instrumentation has been frozen or run. Runtime scheduling, actual billing settlement and both-backend accounting integration remain later task slices."
+  },
+  "accounting_contract": {
+    "currency_unit": "Integer microunits, one millionth of the declared currency; currencies cannot be combined without a separately frozen conversion experiment.",
+    "phases": [
+      "cold_start",
+      "registration",
+      "prewarm",
+      "write",
+      "dependency",
+      "background",
+      "foreground",
+      "failure",
+      "retry",
+      "drain"
+    ],
+    "phase_rule": "Each unique accounting operation has exactly one phase. Phase coverage is explicit even when a measured phase performs no billable work. Missing phases are unknown, not zero.",
+    "operation_identity": "A stable operation ID identifies one possibly billable call/attempt. Retries and concurrent losers remain separate operations; duplicate budget-account constraints are not separate charges. Exact replays are idempotent and conflicting replays fail.",
+    "all_request_denominator": "Every request in the frozen workload, in workload order, including failures, refusals, reasonable unknowns, and diagnostic requests. No selective deletion of failures or low-utility requests.",
+    "effective_answer_denominator": "Non-diagnostic, answerable, correct answers with complete necessary evidence, preserved qualifiers, freshness and current safety. Reasonable unknown, incorrect answer/refusal and system error are separately labeled, never substituted for an effective factual answer. Zero effective answers yields an undefined per-effective-answer cost and cannot pass.",
+    "shared_cost_allocation": "Equal share among recorded triggering request IDs; setup/maintenance without triggering request IDs is allocated equally to all workload requests. Allocation is independent of answer correctness; the unique global ledger remains authoritative, including when there are no requests.",
+    "resource_accounting": "CPU milliseconds, I/O bytes, storage byte-seconds and network bytes remain separate measured counters. Monetary resource pricing requires an explicit tariff reference and is reported separately from provider-billed cost.",
+    "unknown_cost": "Unknown actual cost remains null even if an estimate or conservative reservation exists. A real zero provider bill needs an explicit receipt. Estimated tokens and money are kept separate from measured provider usage and bills.",
+    "outstanding_debt": "Fixed finite unexecuted responsibility IDs are recorded separately from dispatched unresolved calls. Their conservative bounds remain visible; any missing bound makes the debt upper bound unknown. Outstanding work or unresolved billing blocks cost acceptance rather than being released as zero.",
+    "window_and_drain": "The workload drain-policy hash binds injection cutoff, observation window and drain rules for every arm. Window and drain entries both remain in the global ledger. A fixed-window report includes remaining finite obligations; acceptance requires their completion and actual cost reconciliation.",
+    "comparability": "Bind identical event order, initial snapshot, request/change distribution, semantics, current security, hard budget, hardware, request manifest, judging groups, and drain policy. Candidate strategy/configuration is tracked separately; baseline and candidate report hashes bind the paired comparison.",
+    "privacy": "Use opaque experiment operation/request/group IDs and minimal references. Do not record source bodies, credentials, erased content or customer private identifiers in evaluation artifacts. This file is not a production trace or data-sharing authorization.",
+    "model_call_binding": "Each actual model call binds its semantic_model or generation_model role and frozen configuration hash. A not_used role cannot have recorded calls; each declared executed role requires matching call evidence. Legacy unbound calls remain reportable but cannot pass acceptance. These bindings check supplied records, not whether a provider actually executed.",
+    "usage_reconciliation": "An authoritative provider receipt may settle billing and measured tokens together or enrich unknown/estimated usage later while preserving the same bill and call identity. Exact replays do not duplicate usage or cost; conflicting measured usage or billing fails. An absent token receipt remains unknown."
+  },
+  "acceptance_contract": {
+    "strategies": [
+      "on_demand_full",
+      "coalesced_full",
+      "delta_proof",
+      "exact_cache"
+    ],
+    "freeze": "Store the externally approved profile fingerprint before inspecting candidate results. Any profile mutation, including thresholds or judge configuration, requires a new evaluation.",
+    "required_quality": "Effective answerable coverage, necessary evidence coverage, qualifier fidelity, error rate, latency, and permitted effective-rate regression are checked together with both cost denominators. Unsafe or stale delivery blocks the gate.",
+    "benefit": "Require a strictly lower observed cost per effective answer and a grouped paired confidence interval whose upper cost-difference bound is below zero, while its lower effective-rate-difference bound satisfies the frozen non-regression rule.",
+    "scope": "The evaluator accepts trusted annotated records and referenced comparison artifacts. Passing this cost/utility slice does not certify extraction/Recall@budget, operational release, actual provider execution, data license legality, backend durability or all 98 design scenarios. Existing evidence-quality and release gates remain necessary.",
+    "unsupported_claims": [
+      "No production savings percentage or optimal scheduling threshold is claimed.",
+      "No runtime capability is enabled or advertised by this document.",
+      "No AM70-T13 completion, Q7-31 end-to-end completion or Q7-32 production acceptance is implied.",
+      "Historical 120-to-52 routing, 21.2% context and 150-refresh anecdotes are not baseline evidence."
+    ]
+  }
+}
