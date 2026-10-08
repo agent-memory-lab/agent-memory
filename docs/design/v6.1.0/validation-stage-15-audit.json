@@ -1,0 +1,348 @@
+{
+  "schema": "agent-memory-implementation-validation/1",
+  "date": "2026-10-08",
+  "design": "6.1.0",
+  "design_sha256": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+  "ledger_revision": 25,
+  "base_commit": "21733a8cba842dd8377ce89081c0d891ce2bef0b",
+  "stage_plan": "AM61-ST15/1.2",
+  "audit": "AM61-ST15-AUDIT/1.0",
+  "status": "passed",
+  "fixes_completed": [
+    "AUD15-01",
+    "AUD15-02",
+    "AUD15-03",
+    "AUD15-04"
+  ],
+  "findings": {
+    "mutable_inputs": "L1 fingerprinted a caller-owned draft list then stored its mutated value after the scope lock; derived output was validated before an await then published from caller-owned task/snapshot/prepared. Own all inputs before fingerprint/validation and first await; retained UoW is not copied; existing storage/security/CAS guards remain.",
+    "unsupported_worker": "A worker without page-full-rebuild/1 could consume page dirty responsibility or supersede pending jobs. Filter owned definitions by capability before mutation and enforce the same contract at job creation.",
+    "typed_idempotence": "Register enforces strict nonnegative integer generation; refresh force is an exact bool even on receipt replay, before idempotent return.",
+    "output_budget": "Pure materialized_body is shared by full rebuild budget and guarded read; count the actual embedded block body representation with unchanged 32768-byte limit."
+  },
+  "review_scope": "Targeted code review of shared L1/derived transactional boundaries, current/history publication, graph authority, queue/readiness, capacity, erase and backup replay, plus final full regression of all previously enabled stages. Not an exhaustive proof of all code or planned features.",
+  "baseline_failures": [
+    {
+      "file": "agent-memory-stage15-audit-before.xml",
+      "sha256": "c03781e9b0c24b4c6a5de151ce89fe0b3d7c7c5104e0b1b379d81fb38ddc26c2",
+      "failed_cases": [
+        "test_publish_owns_checked_output_before_first_await[sqlite-observation]",
+        "test_publish_owns_checked_output_before_first_await[sqlite-page]",
+        "test_unsupported_page_worker_preserves_refresh_responsibility[sqlite-False]",
+        "test_unsupported_page_worker_preserves_refresh_responsibility[sqlite-True]",
+        "test_definition_generation_requires_nonnegative_integer[sqlite-observation-False]"
+      ]
+    },
+    {
+      "file": "agent-memory-stage15-audit-budget-before.xml",
+      "sha256": "b526414e9d6e8bba845ddde75045c1f65aa1acf732b46275da56768e3c44b7fe",
+      "failed_cases": [
+        "test_page_output_limit_measures_delivered_materialized_body"
+      ]
+    },
+    {
+      "file": "agent-memory-stage15-audit-l1-before.xml",
+      "sha256": "69c6ee87afe67cba8e14a02a8f12cd04a8c3f3db5caeee425bda6a1ecf8723bf",
+      "failed_cases": [
+        "test_l1_admission_owns_fingerprinted_drafts_before_first_await[sqlite]",
+        "test_l1_admission_owns_fingerprinted_drafts_before_first_await[postgres]"
+      ]
+    }
+  ],
+  "full_test_run": true,
+  "tests": {
+    "command": "python -m pytest tests packages --junitxml=<report> -q",
+    "unique_cases": 2374,
+    "passed": 2374,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 129.486,
+    "backends": [
+      "SQLite",
+      "PostgreSQL 17 (isolated real Unix-socket server)"
+    ],
+    "previous_stage15_cases_retained": 2320,
+    "new_cases": 54,
+    "new_backend_cases_each": 26,
+    "new_pure_capacity_cases": 2,
+    "report": {
+      "file": "agent-memory-stage15-audit-full-final.xml",
+      "sha256": "415982e348d0ed97f0c303a86f4a8fb96929ed7e6d7b514b568f98a46be96be3"
+    },
+    "cases_sha256": "e052c331c5cbe819dd5a5f4cece74fd13621501eebbd4395d55edd538b1db440",
+    "counts_by_module": {
+      "tests.test_admission_input_ownership": 2,
+      "tests.test_admission_policy": 36,
+      "tests.test_admission_sqlite_storage": 9,
+      "tests.test_architecture": 93,
+      "tests.test_atom_admission": 30,
+      "tests.test_atom_edges": 8,
+      "tests.test_atom_extraction": 100,
+      "tests.test_atom_temporal": 28,
+      "tests.test_benchmark_harness": 4,
+      "tests.test_bitemporal_claims": 38,
+      "tests.test_candidate_bundle_pipeline": 6,
+      "tests.test_candidate_fusion": 5,
+      "tests.test_capture_composite_acceptance": 4,
+      "tests.test_capture_profile": 15,
+      "tests.test_capture_queue": 8,
+      "tests.test_claim_consolidation": 7,
+      "tests.test_comparison_adapters": 2,
+      "tests.test_consolidation_reliability": 5,
+      "tests.test_contextual_memory": 27,
+      "tests.test_contribution_lifecycle": 40,
+      "tests.test_deletion_audit": 2,
+      "tests.test_derived_context_history": 136,
+      "tests.test_derived_contextual": 71,
+      "tests.test_derived_controls": 74,
+      "tests.test_derived_coverage": 78,
+      "tests.test_derived_history": 75,
+      "tests.test_derived_lifecycle_audit": 52,
+      "tests.test_derived_observations": 90,
+      "tests.test_derived_pages": 115,
+      "tests.test_derived_parents": 101,
+      "tests.test_durable_dispositions": 18,
+      "tests.test_durable_execution": 14,
+      "tests.test_durable_indexing": 50,
+      "tests.test_durable_process_recovery": 14,
+      "tests.test_durable_producer": 4,
+      "tests.test_durable_purge": 34,
+      "tests.test_durable_readiness": 22,
+      "tests.test_durable_retention": 32,
+      "tests.test_durable_transport": 4,
+      "tests.test_episode_segmentation": 7,
+      "tests.test_evidence_evaluation": 27,
+      "tests.test_fact_qualification": 10,
+      "tests.test_feedback_capabilities": 1,
+      "tests.test_feedback_flow": 8,
+      "tests.test_feedback_forget_propagation": 4,
+      "tests.test_feedback_mcp_sdk": 2,
+      "tests.test_feedback_schema_migration": 1,
+      "tests.test_feedback_storage_contract": 4,
+      "tests.test_governed_recall_integration": 2,
+      "tests.test_hybrid_candidate_plugin": 4,
+      "tests.test_index_recovery": 76,
+      "tests.test_kernel_lifecycle": 1,
+      "tests.test_lexical_retrieval": 7,
+      "tests.test_lightweight_runtime": 1,
+      "tests.test_loaded_retriever_integration": 2,
+      "tests.test_memory_block_evidence": 2,
+      "tests.test_memory_blocks": 3,
+      "tests.test_memory_doctor": 5,
+      "tests.test_memory_doctor_plugin": 1,
+      "tests.test_memory_evaluation_protocol_acceptance": 5,
+      "tests.test_memory_retrieval_regression": 2,
+      "tests.test_memory_v61_fixtures": 2,
+      "tests.test_ontology_api": 4,
+      "tests.test_ontology_backfill": 17,
+      "tests.test_ontology_checkpoint": 9,
+      "tests.test_ontology_delta_budget": 18,
+      "tests.test_ontology_extensions": 13,
+      "tests.test_ontology_hosted_extensions": 4,
+      "tests.test_ontology_memory": 7,
+      "tests.test_ontology_p0": 14,
+      "tests.test_ontology_plugin_integration": 2,
+      "tests.test_ontology_postgres_source": 7,
+      "tests.test_ontology_queries": 10,
+      "tests.test_ontology_readiness": 13,
+      "tests.test_ontology_recovery": 5,
+      "tests.test_ontology_registry": 8,
+      "tests.test_ontology_rule_candidates": 14,
+      "tests.test_ontology_runtime": 5,
+      "tests.test_ontology_schema": 5,
+      "tests.test_ontology_timezones": 12,
+      "tests.test_ontology_upgrade": 10,
+      "tests.test_phase_one": 3,
+      "tests.test_plugin_contract_kit": 8,
+      "tests.test_plugin_integrations": 3,
+      "tests.test_plugin_manifest": 29,
+      "tests.test_plugin_protocol_loader": 23,
+      "tests.test_procedure_induction": 6,
+      "tests.test_publication_batches": 83,
+      "tests.test_purge_restore": 64,
+      "tests.test_recovery_cancel_feedback": 2,
+      "tests.test_recovery_context_acceptance": 17,
+      "tests.test_recovery_feedback_fault_acceptance": 4,
+      "tests.test_recovery_operations_acceptance": 8,
+      "tests.test_recovery_specialized_acceptance": 11,
+      "tests.test_regressions": 5,
+      "tests.test_release_acceptance": 5,
+      "tests.test_reprocessing": 24,
+      "tests.test_reprocessing_readiness": 58,
+      "tests.test_resource_evaluation": 4,
+      "tests.test_resource_refresh": 64,
+      "tests.test_retrieval_evaluation": 3,
+      "tests.test_retrieval_trace": 3,
+      "tests.test_scoped_lexical_plugin": 5,
+      "tests.test_semantic_reranker": 2,
+      "tests.test_snapshot_replay": 5,
+      "tests.test_source_revisions": 13,
+      "tests.test_strategy_partition_acceptance": 6,
+      "tests.test_trajectory_extraction": 4,
+      "tests.test_unified_memory": 7,
+      "tests.test_v4_retriever_modules": 5,
+      "tests.test_worker_runtime": 4,
+      "packages.evolution.tests.test_evolution_authorization": 2,
+      "packages.evolution.tests.test_evolution_state_machine": 1,
+      "packages.evolution.tests.test_feedback_episode_builder": 3,
+      "packages.evolution.tests.test_recovery": 1,
+      "packages.evolution.tests.test_retrieval_policy": 2,
+      "packages.evolution.tests.test_source_invalidation": 1,
+      "packages.evolution.tests.test_training_bridge": 9,
+      "packages.langgraph.tests.test_adapter_contract": 1,
+      "packages.mcp-server.tests.test_capture_contract": 1,
+      "packages.mcp-server.tests.test_contract": 1,
+      "packages.mcp-server.tests.test_recovery_http_acceptance": 5,
+      "packages.mcp-server.tests.test_recovery_stdio": 6,
+      "packages.mcp-server.tests.test_tls_gateway_acceptance": 6,
+      "packages.postgres.tests.test_admission": 7,
+      "packages.postgres.tests.test_consolidation": 1,
+      "packages.postgres.tests.test_doctor": 2,
+      "packages.postgres.tests.test_live_contract": 3,
+      "packages.postgres.tests.test_migration_contract": 4,
+      "packages.postgres.tests.test_preflight": 5,
+      "packages.postgres.tests.test_release_scan": 11,
+      "packages.postgres.tests.test_semantic_blocks": 1,
+      "packages.postgres.tests.test_sensitivity": 3,
+      "packages.python-sdk.tests.test_capture_sink_integration": 3,
+      "packages.python-sdk.tests.test_embedded_contract": 1,
+      "packages.python-sdk.tests.test_plugin_error_contract": 9
+    },
+    "accounting": "Final full run only. All original 2320 test identities remain; 54 regressions added. Red runs, development retries and installed repeats are not added to this total."
+  },
+  "installed": {
+    "passed": 258,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "source": "Core/PostgreSQL/SDK/MCP wheels installed --no-deps in a fresh target; all four import paths verified there.",
+    "scope": "New L1 and derived audit regressions plus complete page/parent tests, excluding 12 actual SIGKILL source-helper cases; all 12 passed in final full source run.",
+    "deselected_source_helper_sigkill_cases": 12,
+    "report": {
+      "file": "agent-memory-stage15-audit-final-installed.xml",
+      "sha256": "509228f20faf922a544ce792e10ecffc5e01e93a588ce6ae50e78da95ab2c9d5"
+    },
+    "examples_passed": [
+      "derived_scenario_page.py",
+      "derived_parent_views.py",
+      "derived_context_history.py",
+      "derived_contextual_observation.py",
+      "derived_interval_history.py",
+      "derived_history.py",
+      "derived_controls.py",
+      "derived_observation.py"
+    ]
+  },
+  "build": {
+    "core": {
+      "verified_source_files": 150,
+      "mismatches": [],
+      "artifacts": {
+        "agent_memory-0.1.0-py3-none-any.whl": "b617c0fd9d9c0cc8d314597f4a3d5665b12097e6671d7a56b18f5dbf21cc7e3c",
+        "agent_memory-0.1.0.tar.gz": "9cfa4ee178adc984889d116919af2cf6a9fde50760ad13b7252e1d1a489642b1"
+      },
+      "rebuilt_this_audit": true
+    },
+    "postgres": {
+      "verified_source_files": 25,
+      "mismatches": [],
+      "artifacts": {
+        "agent_memory_postgres-0.1.0-py3-none-any.whl": "63394995de2a3a10fdaa9671eaa31ec6cf714bb98fcbe98291f103802a3b2159",
+        "agent_memory_postgres-0.1.0.tar.gz": "29fd2345df5729345f5a33b83e5999b08ce4c8119e353bd71408b6c919024bec"
+      },
+      "rebuilt_this_audit": true
+    },
+    "sdk": {
+      "verified_source_files": 9,
+      "mismatches": [],
+      "artifacts": {
+        "agent_memory_sdk-0.1.0-py3-none-any.whl": "d70f8fc03f0429ef14459430cf59483ce85475311b7a41724e4fd1f73c00c4ec",
+        "agent_memory_sdk-0.1.0.tar.gz": "21fa9f5e2438594a670ff9bfb50dff49b28b3a64ec3ddd2cb61761bc54968ec6"
+      },
+      "rebuilt_this_audit": false
+    },
+    "mcp": {
+      "verified_source_files": 5,
+      "mismatches": [],
+      "artifacts": {
+        "agent_memory_mcp-0.1.0-py3-none-any.whl": "16787ccd6946055a33ac89bd082caa6cf7b9948a2ae2dc37f563778574100fdb",
+        "agent_memory_mcp-0.1.0.tar.gz": "0f95666b1878544bfc5870d75924d02adda686ca96243c44320f7d02d0fe3999"
+      },
+      "rebuilt_this_audit": false
+    }
+  },
+  "build_note": "Core and PostgreSQL built during audit with isolated sdist-to-wheel builds (hatchling 1.32.4). Unmodified SDK/MCP artifacts reused from original stage 15 and reverified. All 189 production source/type files byte-match final tested source in both sdist and wheel.",
+  "code_files_sha256": {
+    "src/agent_memory/consolidation/admission_runtime.py": "0bdd0f38007f20ae499be2fa609e14226f9fd15eb87ab290202f88c7bf31474b",
+    "src/agent_memory/derived/pages.py": "5932d67a43797bbc6d7e3e1610b4cf2dc4c7e3c42c10e0c564c6f0e573a8d72e",
+    "src/agent_memory/derived/service.py": "a5aa59e574d228d020ce85eae459f6b3467109403f41e5a25d3b0ef5668346a8",
+    "src/agent_memory/operations/facet_refresh.py": "3a5600303a4cfc9fbbfa7d5a4ebd76c180a798fa2ffc7d796f74331380c8f03f",
+    "tests/test_admission_input_ownership.py": "46e614742e49aa99bb9f7b357cd87c7224c159f1ec21d31fa387fe59454ba691",
+    "tests/test_derived_lifecycle_audit.py": "6f74b7858a72dca9cc74f5e030cd9252aeb9baaa44165be4fb4429167a9c18a2"
+  },
+  "lint": {
+    "changed_python_files": 6,
+    "changed_line_findings": 0,
+    "preexisting_E501": 0,
+    "report_sha256": "7292988e6ce1d6d723618ebc6bd04b0502d339085b93708c598aa21f87963918",
+    "git_diff_check": "passed"
+  },
+  "frozen_designs_sha256": {
+    "6.1.0": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b",
+    "6.0.0": "f16f0a3fb1da497b6ef73c96851de04b0cc42ac9353fa9f4278b26122dfe39d0",
+    "5.0.0": "83330a5c8e7921aa56ea76afbb9e8a9b255a5a22732ae4f7c20816deaf25517f"
+  },
+  "original_stage15_validation_sha256": "fc9f90bafa26033565e238edd58a59d564504e3a2c9e0499c90f54261ada6b9e",
+  "unrelated_local_files_excluded_from_commits": [
+    ".github/pull_request_template.md",
+    "CONTRIBUTING.md",
+    "README.md",
+    "README.zh-CN.md",
+    "docs/AGENT_MEMORY_ARCHITECTURE_PLAN.md",
+    "docs/assets/agent-memory-overview.svg"
+  ],
+  "unrelated_local_file_snapshot_sha256": {
+    "docs/AGENT_MEMORY_ARCHITECTURE_PLAN.md": "81095de8aa02db4f59a643d0d6708b4fa9ee415bfb3f230bab4a7abf962fe849",
+    "CONTRIBUTING.md": "522a5c87b18011927c04ec1678d46b0093a709f1d630bc589e7d351fabd3e40d",
+    ".github/pull_request_template.md": "c2e935625993620eaef948a8ef5e6a6d4b43a404d9e07f162188a5549c118e04",
+    "README.md": "0011063781b87db53d376e8c2f393e346a33c7c0da3c2a0d7f4182421c2851da",
+    "README.zh-CN.md": "ab7de802ee858e724f392c6fc50758a1a81c19443254e777f3e6fb491b1be5f5",
+    "docs/assets/agent-memory-overview.svg": "776c4a445511c8c40519ff138d1fc0c789e43d7990dcc12e5b1ba68aee1f1d2c"
+  },
+  "global_task_state": {
+    "DONE": 1,
+    "IN_PROGRESS": 33,
+    "TODO": 10
+  },
+  "global_acceptance_rows": 66,
+  "stage15_tasks_done": 7,
+  "audit_tasks_done": 4,
+  "stage16_status": "PLANNED, unchanged",
+  "quality_evidence": "Synthetic retained-source/protocol/fault fixtures; not real extraction gold, remote ACL freshness, external model quality, or persona inference.",
+  "not_enabled": [
+    "delta or free LLM page editing",
+    "qualified or historical page parents",
+    "page-to-page inputs",
+    "cross-storage-scope pages",
+    "general predicate page templates",
+    "L3 persona inference"
+  ],
+  "delivery": "Separate L1 input-consistency, derived lifecycle-contract, and audit/evidence-ledger commits, then push to GitHub. Unrelated local documentation changes excluded.",
+  "test_environment": {
+    "postgres_major": 17,
+    "disposable_database": true,
+    "cluster_cleanup": "Stopped and removed only the audit-owned temporary cluster after full and installed validation; original databases untouched."
+  },
+  "tested_code_files_sha256": {
+    "src/agent_memory/consolidation/admission_runtime.py": "0bdd0f38007f20ae499be2fa609e14226f9fd15eb87ab290202f88c7bf31474b",
+    "src/agent_memory/derived/pages.py": "5932d67a43797bbc6d7e3e1610b4cf2dc4c7e3c42c10e0c564c6f0e573a8d72e",
+    "src/agent_memory/derived/service.py": "a5aa59e574d228d020ce85eae459f6b3467109403f41e5a25d3b0ef5668346a8",
+    "src/agent_memory/operations/facet_refresh.py": "3a5600303a4cfc9fbbfa7d5a4ebd76c180a798fa2ffc7d796f74331380c8f03f",
+    "tests/test_admission_input_ownership.py": "a7803637a4a5b13f40c4f768a2faa8689904a09fcfc1a7523ae65c21fe443cf0",
+    "tests/test_derived_lifecycle_audit.py": "6f74b7858a72dca9cc74f5e030cd9252aeb9baaa44165be4fb4429167a9c18a2"
+  },
+  "post_validation_format_change": "Removed an extra blank line at EOF in the new L1 regression file. Parsed AST unchanged; production code and all test identities unchanged.",
+  "delivery_parent_commit": "3bbbb61828f3495570dd87f14f38064ab0c73030",
+  "delivery_parent_note": "Concurrent bilingual README/CONTRIBUTING documentation commit; not authored or included in the audit functional commits. Reviewed runtime base remains 21733a8."
+}

@@ -1,6 +1,6 @@
 # 第十五阶段方案：版本化 L2 页面与完整重建
 
-版本 AM61-ST15 / 1.1；2026-10-07；DONE（本阶段有界 full rebuild）；执行台账 revision 24。
+版本 AM61-ST15 / 1.2；2026-10-08；DONE（本阶段有界 full rebuild）；执行台账 revision 25。
 依据冻结 v6.1.0 第 17 节与 T30–T32，复用已验收的 [传递处理图](stage-14c.md)。
 任务：[stage-15-tasks.md](stage-15-tasks.md)。实施：[stage-15.md](stage-15.md)；独立验收：[validation-stage-15.json](validation-stage-15.json)。
 
@@ -28,3 +28,9 @@
 
 本阶段不启用 delta、LLM 自由页面生成、条件/历史父合成、跨范围页面或自动 L3 人格推断。
 先验收完整重建与生命周期，再评估 delta 的实际收益和继承全部输入的合同；历史/条件父另外设计冻结版本证明。
+
+## 前序实现审计修复
+
+AUD15-01–04 修复 L1/派生可变输入、页面能力 worker、严格参数类型与实际交付容量。
+说明和重新验收见 [stage-15-audit.md](stage-15-audit.md) 与 [validation-stage-15-audit.json](validation-stage-15-audit.json)。
+原 ST15-01–07 范围不变；本轮只修复已启用合同，未实现第十六阶段。

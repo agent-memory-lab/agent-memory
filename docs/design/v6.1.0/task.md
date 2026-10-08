@@ -6,7 +6,7 @@
 | 规范依据 | [完整设计 v6.1.0](../AGENT_MEMORY_DESIGN_V6.1.0.md)；设计规定语义，本文件安排实施 |
 | 设计 SHA-256 | `ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b` |
 | 实现基线 | `5cff9f47b7061351fd725c3b8e0a89bf5cb51517` |
-| 台账版本 | revision 24；2026-10-07；可随实施更新 |
+| 台账版本 | revision 25；2026-10-08；可随实施更新 |
 | 当前状态 | DONE 1 项；IN_PROGRESS 33 项；TODO 10 项；本地持久 L1、宿主恢复与事实资格切片已验证，M0/M1 未整体验收 |
 | 范围 | P0–P6 能力阶段；基础能力与可选扩展分别发布 |
 
@@ -49,6 +49,7 @@
 ### AM61-T02 — 领域模型与版本化协议合同
 
 - [ ] 状态/阶段：IN_PROGRESS / P0。依赖：T01 的入口/模型盘点；可提前起草。
+- revision 25 证据：注册 generation 与刷新 force 的类型合同在幂等返回前严格校验，合法旧合同保留。 见 [审计修复](stage-15-audit.md) 与 [独立验证](validation-stage-15-audit.json)。
 - revision 24 证据：新增独立 ScenarioDefinition/PageDefinition/PageBlockRevision，稳定块 ID 与版本化页面合同；复用 v3 单元与 manifest/2，未改旧无父序列化。 见 [stage-15](stage-15.md) 与 [验证记录](validation-stage-15.json)。
 - revision 23 证据：增加显式 parent_facets、v3 固定单元与 manifest/2；旧无父 v1/v2 序列化保留。 见 [stage-14c](stage-14c.md) 与 [验证记录](validation-stage-14c.json)。
 - revision 22 证据：FacetContext 增加冻结历史双时间投影和认知期限证明；两种 mode 显式支持 locale-context/1，当前合同保持原义。 见 [stage-14b3](stage-14b3.md) 与 [验证记录](validation-stage-14b3.json)。
@@ -82,6 +83,7 @@
 ### AM61-T04 — 确定性回放与故障夹具
 
 - [ ] 状态/阶段：IN_PROGRESS / P0。依赖：T02 合同、T03 场景；回放框架可先搭建。
+- revision 25 证据：新增双后端锁等待期间修改输入、不同能力 worker 保留责任及精确物化容量回归；最终重新全量验收。 见 [审计修复](stage-15-audit.md) 与 [独立验证](validation-stage-15-audit.json)。
 - revision 22 证据：新增双后端条件发布/上下文切换提交前后 12 项真实 SIGKILL；独立连接上下文/发布竞争和元数据原子性已验证。 见 [stage-14b3](stage-14b3.md) 与 [验证记录](validation-stage-14b3.json)。
 - revision 21 证据：新增双后端候选/query/发布提交前后 12 项真实 SIGKILL；独立连接竞争、时钟和未跟踪变化拒绝已验证。 见 [stage-14b2](stage-14b2.md) 与 [验证记录](validation-stage-14b2.json)。
 - revision 20 证据：新增双后端历史原子发布、实际 SIGKILL、独立连接删除竞争、备份/pg_dump 清除归档与当前权限 floor 验证。 见 [stage-14b](stage-14b.md) 与 [验证记录](validation-stage-14b.json)。
@@ -214,6 +216,7 @@
 ### AM61-T16 — L0 与处理任务原子事务
 
 - [ ] 状态/阶段：IN_PROGRESS / P2。依赖：T02、T04、T15；先支持当前有限候选类型。
+- revision 25 证据：L1 在指纹计算和首个 await 前取得独立输入副本，保证事务提交值与原请求指纹一致。 见 [审计修复](stage-15-audit.md) 与 [独立验证](validation-stage-15-audit.json)。
 - revision 15 证据：单请求整槽分批；候选/head/清单/逐批 outbox 同事务；独立闭合，整来源替代仍原子激活。见 [stage-11](stage-11.md)。
 - revision 14 证据：复用完整删除实现，在单 UoW 内回放源/候选/历史/索引/刷新清理、epoch、原 purge 游标和恢复回执；不创建额外删除日志或重复推进范围代次。见 [stage-10](stage-10.md)。
 - revision 13 证据：修复在一个事务内实际写定位条目、完成证明和审计；切流从当前有效权威发布清单重建，最后原子激活 head；不改 L1 发布或 capture epoch。见 [stage-09](stage-09.md)。
@@ -378,6 +381,7 @@
 ### AM61-T27 — 按 facet 组织 Observation
 
 - [ ] 状态/阶段：IN_PROGRESS / P3。依赖：T18、T22、T25、T26；输入类型取已验收 T07–T11 子集。
+- revision 25 证据：当前/历史点/历史区间派生发布拥有 task、snapshot 和 prepared 的独立副本，锁等待期间修改调用方输入不能改变提交。 见 [审计修复](stage-15-audit.md) 与 [独立验证](validation-stage-15-audit.json)。
 - revision 23 证据：新增确定性 locale-parents/1，完整保留父块/争议/时间/来源，不把派生摘要重新作为 L1 事实或增加证据。 见 [stage-14c](stage-14c.md) 与 [验证记录](validation-stage-14c.json)。
 - revision 22 证据：locale-context/1 历史保持条件/例外、三值、字段 AND/OR/point 支持及冻结偏序；高优先争议/未知不回退。 见 [stage-14b3](stage-14b3.md) 与 [验证记录](validation-stage-14b3.json)。
 - revision 21 证据：非条件 locale-snapshot/1 的独立 known_at/valid_at 投影扩展到已证实的稳定区间；历史资格 renderer 待补。 见 [stage-14b2](stage-14b2.md) 与 [验证记录](validation-stage-14b2.json)。
@@ -424,6 +428,7 @@
 ### AM61-T30 — Block 与知识页面定义
 
 - [ ] 状态/阶段：IN_PROGRESS / P4。依赖：T25–T27。
+- revision 25 证据：页面 32 KiB 输出预算采用实际交付的内嵌块正文结构，生成与读取复用纯物化函数。 见 [审计修复](stage-15-audit.md) 与 [独立验证](validation-stage-15-audit.json)。
 - revision 24 证据：版本化 L2 页面与稳定块 ID、单独块版本、模板/受众/用途/场景合同已实现；使用现有投影 ledger，不新增权威事实。 见 [stage-15](stage-15.md) 与 [验证记录](validation-stage-15.json)。
 - 已有落点：`domain.py` 既有 Block、`consolidation/`、`ontology/layers.py`、`tests/test_memory_blocks.py`、`tests/test_memory_block_evidence.py`。
 - 交付：统一 DerivedView/Block 定义，保存 source query/filter、模板/schema、范围、政策、输出模式及 definition_fingerprint；稳定块 ID 与结构依赖；页面围绕长期问题组织。
@@ -433,6 +438,7 @@
 ### AM61-T31 — Full/delta 刷新与结果水位
 
 - [ ] 状态/阶段：IN_PROGRESS / P4。依赖：T18、T26、T29、T30。
+- revision 25 证据：不支持页面能力的 worker 不消费其 dirty/待排队责任，兼容 worker 后续可完成固定目标。 见 [审计修复](stage-15-audit.md) 与 [独立验证](validation-stage-15-audit.json)。
 - revision 24 证据：确定性 full rebuild 不使用旧页面；页面/块/head/完成证书原子提交、固定实际输入与父优先刷新已验证。delta/通用补丁仍未启用。 见 [stage-15](stage-15.md) 与 [验证记录](validation-stage-15.json)。
 - 已有落点：`consolidation/`、`operations/worker_tasks.py`、`ontology/delta.py` 的既有增量思路、Block 存储适配器。
 - 交付：固定有限刷新目标；full 默认与显式兼容迁移；验证/apply delta、有限协议修复；持久 applied/noop_verified/incomplete/apply_failed/retraction_unresolved；原子更新内容、依赖和连续水位。
@@ -551,6 +557,7 @@
 ### AM61-T44 — 运行手册与最终交付汇总
 
 - [ ] 状态/阶段：IN_PROGRESS / P6；从首个运行能力开始持续更新。依赖：拟交付子集已通过 T39；不要求 DEFERRED 扩展实现。
+- revision 25 证据：新增独立前序阶段审计记录、失败复现与最终全量/安装/构建证据；按功能模块提交推送，未扩展第十六阶段。 见 [审计修复](stage-15-audit.md) 与 [独立验证](validation-stage-15-audit.json)。
 - revision 24 证据：新增页面运行示例、部署/回退与删除语义、阶段验收和后续评估；本阶段按用户要求全量测试，后续按功能模块提交推送。 见 [stage-15](stage-15.md) 与 [验证记录](validation-stage-15.json)。
 - revision 23 证据：新增父组合示例、版本化 C 交付与验证记录，以及第十五阶段 L2 页面 full rebuild 方案/任务。 见 [stage-14c](stage-14c.md) 与 [验证记录](validation-stage-14c.json)。
 - revision 22 证据：新增历史条件示例、B.3 实施/验证、上下文认知期限/回退边界；下一步为 C01–C03 传递处理图。 见 [stage-14b3](stage-14b3.md) 与 [验证记录](validation-stage-14b3.json)。
@@ -691,5 +698,5 @@ AcceptanceProfile、scorer、实验 manifest 与结果文件：
 | 21 | 2026-10-07 | [连续知识时间覆盖](stage-14b2.md) | DONE 1；IN_PROGRESS 29；TODO 14；B.2 已验证，历史资格上下文/完整 B 与 C 待补；未运行全量测试 |
 | 22 | 2026-10-07 | [历史资格上下文](stage-14b3.md) | DONE 1；IN_PROGRESS 29；TODO 14；本阶段 B 有界语言组合已验收，C/完整 T28/M2 待补；未运行全量测试 |
 | 23 | 2026-10-07 | [有界传递处理图](stage-14c.md)；[L2 页面规划](stage-15-plan.md) | DONE 1；IN_PROGRESS 29；TODO 14；第十四阶段本阶段有界组合完成，通用父历史/完整 M2/L2/L3 尚未完成；仅相关测试 |
-
 | 24 | 2026-10-07 | [版本化 L2 页面完整重建](stage-15.md) | DONE 1；IN_PROGRESS 33；TODO 10；ST15-01–07 完成，全量测试；一般 T30–T33/delta/L3 尚未完成 |
+| 25 | 2026-10-08 | [前序实现审计与修复](stage-15-audit.md) | DONE 1；IN_PROGRESS 33；TODO 10；四类缺陷修复并重新全量验收，不新增功能或提前完成一般任务 |

@@ -76,3 +76,8 @@ core/PG/SDK/MCP 的 sdist 和 wheel 共 189 个生产源码/类型标记逐字�
 
 本阶段任务全部完成，一般 T30–T33 仍是 IN_PROGRESS；delta、历史/条件父、一般场景模板和 L3 未启用。
 后续评估与计划：[stage-16-plan.md](stage-16-plan.md)。GitHub 提交按核心能力、接口示例和验收文档组织。
+
+## 后续审计修复
+
+2026-10-08 的 [前序实现审计](stage-15-audit.md) 修复四类实现边界；
+本节以上保留最初第十五阶段的验收成绩，本轮重新验收见 [validation-stage-15-audit.json](validation-stage-15-audit.json)。
