@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from contextlib import nullcontext
+from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -164,6 +165,11 @@ class AdmissionEngine:
         _publication_id: str | None = None,
         _contribution_write: bool = False,
     ) -> AdmissionReceipt:
+        # Keep fingerprinting and transactional admission on the same owned
+        # inputs, even if callers mutate their objects while we await a lock.
+        event, drafts, authority, policy, _extraction_audit = deepcopy(
+            (event, tuple(drafts), authority, policy, _extraction_audit)
+        )
         if _publication_id is not None and (not _retained or not isinstance(_publication_id, str)):
             raise ValueError("publication identity requires retained source admission")
 
