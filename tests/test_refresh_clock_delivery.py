@@ -41,7 +41,10 @@ def test_rollback_cannot_revive_expired_managed_head(store):
     asyncio.run(run())
 
 
-def test_restarting_stopped_host_catches_up_after_initial_clock_rollback(store):
+@pytest.mark.parametrize("provider_delay", [0.0, 0.15], ids=["normal", "slow-provider"])
+def test_restarting_stopped_host_catches_up_after_initial_clock_rollback(
+    store, monkeypatch, provider_delay
+):
     async def run():
         from agent_memory.operations.refresh_host import RefreshHost
 
@@ -53,22 +56,68 @@ def test_restarting_stopped_host_catches_up_after_initial_clock_rollback(store):
             high = clock[0] + timedelta(seconds=2)
             clock[0] = high
             await queue.initialize()
+            cls = type(engine.repository.unit_of_work())
+            original_due = cls.refresh_scheduler_due
+            due_calls = []
+
+            async def delayed_due(uow, **kwargs):
+                due_calls.append(clock[0])
+                # A healthy provider can legitimately exceed the former 100 ms
+                # completion assumption. Keep real claim/publication behavior.
+                if provider_delay:
+                    await asyncio.sleep(provider_delay)
+                return await original_due(uow, **kwargs)
+
+            monkeypatch.setattr(cls, "refresh_scheduler_due", delayed_due)
             host = RefreshHost(queue, worker_id="host", poll_seconds=0.01)
             host.stop()
             clock[0] = high - timedelta(seconds=1)
             running = asyncio.create_task(host.run())
+            phase, status = "initial rollback", None
             try:
-                await asyncio.sleep(0.03)
-                # Keep polling until durable wall floor catches up.
+                # Observe the rejected initialization before advancing the fake
+                # wall clock. A fixed sleep could skip this coverage on a busy CI.
+                async with asyncio.timeout(5):
+                    while host.health.state != "degraded":
+                        if running.done():
+                            await running  # Surface unexpected host exceptions immediately.
+                            pytest.fail("refresh host exited before observing rollback")
+                        await asyncio.sleep(0.01)
+                assert not host.health.clock_healthy
+                assert host.health.reason == "refresh_clock_discontinuity"
+                assert queue.stopping
+                assert due_calls == []  # No claim may reach the provider during rollback.
+                status = await queue.status(receipt["target_id"], actor="alice")
+                assert not status["complete"]
+
+                # Completion depends on several real provider transactions, not
+                # host health or a fixed wall-time latency. Keep the durable clock
+                # exactly at its high-water mark while the existing host catches up.
+                phase = "durable completion after catch-up"
                 clock[0] = high
-                await asyncio.sleep(0.1)
-                assert (await queue.status(receipt["target_id"], actor="alice"))["complete"], (
-                    host.health,
-                    queue.stopping,
+                async with asyncio.timeout(5):
+                    while True:
+                        if running.done():
+                            await running
+                            pytest.fail("refresh host exited before completing receipt")
+                        status = await queue.status(receipt["target_id"], actor="alice")
+                        if status["complete"]:
+                            break
+                        await asyncio.sleep(0.01)
+                assert status["state"] == "completed"
+                assert status["covered"] == sorted(receipt["target"]["required_frontier"]["units"])
+                assert due_calls and all(at == high for at in due_calls)
+                assert host.health.state == "running" and host.health.clock_healthy
+                assert not queue.stopping
+            except TimeoutError:
+                pytest.fail(
+                    f"timed out waiting for {phase}: status={status!r}, "
+                    f"health={host.health!r}, stopping={queue.stopping}"
                 )
             finally:
                 host.stop()
-                await asyncio.wait_for(running, 1)
+                await asyncio.wait_for(running, 5)
+            assert host.health.state == "stopped" and queue.stopping
 
     asyncio.run(run())
 

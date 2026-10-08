@@ -1,0 +1,371 @@
+{
+  "schema": "v7-batch-validation/1",
+  "batch": "V7-B4",
+  "date": "2026-10-08",
+  "code_commit": "3e0a43bbed3f97a8a1c57a443ecae74ebaeba912",
+  "core_test_commit": "cf16ba0bd717bd4bfa4e0081fa369faadaeec4f5",
+  "source_manifest": {
+    "packages/postgres/src/agent_memory_postgres/repository.py": "310a754dea321aa66f789a40a427a32ba5c4c5053cca822b99d81e03293c6050",
+    "src/agent_memory/consolidation/project_admission.py": "41ce774423498945da3bf587a69196f1aebd3be0f513ccd68ca740a19353193f",
+    "src/agent_memory/derived/project_index.py": "c34df53c95535f226210e9f119c825be261f9b2a025d09fdcc29d4fdcc31ae54",
+    "src/agent_memory/derived/project_questions.py": "c6dcaf9f480bdc69daed2f25c384ac20ca5f27242df75615edef2c943ed45eb9",
+    "src/agent_memory/derived/question_contracts.py": "7aa401889acbbb4a816a6e9becdb6b2ee772d57651573b6b4bacd3541ae8fb85",
+    "src/agent_memory/derived/question_delta.py": "7e8ed58f7b9eaf1988d9df19654e9d0434535f507d32a54718a75edfcbcbdb0d",
+    "src/agent_memory/derived/question_erasure.py": "789298e08f4b35187e810dd90e320482ef7aac6d9a2e6279fb2dd6ede548b431",
+    "src/agent_memory/derived/question_materialize.py": "dfb3395865bee4c2bb7016c83d12445d9fc230d3533cd367beb35b08458630e1",
+    "src/agent_memory/derived/question_model.py": "4dc4eddba73d967df57a6485c166e4a23b723a1167ac0355c4505afe41256e9c",
+    "src/agent_memory/derived/question_pages.py": "fda64ff8cfcd26a99ae86ccb071e0d90b786d360cf9acd2f3d8dbd2bff9df813",
+    "src/agent_memory/derived/question_refresh.py": "cd65cba1ed1e571992617f549c947939789ddae58e5849d56f74ea67016e9a62",
+    "src/agent_memory/derived/question_service.py": "a8eebe74ba78550b48ce1442f691acb0e8ca4f647b0fe6f67cde334b1a1c211f",
+    "src/agent_memory/derived/question_transport.py": "eb6605067cf3a8d70b89bf6deefedebab97ed629984d4b505f766a2b5cd5e0ca",
+    "src/agent_memory/derived/subscriptions.py": "9a41f1ca1ac2620e26516c2e7e8308af85b6dd74bd44bc4828d21568343e0270",
+    "src/agent_memory/sqlite.py": "a8fd4bcc71a97ca22a18dc0f073ef37106d43055be779fd682bdcc686ef1764a",
+    "tests/test_b4_adversarial_review.py": "411bf435cb1a291d5dba1e25062773557ceb602488f5c0e62790688e3c4b3f1e",
+    "tests/test_project_questions_v7.py": "9b4a3477f8b37f8be7c109a5ad2dc1ef26432ea3e285d00235087d43c91e41ad",
+    "tests/test_question_delta_v7.py": "b7de79b0e4ff0df2f74e38affee0027c845c9ac8fe0410b55a2714b1a7d9153c",
+    "tests/test_question_model_v7.py": "df240d21f41e9ad11e47f92e8d5e4812050890e6b8758b6e5a3b512f15638685",
+    "tests/test_question_page_validation_v7.py": "36c5cf673ed4bcd39349d5abbca06da3e076c0bb7d17385ce86af8cd7207d497",
+    "tests/test_question_proof_reuse_v7.py": "0a4a81d13c2bef84f94de22f9755af529471121e97e89c8017cbb9163eaeb43b",
+    "tests/test_question_transport_v7.py": "f1f167195380f5c4a486fbc3619502875334b1df55e1c63c8ce919c98a8c3024",
+    ".github/workflows/ci.yml": "e169ab1178080ba9d82f9960e5788a109743eb10884d840a43ba2d262506be6b",
+    "tests/test_refresh_clock_delivery.py": "3c59f9ed9b38e12958853179fd1a47c562fd0ca7106ea09e43e7de50759cc6ab"
+  },
+  "canonical_b4_commits": [
+    "52313c2",
+    "8b9d421",
+    "51230e2",
+    "cf16ba0",
+    "8e2011d",
+    "9cff5ee",
+    "e83d39c",
+    "2ed0037",
+    "3e0a43b"
+  ],
+  "scope": "Registered bounded project templates and QuestionView-to-page validation. Synthetic correctness/security tests; no model or production savings claim.",
+  "runs": [
+    {
+      "command": "PYTHONPATH=src:packages/postgres/src:packages/python-sdk/src:packages/mcp-server/src bash /tmp/agent-memory-pg.42vxoI/run-with-postgres.sh /workspace/shared/agent-memory-v7-b3/.venv/bin/pytest tests/test_question_delta_v7.py tests/test_question_proof_reuse_v7.py tests/test_question_page_validation_v7.py tests/test_b4_adversarial_review.py tests/test_question_runtime_v7.py tests/test_question_pages_v7.py tests/test_question_snapshot_security_v7.py tests/test_question_erasure_v7.py tests/test_v7_project_indexes.py tests/test_project_admission_v7.py --junitxml=/tmp/agent-memory-b4-final.xml -x",
+      "source_commit": "cf16ba0bd717bd4bfa4e0081fa369faadaeec4f5",
+      "status": "passed",
+      "tests": 230,
+      "passed": 230,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 72.488,
+      "backends": {
+        "sqlite": 105,
+        "postgresql_17": 105,
+        "provider_independent": 20
+      },
+      "junit_sha256": "2c3783768999a5a02e1c4f3cda898d020919b67c9f6ce30800673c578c062e71"
+    },
+    {
+      "command": "PYTHONPATH=src:packages/postgres/src:packages/python-sdk/src:packages/mcp-server/src bash /tmp/agent-memory-pg.42vxoI/run-with-postgres.sh /workspace/shared/agent-memory-v7-b3/.venv/bin/pytest tests/test_question_transport_v7.py --junitxml=/tmp/agent-memory-b4-transport.xml -x",
+      "source_commit": "8e2011dba7a6ea778f9c48bc2a5cfdfec3dbd118",
+      "status": "passed",
+      "tests": 16,
+      "passed": 16,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 4.721,
+      "backends": {
+        "sqlite": 8,
+        "postgresql_17": 8
+      },
+      "junit_sha256": "a8b3ed2647443050fe85dfa237b911fd81a974f9bac029768bc4cf73e1fee169"
+    },
+    {
+      "command": "PYTHONPATH=src /workspace/shared/agent-memory-v7-b3/.venv/bin/pytest tests/test_question_model_v7.py tests/test_project_questions_v7.py",
+      "source_commit": "cf16ba0bd717bd4bfa4e0081fa369faadaeec4f5",
+      "status": "passed",
+      "passed": 225,
+      "failures": 0,
+      "skipped": 0,
+      "duration_seconds": 0.61
+    },
+    {
+      "command": "ruff check B4 changed Python sources and tests; git diff --check",
+      "status": "passed",
+      "notes": "Selected B4 changed Python sources/tests plus transport source/test passed lint; git diff --check passed. Source manifest additionally pins the unchanged oracle/protocol dependencies. Counts from different runs are reported separately."
+    },
+    {
+      "command": "PYTHONPATH=src:tests:packages/postgres/src:packages/python-sdk/src:packages/mcp-server/src bash /tmp/agent-memory-pg.42vxoI/run-with-postgres.sh /workspace/shared/agent-memory-v7-b3/.venv/bin/pytest tests/test_question_proof_reuse_v7.py tests/test_question_page_validation_v7.py tests/test_b4_adversarial_review.py tests/test_question_runtime_v7.py tests/test_question_pages_v7.py tests/test_question_snapshot_security_v7.py tests/test_question_erasure_v7.py tests/test_question_transport_v7.py --junitxml=/tmp/agent-memory-b4-cached-body.xml -x",
+      "source_commit": "2ed003771e4c0fc7307a600736bc8dfbe6af3638",
+      "status": "passed",
+      "tests": 184,
+      "passed": 184,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 96.889,
+      "backends": {
+        "sqlite": 92,
+        "postgresql_17": 92
+      },
+      "junit_sha256": "6b2372b4370afb39cc8e86919c28547c59acfc94f958d23434a435fa6cfc5da9",
+      "scope": "Post-publication cached-body boundary correction. Includes12 new timing scenarios across snapshot, question read, page read and page publication for grant expiry, context changes and host registration changes. Earlier run counts remain separate and are not summed."
+    },
+    {
+      "command": "PYTHONPATH=src:tests:packages/postgres/src:packages/python-sdk/src:packages/mcp-server/src bash /tmp/agent-memory-pg.42vxoI/run-with-postgres.sh /workspace/shared/agent-memory-v7/.venv/bin/pytest tests/test_refresh_clock_delivery.py tests/test_refresh_host_policy.py tests/test_refresh_scheduler_clock_storage.py --junitxml=/tmp/agent-memory-b4-clock-after.xml -x",
+      "source_commit": "3e0a43bbed3f97a8a1c57a443ecae74ebaeba912",
+      "status": "passed",
+      "passed": 58,
+      "tests": 58,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 7.698,
+      "junit_sha256": "6838c3e9e51d26be77f44af0b577caf6ae7a68327718c726cc451d9ee26b1b55",
+      "backends": {
+        "sqlite": 28,
+        "postgresql_17": 28,
+        "provider_independent": 2
+      },
+      "scope": "Affected clock-delivery, host-policy, and durable-clock-storage suites. Independent run; not cumulative with earlier B4 results."
+    },
+    {
+      "command": "PYTHONPATH=src:tests:packages/postgres/src:packages/python-sdk/src:packages/mcp-server/src bash /tmp/agent-memory-pg.42vxoI/run-with-postgres.sh bash -c 'set -e; for run in $(seq 1 20); do /workspace/shared/agent-memory-v7/.venv/bin/pytest tests/test_refresh_clock_delivery.py -k restarting --junitxml=\"/tmp/agent-memory-b4-clock-repeat-$run.xml\"; done'",
+      "source_commit": "3e0a43bbed3f97a8a1c57a443ecae74ebaeba912",
+      "status": "passed",
+      "repetitions": 20,
+      "tests": 80,
+      "passed": 80,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 28.015,
+      "backends": {
+        "sqlite": 40,
+        "postgresql_17": 40
+      },
+      "variants": [
+        "normal provider",
+        "150 ms due-index provider delay"
+      ],
+      "junit_reports": [
+        {
+          "iteration": 1,
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "duration_seconds": 1.419,
+          "junit_sha256": "7b74df0e2e8e2ba23ee62860c3a36664516e0ab49bcf8b8f50f44cedc25c433f"
+        },
+        {
+          "iteration": 2,
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "duration_seconds": 1.474,
+          "junit_sha256": "e29adf90a9f63a29e0fa15a3431c90512ae0e9d668624c8a3d880c814c61fb53"
+        },
+        {
+          "iteration": 3,
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "duration_seconds": 1.378,
+          "junit_sha256": "6a159b7d4049136838c9fa78a618b63cd8c40a707b4f4e7a9d8a79c5d107916f"
+        },
+        {
+          "iteration": 4,
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "duration_seconds": 1.348,
+          "junit_sha256": "9f7c552ab8f45afd2b3d16d20ef877e069b32914d412d4619987b0df4f69af4b"
+        },
+        {
+          "iteration": 5,
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "duration_seconds": 1.381,
+          "junit_sha256": "38bade9e6e98f03c83f3e3635573db58ee2cca9503f7fd1b8932fd2082848e94"
+        },
+        {
+          "iteration": 6,
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "duration_seconds": 1.416,
+          "junit_sha256": "5ba765874cdc7b07703e85f97070d106373bd7dc3890623ae4d94b135edc5378"
+        },
+        {
+          "iteration": 7,
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "duration_seconds": 1.531,
+          "junit_sha256": "9657da941b9b2699e336304e87ec1603475dc7ca8900e3067660c324ba7dcd07"
+        },
+        {
+          "iteration": 8,
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "duration_seconds": 1.38,
+          "junit_sha256": "a2b110d5b304170d7c19f90b00f531ba107b0061b8af91acc68dba6f967054b6"
+        },
+        {
+          "iteration": 9,
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "duration_seconds": 1.364,
+          "junit_sha256": "2b7efaaed37ff03898932606b989c3650e6a76400ac1f3742419048c171bfa99"
+        },
+        {
+          "iteration": 10,
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "duration_seconds": 1.371,
+          "junit_sha256": "7c8018e1b1ac9bfccf118c221ab11f0b1b0bbbdd12ccc7e82e1a13b7a1d1df16"
+        },
+        {
+          "iteration": 11,
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "duration_seconds": 1.388,
+          "junit_sha256": "04990008354d9bde1b0ab4a4dc23413a60cdd903ce4df6a92e4c0838de55aac6"
+        },
+        {
+          "iteration": 12,
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "duration_seconds": 1.364,
+          "junit_sha256": "b2c3b17a4313e4a7d506396c598a160b0a62374c8eaffdf56b866cff35c69adb"
+        },
+        {
+          "iteration": 13,
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "duration_seconds": 1.416,
+          "junit_sha256": "2e2eb9903a7df3190a8caa24ac3179424003ca6ec561f161be9d2ea0c3f93076"
+        },
+        {
+          "iteration": 14,
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "duration_seconds": 1.456,
+          "junit_sha256": "381e4f0600b049b683a20422794b62f8871bf2ecd4fd943f508bedc703d4368b"
+        },
+        {
+          "iteration": 15,
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "duration_seconds": 1.381,
+          "junit_sha256": "bf66feaf532c13a8ac847b8403345511eafcab162d3ab29935be47fc398f2fc1"
+        },
+        {
+          "iteration": 16,
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "duration_seconds": 1.474,
+          "junit_sha256": "00b8801bff1c828d19cbd131ff3d1c7e2b18e08221daf8d55ece897187767a7c"
+        },
+        {
+          "iteration": 17,
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "duration_seconds": 1.351,
+          "junit_sha256": "358e9eae1c624fa1473862535f665fa3c441f56f05e076cf7d12100bc0b5b731"
+        },
+        {
+          "iteration": 18,
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "duration_seconds": 1.355,
+          "junit_sha256": "ee18f6adb0e8aba586cdbfc48c9914ad3edb440ffe287ad82304702d47bd961b"
+        },
+        {
+          "iteration": 19,
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "duration_seconds": 1.354,
+          "junit_sha256": "e2fb9f94f26be857f9b90132ae49b4effad8c6b5aa430238580760996b24f0ea"
+        },
+        {
+          "iteration": 20,
+          "tests": 4,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0,
+          "duration_seconds": 1.414,
+          "junit_sha256": "0e19570400e7849af16b78ed4eb5ca860b6e5ec730643c16ad08f679b77f5d84"
+        }
+      ],
+      "scope": "Twenty separate pytest invocations, each exercising the same four dual-provider restart/rollback cases. This is repetition evidence, not 80 distinct test definitions."
+    }
+  ],
+  "not_run": [
+    "Full repository/package/build/install acceptance belongs to B6; these are affected suites.",
+    "Real model/Ollama/provider evaluation; unavailable endpoint is handled in B5/B6.",
+    "Licensed production dataset quality/cost/savings and arbitrary model patches."
+  ],
+  "migrations": {
+    "runtime_contract": "question-runtime/2",
+    "registration_contract": "question-instance-registration/2",
+    "processor": "question-refresh/2",
+    "new_sql_tables": [],
+    "ledger_kinds": [
+      "question_delta_state",
+      "question_change_log",
+      "question_page_validation"
+    ],
+    "requires": "Drain old writers/workers and re-register version-1 questions. Missing/unproved history full rebuilds. Preserve authoritative erase replay on restore."
+  },
+  "ci_follow_on": {
+    "commit": "e83d39c12148a47865959c3ab0d60cec8540d557",
+    "change": "Add all four new B4 suites to postgres-live; YAML parse, exact suite collection and diff check passed. No runtime source changed in that CI-only commit."
+  },
+  "ci_timing_follow_on": {
+    "commit": "3e0a43bbed3f97a8a1c57a443ecae74ebaeba912",
+    "runtime_changed": false,
+    "diagnosis": "The original fixed 30 ms/100 ms sleeps did not wait for rejected initialization or durable receipt completion. Running/healthy host health precedes completion of provider transactions.",
+    "correction": "Use 5-second monotonic asyncio timeouts for observed rollback rejection and exact durable coverage. Preserve pre-catch-up stopped/no-claim/incomplete state, healthy recovery at unchanged high-water time, and bounded clean shutdown.",
+    "diagnostic_counterexample": {
+      "base_commit": "703beb2",
+      "change": "Retain the original fixed-sleep assertions and inject a 150 ms delay into the real unit-of-work refresh_scheduler_due call on each provider.",
+      "result": "Both SQLite and PostgreSQL reproduce the original incomplete-receipt assertion with running, clock-healthy host state.",
+      "expected_failures": 2,
+      "tests": 2,
+      "failures": 2,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 1.217,
+      "junit_sha256": "a4f9255e6ff7390015fa2d6cfc6eb9531bbf5000bd261360f2e8e34be839960b"
+    }
+  }
+}

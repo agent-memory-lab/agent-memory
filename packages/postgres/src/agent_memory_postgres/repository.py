@@ -94,7 +94,7 @@ class PostgresMemoryUnitOfWork:
     refresh_scheduler_contract = "durable-coalescing/1"
     derived_parent_contract = "processing-graph/1"
     derived_page_contract = "page-full-rebuild/1"
-    question_runtime_contract = "question-runtime/1"
+    question_runtime_contract = "question-runtime/2"
     question_page_contract = "project-question-scenario/1"
     derived_qualified_contract = "qualified-current-route/1"
 

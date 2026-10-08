@@ -150,8 +150,12 @@ async def changed(uow, scope, old_header, new_header, *, at=None, reason="candid
     from . import subscriptions
 
     keys = set(header_keys(old_header)) | set(header_keys(new_header))
+    from .question_delta import record_change
+
     for key in sorted(keys):
-        await subscriptions.bump(uow, scope, key)
+        generation = await subscriptions.bump(uow, scope, key)
+        await record_change(uow, scope, key, generation,
+                            before=old_header, after=new_header, reason=reason)
     gate = checked_gate(await uow.derived_get(scope, "project_index", "scope"))
     if gate and gate["state"] != "ready":
         await subscriptions.scope_fallback(uow, scope, at=at, reason="project_index_incomplete")
@@ -182,8 +186,12 @@ async def source_changed(uow, scope, source_id, *, at=None, reason="source", saf
         if not header or source_id not in header["source_ids"]:
             raise DerivedError("derived_subscription_integrity_failed")
         keys.update(header_keys(header))
+    from .question_delta import record_change
+
     for key in sorted(keys):
-        await subscriptions.bump(uow, scope, key)
+        generation = await subscriptions.bump(uow, scope, key)
+        await record_change(uow, scope, key, generation,
+                            before=source_id, after=reason, reason=reason)
     if keys:
         await subscriptions.invalidate(
             uow, scope, tuple(sorted(keys)), at=at, reason=reason, safety=safety

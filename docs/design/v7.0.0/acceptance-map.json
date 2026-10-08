@@ -1,18 +1,23 @@
 {
   "schema": "v7-acceptance-map/1",
-  "baseline": "a6472feb25ee2b7ef4a3188488a34806fcf7e4a7",
-  "batch": "B3",
+  "baseline": "2ed003771e4c0fc7307a600736bc8dfbe6af3638",
+  "batch": "B4",
   "runtime_capabilities": [
     "finite_current_project_full_questions_opt_in",
     "exact_registered_question_routing",
     "qualified_current_language_parent_page_opt_in",
-    "host_published_full_project_pages"
+    "host_published_full_project_pages",
+    "finite_project_complete_group_delta",
+    "immutable_generation_current_certificate_reuse",
+    "bounded_fair_source_sensitive_page_validation"
   ],
   "notes": [
     "Protocol unit tests do not establish full runtime acceptance.",
     "Inherited status is a verbatim snapshot, not a new V7 test result.",
     "Unsupported, deferred, not_run and insufficient_data are never passes.",
-    "B3 passes are bounded to explicitly host-enabled current full templates; no delta, model, historical page or production quality acceptance is inferred."
+    "B3 passes are bounded to explicitly host-enabled current full templates; no delta, model, historical page or production quality acceptance is inferred.",
+    "B4 passes cover registered deterministic project operators and the finite QuestionView-to-page layer; no model patch, arbitrary query program or production savings claim.",
+    "B4 cached-body correction2ed0037 passed184 affected dual-provider cases. Every cached body has before/after expiry/context/registration guards; earlier counts remain separate."
   ],
   "cases": [
     {
@@ -732,22 +737,37 @@
       "id": "Q7-17",
       "scenario": "集合/聚合加入、修改、删除和时间变化",
       "owner": "AM70-T10",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "passed",
+      "evidence": [
+        "docs/design/v7.0.0/batch-b4.md",
+        "docs/design/v7.0.0/validation-b4.json",
+        "tests/test_question_delta_v7.py",
+        "tests/test_b4_adversarial_review.py"
+      ]
     },
     {
       "id": "Q7-18",
       "scenario": "定义、政策、schema 或算子不兼容变化",
       "owner": "AM70-T10",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "passed",
+      "evidence": [
+        "docs/design/v7.0.0/batch-b4.md",
+        "docs/design/v7.0.0/validation-b4.json",
+        "tests/test_question_delta_v7.py",
+        "tests/test_b4_adversarial_review.py"
+      ]
     },
     {
       "id": "Q7-19",
       "scenario": "delta 日志有缺口、重复、乱序",
       "owner": "AM70-T10",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "passed",
+      "evidence": [
+        "docs/design/v7.0.0/batch-b4.md",
+        "docs/design/v7.0.0/validation-b4.json",
+        "tests/test_question_delta_v7.py",
+        "tests/test_b4_adversarial_review.py"
+      ]
     },
     {
       "id": "Q7-20",
@@ -760,15 +780,27 @@
       "id": "Q7-21",
       "scenario": "业务结果不变但证据修订变化",
       "owner": "AM70-T11",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "passed",
+      "evidence": [
+        "docs/design/v7.0.0/batch-b4.md",
+        "docs/design/v7.0.0/validation-b4.json",
+        "tests/test_question_proof_reuse_v7.py",
+        "tests/test_question_page_validation_v7.py",
+        "tests/test_b4_adversarial_review.py"
+      ]
     },
     {
       "id": "Q7-22",
       "scenario": "旧私有生成输入撤权而公开来源同文",
       "owner": "AM70-T11",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "passed",
+      "evidence": [
+        "docs/design/v7.0.0/batch-b4.md",
+        "docs/design/v7.0.0/validation-b4.json",
+        "tests/test_question_proof_reuse_v7.py",
+        "tests/test_question_page_validation_v7.py",
+        "tests/test_b4_adversarial_review.py"
+      ]
     },
     {
       "id": "Q7-23",

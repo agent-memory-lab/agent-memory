@@ -11,9 +11,9 @@ from .question_model import (
     TimeMode,
 )
 
-REGISTRATION_SCHEMA = "question-instance-registration/1"
-RUNTIME_SCHEMA = "question-runtime/1"
-ALGORITHM = "project-question-full/1"
+REGISTRATION_SCHEMA = "question-instance-registration/2"
+RUNTIME_SCHEMA = "question-runtime/2"
+ALGORITHM = "project-question-render/2"
 
 
 def _string(*, maximum=256, enum=None):
@@ -101,7 +101,7 @@ def project_definition(
         calendar_version=contract.calendar_version,
         renderer_id=ALGORITHM,
         renderer_version=ALGORITHM,
-        allowed_modes=(ComputeMode.FULL,),
+        allowed_modes=(ComputeMode.FULL, ComputeMode.DELTA, ComputeMode.PROOF_REUSE),
         audiences=tuple(readers),
         purposes=(admission.purpose,),
         retention_policy_version="project-question-retention/1",
