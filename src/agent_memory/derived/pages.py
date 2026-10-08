@@ -17,6 +17,14 @@ def page_supported(uow):
     return supported(uow) and getattr(uow, "derived_page_contract", None) == PAGE_CONTRACT
 
 
+def materialized_body(body, block_bodies):
+    """The same delivered representation defines the full rebuild output budget."""
+    return {**body, "blocks": [
+        {**ref, "body": deepcopy(content)}
+        for ref, content in zip(body["blocks"], block_bodies, strict=True)
+    ]}
+
+
 def compose_page(snapshot, scope):
     spec, parents, manifest = (
         snapshot["definition"]["spec"], snapshot["parents"], snapshot["manifest"]
@@ -49,7 +57,8 @@ def compose_page(snapshot, scope):
         rebuild="full", blocks=references,
     )
     # Include the materialized blocks in the output budget, not just tiny references.
-    if len(canonical_json(dict(page=body, blocks=[b["body"] for b in blocks])).encode()) > 32768:
+    delivered = materialized_body(body, [block["body"] for block in blocks])
+    if len(canonical_json(delivered).encode()) > 32768:
         raise DerivedError("page_output_capacity")
     return dict(
         body=body, body_sha256=digest(body), block_revisions=blocks,
@@ -144,10 +153,10 @@ class KnowledgePages:
             ):
                 return dict(page_id=page_id, state="invalid", body=None,
                             reason="page_block_integrity_failed")
-            materialized.append(dict(**ref, body=deepcopy(block["body"])))
+            materialized.append(block["body"])
         result.update(
             revision_id=revision["id"], refresh_state="completed",
-            body={**view["body"], "blocks": materialized},
+            body=materialized_body(view["body"], materialized),
             processed_unit=deepcopy(revision["unit"]),
         )
         return result

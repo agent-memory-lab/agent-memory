@@ -32,7 +32,7 @@ from .parents import (
     revision_header,
     supported,
 )
-from .registry import DerivedRegistry, slots
+from .registry import DerivedRegistry, expected, slots
 
 
 async def open_derived(uow, scope, history_mode=None):
@@ -192,6 +192,7 @@ class ObservationService:
         return await self.pages.register(definition, expected_generation=expected_generation)
 
     async def _register_spec(self, spec, *, expected_generation, definition_slots):
+        expected(expected_generation)
         if spec["subject_id"] != self.scope.user_id:
             raise DerivedError("derived_subject_scope_mismatch")
         if spec.get("history_mode") != self.history_mode:
@@ -522,6 +523,9 @@ class ObservationService:
         return result
 
     async def publish(self, task, snapshot, prepared):
+        # Own the entire checked contract before any await: callers may retain
+        # references while this coroutine waits for the transaction/scope lock.
+        task, snapshot, prepared = deepcopy((task, snapshot, prepared))
         # Deterministic recomputation is an output-validation boundary, not a confidence threshold.
         if prepared != self.prepare(snapshot):
             raise DerivedError("derived_output_invalid")

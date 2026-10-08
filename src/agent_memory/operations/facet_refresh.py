@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from secrets import token_urlsafe
 
 from ..derived.model import DerivedError, digest, identity, timestamp
+from ..derived.pages import is_page, page_supported
 from ..derived.parents import waiting_for_parent
 from ..derived.service import open_derived
 from .worker_tasks import WorkerLease, WorkerQueueError, WorkerTask, WorkerTaskStatus
@@ -70,6 +71,7 @@ class FacetRefreshQueue:
         self.repository, self.scope = service.repository, service.scope
 
     async def _job(self, uow, definition):
+        await self.service.pages.check(uow, definition["spec"])
         unit = await self.service._unit(uow, definition)
         await self.service.parents.inputs(
             uow, definition["spec"], unit.parents, self.service.clock(), load_bodies=False
@@ -105,6 +107,8 @@ class FacetRefreshQueue:
 
     async def request(self, facet_id, *, dedupe_key, force=False):
         identity(dedupe_key)
+        if type(force) is not bool:
+            raise DerivedError("invalid_derived_request")
         async with self.repository.unit_of_work() as uow:
             epoch = await open_derived(uow, self.scope, self.service.history_mode)
             target_id = "facet-target:" + digest([self.scope.partition_key(), epoch, dedupe_key])
@@ -117,8 +121,6 @@ class FacetRefreshQueue:
             if len(await uow.derived_records(self.scope, "request")) >= 4096:
                 raise DerivedError("derived_target_capacity")
             await self._time_transition(uow, definition)
-            if type(force) is not bool:
-                raise DerivedError("invalid_derived_request")
             if force:
                 definition.update(time_generation=definition["time_generation"] + 1, dirty=True)
             job = await self._job(uow, definition)
@@ -159,6 +161,7 @@ class FacetRefreshQueue:
                 item["identity"]
                 for item in definitions
                 if self.service.accepts_definition(item["payload"])
+                and (not is_page(item["payload"]["spec"]) or page_supported(uow))
             }
             for item in definitions:
                 definition = item["payload"]
