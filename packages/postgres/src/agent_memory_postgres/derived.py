@@ -1,7 +1,15 @@
 """PostgreSQL derived SQL; the caller owns transaction and namespace lock."""
 
-from agent_memory.derived.model import erase_rows, source_ids
-from agent_memory.domain import canonical_json
+from copy import deepcopy
+
+from agent_memory.derived.model import erase_rows
+from agent_memory.derived.subscriptions import (
+    HEADER_SCHEMA,
+    candidate_owner,
+    header_data,
+    source_key,
+)
+from agent_memory.domain import MemoryScope, canonical_json
 
 
 async def get(connection, scope, kind, identity):
@@ -35,27 +43,76 @@ async def records(connection, scope, kind):
     return tuple(dict(identity=r["identity"], payload=r["payload_json"]) for r in rows)
 
 
-async def header(connection, scope, record_id, event_id, slot_key, payload, version):
+async def get_header(connection, scope, record_id):
+    cursor = await connection.execute(
+        "SELECT payload_json FROM agent_memory_derived_atom_headers "
+        "WHERE partition_key=%s AND identity=%s",
+        (scope.partition_key(), record_id),
+    )
+    row = await cursor.fetchone()
+    return row["payload_json"] if row else None
+
+
+async def headers(connection, scope):
+    """Bounded metadata census; 4097 signals overflow to the scope fallback gate."""
+    cursor = await connection.execute(
+        "SELECT payload_json FROM agent_memory_derived_atom_headers "
+        "WHERE partition_key=%s ORDER BY identity LIMIT 4097",
+        (scope.partition_key(),),
+    )
+    result = [row["payload_json"] for row in await cursor.fetchall()]
+    if len(result) <= 4096:
+        for index, old in enumerate(result):
+            if old.get("schema") == HEADER_SCHEMA:
+                continue
+            cursor = await connection.execute(
+                "SELECT event_id,slot_key,payload_json,version "
+                "FROM agent_memory_admission_records WHERE partition_key=%s AND record_id=%s",
+                (scope.partition_key(), old["id"]),
+            )
+            row = await cursor.fetchone()
+            if row is None or row["payload_json"].get("deleted"):
+                raise ValueError("derived candidate header has no live admission record")
+            await header(
+                connection,
+                scope,
+                old["id"],
+                row["event_id"],
+                row["slot_key"],
+                row["payload_json"],
+                row["version"],
+                routes=False,
+            )
+            result[index] = await get_header(connection, scope, old["id"])
+    return tuple(result)
+
+
+async def header(
+    connection, scope, record_id, event_id, slot_key, payload, version, *, routes=True
+):
+    payload = deepcopy(payload)
     if payload.get("deleted"):
         await connection.execute(
             "DELETE FROM agent_memory_derived_atom_headers WHERE partition_key=%s AND identity=%s",
             (scope.partition_key(), record_id),
         )
+        if routes:
+            await edges(connection, scope, candidate_owner(record_id), ())
         return
-    data = dict(
-        id=record_id,
-        event_id=event_id,
-        source_ids=sorted({event_id, *source_ids(payload)}),
-        version=version,
-        claim_id=payload.get("claim_id"),
-        slot_key=slot_key,
-    )
+    data = header_data(record_id, event_id, slot_key, payload, version)
     await connection.execute(
         "INSERT INTO agent_memory_derived_atom_headers VALUES (%s,%s,%s,%s::jsonb) "
         "ON CONFLICT (partition_key,identity) DO UPDATE SET slot_key=excluded.slot_key, "
         "payload_json=excluded.payload_json",
         (scope.partition_key(), record_id, slot_key, canonical_json(data)),
     )
+    if routes:
+        await edges(
+            connection,
+            scope,
+            candidate_owner(record_id),
+            [("query", source_key(key)) for key in data["source_ids"]],
+        )
 
 
 async def candidates(connection, scope, slots):
@@ -68,6 +125,7 @@ async def candidates(connection, scope, slots):
 
 
 async def edges(connection, scope, revision_id, values):
+    values = deepcopy(tuple(values))
     await connection.execute(
         "DELETE FROM agent_memory_derived_dependencies WHERE partition_key=%s AND revision_id=%s",
         (scope.partition_key(), revision_id),
@@ -165,3 +223,64 @@ async def reconcile_headers(connection, scope):
             row["payload_json"],
             row["version"],
         )
+
+
+async def scrub_routes(connection, scope):
+    """Erase derived routing selectors and fence their exact-scope rebuild."""
+    await connection.execute(
+        "DELETE FROM agent_memory_derived_dependencies "
+        "WHERE partition_key=%s AND revision_id LIKE 'route:%%'",
+        (scope.partition_key(),),
+    )
+    await connection.execute(
+        "DELETE FROM agent_memory_derived_entries WHERE partition_key=%s AND kind='subscription'",
+        (scope.partition_key(),),
+    )
+    old = await get(connection, scope, "subscription_index", "scope") or {}
+    await put(
+        connection,
+        scope,
+        "subscription_index",
+        "scope",
+        {
+            "schema": "derived-subscription-index/1",
+            "state": "needs_backfill",
+            "generation": old.get("generation", 0) + 1,
+        },
+    )
+    barrier = await get(connection, scope, "barrier", "route:fallback") or {}
+    await put(
+        connection,
+        scope,
+        "barrier",
+        "route:fallback",
+        {
+            "generation": barrier.get("generation", 0) + 1,
+        },
+    )
+
+
+async def admission_checkpoint(connection, scope):
+    cursor = await connection.execute(
+        "SELECT MAX(recorded_at) AS boundary FROM agent_memory_admission_records "
+        "WHERE scope_json ->> 'tenant_id'=%s AND scope_json ->> 'namespace'=%s",
+        (scope.tenant_id, scope.namespace),
+    )
+    return (await cursor.fetchone())["boundary"]
+
+
+async def changed_admission_scopes(connection, scope, checkpoint):
+    """Primary scrubs/tombstones advance this namespace-locked publication boundary."""
+    if checkpoint is None:
+        return ()
+    cursor = await connection.execute(
+        "SELECT record_id,scope_json FROM agent_memory_admission_records "
+        "WHERE scope_json ->> 'tenant_id'=%s AND scope_json ->> 'namespace'=%s "
+        "AND recorded_at>%s ORDER BY partition_key,record_id",
+        (scope.tenant_id, scope.namespace, checkpoint),
+    )
+    groups = {}
+    for row in await cursor.fetchall():
+        target = MemoryScope(**row["scope_json"])
+        groups.setdefault(target, []).append(row["record_id"])
+    return tuple((target, tuple(ids)) for target, ids in groups.items())

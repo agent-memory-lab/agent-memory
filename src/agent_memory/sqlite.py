@@ -8,6 +8,7 @@ import time
 from collections import deque
 from collections.abc import Sequence
 from contextlib import contextmanager
+from copy import deepcopy
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
@@ -294,6 +295,7 @@ class SQLiteMemoryUnitOfWork:
         )
 
     async def append_event(self, event: MemoryEvent) -> None:
+        event = deepcopy(event)
         deleted = self.connection.execute(
             """SELECT 1 FROM admission_tombstones
                WHERE event_id = ? OR (partition_key = ? AND idempotency_key = ?)
@@ -335,6 +337,7 @@ class SQLiteMemoryUnitOfWork:
         return sqlite_derived.get(self.connection, scope, kind, identity)
 
     async def derived_put(self, scope, kind, identity, payload):
+        payload = deepcopy(payload)
         from .operations import sqlite_derived
 
         return sqlite_derived.put(self.connection, scope, kind, identity, payload)
@@ -344,12 +347,24 @@ class SQLiteMemoryUnitOfWork:
 
         return sqlite_derived.records(self.connection, scope, kind)
 
+    async def derived_header(self, scope, record_id):
+        from .operations import sqlite_derived
+
+        return sqlite_derived.get_header(self.connection, scope, record_id)
+
+    async def derived_headers(self, scope):
+        await self.lock_admission_scope(scope)
+        from .operations import sqlite_derived
+
+        return sqlite_derived.headers(self.connection, scope)
+
     async def derived_candidates(self, scope, slots):
         from .operations import sqlite_derived
 
         return sqlite_derived.candidates(self.connection, scope, slots)
 
     async def derived_edges(self, scope, revision_id, values):
+        values = deepcopy(tuple(values))
         from .operations import sqlite_derived
 
         return sqlite_derived.edges(self.connection, scope, revision_id, values)
@@ -363,6 +378,7 @@ class SQLiteMemoryUnitOfWork:
         return sqlite_retention.head_get(self.connection, scope, kind, identity)
 
     async def retention_head_put(self, scope, kind, identity, payload, expected_generation):
+        payload = deepcopy(payload)
         await self.lock_admission_scope(scope)
         result = sqlite_retention.head_put(
             self.connection, scope, kind, identity, payload, expected_generation
@@ -569,6 +585,7 @@ class SQLiteMemoryUnitOfWork:
         payload: dict[str, Any],
         expected_version: int,
     ) -> int:
+        payload = deepcopy(payload)
         if type(expected_version) is not int or expected_version < 0:
             raise ValueError("expected_version must be a non-negative integer")
         if not record_id or not event_id or not slot_key or not isinstance(payload, dict):
@@ -655,10 +672,16 @@ class SQLiteMemoryUnitOfWork:
         from .derived.service import mark_slot_changed
         from .operations import sqlite_derived
 
+        old_header = sqlite_derived.get_header(self.connection, scope, record_id)
         sqlite_derived.header(
-            self.connection, scope, record_id, event_id, slot_key, payload, version
+            self.connection, scope, record_id, event_id, slot_key,
+            json.loads(payload_json), version,
         )
-        await mark_slot_changed(self, scope, slot_key, at=datetime.fromisoformat(recorded_at))
+        await mark_slot_changed(
+            self, scope, slot_key, at=datetime.fromisoformat(recorded_at),
+            old_header=old_header,
+            new_header=sqlite_derived.get_header(self.connection, scope, record_id),
+        )
         return version
 
     async def find_current_claim(self, scope: MemoryScope, key: str) -> Claim | None:
@@ -1194,6 +1217,7 @@ class SQLiteMemoryRepository:
                     row["slot_key"],
                     json.loads(row["payload_json"]),
                     row["version"],
+                    routes=False,
                 )
 
     def _enable_wal(self) -> None:
@@ -2175,11 +2199,28 @@ class SQLiteMemoryRepository:
     def _forget_on_connection(self, connection, request, *, replay=False):
         from .operations import sqlite_derived
 
+        checkpoint = sqlite_derived.admission_checkpoint(connection, request.scope)
         sqlite_derived.forget(connection, request)
         sqlite_retention.forget(connection, request, journal=not replay)
         dependency_rows = self._artifact_dependency_rows(connection, request.scope)
         dependent_claim_ids = self._forget_admission_records(connection, request)
-        sqlite_derived.reconcile_headers(connection, request.scope)
+        # Primary deletion also changes admitted projections in broader scopes.
+        # Translate only actually changed candidates, never the all-in-scope flag.
+        affected_scopes = {request.scope}
+        for target, identities in sqlite_derived.changed_admission_scopes(
+            connection, request.scope, checkpoint
+        ):
+            if target == request.scope:
+                continue
+            projected = replace(
+                request, scope=target, all_in_scope=False,
+                memory_ids=tuple(sorted(set(request.memory_ids).union(identities))),
+            )
+            sqlite_derived.forget(connection, projected)
+            affected_scopes.add(target)
+        for target in sorted(affected_scopes, key=lambda value: value.partition_key()):
+            sqlite_derived.reconcile_headers(connection, target)
+            sqlite_derived.scrub_routes(connection, target)
         dependent_artifacts = self._forget_artifact_dependencies(
             connection, request, dependent_claim_ids, dependency_rows
         )

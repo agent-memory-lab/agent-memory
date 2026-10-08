@@ -6,6 +6,7 @@ from datetime import datetime
 from ..domain import canonical_json, utc_now
 from ..operations.retention import RetentionError
 from ..operations.source_revisions import source_is_current
+from . import subscriptions
 from .contracts import HistoricalQuery
 from .coverage import close_coverage
 from .history import PublishedHistory
@@ -43,6 +44,8 @@ async def open_derived(uow, scope, history_mode=None):
         "derived_candidates",
         "derived_edges",
         "derived_reverse",
+        "derived_header",
+        "derived_headers",
         "lock_admission_scope",
         "retention_epoch",
         "get_source_event",
@@ -55,43 +58,47 @@ async def open_derived(uow, scope, history_mode=None):
     ):
         raise DerivedError("derived_history_coverage_backend_unsupported")
     await uow.lock_admission_scope(scope)
+    await subscriptions.ensure_index(uow, scope)
     return await uow.retention_epoch(scope)
 
 
-async def mark_slot_changed(uow, scope, key, *, at=None, reason="candidate"):
+async def mark_slot_changed(
+    uow, scope, key, *, at=None, reason="candidate", old_header=None, new_header=None
+):
     """Always maintained, including slots with no registered subscribers yet."""
-    barrier = await uow.derived_get(scope, "barrier", key) or {"generation": 0}
-    await uow.derived_put(scope, "barrier", key, {"generation": barrier["generation"] + 1})
-    for item in await uow.derived_records(scope, "definition"):
-        row = item["payload"]
-        if key in row["slots"] and not row.get("disabled"):
-            await close_coverage(uow, scope, row["facet_id"], at=at or utc_now(), reason=reason)
-            row["dirty"] = True  # durable refresh responsibility in original write UoW
-            await uow.derived_put(scope, "definition", item["identity"], row)
-            await invalidate_descendants(uow, scope, (item["identity"],))
+    old_header, new_header = deepcopy((old_header, new_header))
+    await subscriptions.ensure_index(uow, scope)
+    await subscriptions.bump(uow, scope, subscriptions.SCOPE_BARRIER)
+    keys = {key}
+    keys.update(header["slot_key"] for header in (old_header, new_header) if header)
+    for changed in sorted(keys):
+        await subscriptions.bump(uow, scope, changed)
+    await subscriptions.invalidate(
+        uow, scope, tuple(subscriptions.slot_key(changed) for changed in sorted(keys)),
+        at=at, reason=reason,
+    )
 
 
 async def interpretation_changed(uow, scope, source_id, *, at=None):
-    # Query membership includes every candidate, not just already cited parents.
-    changed_slots = set()
-    for item in await uow.derived_records(scope, "definition"):
-        row = item["payload"]
-        headers = await uow.derived_candidates(scope, row["slots"]) if row["slots"] else ()
-        if any(source_id in h["source_ids"] for h in headers):
-            changed_slots.update(row["slots"])
-    for key in sorted(changed_slots):
+    # Source routes include pending/rejected candidates, not merely cited inputs.
+    keys = await subscriptions.source_slots(uow, scope, source_id)
+    if keys is None:
+        await subscriptions.bump(uow, scope, subscriptions.SCOPE_BARRIER)
+        await subscriptions.scope_fallback(uow, scope, at=at, reason="interpretation")
+        return
+    for key in sorted(keys):
         await mark_slot_changed(uow, scope, key, at=at, reason="interpretation")
+    if not keys:
+        await subscriptions.bump(uow, scope, subscriptions.SCOPE_BARRIER)
 
 
 async def document_changed(uow, scope, *, at):
-    # A document head can alter an old source's active interpretation even before
-    # new candidates exist. Conservatively close this scope's tracked intervals.
-    for item in await uow.derived_records(scope, "definition"):
-        await close_coverage(uow, scope, item["identity"], at=at, reason="document")
-        row = item["payload"]
-        if not row.get("disabled"):
-            row["dirty"] = True
-            await uow.derived_put(scope, "definition", item["identity"], row)
+    # A document head can change interpretation before any new candidate exists.
+    # Exact document memberships are outside this admitted-L1 slice; the bounded,
+    # indexed scope subscription is deliberately conservative and metered.
+    await subscriptions.ensure_index(uow, scope)
+    await subscriptions.bump(uow, scope, subscriptions.SCOPE_BARRIER)
+    await subscriptions.scope_fallback(uow, scope, at=at, reason="document")
 
 
 async def source_document(uow, source):
@@ -231,6 +238,7 @@ class ObservationService:
                     uow, self.scope, spec["id"], at=self.clock(), reason="definition"
                 )
             await uow.derived_put(self.scope, "definition", spec["id"], row)
+            await subscriptions.install(uow, self.scope, row)
             await invalidate_descendants(uow, self.scope, (spec["id"],))
             return deepcopy(row)
 
@@ -255,26 +263,30 @@ class ObservationService:
             if authority is not None:
                 row.update(authority_id=self.authority_id, authority_version=authority["version"])
             await uow.derived_put(self.scope, "grant", grant.source_id, row)
-            for item in await uow.derived_records(self.scope, "definition"):
-                definition = item["payload"]
-                headers = await self._candidates(uow, definition)
-                if any(grant.source_id in h["source_ids"] for h in headers):
-                    definition.update(
-                        dirty=True, safety_generation=definition["safety_generation"] + 1
-                    )
-                    await uow.derived_put(self.scope, "definition", item["identity"], definition)
-                    await invalidate_descendants(uow, self.scope, (item["identity"],), safety=True)
+            keys = await subscriptions.source_slots(uow, self.scope, grant.source_id)
+            await subscriptions.bump(uow, self.scope, subscriptions.SCOPE_BARRIER)
+            if keys is None:
+                await subscriptions.scope_fallback(
+                    uow, self.scope, at=self.clock(), reason="grant", safety=True
+                )
+            else:
+                await subscriptions.invalidate(
+                    uow, self.scope, tuple(subscriptions.slot_key(key) for key in keys),
+                    at=self.clock(), reason="grant", safety=True,
+                )
             return deepcopy(row)
 
     async def _unit(self, uow, row):
+        subscription = await subscriptions.subscription(uow, self.scope, row)
         epoch = await uow.retention_epoch(self.scope)
         bindings, _ = await self.registry.bindings(uow, row["spec"])
         query = {
             key: (await uow.derived_get(self.scope, "barrier", key) or {"generation": 0})[
                 "generation"
             ]
-            for key in row["slots"]
+            for key in (*row["slots"], subscriptions.FALLBACK_BARRIER)
         }
+        query[subscriptions.SUBSCRIPTION_BARRIER] = subscription["generation"]
         parents = await self.parents.bindings(uow, row["spec"])
         return FacetRefreshUnit(
             row["facet_id"],
@@ -348,6 +360,7 @@ class ObservationService:
             raise DerivedError("derived_processing_grant_expired")
 
     async def snapshot(self, task):
+        task = deepcopy(task)
         timestamp(self.clock())
         async with self.repository.unit_of_work() as uow:
             await open_derived(uow, self.scope, self.history_mode)
@@ -507,7 +520,7 @@ class ObservationService:
         edges += [("processing", "derived:" + parent["id"])
                   for parent in snapshot.get("parents", {}).values()]
         edges += [
-            ("query", "facet:" + key) for key in snapshot["manifest"]["unit"]["query_generation"]
+            ("query", "facet:" + key) for key in snapshot["definition"]["slots"]
         ]
         if len(edges) > 512:
             raise DerivedError("derived_dependency_capacity")
@@ -515,7 +528,7 @@ class ObservationService:
             edges,
             atom_ids=snapshot["manifest"]["atoms"],
             source_event_ids=snapshot["manifest"]["sources"],
-            slot_ids=snapshot["manifest"]["unit"]["query_generation"],
+            slot_ids=snapshot["definition"]["slots"],
             derived_ids=[p["id"] for p in snapshot.get("parents", {}).values()],
         )
         result["edges"] = sorted(set(edges))

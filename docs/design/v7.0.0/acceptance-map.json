@@ -1,7 +1,7 @@
 {
   "schema": "v7-acceptance-map/1",
   "baseline": "7f824dd49b18935c6b47f5eb32aa32efdbd8cf01",
-  "batch": "B0",
+  "batch": "B1",
   "runtime_capabilities": [],
   "notes": [
     "Protocol unit tests do not establish full runtime acceptance.",
@@ -541,29 +541,49 @@
       "id": "Q7-01",
       "scenario": "首次订阅与新增成员并发",
       "owner": "AM70-T03",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b1.json",
+          "scope": "Admitted-L1 indexed invalidation and lifecycle foundation. Project membership and generic QuestionView/publication-manifest runtime remain unverified."
+        }
+      ]
     },
     {
       "id": "Q7-02",
       "scenario": "成员跨项目/字段移动及删除",
       "owner": "AM70-T03",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b1.json",
+          "scope": "Admitted-L1 indexed invalidation and lifecycle foundation. Project membership and generic QuestionView/publication-manifest runtime remain unverified."
+        }
+      ]
     },
     {
       "id": "Q7-03",
       "scenario": "查询谓词无法精确反查",
       "owner": "AM70-T03",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b1.json",
+          "scope": "Admitted-L1 indexed invalidation and lifecycle foundation. Project membership and generic QuestionView/publication-manifest runtime remain unverified."
+        }
+      ]
     },
     {
       "id": "Q7-04",
       "scenario": "订阅索引重建/升级时发生写入",
       "owner": "AM70-T14",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b1.json",
+          "scope": "Admitted-L1 indexed invalidation and lifecycle foundation. Project membership and generic QuestionView/publication-manifest runtime remain unverified."
+        }
+      ]
     },
     {
       "id": "Q7-05",
@@ -707,8 +727,13 @@
       "id": "Q7-24",
       "scenario": "计算后来源/查询变化及调用者修改输入",
       "owner": "AM70-T04",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b1.json",
+          "scope": "Admitted-L1 indexed invalidation and lifecycle foundation. Project membership and generic QuestionView/publication-manifest runtime remain unverified."
+        }
+      ]
     },
     {
       "id": "Q7-25",
@@ -749,8 +774,13 @@
       "id": "Q7-30",
       "scenario": "带 V7 对象的备份恢复/擦除/回滚",
       "owner": "AM70-T14",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b1.json",
+          "scope": "Admitted-L1 indexed invalidation and lifecycle foundation. Project membership and generic QuestionView/publication-manifest runtime remain unverified."
+        }
+      ]
     },
     {
       "id": "Q7-31",
@@ -771,5 +801,6 @@
       "v7_status": "not_run",
       "evidence": []
     }
-  ]
+  ],
+  "base_commit": "2c9974bac1e052efe4284738a2d1c7e51ca81de1"
 }

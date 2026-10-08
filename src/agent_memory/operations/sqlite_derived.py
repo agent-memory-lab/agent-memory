@@ -2,8 +2,9 @@
 
 import json
 
-from ..derived.model import erase_rows, source_ids
-from ..domain import canonical_json
+from ..derived.model import erase_rows
+from ..derived.subscriptions import HEADER_SCHEMA, candidate_owner, header_data, source_key
+from ..domain import MemoryScope, canonical_json
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS derived_entries (
@@ -51,27 +52,70 @@ def records(connection, scope, kind):
     return tuple(dict(identity=r[0], payload=json.loads(r[1])) for r in rows)
 
 
-def header(connection, scope, record_id, event_id, slot_key, payload, version):
+def get_header(connection, scope, record_id):
+    row = connection.execute(
+        "SELECT payload_json FROM derived_atom_headers WHERE partition_key=? AND identity=?",
+        (scope.partition_key(), record_id),
+    ).fetchone()
+    return json.loads(row[0]) if row else None
+
+
+def headers(connection, scope):
+    """Bounded metadata census; 4097 signals overflow to the scope fallback gate."""
+    rows = connection.execute(
+        "SELECT payload_json FROM derived_atom_headers "
+        "WHERE partition_key=? ORDER BY identity LIMIT 4097",
+        (scope.partition_key(),),
+    ).fetchall()
+    result = [json.loads(row[0]) for row in rows]
+    if len(result) <= 4096:
+        for index, old in enumerate(result):
+            if old.get("schema") == HEADER_SCHEMA:
+                continue
+            row = connection.execute(
+                "SELECT event_id,slot_key,payload_json,version "
+                "FROM admission_records WHERE partition_key=? AND record_id=?",
+                (scope.partition_key(), old["id"]),
+            ).fetchone()
+            if row is None or json.loads(row["payload_json"]).get("deleted"):
+                raise ValueError("derived candidate header has no live admission record")
+            header(
+                connection,
+                scope,
+                old["id"],
+                row["event_id"],
+                row["slot_key"],
+                json.loads(row["payload_json"]),
+                row["version"],
+                routes=False,
+            )
+            result[index] = get_header(connection, scope, old["id"])
+    return tuple(result)
+
+
+def header(connection, scope, record_id, event_id, slot_key, payload, version, *, routes=True):
     if payload.get("deleted"):
         connection.execute(
             "DELETE FROM derived_atom_headers WHERE partition_key=? AND identity=?",
             (scope.partition_key(), record_id),
         )
+        if routes:
+            edges(connection, scope, candidate_owner(record_id), ())
         return
-    data = dict(
-        id=record_id,
-        event_id=event_id,
-        source_ids=sorted({event_id, *source_ids(payload)}),
-        version=version,
-        claim_id=payload.get("claim_id"),
-        slot_key=slot_key,
-    )
+    data = header_data(record_id, event_id, slot_key, payload, version)
     connection.execute(
         "INSERT INTO derived_atom_headers VALUES (?,?,?,?) ON CONFLICT "
         "(partition_key,identity) DO UPDATE SET slot_key=excluded.slot_key, "
         "payload_json=excluded.payload_json",
         (scope.partition_key(), record_id, slot_key, canonical_json(data)),
     )
+    if routes:
+        edges(
+            connection,
+            scope,
+            candidate_owner(record_id),
+            [("query", source_key(key)) for key in data["source_ids"]],
+        )
 
 
 def candidates(connection, scope, slots):
@@ -175,3 +219,64 @@ def reconcile_headers(connection, scope):
             json.loads(row["payload_json"]),
             row["version"],
         )
+
+
+def scrub_routes(connection, scope):
+    """Erase derived routing selectors and fence their exact-scope rebuild."""
+    connection.execute(
+        "DELETE FROM derived_dependencies WHERE partition_key=? AND revision_id LIKE 'route:%'",
+        (scope.partition_key(),),
+    )
+    connection.execute(
+        "DELETE FROM derived_entries WHERE partition_key=? AND kind='subscription'",
+        (scope.partition_key(),),
+    )
+    old = get(connection, scope, "subscription_index", "scope") or {}
+    put(
+        connection,
+        scope,
+        "subscription_index",
+        "scope",
+        {
+            "schema": "derived-subscription-index/1",
+            "state": "needs_backfill",
+            "generation": old.get("generation", 0) + 1,
+        },
+    )
+    barrier = get(connection, scope, "barrier", "route:fallback") or {}
+    put(
+        connection,
+        scope,
+        "barrier",
+        "route:fallback",
+        {
+            "generation": barrier.get("generation", 0) + 1,
+        },
+    )
+
+
+def admission_checkpoint(connection, scope):
+    return connection.execute(
+        "SELECT MAX(recorded_at) FROM admission_records "
+        "WHERE json_extract(scope_json, '$.tenant_id')=? "
+        "AND json_extract(scope_json, '$.namespace')=?",
+        (scope.tenant_id, scope.namespace),
+    ).fetchone()[0]
+
+
+def changed_admission_scopes(connection, scope, checkpoint):
+    """Primary scrubs/tombstones advance this namespace-locked publication boundary."""
+    if checkpoint is None:
+        return ()
+    rows = connection.execute(
+        "SELECT record_id,scope_json FROM admission_records "
+        "WHERE json_extract(scope_json, '$.tenant_id')=? "
+        "AND json_extract(scope_json, '$.namespace')=? AND recorded_at>? "
+        "ORDER BY partition_key,record_id",
+        (scope.tenant_id, scope.namespace, checkpoint),
+    ).fetchall()
+    groups = {}
+    for row in rows:
+        target = MemoryScope(**json.loads(row["scope_json"]))
+        groups.setdefault(target, []).append(row["record_id"])
+    return tuple((target, tuple(ids)) for target, ids in groups.items())

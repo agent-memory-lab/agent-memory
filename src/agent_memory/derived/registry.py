@@ -5,10 +5,9 @@ from datetime import datetime
 
 from ..consolidation.admission import slot_key
 from ..domain import AtomDraft, ScopeLevel
+from . import subscriptions
 from .contracts import HostGrantAuthority, QueryDefinition
-from .coverage import close_coverage
 from .model import DerivedError, digest
-from .parents import invalidate_descendants
 
 
 def slots(scope, subject, predicates):
@@ -38,20 +37,11 @@ class DerivedRegistry:
         self.service, self.scope = service, service.scope
 
     async def _invalidate(self, uow, field, key, *, safety=False):
-        for item in await uow.derived_records(self.scope, "definition"):
-            row = item["payload"]
-            if row["spec"].get(field) == key and not row.get("disabled"):
-                if not safety:
-                    await close_coverage(
-                        uow, self.scope, item["identity"], at=self.service.clock(), reason="query"
-                    )
-                row["dirty"] = True
-                if safety:
-                    row["safety_generation"] += 1
-                await uow.derived_put(self.scope, "definition", item["identity"], row)
-                await invalidate_descendants(
-                    uow, self.scope, (item["identity"],), safety=safety
-                )
+        await subscriptions.bump(uow, self.scope, subscriptions.SCOPE_BARRIER)
+        await subscriptions.invalidate(
+            uow, self.scope, (subscriptions.control_key(field, key),),
+            at=self.service.clock(), reason="query", safety=safety,
+        )
 
     async def register_query(self, uow, epoch, definition, generation):
         expected(generation)
@@ -68,10 +58,10 @@ class DerivedRegistry:
             raise DerivedError("derived_query_conflict")
         if old is None and len(await uow.derived_records(self.scope, "query")) >= 128:
             raise DerivedError("derived_query_capacity")
-        for item in await uow.derived_records(self.scope, "definition"):
-            facet = item["payload"]
-            if facet["spec"].get("query_id") == definition.id and not facet.get("disabled"):
-                self._consumer(spec, facet["spec"])
+        for facet in (await subscriptions.consumers(
+            uow, self.scope, (subscriptions.control_key("query_id", definition.id),)
+        )).values():
+            self._consumer(spec, facet["spec"])
         row = dict(
             spec=spec,
             generation=generation + 1,

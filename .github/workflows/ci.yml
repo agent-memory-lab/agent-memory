@@ -100,3 +100,5 @@ jobs:
           tests/test_durable_producer.py tests/test_durable_transport.py
           tests/test_reprocessing.py tests/test_source_revisions.py
           tests/test_contextual_memory.py tests/test_artifact_erasure.py
+          tests/test_derived_*.py tests/test_purge_restore.py tests/test_durable_purge.py
+          tests/test_v7_subscriptions.py tests/test_v7_backend_lifecycle.py

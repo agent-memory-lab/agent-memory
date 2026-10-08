@@ -1,0 +1,76 @@
+{
+  "schema": "v7-batch-validation/1",
+  "batch": "V7-B1",
+  "date": "2026-10-08",
+  "base_commit": "2c9974bac1e052efe4284738a2d1c7e51ca81de1",
+  "source_manifest": {
+    ".github/workflows/ci.yml": "99c5667bc3d1431b21919b795f708d6b5b3638f8c861108331f38eea9cabf918",
+    "packages/postgres/src/agent_memory_postgres/derived.py": "eb1c3d1a845564a3588e4b49e7a90d7198258e4951ee7096101dff8f84cf3e96",
+    "packages/postgres/src/agent_memory_postgres/repository.py": "4b596510ca62773e0b1abd53854f0c31b0fd284140ee1f7f7605a0932340a7fa",
+    "src/agent_memory/derived/model.py": "8467638cbbbcdd92fd6c6e3fe8e1dfd021c5a260d6af10df9c6fd43f18cff9c2",
+    "src/agent_memory/derived/parents.py": "00829a1e517ae7ebbd8505411eef6f8606464081ed1bacd5772282bb88ebcafb",
+    "src/agent_memory/derived/registry.py": "70e617279a01e0d9b45a128658f093082385ce7750b2014fe1ffb57462b20e6b",
+    "src/agent_memory/derived/service.py": "4f91e5e52b7694336374db28bf2956975b90144be57e5fe5819ececbca1397d7",
+    "src/agent_memory/derived/subscriptions.py": "ce88226595ed3e4e6d53e75f7261583fc912e8db6fc9bd32ab1be13639bbb0d3",
+    "src/agent_memory/operations/sqlite_derived.py": "6924ce69030926f3a112f3a8c2220b506eaf9d6a2faf45032b0cb5a3ad6058b4",
+    "src/agent_memory/ports.py": "6f8acacc1c47b7ffb0552f418c503106ab5c1b7bb2797f9d0c31783c64e82b83",
+    "src/agent_memory/sqlite.py": "a08cc6ab494850d7f6b223c0adff1e3c8876a44881ec2275e1ccc87bbb08e142",
+    "tests/test_derived_coverage.py": "bcbaf86773288149321f2a04d5b43fd0ac7bd87161fff54aa97dc2703506d698",
+    "tests/test_v7_backend_lifecycle.py": "709d2b129107df7cd01fa3d471fd0ce7be36a573650264e211454bd83e06a496",
+    "tests/test_v7_subscriptions.py": "d10faac36c575f21c98c3b584e7b1ec9167fd1a47c9adbdecf6355a0057e0f6b"
+  },
+  "source_manifest_sha256": "b3f5afc55fbe1d9f550aefff9393a04daaa49579f40be7934ac3d4932885e3fd",
+  "environment": {
+    "python": "3.13.5",
+    "postgresql": "17.11",
+    "pgvector": "0.8.0",
+    "scope": "isolated disposable test database; no production data"
+  },
+  "commands": [
+    {
+      "command": ".venv/bin/python -m pytest -o addopts=\"\" -q tests/test_atom_admission.py tests/test_derived_*.py tests/test_v7_backend_lifecycle.py tests/test_v7_subscriptions.py tests/test_source_revisions.py tests/test_purge_restore.py tests/test_durable_purge.py tests/test_architecture.py",
+      "passed": 1093,
+      "failed": 0,
+      "skipped": 5,
+      "duration_seconds": 176.711,
+      "junit_sha256": "d5ba3e818f3a3849c739e129ea50f309fcb7ee9405bd944dced7d8b35eb937aa",
+      "execution_note": "Pytest completed successfully. The external disposable-server wrapper reported a post-test parse error because its lock preamble was edited during the running shell; its EXIT trap stopped PostgreSQL. Current wrapper syntax verified clean. This is not a product test failure. The serialized wrapper subsequently completed a fresh isolated test/startup/shutdown cycle successfully."
+    },
+    {
+      "command": ".venv/bin/python -m pytest -o addopts=\"\" -q tests/test_atom_admission.py tests/test_v7_backend_lifecycle.py tests/test_v7_subscriptions.py",
+      "passed": 97,
+      "failed": 0,
+      "skipped": 5,
+      "scope": "After dedicated PostgreSQL persisted-row lookup repair; outer wrapper exit 0."
+    },
+    {
+      "command": ".venv/bin/python -m build --no-isolation . && .venv/bin/python -m build --no-isolation packages/postgres",
+      "result": "passed after installing the declared hatchling build backend in the disposable environment"
+    }
+  ],
+  "earlier_full_run": {
+    "passed": 2909,
+    "failed": 1,
+    "skipped": 5,
+    "failure": "test_snapshot_keeps_current_and_history_consistent_during_concurrent_commit[postgres]",
+    "resolution": "Dedicated persisted JSON SQL lookup avoids re-entering public snapshot instrumentation; unchanged test passes in both final runs."
+  },
+  "skip_reason": "Five asynchronous PostgreSQL lock/SQL race cases do not apply to SQLite; PostgreSQL variants executed and passed.",
+  "review": {
+    "independent": true,
+    "remaining_blockers": [],
+    "fixed": [
+      "projected-scope source routing erasure leak",
+      "tuple source membership persisted-JSON normalization",
+      "history cutover avoids unrelated wall-clock knowledge boundary",
+      "writer avoids public snapshot-read hook"
+    ]
+  },
+  "runtime_question_capabilities_enabled": [],
+  "limitations": [
+    "Only existing admitted-L1 slot census is integrated; dynamic project membership remains B3.",
+    "Finite PUBLICATION_MANIFEST readiness/closure and generic historical question execution remain unsupported.",
+    "Coordinated upgrade requires old writers stopped; metadata does not fence arbitrary old binaries.",
+    "T03/T04/T14 and corresponding Q7 responsibilities remain partial."
+  ]
+}

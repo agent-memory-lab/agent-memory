@@ -62,23 +62,12 @@ def validate_graph(definitions, spec, *, check_readers=True):
 
 async def invalidate_descendants(uow, scope, facets, *, safety=False):
     """Same original writer UoW; definitions are the existing durable outbox."""
-    rows = await uow.derived_records(scope, "definition")
-    affected = set(facets)
-    while True:
-        new = {
-            item["identity"] for item in rows if not item["payload"].get("disabled")
-            and set(item["payload"]["spec"].get("parent_facets", ())).intersection(affected)
-        } - affected
-        if not new:
-            break
-        affected.update(new)
-        for item in rows:
-            if item["identity"] in new:
-                row = item["payload"]
-                row["dirty"] = True
-                if safety:
-                    row["safety_generation"] += 1
-                await uow.derived_put(scope, "definition", item["identity"], row)
+    from . import subscriptions
+
+    await subscriptions.invalidate(
+        uow, scope, tuple(subscriptions.parent_key(key) for key in facets),
+        reason="parent", safety=safety,
+    )
 
 
 class ParentGraph:
