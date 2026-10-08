@@ -341,3 +341,69 @@ async def changed_admission_scopes(connection, scope, checkpoint):
         target = MemoryScope(**row["scope_json"])
         groups.setdefault(target, []).append(row["record_id"])
     return tuple((target, tuple(ids)) for target, ids in groups.items())
+
+
+async def gc_snapshot(connection, scope, *, max_records, max_edges, max_bytes):
+    """Same bounded census as SQLite, under the namespace and scheduler locks."""
+    from agent_memory.derived.question_gc import census_limits
+
+    census_limits(max_records, max_edges, max_bytes)
+    args = (scope.partition_key(),)
+    cursor = await connection.execute(
+        "SELECT octet_length(payload_json::text) + octet_length(kind) "
+        "+ octet_length(identity) AS size FROM agent_memory_derived_entries "
+        "WHERE partition_key=%s ORDER BY kind,identity LIMIT %s", (*args, max_records + 1)
+    )
+    sizes = await cursor.fetchall()
+    cursor = await connection.execute(
+        "SELECT octet_length(revision_id) + octet_length(parent_id) "
+        "+ octet_length(edge_kind) AS size FROM agent_memory_derived_dependencies "
+        "WHERE partition_key=%s ORDER BY revision_id,parent_id,edge_kind LIMIT %s",
+        (*args, max_edges + 1),
+    )
+    edge_sizes = await cursor.fetchall()
+    cursor = await connection.execute(
+        "SELECT octet_length(execution_id) AS size FROM agent_memory_refresh_schedule_reservations "
+        "WHERE partition_key=%s ORDER BY execution_id LIMIT %s", (*args, max_records + 1)
+    )
+    reservation_sizes = await cursor.fetchall()
+    if (len(sizes) > max_records or len(edge_sizes) > max_edges
+            or len(reservation_sizes) > max_records
+            or sum(r["size"] for r in (*sizes, *edge_sizes, *reservation_sizes)) > max_bytes):
+        return None
+    cursor = await connection.execute(
+        "SELECT kind,identity,payload_json FROM agent_memory_derived_entries "
+        "WHERE partition_key=%s ORDER BY kind,identity LIMIT %s", (*args, max_records + 1)
+    )
+    rows = tuple(dict(kind=r["kind"], identity=r["identity"], payload=r["payload_json"])
+                 for r in await cursor.fetchall())
+    cursor = await connection.execute(
+        "SELECT revision_id,parent_id,edge_kind FROM agent_memory_derived_dependencies "
+        "WHERE partition_key=%s ORDER BY revision_id,parent_id,edge_kind LIMIT %s",
+        (*args, max_edges + 1),
+    )
+    edges = tuple(dict(r) for r in await cursor.fetchall())
+    cursor = await connection.execute(
+        "SELECT execution_id FROM agent_memory_refresh_schedule_reservations "
+        "WHERE partition_key=%s ORDER BY execution_id LIMIT %s", (*args, max_records + 1)
+    )
+    return dict(rows=rows, edges=edges,
+                reservations=tuple(r["execution_id"] for r in await cursor.fetchall()))
+
+
+async def gc_delete(connection, scope, kind, identity):
+    from agent_memory.derived.question_gc import COLLECTIBLE_KINDS
+
+    if kind not in COLLECTIBLE_KINDS:
+        raise ValueError("unsupported question GC kind")
+    await connection.execute(
+        "DELETE FROM agent_memory_derived_entries "
+        "WHERE partition_key=%s AND kind=%s AND identity=%s",
+        (scope.partition_key(), kind, identity),
+    )
+    await connection.execute(
+        "DELETE FROM agent_memory_derived_dependencies "
+        "WHERE partition_key=%s AND revision_id=%s AND NOT EXISTS "
+        "(SELECT 1 FROM agent_memory_derived_entries WHERE partition_key=%s AND identity=%s)",
+        (scope.partition_key(), identity, scope.partition_key(), identity),
+    )

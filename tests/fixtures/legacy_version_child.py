@@ -22,9 +22,10 @@ async def main(config):
     import agent_memory
     import test_atom_admission as base
     from test_derived_observations import build, setup
+    from test_durable_purge import source_id
 
     from agent_memory.derived import DerivedError, ObservationService
-    from agent_memory.domain import MemoryScope
+    from agent_memory.domain import ForgetMode, ForgetRequest, MemoryScope
     from agent_memory.operations.facet_refresh import FacetRefreshQueue
 
     assert Path(agent_memory.__file__).resolve().is_relative_to(root / "src")
@@ -55,10 +56,27 @@ async def main(config):
     try:
         if config["mode"] == "seed":
             service, queue, _ = await setup(base.AdmissionEngine(repository), kernel,
-                                             scope, clock)
+                                             scope, clock, inputs=2)
+            # Exercise old capture/admission and erasure before the coordinated
+            # cutover, while only the old binary owns this disposable database.
+            erased_source_id = source_id(scope, "2")
+            retained_source_id = source_id(scope, "1")
+            await kernel.forget(ForgetRequest(
+                scope, (erased_source_id,), mode=ForgetMode.ERASE,
+            ))
             receipt = await build(queue)
             view = await service.read("language", actor="alice")
-            result = dict(receipt=receipt, view=view, clock=clock[0].isoformat())
+            assert await queue.claim("old-version-drained", lease_seconds=30) is None
+            async with repository.unit_of_work() as uow:
+                assert await uow.source_erased(scope, erased_source_id)
+                assert await uow.get_source_event(scope, erased_source_id) is None
+                assert await uow.get_source_event(scope, retained_source_id) is not None
+                checkpoint = dict(purge_head=await uow.purge_head(scope),
+                                  retention_epoch=await uow.retention_epoch(scope))
+            result = dict(receipt=receipt, view=view, clock=clock[0].isoformat(),
+                          erased_source_id=erased_source_id,
+                          retained_source_id=retained_source_id,
+                          deletion_checkpoint=checkpoint)
         elif config["mode"] == "probe":
             service = ObservationService(repository, scope, base.POLICY,
                                          clock=lambda: clock[0])

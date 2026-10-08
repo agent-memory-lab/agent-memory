@@ -14,7 +14,7 @@ tested source `612131d833ad8aa1a2c55dfdfd399d2d0fde527e`, which includes B3
 passes, two real-backend version-drill passes, six built/installed distributions
 and a complete source/12-archive sensitive scan with zero findings. These are
 preparation results, not the final full-repository or B4/B5 acceptance run.
-The final integrated runtime execution source is `4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c`; the older preparation snapshot above is preserved as historical evidence.
+The final closeout runtime execution/build source is `dc39baf9a0a751a101232f72526c39486d430240`; the prior 4f3e2da run and preparation snapshot above remain historical evidence.
 The B2 heartbeat/completion-race repair and every later reviewed repair must be
 present before final tests; a passing earlier run is not evidence for a later tree.
 
@@ -92,12 +92,16 @@ Do not unset the DSN and call missing PostgreSQL variants a SQLite acceptance
 pass. A SQLite-only diagnostic run is useful, but all missing backend variants
 remain explicit unrun/skip evidence. Preserve every JUnit skip's full node ID
 and reason. A PostgreSQL-specific concurrency assertion skipped on SQLite may
-be reviewed as non-applicable only if its matching PostgreSQL assertion really
-ran and passed; never subtract an entire class of skips or report "zero skips".
-The existing strict release gate does not auto-waive those skips.
+be removed from future collection only through explicit provider-specific
+parameterization that preserves its real PostgreSQL assertion and every previously
+passing node. The closeout [collection audit](validation-b6-zero-skip.json) verifies
+exactly this change, followed by an unfiltered zero-skip full run. Never subtract
+executed skips or relabel them as passes; the strict gate does not waive them.
 
-Run and record the narrower operational slice separately, even though most
-tests also belong to the full run, so Q7-29/Q7-30 evidence is inspectable:
+Keep the operational slice inspectable through exact node IDs in the final full
+JUnit. Closeout preserves all 538 prior operational passing nodes in that run;
+`operational-subset.json` is an explicit projection, not a separate execution.
+The following narrower command is an optional diagnostic, not an extra final gate:
 
 ```sh
 python -m pytest -q tests/test_durable_process_recovery.py \
@@ -137,11 +141,16 @@ python -m pytest -q tests/operational/v7_upgrade_drill.py \
 
 This explicitly selected operational file is not part of default collection.
 Missing prior source or PostgreSQL fails the drill instead of producing a skip.
-It seeds a real old database in an independent process, closes it, initializes
-the new repository, preserves the old exact receipt and body, publishes a V7
+It seeds a real old database in an independent process, exercises old capture,
+admission and source erasure, drains the old refresh queue, closes it, initializes
+the new repository, preserves the old exact receipt, body and deletion checkpoint, publishes a V7
 question and coverage receipt, stops current connections, probes the old reader
 and worker with another V7 responsibility still pending, then reopens current
 code, verifies unchanged V7 records and finishes that pending responsibility.
+Compatible current code then erases the new question's source and reopens again;
+both old and new erased sources stay absent, deletion checkpoints and scrubbed V7
+records remain unchanged, the unrelated old source remains present, and the
+question still rejects as erased.
 
 **Observed rollback boundary:** the pinned old reader rejects the V7 question
 as `derived_definition_configuration_changed`; the old exact-status reader
@@ -156,6 +165,31 @@ deletion barriers, and use a compatible forward fix or separately verified
 legacy-only environment. This drill does not claim a global old-binary fence,
 online mixed-version writing, arbitrary historical rollback, or permission to
 restore content without replaying the pinned current deletion journal.
+
+The coordinated stop/drain/forward-resume sequence is an operator requirement:
+
+1. Stop external capture, admission, permission, erase/restore and model-dispatch
+   entry points, as well as refresh claims. Drain old active leases with their
+   compatible worker or record an explicit responsibility handoff. Confirm all
+   old processes have exited and released database connections before enabling
+   any new record writer. A drained queue alone does not prove writers are stopped.
+2. Pin the current deletion journal/checkpoint and financial obligations outside
+   any content backup. Initialize the current schema with entry points still
+   stopped; complete guarded index backfill and check its conservative fallback.
+3. Enable only compatible readers, writers, erasers, restore operators and workers
+   for the opted-in scopes. The deployment supervisor must prevent an old binary
+   from targeting those scopes. This codebase does not supply a global binary
+   fence; the isolated old read/claim rejection probe is not that fence.
+4. If the rollout must stop, close the new entry points, finish or seal finite
+   responsibilities with compatible code, retain deletion/clock/finance floors,
+   and use a compatible forward fix. Do not resume legacy write, erase or restore
+   entry points against the V7 scope. Reopen with compatible code and verify
+   receipt continuity, pending-work recovery and erasure before restoring traffic.
+
+The extended drill verifies the sequential old-write/old-erase cutover and the
+compatible forward-erasure/reopen boundaries on both real backends. It does not
+claim concurrent old/new writer safety, an enforced deployment supervisor, an
+operational downgrade, or restoration of a stale backup without purge replay.
 
 ### Build and clean artifact installation
 
@@ -245,4 +279,4 @@ Q7-32 仍明确受真实 Ollama Qwen3.5 9B 配置、许可留出 gold、裁判�
 
 ## 6. Final execution record
 
-See [batch-b6.md](batch-b6.md) and [validation-b6.json](validation-b6.json) for source-bound final engineering evidence. The frozen preparation map is unchanged; the current [acceptance map](acceptance-map.json) resolves implemented slices without hiding external gaps. Full release acceptance remains blocked, including the strict no-skip aggregate and real Q7-32 quality/cost requirements.
+See [batch-b6.md](batch-b6.md) and [validation-b6.json](validation-b6.json) for source-bound final engineering evidence. The frozen preparation map is unchanged; the current [acceptance map](acceptance-map.json) resolves implemented slices without hiding external gaps. The strict no-skip bounded-engineering claim now passes. Overall release acceptance remains blocked by real Q7-32 integration and whole-cost resource requirements. Actual-source cutover is coordinated stop/drain/forward-resume only; bounded host GC does not expire exact receipts or rewrite delta/model-audit lineage.

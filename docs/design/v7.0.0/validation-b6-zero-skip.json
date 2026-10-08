@@ -1,0 +1,77 @@
+{
+  "schema": "v7-zero-skip-collection-audit/1",
+  "baseline_source_commit": "ec71a517324b82c3521cd11cab306fd851261744",
+  "before_collection_count": 3789,
+  "after_collection_count": 3783,
+  "removed_nodes": [
+    "tests/test_refresh_schedule_storage.py::test_postgres_due_and_expired_indexes_are_available[sqlite]",
+    "tests/test_v7_backend_lifecycle.py::test_postgres_derived_writes_own_mutable_values_before_first_await[sqlite-derived_edges]",
+    "tests/test_v7_backend_lifecycle.py::test_postgres_derived_writes_own_mutable_values_before_first_await[sqlite-derived_put]",
+    "tests/test_v7_backend_lifecycle.py::test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[sqlite-append_event]",
+    "tests/test_v7_backend_lifecycle.py::test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[sqlite-retention_head_put]",
+    "tests/test_v7_backend_lifecycle.py::test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[sqlite-save_admission_record]"
+  ],
+  "added_nodes": [],
+  "prior_full_run_junit_sha256": "ab9df2775cce3e3c912e04b66e207e45d31de5c008039e9931c90caf498b2539",
+  "prior_passing_count": 3783,
+  "prior_skipped_count": 6,
+  "every_prior_passing_node_retained": true,
+  "after_collection_exactly_equals_prior_passing_node_set": true,
+  "removed_nodes_exactly_equal_prior_skipped_node_set": true,
+  "retained_postgresql_counterparts": [
+    "tests/test_refresh_schedule_storage.py::test_postgres_due_and_expired_indexes_are_available[postgres]",
+    "tests/test_v7_backend_lifecycle.py::test_postgres_derived_writes_own_mutable_values_before_first_await[postgres-derived_edges]",
+    "tests/test_v7_backend_lifecycle.py::test_postgres_derived_writes_own_mutable_values_before_first_await[postgres-derived_put]",
+    "tests/test_v7_backend_lifecycle.py::test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[postgres-append_event]",
+    "tests/test_v7_backend_lifecycle.py::test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[postgres-retention_head_put]",
+    "tests/test_v7_backend_lifecycle.py::test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[postgres-save_admission_record]"
+  ],
+  "collection_before_sha256": "6002df8aad55796fd13abecb91f9912005654b51f54ebb5868f6bd3279fc7a2c",
+  "collection_after_sha256": "ed5679d18870c3d404980aae0b66326b893444bd359c76aa4ddb802fbc6cd781",
+  "date": "2026-10-08",
+  "scope": "Collection applicability only. No runtime implementation, assertion, PostgreSQL prerequisite, or strict release-gate relaxation.",
+  "collection_command": ".venv/bin/python -m pytest --collect-only -q -o addopts= tests packages/evolution/tests packages/langgraph/tests packages/python-sdk/tests packages/mcp-server/tests packages/postgres/tests",
+  "collection_baseline_notes": "The baseline collection was read from the unchanged ec71a517 worktree; the after collection was read from this patch. Both used the same copied and rebound local virtualenv. Counts were checked against exact testcase classname/name keys from the previous final-integrated JUnit, whose hash is recorded above.",
+  "after_node_set_sha256": "72ac0b1201bb8ef935cc219d82a0ab43e561d794c8f1614a54e326d0e137f834",
+  "test_source_sha256": {
+    "tests/test_refresh_schedule_storage.py": "ac111f0b495f38d30f63f9a10f9ef567650e6a45f5c41e96e6cf956fe2d12363",
+    "tests/test_v7_backend_lifecycle.py": "dae35f8b78a741e6d57d6a8e37b7fe3c90bd5483280d72ed5ed95610e39fdd18"
+  },
+  "targeted_dual": {
+    "command": ".venv/bin/python -m pytest -q tests/test_refresh_schedule_storage.py tests/test_v7_backend_lifecycle.py --junitxml=<evidence>/targeted-dual.xml -ra",
+    "environment": {
+      "python": "3.13.5",
+      "postgresql": "17.11",
+      "both_test_dsn_entrypoints_configured": true,
+      "disposable_test_database": true,
+      "own_virtualenv_and_all_six_editable_sources_verified": true,
+      "credentials_recorded": false
+    },
+    "tests": 60,
+    "passed": 60,
+    "skipped": 0,
+    "failures": 0,
+    "errors": 0,
+    "duration_seconds": 4.774,
+    "junit_sha256": "b0b5e23aaed6e10276a38d66a200f8ffc02767b37ffdd06e3ca17b570abe0e5a",
+    "log_sha256": "c51eb10680df6bfc1ca49126cbf835f53d64c4beb552f860cfede506ce652371",
+    "all_six_real_postgresql_assertions_passed": true
+  },
+  "complete_suite_rerun": {
+    "status": "passed_zero_skips",
+    "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
+    "full_passed": 3931,
+    "prior_passing_nodes_retained": 3783,
+    "new_passing_nodes": 148,
+    "junit_sha256": "c53d465123fd57fa544ec523fdad6c2b9f733fd22af69b98e482e7a89547f625",
+    "validation_path": "validation-b6.json"
+  },
+  "acceptance_boundary": {
+    "full_v7_acceptance": false,
+    "real_model_executed": false,
+    "model_downloaded": false,
+    "paid_api_called": false,
+    "real_gold_quality_or_whole_cost_benefit_claim": false,
+    "strict_release_gate_waived": false
+  }
+}

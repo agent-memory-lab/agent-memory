@@ -229,6 +229,8 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 | 可信项目问题 | 宿主审查的负责人、状态、承诺和风险；确定性 full/delta 答案与受守卫证明复用、共享持久刷新、精确路由及可选 SDK/MCP 读取 | [B3](docs/design/v7.0.0/batch-b3.md) · [B4](docs/design/v7.0.0/batch-b4.md) · [示例](examples/project_questions.py) |
 | 资格保持当前父与项目 L2 页面 | 兼容可信上下文、保留条件/例外、稳定块、宿主类型化补丁、不可变谱系与整页交付守卫 | [B3](docs/design/v7.0.0/batch-b3.md) · [类型化补丁](docs/design/v7.0.0/typed-page-patches.md) |
 | 受治理模型/缓存合同（可选） | 宿主绑定的不可变供应商/输入/输出身份、精确缓存、多账户预留及未知费用恢复；仅有合成协议证据 | [B5](docs/design/v7.0.0/batch-b5.md) · [B6](docs/design/v7.0.0/batch-b6.md) |
+| 有界宿主保留 | QuestionView 原子引用保护 GC 与显式保留；精确回执、delta 谱系和模型审计可持续占满容量 | [保留/GC](docs/design/v7.0.0/retention-gc.md) |
+| 离线 A9 评测工具 | 真实 SQLite 运行时对照、隔离消融、全阶段未知账、配对 bootstrap 及显式观测/费率/Ollama 接线；仅合成证据 | [A9 执行器](docs/design/v7.0.0/a9-experiment-runner.md) |
 | 检索与反馈基础 | 受范围和预算约束的检索、可选 lexical/hybrid 候选、关联结果的 Episode/Procedure 与受控 Evolution 组件 | [代码架构](docs/ARCHITECTURE.md) · [反馈契约](docs/FEEDBACK_CONTRACT.md) |
 
 Observation 只开放文档规定的语言模板。发布点和可证明稳定区间的历史保留冻结政策/上下文，并检查当前权限；覆盖缺口明确拒绝。当前 `locale-parents/1` 视图固定实际父版本及传递处理许可。当前 `language-scenario/1` 页面组合同一 exact scope 下 1–4 个非条件语言 Observation 父，要求主体、用途与 authority 兼容。
@@ -296,4 +298,4 @@ python -m pytest -q
 
 [Apache License 2.0](LICENSE)。
 
-B6 固定源码完整仓库/全部扩展包验证：3783 通过、6 个明确保留的 PostgreSQL 专属 SQLite skip，对应真实 PG 断言通过。六包已构建并在全新环境安装，源码及 12 个归档扫描零发现。范围见[B6 报告](docs/design/v7.0.0/batch-b6.md)；真实 Ollama/领域质量与全成本验收仍受阻。
+B6 固定源码收尾验证：完整仓库/全部扩展包 3931 通过、零 skip/失败/错误，原 3783 项通过节点均保留。六包构建及全新离线安装完成，241 份 Python 与 19 份 SQL 迁移逐字节相符，源码及 12 个归档扫描零发现；已含有引用保护的 GC 与冻结离线 A9 工具。范围见[B6 报告](docs/design/v7.0.0/batch-b6.md)；实际 Ollama/许可领域质量与实测全成本验收仍受阻。

@@ -4,12 +4,12 @@
 | --- | --- |
 | 设计 | [Agent Memory v7.0.0](../AGENT_MEMORY_DESIGN_V7.0.0.md) |
 | 正文 SHA-256 | `309104c81b2e89ce74137903312ecbeaa036ba192d47fcfbdd555cdd4dc907b9` |
-| 台账版本 | revision 8 / 2026-10-08 |
+| 台账版本 | revision 10 / 2026-10-08 |
 | 继承审计起点 | `583e20d55ea85023f751084f5b86b29e1e92e5bf` |
 | B3 被测实现 | `a6472feb25ee2b7ef4a3188488a34806fcf7e4a7`；见 [逐次验证](validation-b3.json) |
 | B4 被测实现 | `2ed0037` 缓存正文逐次守卫；此前核心/能力与各次验证分别见 [逐次验证](validation-b4.json) |
 | 发布整合 | 按 B0–B6 分批 PR 集成；远端最终 head 与 CI 另行核验，本记录不宣告部署 |
-| 本次范围 | B0–B6 工程实现及固定源码全量验证已完成；真实领域/模型收益门仍开放 |
+| 本次范围 | GC、A9 评测工具与固定源码零 skip 工程验证已完成；真实领域/模型/全成本收益门仍开放 |
 
 ## 1. 使用规则
 
@@ -28,18 +28,18 @@
 | --- | --- | --- | --- |
 | AM70-T01 | 固定问题视图与版本化协议合同 | B0 | DONE |
 | AM70-T02 | 项目问题领域合同与可信输入 | B0；领域实现随 B3 | IN_PROGRESS |
-| AM70-T03 | 反向订阅、成员变化与事务屏障 | B1 | IN_PROGRESS |
-| AM70-T04 | freshness、固定快照与原子证明 | B1 | IN_PROGRESS |
-| AM70-T05 | 合并刷新、固定目标与后继责任 | B2 | IN_PROGRESS |
-| AM70-T06 | 冷热、公平与统一资源预算 | B2 | IN_PROGRESS |
-| AM70-T07 | 持久时间调度与宿主 worker | B2 | IN_PROGRESS |
+| AM70-T03 | 反向订阅、成员变化与事务屏障 | B1 | DONE（已登记当前能力） |
+| AM70-T04 | freshness、固定快照与原子证明 | B1 | DONE（已登记当前能力） |
+| AM70-T05 | 合并刷新、固定目标与后继责任 | B2 | DONE（已登记当前能力） |
+| AM70-T06 | 冷热、公平与统一资源预算 | B2 | DONE（已登记当前能力） |
+| AM70-T07 | 持久时间调度与宿主 worker | B2 | DONE（已登记当前能力） |
 | AM70-T08 | 确定性路由与 SDK/MCP 问题读取 | B3 | DONE（有限当前 full） |
 | AM70-T09 | 业务 full 视图与资格父页面 | B3/B6 | DONE（有限当前 full 与宿主类型化补丁） |
 | AM70-T10 | 白名单确定性增量算子 | B4 | DONE |
 | AM70-T11 | 内容与验证证书分离及按需传播 | B4 | DONE |
 | AM70-T12 | 受治理模型与精确答案缓存 | B5 | IN_PROGRESS |
 | AM70-T13 | 全成本 trace、基线与收益评测 | B0 启动，B5 完成 | IN_PROGRESS |
-| AM70-T14 | 迁移、擦除、恢复与保留 | B0 设计，B1 起逐批实现，B6 汇总 | IN_PROGRESS |
+| AM70-T14 | 迁移、擦除、恢复与保留 | B0 设计，B1 起逐批实现，B6 汇总 | DONE（当前能力、有界 GC 与停机切换） |
 | AM70-T15 | 完整验收、构建安装与发布 | B6；映射从 B0 维护 | IN_PROGRESS |
 
 ## 3. 任务明细
@@ -66,53 +66,53 @@
 
 ### AM70-T03 — 反向订阅、成员变化与事务屏障
 
-- [ ] 状态：IN_PROGRESS；批次：B1。
+- [x] 状态：DONE（已登记当前能力）；批次：B1。
 - 依赖：T01/T02/T14 迁移基础。
 - 交付：复用 typed edges；定义/实例订阅、old/new keys、首次订阅前屏障、空结果依赖和保守 scope fallback。
 - 完成定义：相关新增/修改/移出/删除/资格变化不漏失效，写路径不扫描全部视图作为默认实现；保守退化可计量。
 - 主责任验收：Q7-01, Q7-02, Q7-03。
 - 继承责任：AM61-T25、T26、T29。旧任务只在自身全部适用范围通过时更新，不能因本切片完成整体打勾。
-- 当前证据：B1 索引失效/原子证明基础切片，见 [B1 执行记录](batch-b1.md)。B3/B6 已验证真实 provider 的有限项目成员、闭合 publication-manifest 和原子守卫；通用历史项目问题仍显式拒绝，整体状态不扩展到未支持能力。
+- 当前证据：B1/B3/B6 已完成当前已登记能力的 typed-edge 反向路由、首次/空订阅、old/new 成员键、事务失效与可计量 scope fallback。实现见 `derived/subscriptions.py` 的 install/consumers/invalidate/scope_fallback 及 `derived/project_index.py` 的项目路由；Q7-01/02/03 在 [B6 验证](validation-b6.json) 均已通过。T02 的许可 gold 与 T14 的后续 GC 不撤销已验证的本项迁移/成员失效前置；不宣称通用历史项目支持。
 
 ### AM70-T04 — freshness、固定快照与原子证明
 
-- [ ] 状态：IN_PROGRESS；批次：B1。
+- [x] 状态：DONE（已登记当前能力）；批次：B1。
 - 依赖：T01/T03；旧双时态/历史安全切片。
 - 交付：可用性证书、连续覆盖与 publication closure、时间边界、输入所有权；现有 CAS 扩展并保留旧合同。
 - 完成定义：source persisted 不等于事实 ready；current/historical 不混；提交前输入/查询/安全变化使旧发布失败。
 - 主责任验收：Q7-13, Q7-20, Q7-24。
 - 继承责任：AM61-T10、T13 读取切片、T22、T28、T33。旧任务只在自身全部适用范围通过时更新，不能因本切片完成整体打勾。
-- 当前证据：B1 索引失效/原子证明基础切片，见 [B1 执行记录](batch-b1.md)。B3/B6 已验证真实 provider 的有限项目成员、闭合 publication-manifest 和原子守卫；通用历史项目问题仍显式拒绝，整体状态不扩展到未支持能力。
+- 当前证据：B3/B4/B6 已完成当前能力的闭合 publication manifest、owned snapshot、query/source/authority/context/lease CAS 与最终原子时间守卫，见 `derived/question_service.py` 的 _proof/publish 及 [B6 验证](validation-b6.json) Q7-13/20/24。冻结设计 Q7-20 明确允许无历史能力时显式拒绝；当前项目接口的历史请求拒绝已测，因此未实现通用历史问题不再作为本项虚构的完成阻塞。旧双时态仍按原合同验证，不扩展其能力。
 
 ### AM70-T05 — 合并刷新、固定目标与后继责任
 
-- [ ] 状态：IN_PROGRESS；批次：B2。
+- [x] 状态：DONE（已登记当前能力）；批次：B2。
 - 依赖：T01/T03/T04。
 - 交付：debounce/max_wait、同实例兼容 singleflight、固定 claimed frontier、持久 successor、旧 exact 与新 coverage 回执。
 - 完成定义：连续新输入不重置最早等待、不被旧完成吞掉；等待终止不取消他人责任；幂等与 fencing 保持。
 - 主责任验收：Q7-05, Q7-06, Q7-07。
 - 继承责任：AM61-T18、T22、T31、T33。旧任务只在自身全部适用范围通过时更新，不能因本切片完成整体打勾。
-- 当前证据：B2 当前 Observation/父图/页面的持久调度切片，见 [B2 执行记录](batch-b2.md) 与 [独立验证](validation-b2.json)。双后端覆盖固定责任、公平预算、时间守卫和实际进程强杀；B3 已验证有限 QuestionView 处理器集成；B5/B6 已补入金额预算合同和最终工程组合验证；真实模型费用/收益与更广泛能力仍未验收，不扩展原任务范围。
+- 当前证据：B2/B3/B5/B6 已完成持久 debounce/max_wait、固定 claimed frontier、singleflight、后继责任及旧 exact/新 coverage 分离，QuestionView 处理器已集成，见 `operations/refresh_demand.py`、`derived/question_refresh.py` 与 [B6 验证](validation-b6.json) Q7-05/06/07。预算合同依赖已交付；真实模型费用/收益属于 T12/T13/T15 外部门，不是已完成调度合同的额外隐藏前置。
 
 ### AM70-T06 — 冷热、公平与统一资源预算
 
-- [ ] 状态：IN_PROGRESS；批次：B2。
+- [x] 状态：DONE（已登记当前能力）；批次：B2。
 - 依赖：T05；T13 计量；真实模型费用依赖 AM61-T21。
 - 交付：热冷策略/滞回、有界实例与最小驻留、冷父瞬时需求、租户公平/aging、前后台同配额与 deferred。
 - 完成定义：冷热不影响即时失效；小租户与低优先级可观察前进；预算不足不返回旧答案或旁路调用。
 - 主责任验收：Q7-09, Q7-10, Q7-11。
 - 继承责任：AM61-T18、T21、T34、T39。旧任务只在自身全部适用范围通过时更新，不能因本切片完成整体打勾。
-- 当前证据：B2 当前 Observation/父图/页面的持久调度切片，见 [B2 执行记录](batch-b2.md) 与 [独立验证](validation-b2.json)。双后端覆盖固定责任、公平预算、时间守卫和实际进程强杀；B3 已验证有限 QuestionView 处理器集成；B5/B6 已补入金额预算合同和最终工程组合验证；真实模型费用/收益与更广泛能力仍未验收，不扩展原任务范围。
+- 当前证据：B2/B5/B6 已完成宿主持有的热冷策略/滞回/最小驻留、有界统计、冷父临时需求、公平与 aging、统一持久配额及 deferred；见 `operations/refresh_policy.py`、`operations/refresh_demand.py` 与 [B6 验证](validation-b6.json) Q7-09/10/11。策略阈值由宿主应用，合同不要求自动调优器；真实成本未知仍保持未知，不据此宣称经济收益或生产吞吐保证。
 
 ### AM70-T07 — 持久时间调度与宿主 worker
 
-- [ ] 状态：IN_PROGRESS；批次：B2。
+- [x] 状态：DONE（已登记当前能力）；批次：B2。
 - 依赖：T05/T06；现有队列和删除恢复。
 - 交付：due 索引/可重建堆、启动补跑、通知兜底、能力匹配、心跳/无进度/总龄、graceful stop 和健康检查。
 - 完成定义：重启/时钟跳变/丢通知/旧租约/不兼容 worker 行为确定；双后端实际强杀验证。
 - 主责任验收：Q7-08, Q7-12, Q7-29。
 - 继承责任：AM61-T18、T23、T24、T44。旧任务只在自身全部适用范围通过时更新，不能因本切片完成整体打勾。
-- 当前证据：B2 当前 Observation/父图/页面的持久调度切片，见 [B2 执行记录](batch-b2.md) 与 [独立验证](validation-b2.json)。双后端覆盖固定责任、公平预算、时间守卫和实际进程强杀；B3 已验证有限 QuestionView 处理器集成；B5/B6 已补入金额预算合同和最终工程组合验证；真实模型费用/收益与更广泛能力仍未验收，不扩展原任务范围。
+- 当前证据：B2/B3/B6 已完成持久 due/clock high-water、重启补跑、丢通知轮询、能力过滤、心跳/无进展/总龄、graceful stop 与健康报告，见 `operations/refresh_host.py`、`operations/refresh_demand.py` 与 [B6 验证](validation-b6.json) Q7-08/12/29。真实独立进程强杀与双后端恢复已通过；SQLite 不适用的 PostgreSQL 索引/异步断言已按 [collection 修正](zero-skip-b6.md) 保留其真实 PostgreSQL 覆盖。
 
 ### AM70-T08 — 确定性路由与 SDK/MCP 问题读取
 
@@ -172,17 +172,17 @@
 - 完成定义：按全请求/有效回答双口径；包含预热、失败和 drain；真实模型数据与合成夹具严格分开。
 - 主责任验收：Q7-31。
 - 继承责任：AM61-T03、T05、T34、T38、T39。旧任务只在自身全部适用范围通过时更新，不能因本切片完成整体打勾。
-- 当前证据：B0 口径复用于 [B5 全阶段费用记录](batch-b5.md)，未定价/未知账单保持未决；真实数据、模型、阈值及收益比较未验收。
+- 当前证据：B0/B5 全阶段费用合同已扩展为 [A9 执行器](a9-experiment-runner.md)：冻结 gold-free 输入、真实 SQLite full/delta/cache 对照、隔离消融、生命周期/限定语评分、全阶段未知账、配对 cluster bootstrap、宿主 observer/费率与现有 Ollama 接线均已实现并测试。真实许可 gold、实际 Ollama 运行、冻结裁判/阈值/统计选择、主机观测/费率/账单及重复质量/收益比较仍缺，因此 T13 保留 IN_PROGRESS。
 
 ### AM70-T14 — 迁移、擦除、恢复与保留
 
-- [ ] 状态：IN_PROGRESS；批次：B0 设计，B1 起逐批实现，B6 汇总。
+- [x] 状态：DONE（当前能力、有界 GC 与停机切换）；批次：B0 设计，B1 起逐批实现，B6 汇总。
 - 依赖：T01；每批新对象登记后同批完成对应切片。
 - 交付：schema/index/能力迁移、回填屏障、旧 lease/receipt 兼容；新证书/缓存/统计的擦除、备份恢复、GC 与回滚。
 - 完成定义：两后端迁移中写入无漏窗，独立检查点恢复不复活；旧进程不把新合同当旧数据处理。
 - 主责任验收：Q7-04, Q7-30。
 - 继承责任：AM61-T23、T24、T29、T40；T42 仅适用恢复切片。旧任务只在自身全部适用范围通过时更新，不能因本切片完成整体打勾。
-- 当前证据：[B6 最终工程验证](batch-b6.md)与[机器记录](validation-b6.json)已覆盖有界双后端全量、真实进程强杀、V7 擦除/实际备份重放、旧源码升级及六包构建安装。旧进程仅验证停机不兼容探测；在线混合写入、真实质量/全成本验收未完成，本任务不标整体 DONE。
+- 当前证据：[最终工程验证](batch-b6.md)、[保留 GC](retention-gc.md)与[切换演练](validation-b6-cutover.json)已在固定源码完整双后端零 skip 运行中复核。有界引用图 GC、当前/原始谱系、宿主 holds、实际备份与删除重放和旧 capture/admission/erase/drain → 兼容前进已完成。本项仅在这些当前合同范围 DONE；精确回执、delta 祖先与模型审计无限保留可继续触发容量背压。宿主必须阻止旧 writer/eraser/restore 并发访问 V7；不支持在线旧二进制屏障或运行降级。
 
 ### AM70-T15 — 完整验收、构建安装与发布
 
@@ -303,4 +303,27 @@ T10/T11 有限实现与实际验证见 [B4 执行记录](batch-b4.md)。T04 的�
 
 ## B6 追加记录（2026-10-08）
 
-固定源码 `4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c` 的最终工程证据见 [B6](batch-b6.md)；原 AM61 状态、设计正文和软件 Alpha 版本不变。实现切片不再以 TODO 隐藏，真实 Ollama 9B、许可 gold、阈值/裁判/统计对照仍受外部输入阻塞；T12/T13/T15 不冒充整体完成。
+先前固定源码 `4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c` 证据保留为历史；当前收尾见 [B6](batch-b6.md)；原 AM61 状态、设计正文和软件 Alpha 版本不变。实现切片不再以 TODO 隐藏，真实 Ollama 9B、许可 gold、阈值/裁判/统计对照仍受外部输入阻塞；T12/T13/T15 不冒充整体完成。
+
+## B6 状态对账补充（2026-10-08）
+
+T03–T07 的先前 IN_PROGRESS 是 B1/B2 依赖说明未随 B3/B5/B6 集成及时对账，
+不是仍缺这些任务已声明的实现。按冻结设计、实现入口与已通过主责任 Q7 逐项核对后，
+这五项更新为已登记当前能力范围的 DONE；不把可选通用历史问题、自动调优器或
+真实模型收益添加为额外完成前置。适用依赖已交付，不要求依赖任务所有外部验收先完成。
+
+T02 的许可领域 gold、T12 的实际 Ollama、T13 的完整实测工作负载与统计、T15 的
+真实质量/全成本发布门仍未完成；T14 的有引用保护 GC 与最终复核已完成，现为明确有界范围的 DONE。
+保留全部 15 项 AM70 条目、44 项 AM61 原状态和冻结设计正文。
+
+[停机切换演练](validation-b6-cutover.json)补充了旧 capture/admission/erase 后排空、
+删除 checkpoint 跨升级保留、兼容新版本完成后继责任、V7 擦除与再次重启不复活。
+旧进程仅在隔离停机探测中拒绝新读取/领取；这不是全局旧二进制写入屏障，宿主仍须
+阻止旧 writer/eraser/restore 入口触及 V7 范围。最终源码 `dc39baf` 的完整组合运行为 3931 通过、零 skip/失败/错误；六包构建离线安装和全源码/12 归档扫描也通过。
+
+## B6 收尾记录（2026-10-08）
+
+GC 与 A9 独立复核通过后，在同一冻结源码完成全仓库和全部扩展包运行、实际旧源码切换、
+六包构建与离线全新安装。严格发布器的 bounded-engineering 声明通过；整体仍因
+真实 integration/resource 门 blocked。T02/T12/T13/T15 保持 IN_PROGRESS，44 项 AM61
+原状态不变；没有付费/真实模型调用、模型下载、发布或部署。报告提交仅更新文档/证据。

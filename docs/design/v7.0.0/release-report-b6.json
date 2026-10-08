@@ -17,7 +17,7 @@
         "agent-memory-mcp",
         "agent-memory-postgres"
       ],
-      "summary": "Six sdists/six wheels built, all six installed in fresh external environment; isolated smoke, 236 Python source plus 19 SQL migration byte matches and dependency checks passed."
+      "summary": "Six sdists/six wheels built and all six distributions clean-installed offline; isolated smoke, 241 Python source and 19 SQL migration byte matches, and dependency checks passed. Artifacts bind the frozen tested source before reporting-only docs."
     },
     {
       "artifact_uri": "validation-b6.json",
@@ -29,7 +29,7 @@
       "skipped": 0,
       "status": "pass",
       "subjects": [],
-      "summary": "Source-bound reviewed Q7 scopes and inherited regression limits are recorded in validation-b6.json; synthetic model contracts are not actual inference."
+      "summary": "Reviewed source-bound current Q7 scopes include bounded reference-aware GC and offline A9 evaluation tooling; inherited regression and real-data limits are preserved."
     },
     {
       "artifact_uri": "documentation-final.xml",
@@ -41,19 +41,19 @@
       "skipped": 0,
       "status": "pass",
       "subjects": [],
-      "summary": "Bilingual baseline, frozen design, 44 inherited task states and 98 explicit scoped acceptance cases preserved; documentation-focused tests passed."
+      "summary": "102 final documentation/architecture/release tests pass, zero skips; bilingual capability boundaries, frozen design, 44 inherited states, all 15 AM70 entries and 98 explicit scoped responsibilities are preserved."
     },
     {
-      "artifact_uri": "operational-dual.xml",
+      "artifact_uri": "operational-subset.json",
       "check_id": "actual-process-faults",
       "failures": 0,
       "findings": 0,
       "kind": "fault",
       "sensitive_findings": [],
-      "skipped": 6,
+      "skipped": 0,
       "status": "pass",
       "subjects": [],
-      "summary": "538 operational integration cases; real independent process death and actual recovery/erasure. Provider-only SQLite skips retained."
+      "summary": "All 538 prior operational/process/erase/restore passing nodes pass in the final whole-repository run. This is an exact-node projection of that run, not a separate execution."
     },
     {
       "artifact_uri": null,
@@ -65,7 +65,7 @@
       "skipped": 0,
       "status": "unmeasured",
       "subjects": [],
-      "summary": "Actual installed Ollama 9B endpoint, licensed held-out gold, frozen judge/thresholds/statistics and repeated real quality/whole-cost observations are unavailable."
+      "summary": "Runner and real Ollama port binding are implemented. Actual installed endpoint/model identity, licensed held-out gold, independent frozen judge/thresholds/statistical choices and repeated real quality observations remain unavailable."
     },
     {
       "artifact_uri": "full-dual.xml",
@@ -77,7 +77,7 @@
       "skipped": 0,
       "status": "pass",
       "subjects": [],
-      "summary": "Real PostgreSQL17.11 contract variants, process races, dump/restore and prior-source upgrade passed. Every SQLite-only skipped PG assertion has a passing live-PG counterpart."
+      "summary": "Live PostgreSQL17.11 variants, process races, dump/restore, GC and prior-source cutover pass with both required test DSN entrypoints configured."
     },
     {
       "artifact_uri": "version-drill.xml",
@@ -89,11 +89,11 @@
       "skipped": 0,
       "status": "pass",
       "subjects": [],
-      "summary": "2 actual-source provider version drills plus full-suite backup/deletion/finance replay; old binaries are incompatible and writers must be stopped."
+      "summary": "2 actual prior-source coordinated provider drills pass: old capture/admission/erase/drain, isolated incompatible reader probe, compatible forward completion and V7 erasure/reopen. No online old-binary or operational downgrade support."
     },
     {
       "artifact_uri": "recovery-soak-final/report.json",
-      "check_id": "historical-recovery-resource",
+      "check_id": "real-whole-cost-resource",
       "failures": 0,
       "findings": 0,
       "kind": "resource",
@@ -101,7 +101,7 @@
       "skipped": 0,
       "status": "unmeasured",
       "subjects": [],
-      "summary": "Final-source/real-model whole-cost resources remain unmeasured. Supplementary historical source f6b6a7a: 1800.238-second non-model single-host lifecycle, 32688 cycles, peak RSS 53571584 bytes and stable FD7. Not rerun on final source; no model, saturation or production resource claim."
+      "summary": "Host observer/tariff contracts are implemented; actual host telemetry, accepted prices/invoices and repeated real-model whole-cost comparison remain absent. Historical f6b6a7a 1800-second recovery soak is supplemental single-host non-model evidence only."
     },
     {
       "artifact_uri": "sensitive-scan.json",
@@ -113,7 +113,7 @@
       "skipped": 0,
       "status": "pass",
       "subjects": [],
-      "summary": "Complete source and 12-archive scan, zero findings and no weakened patterns/thresholds."
+      "summary": "Complete tested source and all 12 archives scanned with zero findings, no skipped large files or weakened threshold. Reporting-only final docs are separately source-scanned."
     },
     {
       "artifact_uri": "full-dual.xml",
@@ -122,10 +122,10 @@
       "findings": 0,
       "kind": "sqlite",
       "sensitive_findings": [],
-      "skipped": 6,
+      "skipped": 0,
       "status": "pass",
       "subjects": [],
-      "summary": "Real SQLite parameterizations and installed artifact smoke pass; explicitly inapplicable PostgreSQL-only parameterizations remain counted as skips."
+      "summary": "All applicable actual SQLite cases and installed smoke pass with zero skips; only six previously inapplicable PostgreSQL-only SQLite instantiations were removed from collection."
     },
     {
       "artifact_uri": "full-dual.xml",
@@ -134,10 +134,10 @@
       "findings": 0,
       "kind": "unit",
       "sensitive_findings": [],
-      "skipped": 6,
+      "skipped": 0,
       "status": "pass",
       "subjects": [],
-      "summary": "3783 passing cases across complete repository/package matrix; six PostgreSQL-only SQLite instantiations remain skipped."
+      "summary": "3931 cases passed in the complete unfiltered repository/all-package matrix with zero skips, failures or errors. All 3783 prior passing nodes are retained."
     }
   ],
   "claims": [
@@ -154,18 +154,14 @@
         "source-and-archive-scan",
         "documentation-api"
       ],
-      "missing_or_failed_checks": [
-        "unit",
-        "fault",
-        "sqlite"
-      ],
-      "supported": false
+      "missing_or_failed_checks": [],
+      "supported": true
     },
     {
       "claim_id": "real-quality-whole-cost",
       "evidence_check_ids": [
         "real-domain-model-integration",
-        "historical-recovery-resource"
+        "real-whole-cost-resource"
       ],
       "missing_or_failed_checks": [
         "integration",
@@ -174,18 +170,14 @@
       "supported": false
     }
   ],
-  "fixed_clock": "2026-10-08T20:41:38.004779+00:00",
+  "fixed_clock": "2026-10-08T22:32:22.440799+00:00",
   "python_version": "3.13",
   "reasons": [
-    "unit check reports 6 skipped",
-    "fault check reports 6 skipped",
     "integration check is unmeasured",
     "resource check is unmeasured",
-    "sqlite check reports 6 skipped",
-    "release claim bounded-engineering lacks passing evidence",
     "release claim real-quality-whole-cost lacks passing evidence"
   ],
-  "release_version": "0.1.0-alpha-v7-b6",
+  "release_version": "0.1.0-alpha-v7-b6-closeout",
   "required_packages": [
     "agent-memory",
     "agent-memory-evolution",

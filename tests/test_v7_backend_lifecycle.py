@@ -201,14 +201,15 @@ def test_migration_rebuilds_header_from_authoritative_payload_under_gate(store):
 @pytest.mark.parametrize(
     "operation", ["append_event", "retention_head_put", "save_admission_record"]
 )
+@pytest.mark.parametrize("store", ["postgres"], indirect=True)
 def test_postgres_write_owns_input_before_waiting_on_real_namespace_lock(
     store, operation, monkeypatch
 ):
     async def run():
         async with store() as (engine, _, scope, _):
             repository = engine.repository
-            if not hasattr(repository, "pool"):
-                pytest.skip("real asynchronous namespace-lock race is PostgreSQL-specific")
+            # Only PostgreSQL can suspend on this real asynchronous namespace lock.
+            assert hasattr(repository, "pool")
             source = base.source(scope, identity="source")
             async with repository.unit_of_work() as uow:
                 await uow.append_event(source)
@@ -264,14 +265,15 @@ def test_postgres_write_owns_input_before_waiting_on_real_namespace_lock(
 
 
 @pytest.mark.parametrize("operation", ["derived_put", "derived_edges"])
+@pytest.mark.parametrize("store", ["postgres"], indirect=True)
 def test_postgres_derived_writes_own_mutable_values_before_first_await(
     store, operation, monkeypatch
 ):
     async def run():
         async with store() as (engine, _, scope, _):
             repository = engine.repository
-            if not hasattr(repository, "pool"):
-                pytest.skip("asynchronous SQL helper ownership is PostgreSQL-specific")
+            # This monkeypatch targets PostgreSQL's asynchronous SQL helper itself.
+            assert hasattr(repository, "pool")
             from agent_memory_postgres import derived
 
             method = "put" if operation == "derived_put" else "edges"

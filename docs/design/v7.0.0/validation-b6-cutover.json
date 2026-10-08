@@ -1,0 +1,62 @@
+{
+  "schema": "v7-coordinated-cutover-validation/1",
+  "date": "2026-10-08",
+  "baseline_source_commit": "de4d0e4f18e3c8fd5340ca75fea940dbcaf460d0",
+  "scope": "Coordinated stop/drain/forward-resume only; no simultaneous old/new processes access the database.",
+  "legacy_upstream_source_commit": "7f824dd49b18935c6b47f5eb32aa32efdbd8cf01",
+  "legacy_local_exact_source_commit": "23c66ff0f4858eded2cbf79d3b6e23a50173746b",
+  "legacy_materialization_verified_tracked_blobs": 535,
+  "legacy_materialization_mismatches": [],
+  "changed_fixture_sha256": {
+    "tests/fixtures/legacy_version_child.py": "8fd9e4a2b1da4db4b0bf86983eb159abc18ede48efe5b19a8fd1b99a8474a0b2",
+    "tests/operational/v7_upgrade_drill.py": "048493e63d810c9173b354d9b8b6d5f5a6ad1967b924130171b6366e425e6684"
+  },
+  "command": "AGENT_MEMORY_LEGACY_SOURCE=<verified-pinned-source> .venv/bin/python -m pytest -q tests/operational/v7_upgrade_drill.py --junitxml=<evidence>/extended-version-drill.xml -ra",
+  "backends": [
+    "SQLite",
+    "real PostgreSQL 17.11"
+  ],
+  "result": {
+    "tests": 2,
+    "passed": 2,
+    "skipped": 0,
+    "failures": 0,
+    "errors": 0,
+    "duration_seconds": 3.309
+  },
+  "junit_sha256": "31bcde293ad6c05233bf0f413083609039e5f3d07a1c36f1f01f8ad042ffbc1d",
+  "log_sha256": "1470206d697601cccbb8fde41d431f3809cddc9989e3550ad84b1dc13e57392e",
+  "verified_boundaries": [
+    "Old capture/admission plus source erasure, then old refresh drain and process exit before current initialization.",
+    "Unchanged old exact receipt/body, retained unrelated source and absent erased source across initialization and isolated quiescent probe.",
+    "Exact deletion head/epoch preserved across upgrade and quiescent probe.",
+    "Old reader/receipt/claim incompatibility remains explicit; no old V7 writer or eraser is authorized.",
+    "Compatible forward resume finishes the pending finite responsibility.",
+    "Compatible V7 source erasure scrubs question records and rejects reads; another reopen preserves scrubbed records and both generations of deletion authority."
+  ],
+  "non_claims": [
+    "No global old-binary fence.",
+    "No concurrent mixed-version writes.",
+    "No operational downgrade.",
+    "No stale backup accepted without purge replay.",
+    "No real-model or whole-cost acceptance."
+  ],
+  "development_correction": "The first extension attempt called close() unconditionally on SQLiteMemoryRepository, which exposes no persistent close method. The fixture now follows the established optional-close provider contract; the final two-backend rerun passed.",
+  "final_integrated_rerun": {
+    "name": "version-drill",
+    "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
+    "source_tree": "8348d9364b8c5a165a83bb8bffcc652979017561",
+    "exit_code": 0,
+    "started_utc": "2026-10-08T22:31:56Z",
+    "ended_utc": "2026-10-08T22:32:00Z",
+    "junit_file": "version-drill.xml",
+    "junit_sha256": "b7140caffcefab436dbc2b4cecb23fa3cb1a866ddfdf2d3c5e71bf3cc201e314",
+    "log_sha256": "d5536bc491c53f5b57cc9ee83509c19fb320b146bda9be73f7c7e7df44d8ca33",
+    "tests": 2,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 2,
+    "duration_seconds": 3.144
+  }
+}

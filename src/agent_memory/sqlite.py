@@ -102,6 +102,7 @@ class SQLiteMemoryUnitOfWork:
     derived_parent_contract = "processing-graph/1"
     derived_page_contract = "page-full-rebuild/1"
     question_runtime_contract = "question-runtime/2"
+    question_gc_contract = "question-reachability-gc/1"
     question_page_contract = "project-question-scenario/1"
     derived_qualified_contract = "qualified-current-route/1"
 
@@ -374,6 +375,21 @@ class SQLiteMemoryUnitOfWork:
         from .operations import sqlite_derived
 
         return sqlite_derived.records(self.connection, scope, kind)
+
+    async def derived_gc_snapshot(self, scope, *, max_records, max_edges, max_bytes):
+        await self.refresh_scheduler_lock(scope)
+        from .operations import sqlite_derived
+
+        return sqlite_derived.gc_snapshot(
+            self.connection, scope, max_records=max_records, max_edges=max_edges,
+            max_bytes=max_bytes
+        )
+
+    async def derived_gc_delete(self, scope, kind, identity):
+        await self.refresh_scheduler_lock(scope)
+        from .operations import sqlite_derived
+
+        return sqlite_derived.gc_delete(self.connection, scope, kind, identity)
 
     async def derived_header(self, scope, record_id):
         from .operations import sqlite_derived

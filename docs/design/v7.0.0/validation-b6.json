@@ -1,21 +1,13 @@
 {
   "schema": "v7-batch-validation/1",
-  "batch": "V7-B6 final engineering verification",
+  "batch": "V7-B6 closeout zero-skip engineering verification",
   "date": "2026-10-08",
-  "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
-  "source_tree": "750636647c4da1567b9dbb5150765b08f5c6e54b",
-  "source_manifest_sha256": "d8ef24a8e735086f4d9a91ab8cf2d8907be9f4fde2f58acb24ce7a40d1dab443",
-  "initial_source_manifest_sha256": "ed14c064d303a33044416a0114b1fd9549cd9bbf5e8d04331f5714db535abf3a",
-  "initial_runtime_commit": "22f6f84954894c48c19f3d70d8f4b77ca5364c7d",
+  "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
+  "source_tree": "8348d9364b8c5a165a83bb8bffcc652979017561",
+  "source_manifest_sha256": "b03a4474b931171af184c350ffcf9da3efbb02b01006cd051b1f7597130848c9",
   "source_clean_at_run_start": true,
-  "source_changes_since_initial": [
-    "docs/design/v7.0.0/batch-b4.md",
-    "docs/design/v7.0.0/batch-b5.md",
-    "docs/design/v7.0.0/validation-b4.json",
-    "docs/design/v7.0.0/validation-b5.json"
-  ],
-  "documentation_evidence_commit": "This report and final ledger updates are committed after the recorded execution source; no runtime code is changed by the reporting commit.",
-  "engineering_status": "passed_with_six_explicit_postgresql_only_skips_on_sqlite",
+  "documentation_evidence_commit": "Reporting-only commits follow this frozen execution/build source. Runtime, tests, migrations and build configuration remain byte-identical; final reporting-document checks and source scan are separately recorded. Archives bind the recorded build source, not later reporting changes.",
+  "engineering_status": "passed_zero_skips",
   "full_v7_acceptance": false,
   "production_benefit_claim": false,
   "default_enablement": false,
@@ -23,143 +15,173 @@
   "real_model_downloaded": false,
   "paid_api_called": false,
   "environment": {
-    "python": "3.13.5 (main, Aug 10 2026, 12:06:59) [GCC 14.2.0]",
-    "packages": {
-      "pytest": "8.4.2",
-      "build": "1.6.1",
-      "hatchling": "1.32.4",
-      "psycopg": "3.3.6",
-      "psycopg-pool": "3.3.3",
-      "mcp": "2.3.0",
-      "langgraph": "1.2.14",
-      "tiktoken": "0.14.0"
+    "all_imports_verified_source_checkout": true,
+    "both_postgres_test_entrypoints_configured": true,
+    "child_without_pythonpath_imports": {
+      "agent_memory": "/workspace/shared/agent-memory-v7-b6-closeout/src/agent_memory/__init__.py",
+      "agent_memory_evolution": "/workspace/shared/agent-memory-v7-b6-closeout/packages/evolution/src/agent_memory_evolution/__init__.py",
+      "agent_memory_langgraph": "/workspace/shared/agent-memory-v7-b6-closeout/packages/langgraph/src/agent_memory_langgraph/__init__.py",
+      "agent_memory_mcp": "/workspace/shared/agent-memory-v7-b6-closeout/packages/mcp-server/src/agent_memory_mcp/__init__.py",
+      "agent_memory_postgres": "/workspace/shared/agent-memory-v7-b6-closeout/packages/postgres/src/agent_memory_postgres/__init__.py",
+      "agent_memory_sdk": "/workspace/shared/agent-memory-v7-b6-closeout/packages/python-sdk/src/agent_memory_sdk/__init__.py"
     },
+    "dependencies": [
+      "PyJWT==2.15.1",
+      "PyYAML==6.0.3",
+      "Pygments==2.21.0",
+      "agent-memory-evolution==0.1.0",
+      "agent-memory-langgraph==0.1.0",
+      "agent-memory-mcp==0.1.0",
+      "agent-memory-postgres==0.1.0",
+      "agent-memory-sdk==0.1.0",
+      "agent-memory==0.1.0",
+      "annotated-types==0.8.0",
+      "anyio==4.15.1",
+      "attrs==26.1.0",
+      "build==1.6.1",
+      "certifi==2026.7.22",
+      "cffi==2.1.1",
+      "charset-normalizer==3.5.2",
+      "click==8.5.0",
+      "cryptography==50.0.2",
+      "distro==1.9.0",
+      "h11==0.16.0",
+      "hatchling==1.32.4",
+      "httpcore2==2.13.1",
+      "httpcore==1.0.9",
+      "httpx2==2.13.1",
+      "httpx==0.28.1",
+      "idna==3.20",
+      "iniconfig==2.3.1",
+      "jsonpatch==1.33",
+      "jsonpointer==3.2.0",
+      "jsonschema-specifications==2025.9.1",
+      "jsonschema==4.26.0",
+      "langchain-core==1.6.8",
+      "langchain-protocol==0.0.19",
+      "langgraph-checkpoint==4.2.0",
+      "langgraph-prebuilt==1.1.0",
+      "langgraph-sdk==0.4.6",
+      "langgraph==1.2.14",
+      "langsmith==0.14.4",
+      "mcp-types==2.3.0",
+      "mcp==2.3.0",
+      "opentelemetry-api==1.45.1",
+      "orjson==3.13.0",
+      "ormsgpack==1.12.2",
+      "packaging==26.3",
+      "pathspec==1.1.1",
+      "pluggy==1.6.0",
+      "psycopg-binary==3.3.6",
+      "psycopg-pool==3.3.3",
+      "psycopg==3.3.6",
+      "pycparser==3.1",
+      "pydantic==2.14.0",
+      "pydantic_core==2.50.0",
+      "pyproject_hooks==1.3.3",
+      "pytest==8.4.2",
+      "python-multipart==0.0.32",
+      "referencing==0.37.0",
+      "regex==2026.9.29",
+      "requests-toolbelt==1.0.0",
+      "requests==2.34.2",
+      "rpds-py==2026.9.1",
+      "sniffio==1.3.1",
+      "sse-starlette==3.5.0",
+      "starlette==1.7.0",
+      "tenacity==9.2.1",
+      "tiktoken==0.14.0",
+      "tomlkit==0.15.1",
+      "trove-classifiers==2026.9.21.13",
+      "truststore==0.10.4",
+      "typing-inspection==0.4.4",
+      "typing_extensions==4.16.0",
+      "urllib3==2.8.0",
+      "uuid_utils==0.17.1",
+      "uvicorn==0.54.0",
+      "websockets==16.1.1",
+      "xxhash==4.0.1",
+      "zstandard==0.25.0"
+    ],
+    "main_imports": {
+      "agent_memory": "/workspace/shared/agent-memory-v7-b6-closeout/src/agent_memory/__init__.py",
+      "agent_memory_evolution": "/workspace/shared/agent-memory-v7-b6-closeout/packages/evolution/src/agent_memory_evolution/__init__.py",
+      "agent_memory_langgraph": "/workspace/shared/agent-memory-v7-b6-closeout/packages/langgraph/src/agent_memory_langgraph/__init__.py",
+      "agent_memory_mcp": "/workspace/shared/agent-memory-v7-b6-closeout/packages/mcp-server/src/agent_memory_mcp/__init__.py",
+      "agent_memory_postgres": "/workspace/shared/agent-memory-v7-b6-closeout/packages/postgres/src/agent_memory_postgres/__init__.py",
+      "agent_memory_sdk": "/workspace/shared/agent-memory-v7-b6-closeout/packages/python-sdk/src/agent_memory_sdk/__init__.py"
+    },
+    "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
     "postgresql": "17.11 (Debian 17.11-0+deb13u1)",
-    "both_postgres_test_entrypoints_configured": true
+    "python": "3.13.5 (main, Aug 10 2026, 12:06:59) [GCC 14.2.0]",
+    "strict_warning_categories": [
+      "ResourceWarning",
+      "pytest.PytestUnraisableExceptionWarning"
+    ]
   },
   "runs": [
     {
       "name": "full-dual",
-      "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
-      "runtime_source_commit": "22f6f84954894c48c19f3d70d8f4b77ca5364c7d",
-      "runtime_difference_from_initial": false,
-      "command": ".venv/bin/python -m pytest -q tests packages/evolution/tests packages/langgraph/tests packages/python-sdk/tests packages/mcp-server/tests packages/postgres/tests --junitxml=<evidence>/full-dual.xml -ra",
+      "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
+      "source_tree": "8348d9364b8c5a165a83bb8bffcc652979017561",
+      "command": ".venv/bin/python -m pytest -q tests packages/evolution/tests packages/langgraph/tests packages/python-sdk/tests packages/mcp-server/tests packages/postgres/tests -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning --junitxml=<evidence>/full-dual.xml -ra",
       "exit_code": 0,
-      "started_utc": "2026-10-08T20:29:20Z",
-      "ended_utc": "2026-10-08T20:40:53Z",
+      "started_utc": "2026-10-08T22:18:34Z",
+      "ended_utc": "2026-10-08T22:31:56Z",
       "junit_file": "full-dual.xml",
-      "junit_sha256": "ab9df2775cce3e3c912e04b66e207e45d31de5c008039e9931c90caf498b2539",
-      "log_sha256": "5cda14da68dac24ea3a36c4a6c983e53607ca12dd0cff0423d2d9cfed4e50658",
-      "tests": 3789,
+      "junit_sha256": "c53d465123fd57fa544ec523fdad6c2b9f733fd22af69b98e482e7a89547f625",
+      "log_sha256": "7b76c4508e04674793f72108e87c75c3a6edb507f3f392232acf16e17c873ee0",
+      "tests": 3931,
       "failures": 0,
       "errors": 0,
-      "skipped": 6,
-      "passed": 3783,
-      "duration_seconds": 689.702,
-      "environment": {
-        "postgres_entrypoints": [
-          "AGENT_MEMORY_TEST_POSTGRES_DSN",
-          "AGENT_MEMORY_ONTOLOGY_TEST_DSN"
-        ],
-        "same_disposable_database": true,
-        "credentials_recorded": false
-      }
-    },
-    {
-      "name": "operational-dual",
-      "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
-      "runtime_source_commit": "22f6f84954894c48c19f3d70d8f4b77ca5364c7d",
-      "runtime_difference_from_initial": false,
-      "command": ".venv/bin/python -m pytest -q tests/test_durable_process_recovery.py tests/test_refresh_scheduler_process.py tests/test_purge_restore.py tests/test_refresh_schedule_storage.py tests/test_refresh_scheduler_clock_storage.py tests/test_v7_backend_lifecycle.py tests/test_v7_subscriptions.py tests/test_v7_project_indexes.py tests/test_question_runtime_v7.py tests/test_question_process_recovery_v7.py tests/test_question_erasure_v7.py tests/test_question_delta_v7.py tests/test_question_proof_reuse_v7.py tests/test_question_page_patches_v7.py tests/test_question_page_patch_review_v7.py tests/test_model_budget_recovery_v7.py tests/test_governed_models_v7.py tests/test_question_models_v7.py tests/test_model_cost_runtime_v7.py tests/test_b5_independent_security_v7.py --junitxml=<evidence>/operational-dual.xml -ra",
-      "exit_code": 0,
-      "started_utc": "2026-10-08T20:24:53Z",
-      "ended_utc": "2026-10-08T20:29:15Z",
-      "junit_file": "operational-dual.xml",
-      "junit_sha256": "6b5546640cee5a8bf6f949f63fb146c8fb03bb69bcb88ff0389156290a891718",
-      "log_sha256": "758a8682ea0f4357585d53b5172deeaa68c0b57f29ca10b4709bce59535dc0fd",
-      "tests": 544,
-      "failures": 0,
-      "errors": 0,
-      "skipped": 6,
-      "passed": 538,
-      "duration_seconds": 260.637
+      "skipped": 0,
+      "passed": 3931,
+      "duration_seconds": 799.576
     },
     {
       "name": "version-drill",
-      "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
-      "runtime_source_commit": "22f6f84954894c48c19f3d70d8f4b77ca5364c7d",
-      "runtime_difference_from_initial": false,
-      "command": ".venv/bin/python -m pytest -q tests/operational/v7_upgrade_drill.py --junitxml=<evidence>/version-drill.xml -ra",
+      "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
+      "source_tree": "8348d9364b8c5a165a83bb8bffcc652979017561",
+      "command": ".venv/bin/python -m pytest -q tests/operational/v7_upgrade_drill.py -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning --junitxml=<evidence>/version-drill.xml -ra",
       "exit_code": 0,
-      "started_utc": "2026-10-08T20:29:15Z",
-      "ended_utc": "2026-10-08T20:29:20Z",
+      "started_utc": "2026-10-08T22:31:56Z",
+      "ended_utc": "2026-10-08T22:32:00Z",
       "junit_file": "version-drill.xml",
-      "junit_sha256": "53cc189ee7390cd113cf77c7bcd7239089605f84babdabafe5c62fc04800dd11",
-      "log_sha256": "baac9f48f31e3bf70eee3e5655b7fc5316a1ee733c6d55c6605f146910548b4f",
+      "junit_sha256": "b7140caffcefab436dbc2b4cecb23fa3cb1a866ddfdf2d3c5e71bf3cc201e314",
+      "log_sha256": "d5536bc491c53f5b57cc9ee83509c19fb320b146bda9be73f7c7e7df44d8ca33",
       "tests": 2,
       "failures": 0,
       "errors": 0,
       "skipped": 0,
       "passed": 2,
-      "duration_seconds": 3.137
+      "duration_seconds": 3.144
     }
   ],
-  "skips": [
-    {
-      "node_id": "tests.test_refresh_schedule_storage::test_postgres_due_and_expired_indexes_are_available[sqlite]",
-      "outcome": "skipped",
-      "duration_seconds": 0.008,
-      "reason": "PostgreSQL query-plan contract",
-      "executed_postgres_counterpart": "tests.test_refresh_schedule_storage::test_postgres_due_and_expired_indexes_are_available[postgres]",
-      "counterpart_status": "passed",
-      "counted_as_pass": false
-    },
-    {
-      "node_id": "tests.test_v7_backend_lifecycle::test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[sqlite-append_event]",
-      "outcome": "skipped",
-      "duration_seconds": 0.009,
-      "reason": "real asynchronous namespace-lock race is PostgreSQL-specific",
-      "executed_postgres_counterpart": "tests.test_v7_backend_lifecycle::test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[postgres-append_event]",
-      "counterpart_status": "passed",
-      "counted_as_pass": false
-    },
-    {
-      "node_id": "tests.test_v7_backend_lifecycle::test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[sqlite-retention_head_put]",
-      "outcome": "skipped",
-      "duration_seconds": 0.007,
-      "reason": "real asynchronous namespace-lock race is PostgreSQL-specific",
-      "executed_postgres_counterpart": "tests.test_v7_backend_lifecycle::test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[postgres-retention_head_put]",
-      "counterpart_status": "passed",
-      "counted_as_pass": false
-    },
-    {
-      "node_id": "tests.test_v7_backend_lifecycle::test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[sqlite-save_admission_record]",
-      "outcome": "skipped",
-      "duration_seconds": 0.006,
-      "reason": "real asynchronous namespace-lock race is PostgreSQL-specific",
-      "executed_postgres_counterpart": "tests.test_v7_backend_lifecycle::test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[postgres-save_admission_record]",
-      "counterpart_status": "passed",
-      "counted_as_pass": false
-    },
-    {
-      "node_id": "tests.test_v7_backend_lifecycle::test_postgres_derived_writes_own_mutable_values_before_first_await[sqlite-derived_put]",
-      "outcome": "skipped",
-      "duration_seconds": 0.009,
-      "reason": "asynchronous SQL helper ownership is PostgreSQL-specific",
-      "executed_postgres_counterpart": "tests.test_v7_backend_lifecycle::test_postgres_derived_writes_own_mutable_values_before_first_await[postgres-derived_put]",
-      "counterpart_status": "passed",
-      "counted_as_pass": false
-    },
-    {
-      "node_id": "tests.test_v7_backend_lifecycle::test_postgres_derived_writes_own_mutable_values_before_first_await[sqlite-derived_edges]",
-      "outcome": "skipped",
-      "duration_seconds": 0.007,
-      "reason": "asynchronous SQL helper ownership is PostgreSQL-specific",
-      "executed_postgres_counterpart": "tests.test_v7_backend_lifecycle::test_postgres_derived_writes_own_mutable_values_before_first_await[postgres-derived_edges]",
-      "counterpart_status": "passed",
-      "counted_as_pass": false
-    }
-  ],
+  "operational_subset": {
+    "name": "operational-subset",
+    "kind": "exact_passing_node_projection_from_full_dual_not_a_separate_run",
+    "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
+    "passed": 538,
+    "skipped": 0,
+    "failures": 0,
+    "errors": 0,
+    "full_junit_sha256": "c53d465123fd57fa544ec523fdad6c2b9f733fd22af69b98e482e7a89547f625",
+    "prior_operational_junit_sha256": "6b5546640cee5a8bf6f949f63fb146c8fb03bb69bcb88ff0389156290a891718"
+  },
+  "operational_subset_sha256": "4e544acb74cbaeb976328a710b47c0bf560d09caeb62e9685d7c9f0269424f27",
+  "node_preservation": {
+    "baseline_passing_nodes": 3783,
+    "baseline_skipped_nodes": 6,
+    "every_prior_passing_node_executed_and_passed": true,
+    "new_passing_nodes": 148,
+    "full_passing_nodes": 3931,
+    "final_skipped": 0,
+    "prior_junit_sha256": "ab9df2775cce3e3c912e04b66e207e45d31de5c008039e9931c90caf498b2539",
+    "final_junit_sha256": "c53d465123fd57fa544ec523fdad6c2b9f733fd22af69b98e482e7a89547f625",
+    "strict_release_gate_waived": false
+  },
+  "node_preservation_sha256": "917059725882a0b052bd3261ce73d6c78189bc2314af9dbcbe1d077b03c5de7c",
+  "skips": [],
   "strict_release_gate_waived": false,
   "scenario_counts": {
     "partial": 60,
@@ -824,42 +846,48 @@
       "owner": "AM61-T38",
       "inherited_status": "未执行",
       "status": "insufficient_data",
-      "scope": "Frozen synthetic study/scorer and comparison protocol regressions passed, including preserved 17-event/20-check fixture semantics. The fixture explicitly says end-to-end execution is false; real held-out quality/cost data are absent. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "scope": "Frozen synthetic A9 runtime study now executes actual SQLite question/refresh/model-cache paths with four primary arms, isolated ablations and paired cluster bootstrap. Original 17-event/20-check fixture evidence remains historical. No licensed held-out real-model/whole-cost acceptance; inherited scenario is not promoted.",
       "executed_selectors": [
         "test_memory_v61_fixtures.py",
         "test_memory_evaluation_protocol_acceptance.py",
-        "test_question_cost_v7.py"
+        "test_question_cost_v7.py",
+        "test_question_experiment_v7.py",
+        "test_question_resources_v7.py"
       ],
-      "matched_passing_test_cases": 78,
-      "passing_node_ids_sha256": "8f3d5bcf8c50723ee93267c75998555c788d8c1c0e8db3fd10bf0d7e52f0c22a"
+      "matched_passing_test_cases": 164,
+      "passing_node_ids_sha256": "6faffffccae010d8cf3f822d76cc90284f0cd5e08c9c5953d1c24f3771bf61bb"
     },
     {
       "id": "N08-02",
       "owner": "AM61-T38",
       "inherited_status": "部分：17/20 已适配，端到端未执行",
       "status": "insufficient_data",
-      "scope": "Frozen synthetic study/scorer and comparison protocol regressions passed, including preserved 17-event/20-check fixture semantics. The fixture explicitly says end-to-end execution is false; real held-out quality/cost data are absent. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "scope": "Frozen synthetic A9 runtime study now executes actual SQLite question/refresh/model-cache paths with four primary arms, isolated ablations and paired cluster bootstrap. Original 17-event/20-check fixture evidence remains historical. No licensed held-out real-model/whole-cost acceptance; inherited scenario is not promoted.",
       "executed_selectors": [
         "test_memory_v61_fixtures.py",
         "test_memory_evaluation_protocol_acceptance.py",
-        "test_question_cost_v7.py"
+        "test_question_cost_v7.py",
+        "test_question_experiment_v7.py",
+        "test_question_resources_v7.py"
       ],
-      "matched_passing_test_cases": 78,
-      "passing_node_ids_sha256": "8f3d5bcf8c50723ee93267c75998555c788d8c1c0e8db3fd10bf0d7e52f0c22a"
+      "matched_passing_test_cases": 164,
+      "passing_node_ids_sha256": "6faffffccae010d8cf3f822d76cc90284f0cd5e08c9c5953d1c24f3771bf61bb"
     },
     {
       "id": "N08-03",
       "owner": "AM61-T38",
       "inherited_status": "未执行",
       "status": "insufficient_data",
-      "scope": "Frozen synthetic study/scorer and comparison protocol regressions passed, including preserved 17-event/20-check fixture semantics. The fixture explicitly says end-to-end execution is false; real held-out quality/cost data are absent. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "scope": "Frozen synthetic A9 runtime study now executes actual SQLite question/refresh/model-cache paths with four primary arms, isolated ablations and paired cluster bootstrap. Original 17-event/20-check fixture evidence remains historical. No licensed held-out real-model/whole-cost acceptance; inherited scenario is not promoted.",
       "executed_selectors": [
         "test_memory_v61_fixtures.py",
         "test_memory_evaluation_protocol_acceptance.py",
-        "test_question_cost_v7.py"
+        "test_question_cost_v7.py",
+        "test_question_experiment_v7.py",
+        "test_question_resources_v7.py"
       ],
-      "matched_passing_test_cases": 78,
-      "passing_node_ids_sha256": "8f3d5bcf8c50723ee93267c75998555c788d8c1c0e8db3fd10bf0d7e52f0c22a"
+      "matched_passing_test_cases": 164,
+      "passing_node_ids_sha256": "6faffffccae010d8cf3f822d76cc90284f0cd5e08c9c5953d1c24f3771bf61bb"
     },
     {
       "id": "R05-01",
@@ -1399,14 +1427,16 @@
       "owner": "AM70-T11",
       "inherited_status": null,
       "status": "passed",
-      "scope": "Original private processing ancestry remains guarded before body access; only independent approved full generation may discard it.",
+      "scope": "Original private processing ancestry remains guarded before body access; only independent approved full generation may discard it. Reference-aware GC retains removed-block/private ancestry and does not rewrite manifests.",
       "executed_selectors": [
         "test_question_proof_reuse_v7.py::test_revoked_original_private_source_denied_prebody_then_independent_full_public_context",
         "test_question_page_validation_v7.py::test_revoked_page_original_certificate_blocks_prebody_even_after_parent_new_full",
-        "test_b4_adversarial_review.py::test_answer_regenerates_independently_after_original_private_source_is_revoked"
+        "test_b4_adversarial_review.py::test_answer_regenerates_independently_after_original_private_source_is_revoked",
+        "test_question_gc_v7.py",
+        "test_question_gc_review_v7.py"
       ],
-      "matched_passing_test_cases": 6,
-      "passing_node_ids_sha256": "af8dd8af9683663cfe2e3ef0fa1640a0b3b76381ba3034e3c2752a940fd354de"
+      "matched_passing_test_cases": 68,
+      "passing_node_ids_sha256": "9a63853a02f8c3e28d5ff07f7f5826490370b141199eeee0887ec51654b02dd2"
     },
     {
       "id": "Q7-23",
@@ -1419,10 +1449,12 @@
         "test_v7_qualified_pages.py",
         "test_derived_lifecycle_audit.py::test_page_output_limit_measures_delivered_materialized_body",
         "test_question_page_patches_v7.py",
-        "test_question_page_patch_review_v7.py"
+        "test_question_page_patch_review_v7.py",
+        "test_question_gc_v7.py",
+        "test_question_gc_review_v7.py"
       ],
-      "matched_passing_test_cases": 284,
-      "passing_node_ids_sha256": "49fe5ef6eef3f21c3442d98cbf3f824c95564376f6105e8dc45ea60f3468d07c"
+      "matched_passing_test_cases": 346,
+      "passing_node_ids_sha256": "b88c70e5c0d5f9009d3a33bb441159b5fd654bfb30adb8afd68e5dc00c89999a"
     },
     {
       "id": "Q7-24",
@@ -1514,7 +1546,7 @@
       "owner": "AM70-T14",
       "inherited_status": null,
       "status": "partial",
-      "scope": "Actual SQLite backup and PG dump/restore with independently pinned deletion/finance journals; question, patched-page and model-cache lineage. Real prior-source upgrade/quiescent incompatible rollback probe passes. Online mixed-version writing and generic old-binary safety remain unsupported.",
+      "scope": "Actual SQLite backup and PostgreSQL dump/restore, authoritative deletion/finance replay and retained question/page/model lineage pass. Bounded host-only GC atomically reclaims only unreachable objects and preserves retention holds, exact receipts, delta ancestry and model audits; valid pinned workloads can still exhaust capacity. Actual old-source capture/admission/erase/drain, coordinated upgrade, isolated incompatible old-reader probe, compatible forward resume and V7 erasure/reopen pass. No online mixed-version writes, global old-binary fence or operational downgrade.",
       "executed_selectors": [
         "test_question_runtime_v7.py::test_question_erasure_and_real_old_backup_replay_scrub_complete_generation",
         "test_b4_adversarial_review.py::test_delta_state_and_pending_page_validation_are_scrubbed_from_real_backup",
@@ -1522,46 +1554,54 @@
         "test_model_budget_recovery_v7.py::test_independently_pinned_money_replay_restores_postbackup_debt",
         "operational/v7_upgrade_drill.py::test_old_source_upgrade_and_quiescent_rollback_preserve_contracts",
         "test_question_page_patches_v7.py::test_patch_erasure_and_actual_backup_replay_include_all_original_revisions",
-        "test_question_page_patch_review_v7.py::test_removed_private_block_remains_guarded_and_erased_from_real_backup"
+        "test_question_page_patch_review_v7.py::test_removed_private_block_remains_guarded_and_erased_from_real_backup",
+        "test_question_gc_v7.py",
+        "test_question_gc_review_v7.py",
+        "operational/v7_upgrade_drill.py"
       ],
-      "matched_passing_test_cases": 22,
-      "passing_node_ids_sha256": "9faea690543c88f3e8e5a52c22e917abd9345b034fc27a961688a7d8ab07391f"
+      "matched_passing_test_cases": 84,
+      "passing_node_ids_sha256": "c5f73832360b2fa9910d76955aa4a1fcef3b5729aa1cc8f30294a57c60990a17"
     },
     {
       "id": "Q7-31",
       "owner": "AM70-T13",
       "inherited_status": null,
       "status": "partial",
-      "scope": "Runtime accounting projection and all-phase/unknown/debt rejection contracts pass; complete repeated real workload, measured resources and billing reconciliation remain unmeasured.",
+      "scope": "Frozen gold-free reusable A9 runner, actual SQLite question/refresh/model-cache integration, isolated ablations, lifecycle/qualifier scoring, all-phase unknown debt, observer/tariff contracts and paired cluster bootstrap pass with synthetic inputs. Existing real Ollama port is wired but not called. Licensed gold, actual host telemetry and accepted tariffs/invoices, frozen real judge/threshold/statistical choices and repeated quality/whole-cost observations remain absent.",
       "executed_selectors": [
         "test_model_cost_runtime_v7.py::test_actual_runtime_projection_counts_calls_once_and_never_prices_local_unknown_zero",
-        "test_model_cost_runtime_v7.py::test_partial_phase_inventory_stays_unaccounted_and_overlap_is_rejected"
+        "test_model_cost_runtime_v7.py::test_partial_phase_inventory_stays_unaccounted_and_overlap_is_rejected",
+        "test_question_experiment_v7.py",
+        "test_question_resources_v7.py"
       ],
-      "matched_passing_test_cases": 3,
-      "passing_node_ids_sha256": "d3e53c25a3fc6a6fe3ad3d7621aa84c64278f33a16672cbb4c014fb1fd96479a"
+      "matched_passing_test_cases": 89,
+      "passing_node_ids_sha256": "4f7864e17260c4a9d24e6c9d062cc7a740f7ee0b980b3f1dc6935c5630b9463e"
     },
     {
       "id": "Q7-32",
       "owner": "AM70-T15",
       "inherited_status": null,
       "status": "insufficient_data",
-      "scope": "Blocked: actual installed Ollama Qwen3.5 9B endpoint/model identity, licensed held-out gold, frozen judge/thresholds/sample/group/statistical protocol and repeated quality/whole-cost observations are absent.",
-      "executed_selectors": [],
-      "matched_passing_test_cases": 0,
-      "passing_node_ids_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      "scope": "Blocked: actual installed Ollama Qwen3.5 9B endpoint/runtime identity, licensed held-out gold, frozen real judge/thresholds/sample/group/statistical protocol and repeated quality/whole-cost observations are absent. Reusable runner and real-port/observer/tariff integration are ready; synthetic runtime results do not accept the real experiment.",
+      "executed_selectors": [
+        "test_question_experiment_v7.py",
+        "test_question_resources_v7.py"
+      ],
+      "matched_passing_test_cases": 86,
+      "passing_node_ids_sha256": "6022afeb6c092ae821d12404ec756f1636385f3509bdbd23bd03df31122e4a3d"
     }
   ],
   "artifacts": {
-    "agent_memory-0.1.0-py3-none-any.whl": "e6f277f5a1203941f0e95dde00d3485be502548e16a7d18b98ad414648a146fa",
-    "agent_memory-0.1.0.tar.gz": "30b2a22e002393915c882df39ab6273ebea6282780653f961daba317e9d14394",
+    "agent_memory-0.1.0-py3-none-any.whl": "620b252a3ae3edaab4fb3969549c97efe3e67edfa1949983cb5335fd3bed0fcd",
+    "agent_memory-0.1.0.tar.gz": "1389a9385d4e28306d21bb0a06f0e25e5eea1e7e506e915e0ae4e2958d44e883",
     "agent_memory_evolution-0.1.0-py3-none-any.whl": "9da080667f34325c77080a56d96ddbf39eb69bf6371a2226226e8816455a875b",
     "agent_memory_evolution-0.1.0.tar.gz": "caad545544fab4e50001f7c98c4ae4643a02d725e77dbddbad4405a3edb16571",
     "agent_memory_langgraph-0.1.0-py3-none-any.whl": "ae2ad1ce6339d0b1ea1d95b841b301e40c6af034308fea4146af76a93396b48e",
     "agent_memory_langgraph-0.1.0.tar.gz": "0ca9e465ff074a1abdd79e2377ea1aa1b55135359cd5b93c7dc6515b12e963d9",
     "agent_memory_mcp-0.1.0-py3-none-any.whl": "465887469baf58b174b1f50bc09eae89ba36a8ad9bd83feb34ecd783c74c5277",
     "agent_memory_mcp-0.1.0.tar.gz": "1c17dc71636d9fa1b5cc0e88076613ad2f20adc0ff1090f442aca09cdf966e04",
-    "agent_memory_postgres-0.1.0-py3-none-any.whl": "995a7b95e2de08bd77142c0e72c750a9a191551f37f71e764cb98ca3d07cd962",
-    "agent_memory_postgres-0.1.0.tar.gz": "6aacd2028b15e057463207b02be694a9f9e9a8af8fd6bb1e922c7a36f26bc643",
+    "agent_memory_postgres-0.1.0-py3-none-any.whl": "25311ea5fad4e7a7ee90731691747717394d8a1ee480245296b72fdfa0dbab80",
+    "agent_memory_postgres-0.1.0.tar.gz": "98c3669f3591b3dceee4aad214c5b3a14c80a6c5fbb9080dcde3c6b5be145da4",
     "agent_memory_sdk-0.1.0-py3-none-any.whl": "85b5d39d838bff1ac8c100d0ca539c03bac7be28687b57572ccc55082858d86d",
     "agent_memory_sdk-0.1.0.tar.gz": "e5eaee783e45e50c9608db7911269f18cd53b36ba9a7d0de9cd5dec6e3f3e298"
   },
@@ -1646,18 +1686,19 @@
     "scope": "six installed distributions and SQLite smoke only",
     "status": "passed"
   },
+  "installed_smoke_sha256": "8577ac6b5ed624e4ab155665977e6664e2f1716ab59fe112ddc3c817ea2b1406",
   "installed_source_equivalence": {
-    "matched_python_files": 236,
+    "matched_python_files": 241,
     "separately_smoke_verified_sql_migrations": 19,
-    "sha256": "597f9a845c58c489de3eddc389b76f3782559792c0a23e0c0346dfd3d0eb839d"
+    "sha256": "34a12827f62e225ca82f49775feadfe1da73503b3dd83cd54d85dcce1c632aa3"
   },
-  "installed_dependencies_sha256": "d8da50a58a7997d0a20ceb16e0ef17728adf852997fd5ffc0065c521967cc9ec",
+  "installed_dependencies_sha256": "fa775c01bb7156c0523396ae60b0f6ee68b3c6cd36bc3ef173226a55b76bc5ec",
   "sensitive_scan": {
     "roots": [
       ".",
-      "/workspace/shared/agent-memory-evidence/b6/final-integrated/distributions"
+      "/workspace/shared/agent-memory-evidence/b6/closeout-final/distributions"
     ],
-    "scanned_files": 643,
+    "scanned_files": 657,
     "scanned_archives": 12,
     "skipped_large_files": 0,
     "total_findings": 0,
@@ -1666,24 +1707,23 @@
     "violations": [],
     "is_healthy": true
   },
-  "sensitive_scan_sha256": "844c7acca2abd89db9e8a420b43107e9a08b439c9a8557fcfdcd41e41847d846",
+  "sensitive_scan_sha256": "ba28fc7a937b50dec5d77316b03db857b7a3020af8c2be0ca3e7ea5799633461",
   "build_install": {
     "status": "passed",
-    "source_commit": "a90a4463171c8512689e6150c89af1a32ac14a1d",
-    "source_tree": "3a6d442ef632c9c83b82e205d8b09a219babb3a2",
-    "source_clean_at_start": true,
+    "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
+    "source_tree": "8348d9364b8c5a165a83bb8bffcc652979017561",
     "sdists": 6,
     "wheels": 6,
     "distributions_installed": 6,
     "fresh_external_environment": true,
     "offline_dependency_cache": true,
     "isolated_python": true,
-    "started_utc": "2026-10-08T20:42:36Z",
-    "ended_utc": "2026-10-08T20:42:44Z",
+    "build_log_sha256": "df9dc9a60d8a59ba293c1bb252097ed36fadf702ae461d1bf1ac23bc3d483e93",
     "exit_code": 0,
-    "command": "for package in . packages/evolution packages/langgraph packages/python-sdk packages/mcp-server packages/postgres; do .venv/bin/python -m build --no-isolation --outdir <fresh-dist> \"$package\"; done; uv venv --python /usr/bin/python3.13 <fresh-external-install>; uv pip install --offline --python <install>/bin/python <fresh-dist>/*.whl; uv pip check --python <install>/bin/python; cd <external>; <install>/bin/python -I <source>/tests/operational/v7_installed_smoke.py --source-root <source>; agent-memory-release-scan --json --fail-on-violation <source> <fresh-dist>",
-    "build_install_log_sha256": "68fdfe5caf1eb9160bff444fc600144d4a2ba8b7fa00f4910f16ebd36f6b2ec5",
-    "scope": "All final README/ledger/report documents are present in this clean build source. The subsequent evidence-only commit updates artifact/source hashes, not runtime/tests."
+    "started_utc": "2026-10-08T22:18:33Z",
+    "ended_utc": "2026-10-08T22:18:42Z",
+    "source_and_subprocess_imports_verified_actual_checkout": true,
+    "artifact_reporting_boundary": "Built from the frozen tested source; subsequent documentation-only evidence summaries are recorded separately, not relabeled as archive contents."
   },
   "prior_recovery_soak": {
     "status": "passed",
@@ -1708,12 +1748,13 @@
   "rollback_boundary": {
     "legacy_upstream_commit": "7f824dd49b18935c6b47f5eb32aa32efdbd8cf01",
     "local_snapshot_commit": "23c66ff0f4858eded2cbf79d3b6e23a50173746b",
-    "legacy_question_read": "derived_definition_configuration_changed",
-    "legacy_coverage_status": "derived_target_unavailable",
-    "legacy_worker": "KeyError:query before claiming; V7 records unchanged",
-    "scope": "Stopped writers, actual old-source create/new-source upgrade/old incompatible read-and-worker probe/compatible forward resume. Not online mixed-version writing or supported operational downgrade."
+    "scope": "Actual SQLite backup and PostgreSQL dump/restore, authoritative deletion/finance replay and retained question/page/model lineage pass. Bounded host-only GC atomically reclaims only unreachable objects and preserves retention holds, exact receipts, delta ancestry and model audits; valid pinned workloads can still exhaust capacity. Actual old-source capture/admission/erase/drain, coordinated upgrade, isolated incompatible old-reader probe, compatible forward resume and V7 erasure/reopen pass. No online mixed-version writes, global old-binary fence or operational downgrade.",
+    "validation_path": "validation-b6-cutover.json",
+    "current_final_run": "version-drill",
+    "verified_legacy_tracked_blobs": 535,
+    "legacy_source_verification_sha256": "ea0bcc50accec03e574c6a337c0d2284ec4b829c055dd997fd65161394e2c532"
   },
-  "external_gaps": "Blocked: actual installed Ollama Qwen3.5 9B endpoint/model identity, licensed held-out gold, frozen judge/thresholds/sample/group/statistical protocol and repeated quality/whole-cost observations are absent.",
+  "external_gaps": "Blocked: actual installed Ollama Qwen3.5 9B endpoint/runtime identity, licensed held-out gold, frozen real judge/thresholds/sample/group/statistical protocol and repeated quality/whole-cost observations are absent. Reusable runner and real-port/observer/tariff integration are ready; synthetic runtime results do not accept the real experiment. Actual host telemetry, tariffs and invoice reconciliation must also be supplied.",
   "preserved": {
     "frozen_design_sha256": "309104c81b2e89ce74137903312ecbeaa036ba192d47fcfbdd555cdd4dc907b9",
     "inherited_task_sha256": "14f90d83cb2425177aa22ad2dd1cf7fa90e4c56416ae93a02c7ff134ad8810f5",
@@ -1724,78 +1765,70 @@
     },
     "software_version": "0.1.0 / Alpha"
   },
-  "raw_evidence_location": "Parent validation workspace: agent-memory-evidence/b6/final-integrated. Filenames and hashes here identify preserved JUnit, logs and archives; private environment configuration is not included.",
-  "preliminary_attempt": {
-    "tests": "3789",
-    "failures": "0",
-    "errors": "0",
-    "skipped": "29",
-    "time": "709.622",
-    "status": "incomplete_environment_not_final_acceptance",
-    "reason": "AGENT_MEMORY_ONTOLOGY_TEST_DSN was not exported. Primary PG tests ran; ontology variants were skipped. Entire suite rerun with both required DSN entrypoints, not counted as accepted final run.",
-    "junit_sha256": "c07fd8fbd7cb164086f949897917639fb3f04582d457f827127de1adc4ed93c5"
+  "independent_reviews": {
+    "gc": {
+      "source_commit": "b5bfd24aa5885d73bca351f7e9755488ecf985da",
+      "status": "approved_scoped",
+      "evidence_path": "independent-gc/validation.json",
+      "evidence_sha256": "806d6d2a32afcc31e39197dc9f8215ce0f1e584b1103fce3738730a22e20e068",
+      "final_gc_passed": 62,
+      "final_gc_skipped": 0
+    },
+    "a9": {
+      "source_commit": "ffdf476d01e41b3de4367f7540b307f81c0f35a2",
+      "integrated_source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
+      "status": "approved_scoped",
+      "unique_selected_passing_cases": 270,
+      "independent_probes": 17,
+      "sdk_missing_path_skips_closed_by_actual_source_rerun": true,
+      "postgres_cases_deselected_in_independent_slice": 2,
+      "full_integrated_suite_separately_runs_both_providers": true,
+      "evidence": {
+        "independent-a9/probes-focused.log": "a06ec76cfe467e4478b71d859d1712d271f3e74204bd812e44094461af5c590b",
+        "independent-a9/probes-focused.xml": "cc59c986922fc0ec091a04e1fb521dcbfdbeb137b2b0b63aa53dee2fd485a934",
+        "independent-a9/runtime-sdk.log": "0f42bc907b86cc2ce19300b26210f139e403b36e6bd33b038cf42554b670fd89",
+        "independent-a9/runtime-sdk.xml": "226e6a96d057eec92da5a7a2d86c576315cd0f09bc88de116bd6d4a1422a769f"
+      }
+    }
   },
-  "documentation_checks": {
-    "command": ".venv/bin/python -m pytest -q tests/test_v7_acceptance_inventory.py tests/test_v7_b6_evidence_plan.py tests/test_architecture.py tests/test_release_acceptance.py tests/test_comparison_adapters.py tests/test_recovery_context_acceptance.py packages/postgres/tests/test_release_scan.py --junitxml=<evidence>/documentation-final.xml -ra",
-    "tests": "132",
-    "failures": "0",
-    "errors": "0",
-    "skipped": "0",
-    "time": "2.479",
+  "historical_full_run": {
     "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
-    "working_tree": "B6 report, README, plan and ledger changes; no production or test-code changes. Final artifact/evidence hashes are added afterward.",
-    "junit_sha256": "66c83caa3dce01cf4c018137a76a2a0de97ac69377111a58097bb57c9d0d0f5f"
+    "validation_sha256": "359880fb1ca018c8c696c9404221c1c7c9aefdb30a1d32a54f46cd389ea492d4",
+    "passed": 3783,
+    "skipped": 6,
+    "retained_as_historical_only": true
   },
-  "independent_page_review": {
-    "production_commit": "2b0e06f1aaa7e125e03b5ce2ef26d8155e96a403",
-    "review_test_commit": "e4f63c0e1da30089ce56c5dd4fbdcdb8b91b9add",
-    "compatibility_passed": 138,
-    "expanded_review_passed": 26,
-    "unique_passing_cases": 156,
+  "raw_evidence_location": "Parent validation workspace: agent-memory-evidence/b6/closeout-final. Named JUnit, logs, manifests and archive hashes identify retained evidence; no credentials are included.",
+  "documentation_checks": {
+    "tests": 102,
+    "failures": 0,
+    "errors": 0,
     "skipped": 0,
-    "review_json_sha256": "78982c8e9de44e60e9694aafd655d13e2518c9b1b23679cc108fa22eb0eafd8d"
+    "passed": 102,
+    "command": "/workspace/shared/agent-memory-v7-b6-closeout/.venv/bin/python -m pytest -q tests/test_architecture.py tests/test_v7_acceptance_inventory.py tests/test_v7_b6_evidence_plan.py tests/test_release_acceptance.py -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning --junitxml=/workspace/shared/agent-memory-evidence/b6/closeout-final/documentation-final.xml -ra",
+    "junit_sha256": "298af6bfbfb0d6c193bd9cc00783f27f603e7deac545cf94d2674714e32ffeeb",
+    "log_sha256": "dfecfc28763aa5419a5e3033e94e39b32ad9e590235e613c5a169b923edc2945",
+    "scope": "Final documentation-only edits after frozen runtime/test/build source; no code changes."
   },
   "strict_release_report": {
-    "path": "docs/design/v7.0.0/release-report-b6.json",
+    "path": "release-report-b6.json",
+    "sha256": "80f35c4e09846a642d9acb11dfefffef47097e916f9c2abd8fec5424773a2318",
     "status": "blocked",
-    "resource": "unmeasured for final-source real-model whole-cost acceptance; prior non-model soak remains supplementary",
-    "skips_waived": false
+    "bounded_engineering_supported": true,
+    "real_quality_whole_cost_supported": false,
+    "reasons": [
+      "integration check is unmeasured",
+      "resource check is unmeasured",
+      "release claim real-quality-whole-cost lacks passing evidence"
+    ]
   },
-  "initial_artifact_run": {
-    "artifacts": {
-      "agent_memory-0.1.0-py3-none-any.whl": "04251a763d53360c659938f3124d7f59c5c6eb3b4caa64bc5013e4f1ab01d31f",
-      "agent_memory-0.1.0.tar.gz": "3e8e6053efe41311896d464b087dd897b27aef49e385aa5735e13749f6fce966",
-      "agent_memory_evolution-0.1.0-py3-none-any.whl": "9da080667f34325c77080a56d96ddbf39eb69bf6371a2226226e8816455a875b",
-      "agent_memory_evolution-0.1.0.tar.gz": "caad545544fab4e50001f7c98c4ae4643a02d725e77dbddbad4405a3edb16571",
-      "agent_memory_langgraph-0.1.0-py3-none-any.whl": "ae2ad1ce6339d0b1ea1d95b841b301e40c6af034308fea4146af76a93396b48e",
-      "agent_memory_langgraph-0.1.0.tar.gz": "0ca9e465ff074a1abdd79e2377ea1aa1b55135359cd5b93c7dc6515b12e963d9",
-      "agent_memory_mcp-0.1.0-py3-none-any.whl": "465887469baf58b174b1f50bc09eae89ba36a8ad9bd83feb34ecd783c74c5277",
-      "agent_memory_mcp-0.1.0.tar.gz": "1c17dc71636d9fa1b5cc0e88076613ad2f20adc0ff1090f442aca09cdf966e04",
-      "agent_memory_postgres-0.1.0-py3-none-any.whl": "995a7b95e2de08bd77142c0e72c750a9a191551f37f71e764cb98ca3d07cd962",
-      "agent_memory_postgres-0.1.0.tar.gz": "6aacd2028b15e057463207b02be694a9f9e9a8af8fd6bb1e922c7a36f26bc643",
-      "agent_memory_sdk-0.1.0-py3-none-any.whl": "85b5d39d838bff1ac8c100d0ca539c03bac7be28687b57572ccc55082858d86d",
-      "agent_memory_sdk-0.1.0.tar.gz": "e5eaee783e45e50c9608db7911269f18cd53b36ba9a7d0de9cd5dec6e3f3e298"
-    },
-    "build_install": {
-      "status": "passed",
-      "source_commit": "22f6f84954894c48c19f3d70d8f4b77ca5364c7d",
-      "sdists": 6,
-      "wheels": 6,
-      "distributions_installed": 6,
-      "fresh_external_environment": true,
-      "offline_dependency_cache": true,
-      "isolated_python": true,
-      "build_log_sha256": "be446066ce2a70b2ebe0870a8a82f6f8edacf57addc3667325072122c0b86ee3",
-      "corrected_install_log_sha256": "ee5c264bf2c442c765fa356dbe658dd638c28e78a5c2296218986cfb0ab32917",
-      "initial_environment_errors": "Initial default uv cache path was read-only; alternate incomplete cache lacked langgraph. Correct existing offline cache /tmp/uv-v7-cache completed the same authorized install; no dependency/network/model download."
-    },
-    "installed_dependencies_sha256": "d8da50a58a7997d0a20ceb16e0ef17728adf852997fd5ffc0065c521967cc9ec",
-    "sensitive_scan": {
+  "final_documentation_sensitive_scan": {
+    "result": {
       "roots": [
         ".",
-        "/workspace/shared/agent-memory-evidence/b6/final-integrated/distributions"
+        "/workspace/shared/agent-memory-evidence/b6/closeout-final/distributions"
       ],
-      "scanned_files": 640,
+      "scanned_files": 657,
       "scanned_archives": 12,
       "skipped_large_files": 0,
       "total_findings": 0,
@@ -1804,32 +1837,7 @@
       "violations": [],
       "is_healthy": true
     },
-    "sensitive_scan_sha256": "ff9a273c8b951352d1a999cb5ccfb4322bb8ecf78de115bf975531ce1f6aeb55",
-    "preserved_directory": "initial-artifact-run"
-  },
-  "installed_smoke_sha256": "8577ac6b5ed624e4ab155665977e6664e2f1716ab59fe112ddc3c817ea2b1406",
-  "runtime_test_build_input_equivalence": {
-    "test_source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
-    "artifact_source_commit": "a90a4463171c8512689e6150c89af1a32ac14a1d",
-    "identical_git_objects": {
-      "src": "de4df7b6ced8532ba39c9efe24b586c2a65276e3",
-      "packages": "551162f9f52651155ded52ee92b1491a173b4646",
-      "tests": "f242af7aa82b9a211a115b677195c6948b00a6a9",
-      "tools": "f3ba9d4fd519c126b42521bd44360c860ccccf4f",
-      "setup.sh": "394939be01d3e06b09699be2f48e861b784b9bb8",
-      "pyproject.toml": "889751753fbd95fafeb995cfdbd25d9a2f7a17d0"
-    },
-    "later_changes_are_documentation_and_evidence_only": true
-  },
-  "final_artifact_documentation_checks": {
-    "tests": "132",
-    "failures": "0",
-    "errors": "0",
-    "skipped": "0",
-    "time": "2.648",
-    "source_commit": "a90a4463171c8512689e6150c89af1a32ac14a1d",
-    "working_tree": "Only artifact/source evidence metadata in validation-b6.json changed; all runtime, package, test and build input objects match complete-suite source. This result metadata was added after the check.",
-    "command": ".venv/bin/python -m pytest -q tests/test_v7_acceptance_inventory.py tests/test_v7_b6_evidence_plan.py tests/test_architecture.py tests/test_release_acceptance.py tests/test_comparison_adapters.py tests/test_recovery_context_acceptance.py packages/postgres/tests/test_release_scan.py --junitxml=<evidence>/documentation-committed-artifacts.xml -ra",
-    "junit_sha256": "72835495bc55532878ef49247aae3f0cf38f8dd8043b6552853f4cbcb6635000"
+    "sha256": "ba28fc7a937b50dec5d77316b03db857b7a3020af8c2be0ca3e7ea5799633461",
+    "scope": "Final reporting-only source files plus all previously built frozen-source archives; no archives relabeled as later documentation."
   }
 }

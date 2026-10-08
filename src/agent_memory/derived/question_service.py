@@ -92,6 +92,12 @@ class QuestionService:
 
         self.pages = ProjectQuestionPages(self)
 
+    async def collect_garbage(self, policy):
+        """Explicit trusted-host retention; never exposed through model transports."""
+        from .question_gc import collect
+
+        return await collect(self, policy)
+
     async def _open(self, uow):
         if getattr(uow, "question_runtime_contract", None) != RUNTIME_SCHEMA or any(
             not callable(getattr(uow, name, None))
