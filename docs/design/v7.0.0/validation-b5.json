@@ -1,0 +1,253 @@
+{
+  "schema": "agent-memory-v7-b5-validation/1",
+  "date_utc": "2026-10-08",
+  "tested_source_commit": "3773b103c027cfa95709ef61b6cbd1f9aa4fa1bf",
+  "status": "finite_runtime_contract_slice_verified_real_acceptance_pending",
+  "default_enabled": false,
+  "experimental_host_binding": true,
+  "real_model_executed": false,
+  "real_model_downloaded": false,
+  "paid_api_called": false,
+  "real_quality_cost_acceptance": "pending",
+  "production_savings_claim": false,
+  "requested_model": "Ollama Qwen3.5 9B; host/base URL/install state not supplied or probed",
+  "runs": [
+    {
+      "name": "SQLite and actual PostgreSQL 17 integrated runtime",
+      "command": ".venv/bin/pytest tests/test_governed_models_v7.py tests/test_model_budget_v7.py tests/test_ollama_port_v7.py tests/test_model_budget_recovery_v7.py tests/test_model_cost_runtime_v7.py tests/test_question_models_v7.py tests/test_question_runtime_v7.py tests/test_question_transport_v7.py tests/test_question_proof_reuse_v7.py tests/test_question_snapshot_security_v7.py --junitxml=integrated.xml -o addopts='' -q",
+      "environment": "AGENT_MEMORY_TEST_POSTGRES_DSN points at isolated real PostgreSQL 17 test schemas; shared server wrapper serializes runs",
+      "elapsed_seconds": 53.49,
+      "junit_filename": "integrated.xml",
+      "junit_sha256": "28307a21beef4069b6ca5ca691a08255c20ac765be5525cb5b47c64abcb9c98c",
+      "tests": 206,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "source_commit": "46b063122e6b008ba90f61a91cf1c3e455d54de5",
+      "evidence_scope": "pre-security-hardening baseline"
+    },
+    {
+      "name": "SQLite focused warnings as errors",
+      "command": ".venv/bin/pytest tests/test_governed_models_v7.py tests/test_model_budget_v7.py tests/test_ollama_port_v7.py tests/test_model_budget_recovery_v7.py tests/test_model_cost_runtime_v7.py tests/test_question_models_v7.py -k 'not postgres' --junitxml=sqlite-strict.xml",
+      "environment": "repository default addopts retains ResourceWarning and PytestUnraisableExceptionWarning as errors",
+      "deselected": 41,
+      "elapsed_seconds": 10.82,
+      "junit_filename": "sqlite-strict.xml",
+      "junit_sha256": "8b9fab2815fd58ebe0766dbfb73029de02bda8bf9063f023559c160adbde0b72",
+      "tests": 71,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "source_commit": "46b063122e6b008ba90f61a91cf1c3e455d54de5",
+      "evidence_scope": "pre-security-hardening baseline"
+    },
+    {
+      "name": "B0 accounting and acceptance inventory regression",
+      "command": ".venv/bin/pytest tests/test_question_cost_v7.py tests/test_v7_acceptance_inventory.py -o addopts='' -q",
+      "tests": 74,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "source_commit": "46b063122e6b008ba90f61a91cf1c3e455d54de5",
+      "evidence_scope": "pre-security-hardening baseline"
+    },
+    {
+      "name": "Ruff focused new runtime and tests",
+      "result": "passed",
+      "source_commit": "46b063122e6b008ba90f61a91cf1c3e455d54de5",
+      "evidence_scope": "pre-security-hardening baseline"
+    },
+    {
+      "name": "Python compileall new runtime and evaluation modules",
+      "result": "passed",
+      "source_commit": "46b063122e6b008ba90f61a91cf1c3e455d54de5",
+      "evidence_scope": "pre-security-hardening baseline"
+    },
+    {
+      "name": "Final security, transport and erasure integration; SQLite plus real PostgreSQL17",
+      "source_commit": "caf15f0f1ce332b2f4f76284797e5df59b1ccf0d",
+      "command": ".venv/bin/pytest tests/test_governed_models_v7.py tests/test_model_budget_v7.py tests/test_ollama_port_v7.py tests/test_model_budget_recovery_v7.py tests/test_model_cost_runtime_v7.py tests/test_question_models_v7.py tests/test_b5_independent_security_v7.py tests/test_question_transport_v7.py tests/test_question_erasure_v7.py --junitxml=security-final.xml -o addopts='-W error::pytest.PytestUnraisableExceptionWarning -W error::ResourceWarning' -q",
+      "elapsed_seconds": 58.67,
+      "junit_filename": "security-final.xml",
+      "junit_sha256": "2abe4ae6d89a37650173e1676dfa74f0ccc5197dd62605ca8942b8337797d9c3",
+      "tests": 173,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "Independent adversarial review; SQLite plus real PostgreSQL17",
+      "source_commit": "caf15f0f1ce332b2f4f76284797e5df59b1ccf0d",
+      "test_commit": "c5d2e6c43fe0ffc52fc453412048459d30ad98ff",
+      "command": ".venv/bin/pytest tests/test_b5_independent_security_v7.py",
+      "junit_filename": "b5-independent-security-final.xml",
+      "junit_sha256": "6a20ac6418cbf885fbbe8919564a13a7a892f1988460f29fc641255df3125b45",
+      "tests": 41,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "name": "Final combined B5 plus cached-body guards; SQLite and actual PostgreSQL17",
+      "source_commit": "3773b103c027cfa95709ef61b6cbd1f9aa4fa1bf",
+      "command": "bash isolated-postgres-wrapper.sh .venv/bin/python -m pytest tests/test_governed_models_v7.py tests/test_model_budget_v7.py tests/test_ollama_port_v7.py tests/test_model_budget_recovery_v7.py tests/test_model_cost_runtime_v7.py tests/test_question_models_v7.py tests/test_b5_independent_security_v7.py tests/test_question_snapshot_security_v7.py tests/test_question_transport_v7.py tests/test_b4_adversarial_review.py -o addopts='' -W error::ResourceWarning -W error::pytest.PytestUnraisableExceptionWarning -q --junitxml=combined.xml",
+      "junit_filename": "combined.xml",
+      "junit_sha256": "5ab742d3bb62687f8474e2a56c20ca22e374c1008648b8f378a943d6679f25e7",
+      "tests": 239,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "elapsed_seconds": 79.401
+    }
+  ],
+  "real_process_evidence": {
+    "test": "tests/test_model_budget_recovery_v7.py",
+    "child": "tests/fixtures/model_budget_crash_child.py",
+    "boundaries": [
+      "intent before SQL commit",
+      "intent after SQL commit",
+      "settled invoice",
+      "recording HTTP server accepted exact request body before reply"
+    ],
+    "kill": "actual subprocess.kill and -SIGKILL assertion",
+    "provider": "synthetic recording local HTTP server, not an inference engine",
+    "recovery": [
+      "new attempt preserves old unknown debt",
+      "source erasure blocks retry",
+      "idempotent invoice",
+      "no output/cache before completed response"
+    ]
+  },
+  "restore_evidence": [
+    "actual SQLite backup",
+    "actual PostgreSQL pg_dump into independent schema",
+    "current purge checkpoint replay",
+    "independently pinned current finance checkpoint replay",
+    "monotonic retained local debt",
+    "provider receipt uniqueness restored"
+  ],
+  "accounting": {
+    "contract": "question-cost/1",
+    "phases": [
+      "cold_start",
+      "registration",
+      "prewarm",
+      "write",
+      "dependency",
+      "background",
+      "foreground",
+      "failure",
+      "retry",
+      "drain"
+    ],
+    "denominators": [
+      "all_requests",
+      "effective_answers"
+    ],
+    "unpriced_local_compute": "unknown",
+    "unobserved_resources": "explicit, never zero-filled",
+    "runtime_phase_without_resource_observation": "rejected"
+  },
+  "acceptance_slices": {
+    "Q7-25": "exact-key and runtime actor/project isolation tested",
+    "Q7-26": "current grants, full original lineage, erasure and delivery tested",
+    "Q7-27": "configuration mutation and buffered HTTP/unknown usage tested; real provider acceptance pending",
+    "Q7-28": "actual dual-backend SIGKILL including synthetic HTTP receipt-loss boundary tested",
+    "Q7-30": "model cache/purge/finance old-backup recovery tested; host offline restore contract required",
+    "Q7-31": "full synthetic phase accounting and unresolved debt tested; real benefit comparison pending"
+  },
+  "unsupported_or_pending": [
+    "verified Ollama host/base URL/model installation",
+    "frozen installed model tag/digest and runtime manifest",
+    "host overflow-rejection proof for exact installed server",
+    "exact tokenizer input ceiling",
+    "strict immutable-server execution",
+    "strict monetary ceiling for unpriced local compute",
+    "streaming/tools/failover",
+    "licensed real workload",
+    "frozen real-quality and paired-cost thresholds",
+    "real local compute pricing and confidence intervals"
+  ],
+  "legacy_ledger": {
+    "path": "docs/design/v6.1.0/task.md",
+    "sha256": "14f90d83cb2425177aa22ad2dd1cf7fa90e4c56416ae93a02c7ff134ad8810f5",
+    "changed": false,
+    "tasks": 44,
+    "done": 1,
+    "in_progress": 33,
+    "todo": 10
+  },
+  "source_sha256": {
+    "src/agent_memory/retrieval/model_contracts.py": "f2d616e3dc2f79f8125fa7353954c0b973925e10d19b67a7d45feb48c4f5b426",
+    "src/agent_memory/retrieval/model_authority.py": "633bb4acbf19c8ac881b2c25c027956337eb8217b91e9c14d3df57f192eeb391",
+    "src/agent_memory/retrieval/model_answers.py": "f58e4c490ddb1af3ff9868f4bcd53d5634547fda0148c3ace813252203ad0f6c",
+    "src/agent_memory/retrieval/ollama.py": "59a19b9fa3a4b9a5cd10ddbd66bcd1271738791ae5de39502e27e8bc512bd731",
+    "src/agent_memory/retrieval/question_models.py": "9ca2eb87c75504aada652a2b2f5f7d90eea2d6a25d1c19aed44467b6f05bf25a",
+    "src/agent_memory/operations/model_budget.py": "f5b06f395ec046877194181246906e9175a06c915368db79762b7a8ebfbdcc55",
+    "src/agent_memory/operations/sqlite_model_budget.py": "552f97a69b13d9b2a5d7e45f1c087336853011e6ae5f94e7cd178bdb7fd02e35",
+    "src/agent_memory/evaluation/model_cost.py": "b151abb3dc0f9c43b62fd793f4948d2d61e4c6fc90f78353283ab959992958de",
+    "src/agent_memory/evaluation/model_experiment.py": "3e1c2afec97fb685209c0d3c13af17c2190cf25aedfcb9077f82963031cbc9e9",
+    "packages/postgres/migrations/019_model_budget.sql": "1382dd34c8f1c6a8c8f093e0e7afa06977679c507b9e31af67dc7fc4691e97fa",
+    "packages/postgres/src/agent_memory_postgres/model_budget.py": "735a373010081b9c2e12e72509e6e760eb5a7ec72029352c2d79503cc3b81a8e",
+    "tests/test_model_budget_recovery_v7.py": "374d45ea6d5be1466b2c05a85aaed458d4f87ca8ac0a168babfeffeaa9734b27",
+    "tests/fixtures/model_budget_crash_child.py": "6e15614f6936c1aa0138526e0f94cf55c880b07723cbfd8cc02bc2f96f9a02b1",
+    "src/agent_memory/operations/sqlite_derived.py": "47c13d875dd7362c43d3acffd14a818e1c1b18a2692bfb70041273312ffa76ef",
+    "packages/postgres/src/agent_memory_postgres/derived.py": "6b87073140aac7beb0aeb00587429eaaa33ddf610d622ace48bb9ac15b5c688c",
+    "tests/test_b5_independent_security_v7.py": "a85de5b224614d59db2b8a5d92e5b5964860c62f13f821d3cc8759fee1abcb03",
+    ".github/workflows/ci.yml": "89d5fc555db00da0993309507ad0ef4ef120e33ac85961f813c70e02a9d0fbb3"
+  },
+  "publication_integration": {
+    "base_local_commit": "478bc18778babc478ae1589bd26b39ce54923b1a",
+    "base_executable_tree": "1ad96d375a016fa81661e866190b68353f40dbb9",
+    "inherited_dependency_commits": [
+      "8e2011d",
+      "149e1cb",
+      "5999f19",
+      "9cff5ee",
+      "3e11856",
+      "e83d39c",
+      "2ed0037",
+      "703beb2",
+      "3e0a43b",
+      "478bc18"
+    ],
+    "setup_sh_mode": "100755",
+    "unexpected_removals": false,
+    "ast_preserving_model_py_format_cleanup": true,
+    "affected_checks": {
+      "command": ".venv/bin/pytest tests/test_question_transport_v7.py tests/test_question_models_v7.py tests/test_v7_acceptance_inventory.py tests/test_question_cost_v7.py -k \"not postgres\" -o addopts=\"\" -q",
+      "tests": 93,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "deselected": 19,
+      "junit_sha256": "6561ed604636d6de38e75d92f8a455feee0d1f8f9066a71feadb3bc24acbf2c7"
+    },
+    "legacy_44_task_statuses_changed": false,
+    "ci_commit": "986dc03",
+    "postgres_live_b5_test_files": [
+      "tests/test_governed_models_v7.py",
+      "tests/test_model_budget_v7.py",
+      "tests/test_ollama_port_v7.py",
+      "tests/test_model_budget_recovery_v7.py",
+      "tests/test_model_cost_runtime_v7.py",
+      "tests/test_question_models_v7.py",
+      "tests/test_b5_independent_security_v7.py"
+    ],
+    "b4_test_files_preserved": true
+  },
+  "security_review": {
+    "resolved": [
+      "mutable transport recipient/configuration during awaited preflight",
+      "nested serialized-delivery aliases mutated after authorization hash",
+      "provider/read expiry before subsequent raw or QuestionView body access",
+      "known provider request identity rebound by pending/settlement/restore",
+      "current or historical question certificate erasure not scrubbing model descendants",
+      "late provider identity assigned to settled call without receipt uniqueness"
+    ],
+    "actual_model_execution": false,
+    "all_independent_cases_passed": true,
+    "production_commit": "caf15f0f1ce332b2f4f76284797e5df59b1ccf0d"
+  },
+  "verification_environment_correction": "An earlier invocation used the original B0 virtualenv with PYTHONPATH overrides; four child-process tests replaced PYTHONPATH and loaded B0, producing missing model_budget imports. Re-run used the surviving B5 editable virtualenv verified against this exact worktree; all239 selected tests passed. Invalid-selector and environment-invocation logs are retained separately, not counted as product passes."
+}

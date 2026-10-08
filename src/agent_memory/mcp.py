@@ -386,7 +386,10 @@ class MCPMemoryTools:
                     "Read or request finite registered project questions under host budgets. "
                     + scope_note,
                     {
-                        "operation": {"type": "string", "enum": list(OPERATIONS)},
+                        "operation": {"type": "string", "enum": [
+                            op for op in OPERATIONS
+                            if op != "model_answer" or getattr(self._questions, "models", None)
+                        ]},
                         "payload": {"type": "object"},
                     },
                     ("operation", "payload"),

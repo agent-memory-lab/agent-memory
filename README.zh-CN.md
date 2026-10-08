@@ -259,6 +259,8 @@ B2 的[独立生命周期证据](docs/design/v7.0.0/validation-b2.json)覆盖固
 
 高级检索和可选的只读 Reflect 继续按[任务台账](docs/design/v6.1.0/task.md)推进。远程部署见[安全策略](SECURITY.md)和[威胁模型](docs/THREAT_MODEL.md)；外部缓存、远端 ACL 和供应商副本需要各自完成集成合同。
 
+宿主可显式绑定 [B5 受治理模型解释](docs/design/v7.0.0/batch-b5.md)，通过 SDK `question_model_answer` 调用；普通结构化回答不调用模型。Ollama 部署及真实质量/成本验收仍待完成，本地计算不默认免费。
+
 ## 文档导航
 
 | 想了解什么 | 阅读入口 |

@@ -417,7 +417,22 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
     result = []
     for item in rows:
         kind, key, row = item["kind"], item["identity"], item["payload"]
-        if kind in {"history_point", "history_interval"} and (
+        if kind in {
+            "model_cache_header",
+            "model_cache_body",
+            "model_flight",
+            "model_authorization",
+        } and (
+            all_in_scope
+            or any("source:" + source in parents for source in row.get("sources", ()))
+            or set(row.get("parents", ())).intersection(parents)
+        ):
+            result.append((kind, key, {"state": "erased"}))
+        elif kind == "model_processing_grant" and (
+            all_in_scope or "source:" + row.get("source_id", "") in parents
+        ):
+            result.append((kind, key, {"state": "erased", "version": row.get("version", 0) + 1}))
+        elif kind in {"history_point", "history_interval"} and (
             all_in_scope or row.get("facet_id") in affected
         ):
             result.append((kind, key, {"id": key, "facet_id": row["facet_id"], "state": "erased"}))

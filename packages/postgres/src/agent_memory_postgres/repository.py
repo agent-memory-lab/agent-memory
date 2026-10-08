@@ -338,6 +338,25 @@ class PostgresMemoryUnitOfWork:
             ),
         )
 
+    model_budget_contract = "model-budget/1"
+
+    async def model_budget_lock(self):
+        from . import model_budget as store
+        await store.lock(self.connection)
+        
+
+    async def model_budget_get(self, kind, key):
+        from . import model_budget as store
+        return await store.get(self.connection, kind, key)
+
+    async def model_budget_put(self, kind, key, payload):
+        from . import model_budget as store
+        return await store.put(self.connection, kind, key, payload)
+
+    async def model_budget_records(self, kind):
+        from . import model_budget as store
+        return await store.records(self.connection, kind)
+
     async def derived_get(self, scope, kind, identity):
         from . import derived
 

@@ -7,7 +7,16 @@ from .model import DerivedError, identity
 from .project_questions import PROJECT_QUESTIONS
 from .question_contracts import ALGORITHM, RUNTIME_SCHEMA
 
-OPERATIONS = ("capabilities", "read", "answer", "route", "request", "status", "page_read")
+OPERATIONS = (
+    "capabilities",
+    "read",
+    "answer",
+    "route",
+    "request",
+    "status",
+    "page_read",
+    "model_answer",
+)
 FIELDS = {
     "capabilities": (set(), set()),
     "read": ({"question_id"}, {"valid_at", "known_at"}),
@@ -16,6 +25,7 @@ FIELDS = {
     "request": ({"question_id", "dedupe_key"}, set()),
     "status": ({"target_id"}, set()),
     "page_read": ({"page_id"}, set()),
+    "model_answer": ({"question_id"}, set()),
 }
 
 
@@ -34,7 +44,8 @@ async def call(service, operation, payload, context):
         if name in payload:
             identity(payload[name])
     if "query" in payload and (
-        type(payload["query"]) is not str or not payload["query"].strip()
+        type(payload["query"]) is not str
+        or not payload["query"].strip()
         or len(payload["query"]) > 512
     ):
         raise DerivedError("invalid_question_request")
@@ -47,21 +58,50 @@ async def call(service, operation, payload, context):
             await service._open(uow)
             pages = getattr(uow, "question_page_contract", None) == PAGE_TEMPLATE
         return dict(
-            schema="question-capabilities/1", enabled=True,
+            schema="question-capabilities/1",
+            enabled=True,
             contract=RUNTIME_SCHEMA,
-            operations=[op for op in OPERATIONS if op != "page_read" or pages],
-            templates=sorted(PROJECT_QUESTIONS), renderer=ALGORITHM,
-            compute_modes=["full", "delta", "proof_reuse"], historical=False, models=False,
-            default_enabled=False, registration="trusted_host_only",
-            context="trusted_host_only", processing_grants="trusted_host_only",
+            operations=[
+                op
+                for op in OPERATIONS
+                if (op != "page_read" or pages)
+                and (op != "model_answer" or getattr(service, "models", None))
+            ],
+            templates=sorted(PROJECT_QUESTIONS),
+            renderer=ALGORITHM,
+            compute_modes=["full", "delta", "proof_reuse"],
+            historical=False,
+            models=bool(getattr(service, "models", None)),
+            model_runtime=(
+                service.models.capabilities() if getattr(service, "models", None) else None
+            ),
+            default_enabled=False,
+            registration="trusted_host_only",
+            context="trusted_host_only",
+            processing_grants="trusted_host_only",
             source_bases=["admitted_l1", "publication_manifest"],
-            aliases="exact_registered_only", response_schema="question-answer/1",
+            aliases="exact_registered_only",
+            response_schema="question-answer/1",
             source_completeness="known_authorized_scope_only",
             refresh="shared_durable_budgeted_coverage_target/1",
             pages=PAGE_TEMPLATE if pages else None,
             page_publication="trusted_host_full_or_validated_reuse" if pages else None,
             page_parent_limit=4,
         )
+    if operation == "model_answer":
+        from ..retrieval.model_contracts import ModelError
+
+        if not getattr(service, "models", None):
+            raise DerivedError("question_model_disabled")
+        try:
+            return await service.models.answer(payload["question_id"], actor=context.actor)
+        except ModelError as error:
+            raise DerivedError(error.code) from None
+        except DerivedError:
+            raise
+        except Exception:
+            # A provider, validator, or database error can repeat private inputs.
+            raise DerivedError("model_execution_unavailable") from None
     if operation == "page_read":
         await service.pages.read(payload["page_id"], actor=context.actor)
         return await service.pages.read(payload["page_id"], actor=context.actor)
