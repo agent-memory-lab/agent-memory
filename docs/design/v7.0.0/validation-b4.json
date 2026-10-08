@@ -1,0 +1,105 @@
+{
+  "schema": "v7-batch-validation/1",
+  "batch": "V7-B4",
+  "date": "2026-10-08",
+  "code_commit": "8e2011dba7a6ea778f9c48bc2a5cfdfec3dbd118",
+  "core_test_commit": "cf16ba0bd717bd4bfa4e0081fa369faadaeec4f5",
+  "source_manifest": {
+    "packages/postgres/src/agent_memory_postgres/repository.py": "310a754dea321aa66f789a40a427a32ba5c4c5053cca822b99d81e03293c6050",
+    "src/agent_memory/consolidation/project_admission.py": "41ce774423498945da3bf587a69196f1aebd3be0f513ccd68ca740a19353193f",
+    "src/agent_memory/derived/project_index.py": "c34df53c95535f226210e9f119c825be261f9b2a025d09fdcc29d4fdcc31ae54",
+    "src/agent_memory/derived/project_questions.py": "c6dcaf9f480bdc69daed2f25c384ac20ca5f27242df75615edef2c943ed45eb9",
+    "src/agent_memory/derived/question_contracts.py": "7aa401889acbbb4a816a6e9becdb6b2ee772d57651573b6b4bacd3541ae8fb85",
+    "src/agent_memory/derived/question_delta.py": "7e8ed58f7b9eaf1988d9df19654e9d0434535f507d32a54718a75edfcbcbdb0d",
+    "src/agent_memory/derived/question_erasure.py": "789298e08f4b35187e810dd90e320482ef7aac6d9a2e6279fb2dd6ede548b431",
+    "src/agent_memory/derived/question_materialize.py": "dfb3395865bee4c2bb7016c83d12445d9fc230d3533cd367beb35b08458630e1",
+    "src/agent_memory/derived/question_model.py": "4dc4eddba73d967df57a6485c166e4a23b723a1167ac0355c4505afe41256e9c",
+    "src/agent_memory/derived/question_pages.py": "7fda0faf1d92530e036bd92dfd9405c7fa5710adb623fb68ba05fd76802d1279",
+    "src/agent_memory/derived/question_refresh.py": "cd65cba1ed1e571992617f549c947939789ddae58e5849d56f74ea67016e9a62",
+    "src/agent_memory/derived/question_service.py": "ee72af26b74144ef4b2e3dd440ad69fd301314c7a0f248d86a49d0c74489676d",
+    "src/agent_memory/derived/question_transport.py": "eb6605067cf3a8d70b89bf6deefedebab97ed629984d4b505f766a2b5cd5e0ca",
+    "src/agent_memory/derived/subscriptions.py": "9a41f1ca1ac2620e26516c2e7e8308af85b6dd74bd44bc4828d21568343e0270",
+    "src/agent_memory/sqlite.py": "a8fd4bcc71a97ca22a18dc0f073ef37106d43055be779fd682bdcc686ef1764a",
+    "tests/test_b4_adversarial_review.py": "0c2f73f299ac100c7905116fb3dd676fd93ce22ae5814c450e6b1579519216d8",
+    "tests/test_project_questions_v7.py": "9b4a3477f8b37f8be7c109a5ad2dc1ef26432ea3e285d00235087d43c91e41ad",
+    "tests/test_question_delta_v7.py": "b7de79b0e4ff0df2f74e38affee0027c845c9ac8fe0410b55a2714b1a7d9153c",
+    "tests/test_question_model_v7.py": "df240d21f41e9ad11e47f92e8d5e4812050890e6b8758b6e5a3b512f15638685",
+    "tests/test_question_page_validation_v7.py": "36c5cf673ed4bcd39349d5abbca06da3e076c0bb7d17385ce86af8cd7207d497",
+    "tests/test_question_proof_reuse_v7.py": "0a4a81d13c2bef84f94de22f9755af529471121e97e89c8017cbb9163eaeb43b",
+    "tests/test_question_transport_v7.py": "f1f167195380f5c4a486fbc3619502875334b1df55e1c63c8ce919c98a8c3024"
+  },
+  "canonical_b4_commits": [
+    "52313c2",
+    "8b9d421",
+    "51230e2",
+    "cf16ba0",
+    "8e2011d"
+  ],
+  "scope": "Registered bounded project templates and QuestionView-to-page validation. Synthetic correctness/security tests; no model or production savings claim.",
+  "runs": [
+    {
+      "command": "PYTHONPATH=src:packages/postgres/src:packages/python-sdk/src:packages/mcp-server/src bash /tmp/agent-memory-pg.42vxoI/run-with-postgres.sh /workspace/shared/agent-memory-v7-b3/.venv/bin/pytest tests/test_question_delta_v7.py tests/test_question_proof_reuse_v7.py tests/test_question_page_validation_v7.py tests/test_b4_adversarial_review.py tests/test_question_runtime_v7.py tests/test_question_pages_v7.py tests/test_question_snapshot_security_v7.py tests/test_question_erasure_v7.py tests/test_v7_project_indexes.py tests/test_project_admission_v7.py --junitxml=/tmp/agent-memory-b4-final.xml -x",
+      "source_commit": "cf16ba0bd717bd4bfa4e0081fa369faadaeec4f5",
+      "status": "passed",
+      "tests": 230,
+      "passed": 230,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 72.488,
+      "backends": {
+        "sqlite": 105,
+        "postgresql_17": 105,
+        "provider_independent": 20
+      },
+      "junit_sha256": "2c3783768999a5a02e1c4f3cda898d020919b67c9f6ce30800673c578c062e71"
+    },
+    {
+      "command": "PYTHONPATH=src:packages/postgres/src:packages/python-sdk/src:packages/mcp-server/src bash /tmp/agent-memory-pg.42vxoI/run-with-postgres.sh /workspace/shared/agent-memory-v7-b3/.venv/bin/pytest tests/test_question_transport_v7.py --junitxml=/tmp/agent-memory-b4-transport.xml -x",
+      "source_commit": "8e2011dba7a6ea778f9c48bc2a5cfdfec3dbd118",
+      "status": "passed",
+      "tests": 16,
+      "passed": 16,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 4.721,
+      "backends": {
+        "sqlite": 8,
+        "postgresql_17": 8
+      },
+      "junit_sha256": "a8b3ed2647443050fe85dfa237b911fd81a974f9bac029768bc4cf73e1fee169"
+    },
+    {
+      "command": "PYTHONPATH=src /workspace/shared/agent-memory-v7-b3/.venv/bin/pytest tests/test_question_model_v7.py tests/test_project_questions_v7.py",
+      "source_commit": "cf16ba0bd717bd4bfa4e0081fa369faadaeec4f5",
+      "status": "passed",
+      "passed": 225,
+      "failures": 0,
+      "skipped": 0,
+      "duration_seconds": 0.61
+    },
+    {
+      "command": "ruff check B4 changed Python sources and tests; git diff --check",
+      "status": "passed",
+      "notes": "Selected B4 changed Python sources/tests plus transport source/test passed lint; git diff --check passed. Source manifest additionally pins the unchanged oracle/protocol dependencies. Counts from different runs are reported separately."
+    }
+  ],
+  "not_run": [
+    "Full repository/package/build/install acceptance belongs to B6; these are affected suites.",
+    "Real model/Ollama/provider evaluation; unavailable endpoint is handled in B5/B6.",
+    "Licensed production dataset quality/cost/savings and arbitrary model patches."
+  ],
+  "migrations": {
+    "runtime_contract": "question-runtime/2",
+    "registration_contract": "question-instance-registration/2",
+    "processor": "question-refresh/2",
+    "new_sql_tables": [],
+    "ledger_kinds": [
+      "question_delta_state",
+      "question_change_log",
+      "question_page_validation"
+    ],
+    "requires": "Drain old writers/workers and re-register version-1 questions. Missing/unproved history full rebuilds. Preserve authoritative erase replay on restore."
+  }
+}

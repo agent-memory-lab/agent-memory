@@ -44,7 +44,7 @@ def test_questions_opt_in_and_zero_model_transport_closed_loop(store, transport)
             async with client_for(kernel, scope, service, transport) as client:
                 capabilities = await client.question_capabilities()
                 assert capabilities["templates"] == ["commitments", "owner", "risks", "status"]
-                assert capabilities["compute_modes"] == ["full"]
+                assert capabilities["compute_modes"] == ["full", "delta", "proof_reuse"]
                 assert capabilities["historical"] is capabilities["models"] is False
                 assert (await client.question_route("Who owns project A?"))["route"] == "question"
                 assert (await client.question_route("who owns this?"))["route"] == "abstain"

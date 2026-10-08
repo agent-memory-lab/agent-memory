@@ -20,7 +20,14 @@ from .question_contracts import (
     project_definition,
     registration_key,
 )
-from .question_materialize import budget, check_time, materialize, refresh_state, response
+from .question_materialize import (
+    budget,
+    check_time,
+    content_digests,
+    materialize,
+    refresh_state,
+    response,
+)
 from .question_model import (
     QuestionCertificate,
     QuestionContent,
@@ -421,6 +428,116 @@ class QuestionService:
             publication_manifests=[digest(m) for m in manifests],
         )
 
+    async def _generation_guard(self, uow, definition, generation_proof):
+        """Check original inputs even when current evidence contains equal public values.
+
+        This method reads source/grant metadata only. A missing legacy proof may
+        never be promoted to permission to load/reuse its restricted body.
+        """
+        if (
+            not generation_proof
+            or generation_proof.get("schema") != "question-input-proof/1"
+            or generation_proof["epoch"] != await uow.retention_epoch(self.scope)
+            or generation_proof["registration_fingerprint"]
+            != self.admission.registration_fingerprint
+        ):
+            _fail("question_original_generation_unavailable")
+        originals = {s["source_event_id"]: s for s in generation_proof["sources"]}
+        grants = await self.admission._grants(uow, originals, instant(self.clock()))
+        for source_id, original in originals.items():
+            if not set(definition["spec"]["readers"]) <= set(grants[source_id]["readers"]):
+                _fail("project_processing_denied")
+            current = await uow.derived_project_source_proof(self.scope, source_id)
+            if current is None or any(current[k] != original.get(k) for k in current):
+                _fail("question_original_generation_changed")
+        authority = await self.registry.authority(uow, self.admission.authority_id)
+        boundaries = [
+            datetime.fromisoformat(g["expires_at"]) for g in grants.values() if g.get("expires_at")
+        ]
+        if authority:
+            boundaries.append(datetime.fromisoformat(authority["spec"]["expires_at"]))
+        # The last metadata await can cross an expiry or host-policy change.
+        # Recheck synchronously before this guard permits any cached body read.
+        now = instant(self.clock())
+        if any(boundary <= now for boundary in boundaries):
+            _fail("project_processing_grant_expired")
+        if (
+            self._context() != definition["spec"]["context"]
+            or self.admission.registration_fingerprint
+            != generation_proof["registration_fingerprint"]
+        ):
+            _fail("question_registration_changed")
+        return min(boundaries).isoformat() if boundaries else None
+
+    async def _baseline(self, uow, definition, proof, *, expected_head=None):
+        header = (
+            await uow.derived_get(self.scope, "question_head", definition["facet_id"])
+            if expected_head is None
+            else expected_head
+        )
+        empty = dict(
+            expected_head=header,
+            generation_safe=False,
+            generation_until=None,
+            delta_state=None,
+            previous_content=None,
+            change_logs={},
+        )
+        if not header:
+            return empty
+        _checked(header, "question-head-proof/1")
+        try:
+            generation_until = await self._generation_guard(
+                uow, definition, header.get("generation_proof")
+            )
+        except DerivedError:
+            # Independent full generation may still use the current authorized
+            # census. Do not load old body/state to discover that it is unsafe.
+            return empty
+        content = await uow.derived_get(
+            self.scope, "question_content", header["head"]["content_revision_id"]
+        )
+        state = await uow.derived_get(self.scope, "question_delta_state", definition["facet_id"])
+        if digest(content) != header["content_sha256"]:
+            _fail("question_content_changed")
+        if state is not None and digest(state) != header.get("delta_state_sha256"):
+            # A corrupt optimization baseline is not proof. Rebuild, while the
+            # independently guarded current source census remains authoritative.
+            state = None
+        logs = {
+            key: await uow.derived_get(self.scope, "question_change_log", key)
+            for key in proof["query_generations"]
+        }
+        return dict(
+            expected_head=header,
+            generation_safe=True,
+            generation_until=generation_until,
+            delta_state=state,
+            previous_content=content,
+            change_logs=logs,
+        )
+
+    async def model_input_header(self, uow, question_id, *, actor):
+        """Guarded metadata-only union for model input, dispatch and delivery gates."""
+        definition = await self._registration(uow, question_id, actor)
+        header = await uow.derived_get(self.scope, "question_head", definition["facet_id"])
+        if header is None:
+            _fail("question_view_unavailable")
+        await self._guard(uow, definition, header, actor=actor)
+        sources = {
+            s["source_event_id"]
+            for p in (header["proof"], header["generation_proof"])
+            for s in p["sources"]
+        }
+        return deepcopy(
+            dict(
+                definition=definition,
+                header=header,
+                original_generation_manifest=header["generation_manifest"],
+                source_ids=sorted(sources),
+            )
+        )
+
     @staticmethod
     def _unit(definition, proof):
         return dict(
@@ -511,9 +628,7 @@ class QuestionService:
                     question_id=spec["question_id"],
                     question=spec["question"],
                     overdue_only=spec["instance"]["parameters"]["overdue_only"],
-                    expected_head=await uow.derived_get(
-                        self.scope, "question_head", definition["facet_id"]
-                    ),
+                    **await self._baseline(uow, definition, proof),
                 )
             )
             # Bind the complete owned snapshot to the fenced job. A caller may
@@ -596,9 +711,17 @@ class QuestionService:
             ).payload()
             if snapshot["refresh_policy"] != expected_policy:
                 _fail("derived_snapshot_changed")
+            baseline = await self._baseline(uow, definition, proof)
+            if any(snapshot.get(k) != v for k, v in baseline.items()):
+                _fail("derived_input_changed")
             certificate.validate_content_binding(content)
-            if len(await uow.derived_records(self.scope, "question_content")) >= 4096:
+            if (
+                not prepared["reused"]
+                and len(await uow.derived_records(self.scope, "question_content")) >= 4096
+            ):
                 _fail("question_content_capacity")
+            if len(await uow.derived_records(self.scope, "question_certificate")) >= 4096:
+                _fail("question_certificate_capacity")
             head = QuestionHead(
                 content.instance.id,
                 self.scope,
@@ -613,7 +736,22 @@ class QuestionService:
                 edges.add(
                     (
                         "query" if ref.kind == "query" else "processing",
-                        "facet:" + ref.id if ref.kind == "query" else ref.kind + ":" + ref.id,
+                        "facet:" + ref.id
+                        if ref.kind == "query"
+                        else "derived:" + ref.id
+                        if ref.kind.startswith("derived_")
+                        else ref.kind + ":" + ref.id,
+                    )
+                )
+            for ref in certificate.validation_manifest.inputs:
+                edges.add(
+                    (
+                        "query" if ref.kind == "query" else "processing",
+                        "facet:" + ref.id
+                        if ref.kind == "query"
+                        else "derived:" + ref.id
+                        if ref.kind.startswith("derived_")
+                        else ref.kind + ":" + ref.id,
                     )
                 )
             edges.update(("support", ref.kind + ":" + ref.id) for ref in certificate.support)
@@ -633,19 +771,31 @@ class QuestionService:
                     content_sha256=digest(content.payload()),
                     certificate_sha256=digest(certificate.payload()),
                     generation_manifest_sha256=content.generation_manifest_digest,
+                    generation_manifest=content.generation_manifest.payload(),
+                    generation_proof=prepared["generation_proof"],
+                    delta_state_sha256=digest(prepared["delta_state"]),
+                    digests=content_digests(content, certificate),
+                    compute_mode=prepared["trace"]["compute_mode"],
+                    compute_trace=prepared["trace"],
+                    result_metadata=prepared["result_metadata"],
                     validated_at=certificate.validated_at.isoformat(),
                     next_transition_at=prepared["next_transition_at"],
                 )
             )
+            await uow.derived_put(
+                self.scope, "question_delta_state", definition["facet_id"], prepared["delta_state"]
+            )
             await uow.derived_put(self.scope, "question_head", definition["facet_id"], header)
             await uow.derived_edges(self.scope, definition["facet_id"], sorted(edges))
+            await self.pages.parent_published(uow, definition["facet_id"], header)
             definition.update(next_transition_at=prepared["next_transition_at"])
+            outcome = "noop" if prepared["reused"] else "applied"
             token = "derived-commit:" + digest(
-                [self.scope.partition_key(), job["unit"], content.id, "applied"]
+                [self.scope.partition_key(), job["unit"], content.id, outcome]
             )
             job.update(
                 status="completed",
-                outcome="applied",
+                outcome=outcome,
                 no_outputs=False,
                 revision_id=content.id,
                 commit_token=token,
@@ -673,6 +823,7 @@ class QuestionService:
             )
             # Final clock/context/lease safety check while the same publication
             # transaction still owns all compare-and-swap coordinates.
+            await self._generation_guard(uow, definition, header["generation_proof"])
             from ..operations.refresh_demand import observed_clock
 
             observed = await observed_clock(uow, self.scope, self.clock)
@@ -680,8 +831,11 @@ class QuestionService:
             if now < observed:
                 _fail("refresh_clock_discontinuity")
             check_time(header, now)
-            if any(now >= datetime.fromisoformat(job[key])
-                   for key in ("lease_until", "expires_at") if job.get(key)):
+            if any(
+                now >= datetime.fromisoformat(job[key])
+                for key in ("lease_until", "expires_at")
+                if job.get(key)
+            ):
                 from ..operations.facet_refresh import stale
 
                 raise stale()
@@ -691,7 +845,7 @@ class QuestionService:
             ):
                 _fail("question_registration_changed")
             return dict(
-                outcome="applied",
+                outcome=outcome,
                 no_outputs=False,
                 revision_id=content.id,
                 certificate_revision_id=certificate.id,
@@ -707,6 +861,7 @@ class QuestionService:
         ):
             _fail("question_view_stale")
         await self._authorize(uow, definition, actor)
+        await self._generation_guard(uow, definition, header.get("generation_proof"))
         check_time(header, self.clock())
         proof = await self._proof(uow, definition, at=instant(self.clock()))
         if proof != header["proof"] or self._unit(definition, proof) != header["unit"]:
@@ -725,9 +880,11 @@ class QuestionService:
         if now < observed:
             _fail("refresh_clock_discontinuity")
         check_time(header, now)
-        if (self._context() != definition["spec"]["context"]
-                or self.admission.registration_fingerprint
-                != header["proof"]["registration_fingerprint"]):
+        if (
+            self._context() != definition["spec"]["context"]
+            or self.admission.registration_fingerprint
+            != header["proof"]["registration_fingerprint"]
+        ):
             _fail("question_registration_changed")
         return head
 
@@ -767,10 +924,7 @@ class QuestionService:
         cert = await uow.derived_get(
             self.scope, "question_certificate", head.certificate_revision_id
         )
-        if (
-            digest(body) != header["content_sha256"]
-            or digest(cert) != header["certificate_sha256"]
-        ):
+        if digest(body) != header["content_sha256"] or digest(cert) != header["certificate_sha256"]:
             _fail("question_content_changed")
         content, certificate = (
             QuestionContent.from_payload(body),
@@ -784,7 +938,13 @@ class QuestionService:
             or certificate.safety_fingerprint != digest(header["proof"])
         ):
             _fail("question_content_changed")
-        result = response(content, certificate, question_id)
+        result = response(
+            content,
+            certificate,
+            question_id,
+            metadata=header.get("result_metadata"),
+            trace=header.get("compute_trace"),
+        )
         from ..operations.refresh_demand import _compatibility
 
         demand_id = "refresh-demand:" + digest(
@@ -796,9 +956,7 @@ class QuestionService:
         await self._guard(uow, definition, header, actor=actor)
         from ..operations.refresh_demand import observed_clock, record_guarded_read
 
-        await record_guarded_read(
-            uow, self.scope, definition, {"state": "ready"}, at=self.clock()
-        )
+        await record_guarded_read(uow, self.scope, definition, {"state": "ready"}, at=self.clock())
         observed = await observed_clock(uow, self.scope, self.clock)
         now = instant(self.clock())
         if now < observed:
@@ -832,6 +990,10 @@ class QuestionService:
                 "question_view_unavailable",
                 "question_view_stale",
                 "derived_time_coverage_expired",
+                "project_processing_denied",
+                "project_processing_grant_expired",
+                "question_original_generation_unavailable",
+                "question_original_generation_changed",
             }:
                 raise
         receipt = await self.request(question_id, actor=actor, dedupe_key=dedupe_key)
@@ -852,6 +1014,8 @@ class QuestionService:
                     "question_view_unavailable",
                     "question_view_stale",
                     "derived_time_coverage_expired",
+                    "project_processing_denied",
+                    "project_processing_grant_expired",
                 }:
                     raise
         state = await self.queue.status(receipt["target_id"], actor=actor)

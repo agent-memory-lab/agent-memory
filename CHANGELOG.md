@@ -7,6 +7,11 @@ the first stable release.
 
 ### Added
 
+- V7-B4 complete-group project deltas, old-remove/new-add aggregates and verified full fallback;
+  immutable original generation versus current certificates, safe noops and bounded fair page validation.
+  Original source permissions/expiry, snapshot ownership and erasure remain enforced. Version-2
+  runtime/registration/worker upgrade and evidence: [B4](docs/design/v7.0.0/batch-b4.md).
+
 - Explicitly host-enabled V7-B3 current project QuestionViews for owner, status,
   commitments and risks, reviewed field/time evidence, complete indexed census,
   immutable full provenance, closed publication manifests and shared bounded refresh.

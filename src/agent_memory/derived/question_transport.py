@@ -51,7 +51,7 @@ async def call(service, operation, payload, context):
             contract=RUNTIME_SCHEMA,
             operations=[op for op in OPERATIONS if op != "page_read" or pages],
             templates=sorted(PROJECT_QUESTIONS), renderer=ALGORITHM,
-            compute_modes=["full"], historical=False, models=False,
+            compute_modes=["full", "delta", "proof_reuse"], historical=False, models=False,
             default_enabled=False, registration="trusted_host_only",
             context="trusted_host_only", processing_grants="trusted_host_only",
             source_bases=["admitted_l1", "publication_manifest"],
@@ -59,7 +59,7 @@ async def call(service, operation, payload, context):
             source_completeness="known_authorized_scope_only",
             refresh="shared_durable_budgeted_coverage_target/1",
             pages=PAGE_TEMPLATE if pages else None,
-            page_publication="trusted_host_full_only" if pages else None,
+            page_publication="trusted_host_full_or_validated_reuse" if pages else None,
             page_parent_limit=4,
         )
     if operation == "page_read":

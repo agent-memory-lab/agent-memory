@@ -11,7 +11,7 @@ class QuestionRefreshProcessor:
 
     def __init__(self, service):
         self.service, self.repository, self.scope = service, service.repository, service.scope
-        self.key = "question-refresh/1:" + digest(
+        self.key = "question-refresh/2:" + digest(
             [
                 self.scope.partition_key(),
                 service.admission.registration_fingerprint,

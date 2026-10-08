@@ -77,7 +77,9 @@ def keys_for(definition):
         raise DerivedError("derived_subscription_slot_unsupported")
     keys = {SCOPE_KEY, *(slot_key(key) for key in definition["slots"])}
     spec = definition["spec"]
-    if spec.get("schema") == "question-instance-registration/1":
+    if spec.get("schema") in {
+        "question-instance-registration/1", "question-instance-registration/2"
+    }:
         from .project_index import query_keys
 
         keys.update(query_keys(spec["contract_fingerprint"], spec["project_id"]))
@@ -92,6 +94,11 @@ async def bump(uow, scope, key):
     row = await uow.derived_get(scope, "barrier", key) or {"generation": 0}
     generation = row["generation"] + 1
     await uow.derived_put(scope, "barrier", key, {"generation": generation})
+    if key == FALLBACK_BARRIER or key.startswith("route:project"):
+        from .question_delta import record_change
+
+        await record_change(uow, scope, key, generation,
+                            before=row["generation"], after=generation, reason="barrier")
     return generation
 
 

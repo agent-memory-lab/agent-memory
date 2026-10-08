@@ -1,14 +1,16 @@
 """Deterministic full materialization; no models or unchecked standalone delivery."""
 
 import json
+from copy import deepcopy
 from datetime import datetime
 
 from ..serialization import to_jsonable
 from .model import DerivedError, digest
 from .project_index import project_key
-from .project_questions import full_project_question
 from .question_contracts import ALGORITHM
+from .question_delta import OPERATOR, evaluate
 from .question_model import (
+    AnswerStatus,
     CoverageFrontier,
     InputManifest,
     InputReference,
@@ -50,39 +52,108 @@ def materialize(contract, snapshot):
     """Pure oracle consumes an owned full census; service gates persistence/delivery."""
     instance = QuestionInstance.from_payload(snapshot["instance"])
     census = snapshot["census"]
-    result = full_project_question(
-        contract, census.snapshot, snapshot["question"], overdue_only=snapshot["overdue_only"]
-    )
+    result, delta_state, trace = evaluate(contract, snapshot)
     manifest = input_manifest(snapshot["proof"], census.snapshot.id)
+    generation_manifest = manifest
+    generation_proof = deepcopy(snapshot["proof"])
+    if trace["compute_mode"] == "delta":
+        old_content = QuestionContent.from_payload(snapshot["previous_content"])
+        header = snapshot["expected_head"]
+        references = {(r.kind, r.id, r.revision): r for r in old_content.generation_manifest.inputs}
+        references.update({(r.kind, r.id, r.revision): r for r in manifest.inputs})
+        for kind, key, sha in (
+            ("derived_content", old_content.id, header["content_sha256"]),
+            (
+                "derived_certificate",
+                header["head"]["certificate_revision_id"],
+                header["certificate_sha256"],
+            ),
+        ):
+            ref = InputReference(kind, key, "1", sha)
+            references[(kind, key, "1")] = ref
+        if len(references) > instance.definition.max_dependencies:
+            result, delta_state, trace = evaluate(contract, {**snapshot, "delta_state": None})
+            trace["fallback_reason"] = "generation_dependency_capacity"
+        else:
+            generation_manifest = InputManifest(
+                tuple(references.values()), census.snapshot.id, OPERATOR
+            )
+            # Cached group rows were actual generation inputs. Preserve their
+            # complete flattened original safety census, including removed rows.
+            for key, identity in (("sources", "source_event_id"), ("candidates", "id")):
+                inherited = header["generation_proof"][key]
+                merged = {item[identity]: item for item in inherited}
+                merged.update({item[identity]: item for item in generation_proof[key]})
+                generation_proof[key] = list(merged.values())
     support_candidates = {
-        candidate.fact.id: candidate
-        for row in result.rows
-        for field in row.fields
-        for candidate in field.candidates
+        candidate["fact"]["id"]: candidate
+        for row in result["rows"]
+        for field in row["fields"]
+        for candidate in field["candidates"]
     }
+    spans = {}
+    for candidate in support_candidates.values():
+        for evidence in candidate["qualification"]["field_evidence"]:
+            for branch in evidence["alternatives"]:
+                for span in branch:
+                    spans[digest(span)] = span
     support_spans = sorted(
-        {span for candidate in support_candidates.values() for span in candidate.source_references},
-        key=lambda span: (span.source_event_id, span.start, span.end, span.quote),
+        spans.values(), key=lambda s: (s["source_event_id"], s["start"], s["end"], s["quote"])
     )
+    # Clock/snapshot coordinates certify this evaluation. They are never part of
+    # reusable semantic content. Actual qualifier intervals and citations remain.
+    result_metadata = {
+        key: result[key]
+        for key in (
+            "snapshot_id",
+            "input_fingerprint",
+            "valid_at",
+            "known_at",
+            "next_transition_at",
+        )
+    }
+    stable_result = {k: v for k, v in result.items() if k not in result_metadata}
     content = QuestionContent(
         instance,
-        result.status,
+        AnswerStatus(result["status"]),
         {
-            "question": result.question,
-            "answer_status": result.status.value,
-            "matched_ids": list(result.matched_ids),
+            "question": result["question"],
+            "answer_status": result["status"],
+            "matched_ids": result["matched_ids"],
         },
         {
-            "result": json.loads(json.dumps(result.payload(), allow_nan=False)),
+            "result": stable_result,
             "processing_references": [to_jsonable(span) for span in census.processing_references],
-            "citations": [to_jsonable(span) for span in support_spans],
+            "citations": support_spans,
         },
         ALGORITHM,
         None,
-        manifest,
+        generation_manifest,
     )
+    prior = snapshot.get("previous_content")
+    reused = False
+    if prior and snapshot.get("generation_safe") and trace["fallback_reason"] is None:
+        old = QuestionContent.from_payload(prior)
+        if (
+            old.instance == content.instance
+            and old.value_digest == content.value_digest
+            and old.structure_digest == content.structure_digest
+        ):
+            content, reused = old, True
+            generation_proof = deepcopy(snapshot["expected_head"]["generation_proof"])
+            trace["compute_mode"] = "proof_reuse"
+    next_transition = result_metadata["next_transition_at"]
     boundaries = [instance.context.expires_at]
-    boundaries.extend(t for t in (census.next_transition_at, result.next_transition_at) if t)
+    if trace["compute_mode"] != "full" and snapshot.get("generation_until"):
+        boundaries.append(datetime.fromisoformat(snapshot["generation_until"]))
+    boundaries.extend(
+        t
+        for t in (
+            census.next_transition_at,
+            datetime.fromisoformat(next_transition) if next_transition else None,
+        )
+        if t
+    )
     until = min(boundaries)
     at = census.snapshot.context.valid_at
     if until <= at:
@@ -104,7 +175,7 @@ def materialize(contract, snapshot):
         digest(list(census.publication_manifests)) if publication else None,
         True if publication else None,
     )
-    support_ids = {span.source_event_id for span in support_spans}
+    support_ids = {span["source_event_id"] for span in support_spans}
     certificate = QuestionCertificate(
         content.id,
         instance.id,
@@ -134,14 +205,21 @@ def materialize(contract, snapshot):
         "certificate": certificate.payload(),
         "certificate_id": certificate.id,
         "next_transition_at": until.isoformat(),
+        "result_metadata": result_metadata,
+        "delta_state": delta_state,
+        "trace": trace,
+        "reused": reused,
+        "generation_proof": generation_proof,
     }
-    response(content, certificate, snapshot["question_id"])
+    response(content, certificate, snapshot["question_id"], metadata=result_metadata, trace=trace)
     return payload
 
 
-def response(content, certificate, question_id):
+def response(content, certificate, question_id, *, metadata=None, trace=None):
     """Budget the complete response, including qualifiers, lineage, status and refs."""
     result = to_jsonable(content.structure["result"])
+    if metadata:
+        result.update(deepcopy(metadata))
     # The protocol oracle remains explicitly known-scope. Runtime adds an actual
     # validated certificate without changing the semantic oracle's honesty flags.
     value = {
@@ -153,13 +231,16 @@ def response(content, certificate, question_id):
         "answer_status": content.answer_status.value,
         "availability_status": "valid",
         "refresh_status": "idle",
-        "compute_mode": "full",
+        "compute_mode": (trace or {}).get("compute_mode", "full"),
+        "compute_trace": deepcopy(trace or {}),
         "model_calls": 0,
         "runtime_current_validated": True,
         "result": result,
         "citations": to_jsonable(content.structure["citations"]),
         "processing_references": to_jsonable(content.structure["processing_references"]),
         "generation_manifest": content.generation_manifest.payload(),
+        "validation_manifest": certificate.validation_manifest.payload(),
+        "digests": content_digests(content, certificate),
         "coverage": certificate.query_coverage.payload(),
         "valid_until": certificate.time_coverage.valid_until.isoformat(),
     }
@@ -178,3 +259,31 @@ def refresh_state(value):
     if value in {"idle", "pending", "running", "retry", "deferred", "dead"}:
         return value
     return {"completed": "idle", "dirty": "pending", "superseded": "pending"}.get(value, "deferred")
+
+
+def content_digests(content, certificate):
+    """Pure business projection retains conditions, time, unknown and conflicts.
+
+    Only explicit provenance fields are removed. Source/explanation consumers
+    must also compare structure/support/validation and still validate safety.
+    """
+    result = to_jsonable(content.structure["result"])
+    for row in result["rows"]:
+        for field in row["fields"]:
+            field["candidates"] = [
+                {
+                    k: v
+                    for k, v in candidate["fact"].items()
+                    if k not in {"id", "known_from", "known_to"}
+                }
+                for candidate in field["candidates"]
+            ]
+    result.pop("processing_references", None)
+    return dict(
+        value=digest(result),
+        structure=content.structure_digest,
+        support=certificate.support_digest,
+        generation=content.generation_manifest_digest,
+        validation=certificate.validation_digest,
+        safety=certificate.safety_fingerprint,
+    )

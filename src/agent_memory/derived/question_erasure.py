@@ -17,6 +17,8 @@ QUESTION_KINDS = (
     "question_content",
     "question_certificate",
     "question_head",
+    "question_delta_state",
+    "question_change_log",
     *PAGE_KINDS,
 )
 RELATED_KINDS = (
@@ -42,7 +44,7 @@ def _instance(kind, key, row):
             return QuestionInstance.from_payload(row["instance"]).id
         except (KeyError, TypeError, ValueError):
             return row.get("instance_id")
-    if kind == "question_certificate":
+    if kind in {"question_certificate", "question_delta_state"}:
         return row.get("instance_id")
     if kind == "question_head":
         return row.get("head", {}).get("instance_id", row.get("facet_id", key))
@@ -58,12 +60,14 @@ def _dependencies(kind, row):
     manifests = []
     if kind in PAGE_KINDS:
         manifests.append(row.get("generation_manifest", {}))
+        manifests.append(row.get("validation_manifest", {}))
         # Unpublished page registrations still inherit their parents' erasure.
         for parent in row.get("parents", ()):
             if isinstance(parent, dict) and parent.get("instance_id"):
                 result.add("derived:" + parent["instance_id"])
         if kind == "question_page_head":
             result.update("derived:" + key for key in row.get("parents", {}))
+            result.update("derived:" + key for key in row.get("generation_parents", {}))
     if kind == "question_content":
         manifests.append(row.get("generation_manifest", {}))
     elif kind == "question_certificate":
@@ -77,6 +81,9 @@ def _dependencies(kind, row):
             elif ref.get("kind") in {"derived_content", "derived_certificate"}:
                 result.add("derived:" + ref["id"])
     if kind == "question_head":
+        original = row.get("generation_proof", {})
+        result.update("source:" + s["source_event_id"] for s in original.get("sources", ()))
+        result.update("atom:" + s["id"] for s in original.get("candidates", ()))
         proof = row.get("proof", {})
         result.update("source:" + s["source_event_id"] for s in proof.get("sources", ()))
         for candidate in proof.get("candidates", ()):
@@ -150,6 +157,12 @@ def erase_question_rows(rows, parents, all_in_scope, *, project_routes=()):
     for item in rows:
         kind, key, row = item["kind"], item["identity"], item["payload"]
         instance = instances[(kind, key)]
+        if kind == "question_change_log":
+            # Commit-window hashes can reveal write patterns. Conservatively
+            # drop all such history in the affected exact scope; surviving
+            # optimizations fall back to full rather than inventing continuity.
+            changes.append((kind, key, {"id": key, "state": "erased"}))
+            continue
         if kind not in (*QUESTION_KINDS, *RELATED_KINDS) or instance not in affected:
             continue
         owners.add(key)
