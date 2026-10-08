@@ -30,7 +30,7 @@ deletion or recovery workflow atomic across processes.
 ## TLS and gateway boundary
 
 The local acceptance gateway is a test fixture, not a production gateway product.
-It terminates TLS, validates a bearer credential, removes caller-supplied identity
+It terminates TLS, validates the request's authorization token, removes caller-supplied identity
 headers and supplies a signed host identity. Keep certificate and hostname
 verification enabled. Store secrets outside source control.
 

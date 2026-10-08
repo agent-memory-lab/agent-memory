@@ -230,18 +230,80 @@ class ProjectQuestionPages:
         return results
 
     async def _original_guard(self, uow, registration, originals, actor):
-        if set(originals) != {p["instance_id"] for p in registration["parents"]}:
+        # Legacy full pages key snapshots by instance. Typed patches key them by
+        # immutable header digest, preserving several generations of one parent.
+        definitions = {
+            parent["instance_id"]: await self.service._registration(
+                uow, parent["question_id"], actor
+            )
+            for parent in registration["parents"]
+        }
+        seen, boundaries = set(), []
+        if not 1 <= len(originals) <= 128:
             raise DerivedError("question_page_integrity_failed")
-        for parent in registration["parents"]:
-            definition = await self.service._registration(uow, parent["question_id"], actor)
-            original = originals[parent["instance_id"]]
-            if original.get("sha256") != digest(
-                {k: v for k, v in original.items() if k != "sha256"}
+        for key, original in originals.items():
+            instance = original.get("head", {}).get("instance_id")
+            if (
+                instance not in definitions
+                or key not in {instance, "question-page-parent-generation:" + digest(original)}
+                or original.get("sha256")
+                != digest({k: v for k, v in original.items() if k != "sha256"})
             ):
                 raise DerivedError("question_page_integrity_failed")
-            await self.service._generation_guard(uow, definition, original.get("generation_proof"))
-            # Page composition processed its original parent certificate too.
-            await self.service._generation_guard(uow, definition, original.get("proof"))
+            seen.add(instance)
+            for proof in ("generation_proof", "proof"):
+                boundary = await self.service._generation_guard(
+                    uow, definitions[instance], original.get(proof)
+                )
+                if boundary:
+                    boundaries.append(datetime.fromisoformat(boundary))
+        if seen != set(definitions):
+            raise DerivedError("question_page_integrity_failed")
+        boundary = min(boundaries) if boundaries else None
+        if boundary is not None and self.service.clock() >= boundary:
+            raise DerivedError("project_processing_grant_expired")
+        if self.service._context() != registration["context"] or any(
+            self.service.admission.registration_fingerprint
+            != definition["spec"]["registration_fingerprint"]
+            for definition in definitions.values()
+        ):
+            raise DerivedError("question_registration_changed")
+        return boundary
+
+    async def patch(
+        self,
+        page_id,
+        operations,
+        *,
+        actor,
+        expected_revision_id,
+        expected_certificate_revision_id,
+    ):
+        """Apply a bounded host-only typed plan; never accept prose or model patches."""
+        from .question_page_patches import apply_patch, snapshot_operations
+
+        operations = snapshot_operations(operations)
+        identity(expected_revision_id)
+        identity(expected_certificate_revision_id)
+        observed = await self.service._clock_barrier()
+        try:
+            await apply_patch(
+                self,
+                page_id,
+                operations,
+                actor=actor,
+                expected_revision_id=expected_revision_id,
+                expected_certificate_revision_id=expected_certificate_revision_id,
+            )
+            return await self.read(page_id, actor=actor)
+        except BaseException:
+            observed = max(observed, self.service.clock())
+            try:
+                await self.service._clock_barrier(observed_at=observed)
+            except DerivedError as error:
+                if error.code != "refresh_clock_discontinuity":
+                    raise
+            raise
 
     @staticmethod
     def _split_answer(answer):
@@ -320,66 +382,52 @@ class ProjectQuestionPages:
                     await self._original_guard(
                         uow, registration, old_head.get("generation_parents", {}), actor
                     )
+                    await self._original_guard(uow, registration, old_head["parents"], actor)
                 except DerivedError:
                     pass  # New independent full generation; do not load old bodies.
                 else:
                     if old_head["registration_sha256"] == registration["sha256"]:
-
-                        async def old_guard():
-                            await self._original_guard(
-                                uow, registration, old_head["generation_parents"], actor
-                            )
-
-                        old_content = checked(
-                            await self.service._cached_body(
-                                uow,
-                                "question_page_content",
-                                old_head["content_revision_id"],
-                                guard=old_guard,
-                            ),
-                            "question-page-content/1",
+                        old_content, old_certificate, old_blocks = await self._load(
+                            uow, old_head, registration, actor
                         )
-                        old_certificate = checked(
-                            await self.service._cached_body(
-                                uow,
-                                "question_page_certificate",
-                                old_head["certificate_revision_id"],
-                                guard=old_guard,
-                            ),
-                            "question-page-certificate/1",
-                        )
-                        if (
-                            old_content["sha256"] != old_head["content_sha256"]
-                            or old_certificate["sha256"] != old_head["certificate_sha256"]
-                        ):
-                            raise DerivedError("question_page_integrity_failed")
-                        for ref in old_content["blocks"]:
-                            block = checked(
-                                await self.service._cached_body(
-                                    uow, "question_page_block", ref["revision_id"], guard=old_guard
-                                ),
-                                "question-page-block/1",
-                            )
-                            if block["sha256"] != ref["sha256"]:
-                                raise DerivedError("question_page_integrity_failed")
-                            old_blocks.append(block)
             answer_proofs = {}
             blocks, references = [], []
-            for answer in answers:
-                block_id = "question-page-block:" + digest(
-                    [
-                        registration["instance_id"],
-                        answer["question_id"],
-                    ]
+            by_question = {answer["question_id"]: answer for answer in answers}
+            layout = [
+                (
+                    "question-page-block:"
+                    + digest([registration["instance_id"], answer["question_id"]]),
+                    answer["question_id"],
                 )
-                stable, answer_proofs[answer["question_id"]] = self._split_answer(answer)
+                for answer in answers
+            ]
+            generation_manifest = manifest
+            if old_content and old_content.get("rebuild") == "typed_patch":
+                from .question_page_patches import merge_manifests
+
+                layout = [(b["block_id"], b["body"]["answer"]["question_id"]) for b in old_blocks]
+                generation_manifest = merge_manifests(
+                    old_content["generation_manifest"],
+                    old_certificate["validation_manifest"],
+                    manifest,
+                    dict(
+                        parents={},
+                        inputs=[
+                            dict(kind="derived_content", id=old_content["id"]),
+                            dict(kind="derived_certificate", id=old_certificate["id"]),
+                        ],
+                    ),
+                )
+            for block_id, question_id in layout:
+                answer = by_question[question_id]
+                stable, answer_proofs[question_id] = self._split_answer(answer)
                 body = dict(kind="project_question", answer=stable)
                 block = dict(
                     schema="question-page-block/1",
                     instance_id=registration["instance_id"],
                     block_id=block_id,
                     body=body,
-                    generation_manifest=manifest,
+                    generation_manifest=generation_manifest,
                 )
                 revision_id = "question-page-block-version:" + digest(block)
                 block = sealed({**block, "id": revision_id})
@@ -392,10 +440,14 @@ class ProjectQuestionPages:
                 instance_id=registration["instance_id"],
                 page_id=page_id,
                 template=PAGE_TEMPLATE,
-                rebuild="full",
+                rebuild=(
+                    "typed_patch"
+                    if old_content and old_content.get("rebuild") == "typed_patch"
+                    else "full"
+                ),
                 registration_sha256=registration["sha256"],
                 blocks=references,
-                generation_manifest=manifest,
+                generation_manifest=generation_manifest,
             )
             revision_id = "question-page-content:" + digest(content)
             content = sealed({**content, "id": revision_id})
@@ -435,62 +487,71 @@ class ProjectQuestionPages:
                 )
             )
             budget(self._response(content, certificate, blocks), registration["max_output_bytes"])
-            for kind, values in (
-                ("question_page_block", blocks),
-                ("question_page_content", [content]),
-                ("question_page_certificate", [certificate]),
-            ):
-                rows = await uow.derived_records(self.scope, kind)
-                if len(rows) + len(values) > 4096:
-                    raise DerivedError("question_page_capacity")
-                for value in values:
-                    old = await uow.derived_get(self.scope, kind, value["id"])
-                    if old is not None and old != value:
-                        raise DerivedError("question_page_revision_conflict")
-                    await uow.derived_put(self.scope, kind, value["id"], value)
-                    dependencies = [*inputs, *content["generation_manifest"]["inputs"]]
-                    await uow.derived_edges(
-                        self.scope,
-                        value["id"],
-                        sorted(
-                            set(
-                                [("processing", "derived:" + ref["id"]) for ref in dependencies]
-                                + [
-                                    ("support", "derived:" + ref["id"])
-                                    for ref in dependencies
-                                    if ref["kind"] == "derived_content"
-                                ]
-                            )
-                        ),
-                    )
-            await uow.derived_put(
-                self.scope, "question_page_head", registration["instance_id"], head
-            )
-            pending = await uow.derived_get(
-                self.scope, "question_page_validation", registration["instance_id"]
-            )
-            if pending:
-                await uow.derived_put(
+            await self._store(uow, registration, content, certificate, blocks, head)
+            await self._guard(uow, page_id, actor, registration, head)
+        return await self.read(page_id, actor=actor)
+
+    async def _store(self, uow, registration, content, certificate, blocks, head):
+        """Immutable rows, dependency edges and the head share the locked scope UoW."""
+        for kind, values in (
+            ("question_page_block", blocks),
+            ("question_page_content", [content]),
+            ("question_page_certificate", [certificate]),
+        ):
+            values = {v["id"]: v for v in values}
+            rows = await uow.derived_records(self.scope, kind)
+            existing = {row["identity"] for row in rows}
+            if len(existing | set(values)) > 4096:
+                raise DerivedError("question_page_capacity")
+            for value in values.values():
+                old = await uow.derived_get(self.scope, kind, value["id"])
+                if old is not None and old != value:
+                    raise DerivedError("question_page_revision_conflict")
+                if old is not None:
+                    continue  # Never rewrite retained immutable blocks or their edges.
+                await uow.derived_put(self.scope, kind, value["id"], value)
+                dependencies = list(value["generation_manifest"]["inputs"])
+                dependencies.extend(value.get("validation_manifest", {}).get("inputs", ()))
+                await uow.derived_edges(
                     self.scope,
-                    "question_page_validation",
-                    registration["instance_id"],
-                    sealed(
-                        dict(
-                            schema="question-page-validation/1",
-                            instance_id=registration["instance_id"],
-                            state="valid",
-                            attempts=pending.get("attempts", 0),
-                            targets={k: h["sha256"] for k, h in parents.items()},
+                    value["id"],
+                    sorted(
+                        set(
+                            [("processing", "derived:" + ref["id"]) for ref in dependencies]
+                            + [
+                                ("support", "derived:" + ref["id"])
+                                for ref in dependencies
+                                if ref["kind"] == "derived_content"
+                            ]
                         )
                     ),
                 )
-            await self._guard(uow, page_id, actor, registration, head)
-        return await self.read(page_id, actor=actor)
+        await uow.derived_put(self.scope, "question_page_head", registration["instance_id"], head)
+        pending = await uow.derived_get(
+            self.scope, "question_page_validation", registration["instance_id"]
+        )
+        if pending:
+            await uow.derived_put(
+                self.scope,
+                "question_page_validation",
+                registration["instance_id"],
+                sealed(
+                    dict(
+                        schema="question-page-validation/1",
+                        instance_id=registration["instance_id"],
+                        state="valid",
+                        attempts=pending.get("attempts", 0),
+                        targets={k: h["sha256"] for k, h in head["parents"].items()},
+                    )
+                ),
+            )
 
     async def _guard(self, uow, page_id, actor, registration, head):
         if (
             await self._registration(uow, page_id, actor) != registration
             or head["registration_sha256"] != registration["sha256"]
+            or await uow.derived_get(self.scope, "question_page_head", registration["instance_id"])
+            != head
         ):
             raise DerivedError("question_page_stale")
         pending = await uow.derived_get(
@@ -498,7 +559,9 @@ class ProjectQuestionPages:
         )
         if pending and pending.get("state") == "validation_pending":
             raise DerivedError("question_page_stale")
-        await self._original_guard(uow, registration, head.get("generation_parents", {}), actor)
+        original_until = await self._original_guard(
+            uow, registration, head.get("generation_parents", {}), actor
+        )
         await self._parents(uow, registration, actor, expected=head["parents"])
         from ..operations.refresh_demand import observed_clock
         from .question_materialize import check_time
@@ -516,6 +579,8 @@ class ProjectQuestionPages:
                 != parent["proof"]["registration_fingerprint"]
             ):
                 raise DerivedError("question_registration_changed")
+        if original_until is not None and now >= original_until:
+            raise DerivedError("project_processing_grant_expired")
         if now >= datetime.fromisoformat(head["valid_until"]):
             raise DerivedError("derived_time_coverage_expired")
         if self.service._context() != registration["context"]:
@@ -580,48 +645,75 @@ class ProjectQuestionPages:
                 "question-page-head/1",
             )
             await self._guard(uow, page_id, actor, registration, head)
-
-            async def guard():
-                await self._guard(uow, page_id, actor, registration, head)
-
-            content = checked(
-                await self.service._cached_body(
-                    uow, "question_page_content", head["content_revision_id"], guard=guard
-                ),
-                "question-page-content/1",
+            content, certificate, blocks = await self._load(
+                uow, head, registration, actor, current=True
             )
-            certificate = checked(
-                await self.service._cached_body(
-                    uow, "question_page_certificate", head["certificate_revision_id"], guard=guard
-                ),
-                "question-page-certificate/1",
-            )
-            if (
-                content["sha256"] != head["content_sha256"]
-                or certificate["sha256"] != head["certificate_sha256"]
-                or certificate["content_revision_id"] != content["id"]
-                or content["generation_manifest"] != certificate["generation_manifest"]
-                or content["generation_manifest"]["parents"] != head["generation_parents"]
-                or certificate["validation_manifest"]["parents"] != head["parents"]
-            ):
-                raise DerivedError("question_page_integrity_failed")
-            blocks = []
-            for ref in content["blocks"]:
-                block = checked(
-                    await self.service._cached_body(
-                        uow, "question_page_block", ref["revision_id"], guard=guard
-                    ),
-                    "question-page-block/1",
-                )
-                if (
-                    block["sha256"] != ref["sha256"]
-                    or block["block_id"] != ref["block_id"]
-                    or block["generation_manifest"] != content["generation_manifest"]
-                ):
-                    raise DerivedError("question_page_integrity_failed")
-                blocks.append(block)
             result = budget(
                 self._response(content, certificate, blocks), registration["max_output_bytes"]
             )
             await self._guard(uow, page_id, actor, registration, head)
             return result
+
+    @staticmethod
+    def _contains_manifest(whole, part):
+        # Compare complete headers, never only parent instance keys.
+        parents = {digest(p) for p in whole["parents"].values()}
+        inputs = {digest(ref) for ref in whole["inputs"]}
+        return all(digest(p) in parents for p in part["parents"].values()) and all(
+            digest(ref) in inputs for ref in part["inputs"]
+        )
+
+    async def _load(self, uow, head, registration, actor, *, current=False):
+        originals = {
+            "question-page-parent-generation:" + digest(parent): parent
+            for parent in (*head["generation_parents"].values(), *head["parents"].values())
+        }
+
+        async def guard():
+            await self._original_guard(uow, registration, originals, actor)
+            if current:
+                await self._guard(uow, registration["page_id"], actor, registration, head)
+
+        async def guarded_get(kind, key):
+            await guard()
+            value = await uow.derived_get(self.scope, kind, key)
+            await guard()
+            return value
+
+        content = checked(
+            await guarded_get("question_page_content", head["content_revision_id"]),
+            "question-page-content/1",
+        )
+        certificate = checked(
+            await guarded_get("question_page_certificate", head["certificate_revision_id"]),
+            "question-page-certificate/1",
+        )
+        if (
+            content["sha256"] != head["content_sha256"]
+            or certificate["sha256"] != head["certificate_sha256"]
+            or certificate["content_revision_id"] != content["id"]
+            or content["generation_manifest"] != certificate["generation_manifest"]
+            or content["generation_manifest"]["parents"] != head["generation_parents"]
+            or certificate["validation_manifest"]["parents"] != head["parents"]
+        ):
+            raise DerivedError("question_page_integrity_failed")
+        if not 1 <= len(content["blocks"]) <= 16 or len(
+            {ref["block_id"] for ref in content["blocks"]}
+        ) != len(content["blocks"]):
+            raise DerivedError("question_page_integrity_failed")
+        blocks = []
+        for ref in content["blocks"]:
+            block = checked(
+                await guarded_get("question_page_block", ref["revision_id"]),
+                "question-page-block/1",
+            )
+            if (
+                block["sha256"] != ref["sha256"]
+                or block["block_id"] != ref["block_id"]
+                or not self._contains_manifest(
+                    content["generation_manifest"], block["generation_manifest"]
+                )
+            ):
+                raise DerivedError("question_page_integrity_failed")
+            blocks.append(block)
+        return content, certificate, blocks

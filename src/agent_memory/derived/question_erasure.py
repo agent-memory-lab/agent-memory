@@ -67,7 +67,15 @@ def _dependencies(kind, row):
                 result.add("derived:" + parent["instance_id"])
         if kind == "question_page_head":
             result.update("derived:" + key for key in row.get("parents", {}))
-            result.update("derived:" + key for key in row.get("generation_parents", {}))
+            # Typed patches retain several immutable generations of the same
+            # instance; generation map keys are opaque snapshot IDs, not parents.
+            for original in row.get("generation_parents", {}).values():
+                head = original.get("head", {})
+                result.update(
+                    "derived:" + head[key]
+                    for key in ("instance_id", "content_revision_id", "certificate_revision_id")
+                    if head.get(key)
+                )
     if kind == "question_content":
         manifests.append(row.get("generation_manifest", {}))
     elif kind == "question_certificate":

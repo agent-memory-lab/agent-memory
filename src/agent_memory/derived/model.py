@@ -132,8 +132,11 @@ class FacetDefinition:
         if (
             self.facet != "communication.language"
             or self.predicates != ("locale",)
-            or self.template_version not in {
-                "locale-snapshot/1", "locale-context/1", "locale-parents/1",
+            or self.template_version
+            not in {
+                "locale-snapshot/1",
+                "locale-context/1",
+                "locale-parents/1",
                 "locale-qualified-parents/1",
             }
         ):
@@ -245,9 +248,8 @@ class FacetRefreshUnit:
     def __post_init__(self):
         identity(self.facet_id)
         if (
-            self.schema not in {
-                "facet-refresh-unit/1", "facet-refresh-unit/2", "facet-refresh-unit/3"
-            }
+            self.schema
+            not in {"facet-refresh-unit/1", "facet-refresh-unit/2", "facet-refresh-unit/3"}
             or len(self.definition_sha256) != 64
             or any(c not in "0123456789abcdef" for c in self.definition_sha256)
         ):
@@ -264,13 +266,17 @@ class FacetRefreshUnit:
             for key, parent in self.parents.items():
                 identity(key)
                 if not isinstance(parent, dict) or set(parent) != {
-                    "revision_id", "head_sha256", "definition_sha256"
+                    "revision_id",
+                    "head_sha256",
+                    "definition_sha256",
                 }:
                     raise DerivedError("invalid_facet_refresh_unit")
                 identity(parent["revision_id"])
                 for field in ("head_sha256", "definition_sha256"):
-                    if not isinstance(parent[field], str) or len(parent[field]) != 64 or any(
-                        c not in "0123456789abcdef" for c in parent[field]
+                    if (
+                        not isinstance(parent[field], str)
+                        or len(parent[field]) != 64
+                        or any(c not in "0123456789abcdef" for c in parent[field])
                     ):
                         raise DerivedError("invalid_facet_refresh_unit")
         if self.bindings is not None:
@@ -349,10 +355,11 @@ def source_ids(payload):
 def erase_rows(rows, parents, all_in_scope, slots=()):
     """Physical erasure plan, shared by live deletion and backup purge replay."""
     qualified_graphs = {
-        r["identity"] for r in rows if r["kind"] == "definition"
-        and r["payload"]["spec"].get("template_version") in {
-            "locale-qualified-parents/1", "language-qualified-scenario/1"
-        }
+        r["identity"]
+        for r in rows
+        if r["kind"] == "definition"
+        and r["payload"]["spec"].get("template_version")
+        in {"locale-qualified-parents/1", "language-qualified-scenario/1"}
     }
     affected = {
         r["payload"].get("facet_id", r["identity"])
@@ -373,41 +380,58 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
         and (all_in_scope or set(r["payload"].get("slots", ())).intersection(slots))
     )
     affected.update(
-        r["identity"] for r in rows if r["kind"] == "definition"
-        and (r["payload"]["spec"].get("resource_kind") == "page"
-             or r["identity"] in qualified_graphs)
+        r["identity"]
+        for r in rows
+        if r["kind"] == "definition"
+        and (
+            r["payload"]["spec"].get("resource_kind") == "page" or r["identity"] in qualified_graphs
+        )
         and "derived:" + r["identity"] in parents
     )
     affected.update(
-        r["payload"]["facet_id"] for r in rows if r["kind"] == "page_block"
-        and ({"derived:" + r["identity"], "derived:" + r["payload"].get("block_id", "")}
-             .intersection(parents))
+        r["payload"]["facet_id"]
+        for r in rows
+        if r["kind"] == "page_block"
+        and (
+            {
+                "derived:" + r["identity"],
+                "derived:" + r["payload"].get("block_id", ""),
+            }.intersection(parents)
+        )
     )
     # Even a never-published qualified graph holds host routing metadata. A
     # removed member of its leaf query retires that route without relying on a
     # revision edge that could not exist yet. Legacy leaf rebuilds stay valid.
     route_inputs = {
-        r["identity"] for r in rows if r["kind"] == "definition"
-        and set(r["payload"].get("slots", ())).intersection(slots)
+        r["identity"]
+        for r in rows
+        if r["kind"] == "definition" and set(r["payload"].get("slots", ())).intersection(slots)
     }
     # Clear every version of an affected facet, then follow fixed processing
     # revision edges and configured subscriptions (including empty/unbuilt views).
     while True:
         descendants = {
-            r["identity"] for r in rows if r["kind"] == "definition"
+            r["identity"]
+            for r in rows
+            if r["kind"] == "definition"
             and set(r["payload"]["spec"].get("parent_facets", ())).intersection(affected)
         }
         descendants.update(
-            r["identity"] for r in rows if r["kind"] == "definition"
+            r["identity"]
+            for r in rows
+            if r["kind"] == "definition"
             and r["identity"] in qualified_graphs
             and set(r["payload"]["spec"].get("parent_facets", ())).intersection(route_inputs)
         )
         erased_parents = {
-            "derived:" + r["identity"] for r in rows if r["kind"] == "revision"
-            and r["payload"].get("facet_id") in affected
+            "derived:" + r["identity"]
+            for r in rows
+            if r["kind"] == "revision" and r["payload"].get("facet_id") in affected
         }
         descendants.update(
-            r["payload"]["facet_id"] for r in rows if r["kind"] == "revision"
+            r["payload"]["facet_id"]
+            for r in rows
+            if r["kind"] == "revision"
             and erased_parents.intersection(r["payload"].get("parents", ()))
         )
         if descendants.issubset(affected):
@@ -500,8 +524,9 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
             # Any deleted candidate in the query also invalidates zero-output views.
             row["dirty"] = True
             row["safety_generation"] += 1
-            explicit_page = (row["spec"].get("resource_kind") == "page"
-                             and "derived:" + key in parents)
+            explicit_page = (
+                row["spec"].get("resource_kind") == "page" and "derived:" + key in parents
+            )
             retired_route = key in qualified_graphs and (all_in_scope or key in affected)
             if all_in_scope or explicit_page or retired_route:
                 row["disabled"] = True
@@ -510,8 +535,7 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
                     retained = ("id", "resource_kind", "authority_id")
                     if retired_route:
                         retained += ("template_version",)
-                    row["spec"] = {key: row["spec"][key] for key in
-                                   retained if key in row["spec"]}
+                    row["spec"] = {key: row["spec"][key] for key in retained if key in row["spec"]}
             result.append((kind, key, row))
         elif kind == "job" and (
             all_in_scope or row.get("unit", {}).get("facet_id") in affected & qualified_graphs
@@ -520,8 +544,12 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
                 (
                     kind,
                     key,
-                    {"id": key, "status": "cancelled", "unit": {}, "reason": "scope_erased"
-                     if all_in_scope else "qualified_route_erased"},
+                    {
+                        "id": key,
+                        "status": "cancelled",
+                        "unit": {},
+                        "reason": "scope_erased" if all_in_scope else "qualified_route_erased",
+                    },
                 )
             )
         elif kind == "request" and (
@@ -537,7 +565,8 @@ def validate_edges(values, *, atom_ids, source_event_ids, slot_ids, derived_ids=
     allowed = {
         "support": {"atom:" + key for key in atom_ids} | derived,
         "processing": {"atom:" + key for key in atom_ids}
-        | {"source:" + key for key in source_event_ids} | derived,
+        | {"source:" + key for key in source_event_ids}
+        | derived,
         "query": {"facet:" + key for key in slot_ids},
     }
     if len(values) > 512:

@@ -1,0 +1,1835 @@
+{
+  "schema": "v7-batch-validation/1",
+  "batch": "V7-B6 final engineering verification",
+  "date": "2026-10-08",
+  "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+  "source_tree": "750636647c4da1567b9dbb5150765b08f5c6e54b",
+  "source_manifest_sha256": "d8ef24a8e735086f4d9a91ab8cf2d8907be9f4fde2f58acb24ce7a40d1dab443",
+  "initial_source_manifest_sha256": "ed14c064d303a33044416a0114b1fd9549cd9bbf5e8d04331f5714db535abf3a",
+  "initial_runtime_commit": "22f6f84954894c48c19f3d70d8f4b77ca5364c7d",
+  "source_clean_at_run_start": true,
+  "source_changes_since_initial": [
+    "docs/design/v7.0.0/batch-b4.md",
+    "docs/design/v7.0.0/batch-b5.md",
+    "docs/design/v7.0.0/validation-b4.json",
+    "docs/design/v7.0.0/validation-b5.json"
+  ],
+  "documentation_evidence_commit": "This report and final ledger updates are committed after the recorded execution source; no runtime code is changed by the reporting commit.",
+  "engineering_status": "passed_with_six_explicit_postgresql_only_skips_on_sqlite",
+  "full_v7_acceptance": false,
+  "production_benefit_claim": false,
+  "default_enablement": false,
+  "real_model_executed": false,
+  "real_model_downloaded": false,
+  "paid_api_called": false,
+  "environment": {
+    "python": "3.13.5 (main, Aug 10 2026, 12:06:59) [GCC 14.2.0]",
+    "packages": {
+      "pytest": "8.4.2",
+      "build": "1.6.1",
+      "hatchling": "1.32.4",
+      "psycopg": "3.3.6",
+      "psycopg-pool": "3.3.3",
+      "mcp": "2.3.0",
+      "langgraph": "1.2.14",
+      "tiktoken": "0.14.0"
+    },
+    "postgresql": "17.11 (Debian 17.11-0+deb13u1)",
+    "both_postgres_test_entrypoints_configured": true
+  },
+  "runs": [
+    {
+      "name": "full-dual",
+      "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+      "runtime_source_commit": "22f6f84954894c48c19f3d70d8f4b77ca5364c7d",
+      "runtime_difference_from_initial": false,
+      "command": ".venv/bin/python -m pytest -q tests packages/evolution/tests packages/langgraph/tests packages/python-sdk/tests packages/mcp-server/tests packages/postgres/tests --junitxml=<evidence>/full-dual.xml -ra",
+      "exit_code": 0,
+      "started_utc": "2026-10-08T20:29:20Z",
+      "ended_utc": "2026-10-08T20:40:53Z",
+      "junit_file": "full-dual.xml",
+      "junit_sha256": "ab9df2775cce3e3c912e04b66e207e45d31de5c008039e9931c90caf498b2539",
+      "log_sha256": "5cda14da68dac24ea3a36c4a6c983e53607ca12dd0cff0423d2d9cfed4e50658",
+      "tests": 3789,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "passed": 3783,
+      "duration_seconds": 689.702,
+      "environment": {
+        "postgres_entrypoints": [
+          "AGENT_MEMORY_TEST_POSTGRES_DSN",
+          "AGENT_MEMORY_ONTOLOGY_TEST_DSN"
+        ],
+        "same_disposable_database": true,
+        "credentials_recorded": false
+      }
+    },
+    {
+      "name": "operational-dual",
+      "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+      "runtime_source_commit": "22f6f84954894c48c19f3d70d8f4b77ca5364c7d",
+      "runtime_difference_from_initial": false,
+      "command": ".venv/bin/python -m pytest -q tests/test_durable_process_recovery.py tests/test_refresh_scheduler_process.py tests/test_purge_restore.py tests/test_refresh_schedule_storage.py tests/test_refresh_scheduler_clock_storage.py tests/test_v7_backend_lifecycle.py tests/test_v7_subscriptions.py tests/test_v7_project_indexes.py tests/test_question_runtime_v7.py tests/test_question_process_recovery_v7.py tests/test_question_erasure_v7.py tests/test_question_delta_v7.py tests/test_question_proof_reuse_v7.py tests/test_question_page_patches_v7.py tests/test_question_page_patch_review_v7.py tests/test_model_budget_recovery_v7.py tests/test_governed_models_v7.py tests/test_question_models_v7.py tests/test_model_cost_runtime_v7.py tests/test_b5_independent_security_v7.py --junitxml=<evidence>/operational-dual.xml -ra",
+      "exit_code": 0,
+      "started_utc": "2026-10-08T20:24:53Z",
+      "ended_utc": "2026-10-08T20:29:15Z",
+      "junit_file": "operational-dual.xml",
+      "junit_sha256": "6b5546640cee5a8bf6f949f63fb146c8fb03bb69bcb88ff0389156290a891718",
+      "log_sha256": "758a8682ea0f4357585d53b5172deeaa68c0b57f29ca10b4709bce59535dc0fd",
+      "tests": 544,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 6,
+      "passed": 538,
+      "duration_seconds": 260.637
+    },
+    {
+      "name": "version-drill",
+      "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+      "runtime_source_commit": "22f6f84954894c48c19f3d70d8f4b77ca5364c7d",
+      "runtime_difference_from_initial": false,
+      "command": ".venv/bin/python -m pytest -q tests/operational/v7_upgrade_drill.py --junitxml=<evidence>/version-drill.xml -ra",
+      "exit_code": 0,
+      "started_utc": "2026-10-08T20:29:15Z",
+      "ended_utc": "2026-10-08T20:29:20Z",
+      "junit_file": "version-drill.xml",
+      "junit_sha256": "53cc189ee7390cd113cf77c7bcd7239089605f84babdabafe5c62fc04800dd11",
+      "log_sha256": "baac9f48f31e3bf70eee3e5655b7fc5316a1ee733c6d55c6605f146910548b4f",
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 2,
+      "duration_seconds": 3.137
+    }
+  ],
+  "skips": [
+    {
+      "node_id": "tests.test_refresh_schedule_storage::test_postgres_due_and_expired_indexes_are_available[sqlite]",
+      "outcome": "skipped",
+      "duration_seconds": 0.008,
+      "reason": "PostgreSQL query-plan contract",
+      "executed_postgres_counterpart": "tests.test_refresh_schedule_storage::test_postgres_due_and_expired_indexes_are_available[postgres]",
+      "counterpart_status": "passed",
+      "counted_as_pass": false
+    },
+    {
+      "node_id": "tests.test_v7_backend_lifecycle::test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[sqlite-append_event]",
+      "outcome": "skipped",
+      "duration_seconds": 0.009,
+      "reason": "real asynchronous namespace-lock race is PostgreSQL-specific",
+      "executed_postgres_counterpart": "tests.test_v7_backend_lifecycle::test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[postgres-append_event]",
+      "counterpart_status": "passed",
+      "counted_as_pass": false
+    },
+    {
+      "node_id": "tests.test_v7_backend_lifecycle::test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[sqlite-retention_head_put]",
+      "outcome": "skipped",
+      "duration_seconds": 0.007,
+      "reason": "real asynchronous namespace-lock race is PostgreSQL-specific",
+      "executed_postgres_counterpart": "tests.test_v7_backend_lifecycle::test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[postgres-retention_head_put]",
+      "counterpart_status": "passed",
+      "counted_as_pass": false
+    },
+    {
+      "node_id": "tests.test_v7_backend_lifecycle::test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[sqlite-save_admission_record]",
+      "outcome": "skipped",
+      "duration_seconds": 0.006,
+      "reason": "real asynchronous namespace-lock race is PostgreSQL-specific",
+      "executed_postgres_counterpart": "tests.test_v7_backend_lifecycle::test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[postgres-save_admission_record]",
+      "counterpart_status": "passed",
+      "counted_as_pass": false
+    },
+    {
+      "node_id": "tests.test_v7_backend_lifecycle::test_postgres_derived_writes_own_mutable_values_before_first_await[sqlite-derived_put]",
+      "outcome": "skipped",
+      "duration_seconds": 0.009,
+      "reason": "asynchronous SQL helper ownership is PostgreSQL-specific",
+      "executed_postgres_counterpart": "tests.test_v7_backend_lifecycle::test_postgres_derived_writes_own_mutable_values_before_first_await[postgres-derived_put]",
+      "counterpart_status": "passed",
+      "counted_as_pass": false
+    },
+    {
+      "node_id": "tests.test_v7_backend_lifecycle::test_postgres_derived_writes_own_mutable_values_before_first_await[sqlite-derived_edges]",
+      "outcome": "skipped",
+      "duration_seconds": 0.007,
+      "reason": "asynchronous SQL helper ownership is PostgreSQL-specific",
+      "executed_postgres_counterpart": "tests.test_v7_backend_lifecycle::test_postgres_derived_writes_own_mutable_values_before_first_await[postgres-derived_edges]",
+      "counterpart_status": "passed",
+      "counted_as_pass": false
+    }
+  ],
+  "strict_release_gate_waived": false,
+  "scenario_counts": {
+    "partial": 60,
+    "unsupported": 4,
+    "insufficient_data": 6,
+    "passed": 28
+  },
+  "cases": [
+    {
+      "id": "R01-01",
+      "owner": "AM61-T11",
+      "inherited_status": "部分：同存储槽项目 A/B 条件分段与显式偏序已测；跨存储范围路由待补",
+      "status": "partial",
+      "scope": "Bounded same-slot language/context precedence, three-valued conditions and frozen language-history regressions passed. General cross-scope composition, sets and constraint semantics remain unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_contextual_memory.py",
+        "test_derived_contextual.py",
+        "test_derived_context_history.py"
+      ],
+      "matched_passing_test_cases": 234,
+      "passing_node_ids_sha256": "1c6c25f987185d364095d0f29345e9521e09ef52a1d74b53e4bbd882d6a9802a"
+    },
+    {
+      "id": "R01-02",
+      "owner": "AM61-T11",
+      "inherited_status": "部分：顺序无关、不可比较异值、循环优先政策拒绝已测；跨范围完整矩阵待补",
+      "status": "partial",
+      "scope": "Bounded same-slot language/context precedence, three-valued conditions and frozen language-history regressions passed. General cross-scope composition, sets and constraint semantics remain unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_contextual_memory.py",
+        "test_derived_contextual.py",
+        "test_derived_context_history.py"
+      ],
+      "matched_passing_test_cases": 234,
+      "passing_node_ids_sha256": "1c6c25f987185d364095d0f29345e9521e09ef52a1d74b53e4bbd882d6a9802a"
+    },
+    {
+      "id": "R01-03",
+      "owner": "AM61-T11",
+      "inherited_status": "部分：高优先争议/未知不回退，到期不恢复旧值；可配置 fallback/block_inheritance 待补",
+      "status": "partial",
+      "scope": "Bounded same-slot language/context precedence, three-valued conditions and frozen language-history regressions passed. General cross-scope composition, sets and constraint semantics remain unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_contextual_memory.py",
+        "test_derived_contextual.py",
+        "test_derived_context_history.py"
+      ],
+      "matched_passing_test_cases": 234,
+      "passing_node_ids_sha256": "1c6c25f987185d364095d0f29345e9521e09ef52a1d74b53e4bbd882d6a9802a"
+    },
+    {
+      "id": "R01-04",
+      "owner": "AM61-T11",
+      "inherited_status": "部分：例外三值与时区未知已测；团队约束合取保持 unsupported",
+      "status": "partial",
+      "scope": "Bounded same-slot language/context precedence, three-valued conditions and frozen language-history regressions passed. General cross-scope composition, sets and constraint semantics remain unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_contextual_memory.py",
+        "test_derived_contextual.py",
+        "test_derived_context_history.py"
+      ],
+      "matched_passing_test_cases": 234,
+      "passing_node_ids_sha256": "1c6c25f987185d364095d0f29345e9521e09ef52a1d74b53e4bbd882d6a9802a"
+    },
+    {
+      "id": "R01-05",
+      "owner": "AM61-T11",
+      "inherited_status": "未执行",
+      "status": "unsupported",
+      "scope": "Set membership/constraint semantics remain unsupported; related language-policy regression passes do not implement this scenario.",
+      "executed_selectors": [
+        "test_contextual_memory.py",
+        "test_derived_contextual.py",
+        "test_derived_context_history.py"
+      ],
+      "matched_passing_test_cases": 234,
+      "passing_node_ids_sha256": "1c6c25f987185d364095d0f29345e9521e09ef52a1d74b53e4bbd882d6a9802a"
+    },
+    {
+      "id": "R01-06",
+      "owner": "AM61-T11",
+      "inherited_status": "部分：政策版本不符拒绝、历史/当前擦除分开；动态 ACL/实体政策历史注册待补",
+      "status": "partial",
+      "scope": "Bounded same-slot language/context precedence, three-valued conditions and frozen language-history regressions passed. General cross-scope composition, sets and constraint semantics remain unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_contextual_memory.py",
+        "test_derived_contextual.py",
+        "test_derived_context_history.py"
+      ],
+      "matched_passing_test_cases": 234,
+      "passing_node_ids_sha256": "1c6c25f987185d364095d0f29345e9521e09ef52a1d74b53e4bbd882d6a9802a"
+    },
+    {
+      "id": "R02-01",
+      "owner": "AM61-T20",
+      "inherited_status": "通过（整来源模式）：零候选逐项复核仍 supported，保留身份且不增加独立证据",
+      "status": "partial",
+      "scope": "Whole-source reprocessing, same-slot ordinary contribution replacement, independent support, CAS and erasure regressions passed. General partial coverage/cross-slot replacement and remote authorization histories remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_reprocessing.py",
+        "test_source_revisions.py",
+        "test_contribution_lifecycle.py"
+      ],
+      "matched_passing_test_cases": 77,
+      "passing_node_ids_sha256": "db977c1b4aa0f299f5e5a0e8a5f7ba8841cc47dd05f979802b7b3517e961afdf"
+    },
+    {
+      "id": "R02-02",
+      "owner": "AM61-T20",
+      "inherited_status": "通过（同槽普通贡献）：明确 unsupported 退出，新解释原子接替；历史 known_at 保留",
+      "status": "partial",
+      "scope": "Whole-source reprocessing, same-slot ordinary contribution replacement, independent support, CAS and erasure regressions passed. General partial coverage/cross-slot replacement and remote authorization histories remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_reprocessing.py",
+        "test_source_revisions.py",
+        "test_contribution_lifecycle.py"
+      ],
+      "matched_passing_test_cases": 77,
+      "passing_node_ids_sha256": "db977c1b4aa0f299f5e5a0e8a5f7ba8841cc47dd05f979802b7b3517e961afdf"
+    },
+    {
+      "id": "R02-03",
+      "owner": "AM61-T20",
+      "inherited_status": "部分：复核缺项/未知与 allow_pending 已测；复杂生成完整性和局部覆盖待扩展",
+      "status": "partial",
+      "scope": "Whole-source reprocessing, same-slot ordinary contribution replacement, independent support, CAS and erasure regressions passed. General partial coverage/cross-slot replacement and remote authorization histories remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_reprocessing.py",
+        "test_source_revisions.py",
+        "test_contribution_lifecycle.py"
+      ],
+      "matched_passing_test_cases": 77,
+      "passing_node_ids_sha256": "db977c1b4aa0f299f5e5a0e8a5f7ba8841cc47dd05f979802b7b3517e961afdf"
+    },
+    {
+      "id": "R02-04",
+      "owner": "AM61-T20",
+      "inherited_status": "部分：来源 A 的独立记录退出不影响 B；组合贡献 AND/OR 待扩展",
+      "status": "partial",
+      "scope": "Whole-source reprocessing, same-slot ordinary contribution replacement, independent support, CAS and erasure regressions passed. General partial coverage/cross-slot replacement and remote authorization histories remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_reprocessing.py",
+        "test_source_revisions.py",
+        "test_contribution_lifecycle.py"
+      ],
+      "matched_passing_test_cases": 77,
+      "passing_node_ids_sha256": "db977c1b4aa0f299f5e5a0e8a5f7ba8841cc47dd05f979802b7b3517e961afdf"
+    },
+    {
+      "id": "R02-05",
+      "owner": "AM61-T20",
+      "inherited_status": "部分：整来源 additive/replace 共享 CAS，失败不改基线；部分覆盖明确拒绝",
+      "status": "partial",
+      "scope": "Whole-source reprocessing, same-slot ordinary contribution replacement, independent support, CAS and erasure regressions passed. General partial coverage/cross-slot replacement and remote authorization histories remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_reprocessing.py",
+        "test_source_revisions.py",
+        "test_contribution_lifecycle.py"
+      ],
+      "matched_passing_test_cases": 77,
+      "passing_node_ids_sha256": "db977c1b4aa0f299f5e5a0e8a5f7ba8841cc47dd05f979802b7b3517e961afdf"
+    },
+    {
+      "id": "R02-06",
+      "owner": "AM61-T20",
+      "inherited_status": "部分：删除、贡献版本改变、事务异常与阶段重用已测；动态撤权/真实进程强杀待补",
+      "status": "partial",
+      "scope": "Whole-source reprocessing, same-slot ordinary contribution replacement, independent support, CAS and erasure regressions passed. General partial coverage/cross-slot replacement and remote authorization histories remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_reprocessing.py",
+        "test_source_revisions.py",
+        "test_contribution_lifecycle.py"
+      ],
+      "matched_passing_test_cases": 77,
+      "passing_node_ids_sha256": "db977c1b4aa0f299f5e5a0e8a5f7ba8841cc47dd05f979802b7b3517e961afdf"
+    },
+    {
+      "id": "R03-01",
+      "owner": "AM61-T13",
+      "inherited_status": "未执行",
+      "status": "partial",
+      "scope": "B5 non-streaming source/QuestionView input, immutable provider dispatch and final/cache delivery guards passed using controlled recording transports. Remote ACL synchronization, chunk streaming and unobservable provider context are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_governed_recall_integration.py",
+        "test_question_transport_v7.py",
+        "test_governed_models_v7.py"
+      ],
+      "matched_passing_test_cases": 71,
+      "passing_node_ids_sha256": "70cc410a621e2986403d89b748ea2e12440dc3d72f4c50939d4dbed08348b17f"
+    },
+    {
+      "id": "R03-02",
+      "owner": "AM61-T13",
+      "inherited_status": "未执行",
+      "status": "partial",
+      "scope": "B5 non-streaming source/QuestionView input, immutable provider dispatch and final/cache delivery guards passed using controlled recording transports. Remote ACL synchronization, chunk streaming and unobservable provider context are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_governed_recall_integration.py",
+        "test_question_transport_v7.py",
+        "test_governed_models_v7.py"
+      ],
+      "matched_passing_test_cases": 71,
+      "passing_node_ids_sha256": "70cc410a621e2986403d89b748ea2e12440dc3d72f4c50939d4dbed08348b17f"
+    },
+    {
+      "id": "R03-03",
+      "owner": "AM61-T13",
+      "inherited_status": "未执行",
+      "status": "partial",
+      "scope": "B5 non-streaming source/QuestionView input, immutable provider dispatch and final/cache delivery guards passed using controlled recording transports. Remote ACL synchronization, chunk streaming and unobservable provider context are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_governed_recall_integration.py",
+        "test_question_transport_v7.py",
+        "test_governed_models_v7.py"
+      ],
+      "matched_passing_test_cases": 71,
+      "passing_node_ids_sha256": "70cc410a621e2986403d89b748ea2e12440dc3d72f4c50939d4dbed08348b17f"
+    },
+    {
+      "id": "R03-04",
+      "owner": "AM61-T13",
+      "inherited_status": "未执行",
+      "status": "partial",
+      "scope": "B5 non-streaming source/QuestionView input, immutable provider dispatch and final/cache delivery guards passed using controlled recording transports. Remote ACL synchronization, chunk streaming and unobservable provider context are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_governed_recall_integration.py",
+        "test_question_transport_v7.py",
+        "test_governed_models_v7.py"
+      ],
+      "matched_passing_test_cases": 71,
+      "passing_node_ids_sha256": "70cc410a621e2986403d89b748ea2e12440dc3d72f4c50939d4dbed08348b17f"
+    },
+    {
+      "id": "R03-05",
+      "owner": "AM61-T13",
+      "inherited_status": "未执行",
+      "status": "unsupported",
+      "scope": "Streaming/chunk-level model delivery is not enabled; non-streaming final delivery guards do not satisfy this scenario.",
+      "executed_selectors": [
+        "test_governed_recall_integration.py",
+        "test_question_transport_v7.py",
+        "test_governed_models_v7.py"
+      ],
+      "matched_passing_test_cases": 71,
+      "passing_node_ids_sha256": "70cc410a621e2986403d89b748ea2e12440dc3d72f4c50939d4dbed08348b17f"
+    },
+    {
+      "id": "R03-06",
+      "owner": "AM61-T13",
+      "inherited_status": "未执行",
+      "status": "partial",
+      "scope": "B5 non-streaming source/QuestionView input, immutable provider dispatch and final/cache delivery guards passed using controlled recording transports. Remote ACL synchronization, chunk streaming and unobservable provider context are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_governed_recall_integration.py",
+        "test_question_transport_v7.py",
+        "test_governed_models_v7.py"
+      ],
+      "matched_passing_test_cases": 71,
+      "passing_node_ids_sha256": "70cc410a621e2986403d89b748ea2e12440dc3d72f4c50939d4dbed08348b17f"
+    },
+    {
+      "id": "R04-01",
+      "owner": "AM61-T25",
+      "inherited_status": "第十二阶段当前本地 facet 切片通过；完整扩展未验收",
+      "status": "partial",
+      "scope": "Original processing manifests, source/query completeness, immutable private ancestry and B5/B6 cache/page erasure passed for bounded current paths. Arbitrary multi-turn provider histories, model patches and authorized declassification remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_derived_observations.py",
+        "test_question_erasure_v7.py",
+        "test_governed_models_v7.py",
+        "test_question_proof_reuse_v7.py",
+        "test_question_snapshot_security_v7.py"
+      ],
+      "matched_passing_test_cases": 183,
+      "passing_node_ids_sha256": "23d7717654dfef55399528b26ffd4dd6dd051c4d04ecd4e4451b8c8ec561353d"
+    },
+    {
+      "id": "R04-02",
+      "owner": "AM61-T25",
+      "inherited_status": "未执行",
+      "status": "partial",
+      "scope": "Original processing manifests, source/query completeness, immutable private ancestry and B5/B6 cache/page erasure passed for bounded current paths. Arbitrary multi-turn provider histories, model patches and authorized declassification remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_derived_observations.py",
+        "test_question_erasure_v7.py",
+        "test_governed_models_v7.py",
+        "test_question_proof_reuse_v7.py",
+        "test_question_snapshot_security_v7.py"
+      ],
+      "matched_passing_test_cases": 183,
+      "passing_node_ids_sha256": "23d7717654dfef55399528b26ffd4dd6dd051c4d04ecd4e4451b8c8ec561353d"
+    },
+    {
+      "id": "R04-03",
+      "owner": "AM61-T25",
+      "inherited_status": "未执行",
+      "status": "unsupported",
+      "scope": "Free-form model delta/block patches are not enabled. B6 typed patches are deterministic host operations.",
+      "executed_selectors": [
+        "test_derived_observations.py",
+        "test_question_erasure_v7.py",
+        "test_governed_models_v7.py",
+        "test_question_proof_reuse_v7.py",
+        "test_question_snapshot_security_v7.py"
+      ],
+      "matched_passing_test_cases": 183,
+      "passing_node_ids_sha256": "23d7717654dfef55399528b26ffd4dd6dd051c4d04ecd4e4451b8c8ec561353d"
+    },
+    {
+      "id": "R04-04",
+      "owner": "AM61-T25",
+      "inherited_status": "第十二阶段当前本地 facet 切片通过；完整扩展未验收",
+      "status": "partial",
+      "scope": "Original processing manifests, source/query completeness, immutable private ancestry and B5/B6 cache/page erasure passed for bounded current paths. Arbitrary multi-turn provider histories, model patches and authorized declassification remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_derived_observations.py",
+        "test_question_erasure_v7.py",
+        "test_governed_models_v7.py",
+        "test_question_proof_reuse_v7.py",
+        "test_question_snapshot_security_v7.py"
+      ],
+      "matched_passing_test_cases": 183,
+      "passing_node_ids_sha256": "23d7717654dfef55399528b26ffd4dd6dd051c4d04ecd4e4451b8c8ec561353d"
+    },
+    {
+      "id": "R04-05",
+      "owner": "AM61-T25",
+      "inherited_status": "未执行",
+      "status": "partial",
+      "scope": "Original processing manifests, source/query completeness, immutable private ancestry and B5/B6 cache/page erasure passed for bounded current paths. Arbitrary multi-turn provider histories, model patches and authorized declassification remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_derived_observations.py",
+        "test_question_erasure_v7.py",
+        "test_governed_models_v7.py",
+        "test_question_proof_reuse_v7.py",
+        "test_question_snapshot_security_v7.py"
+      ],
+      "matched_passing_test_cases": 183,
+      "passing_node_ids_sha256": "23d7717654dfef55399528b26ffd4dd6dd051c4d04ecd4e4451b8c8ec561353d"
+    },
+    {
+      "id": "R04-06",
+      "owner": "AM61-T25",
+      "inherited_status": "未执行",
+      "status": "unsupported",
+      "scope": "Authorized declassification is not implemented; model self-assertion does not grant it.",
+      "executed_selectors": [
+        "test_derived_observations.py",
+        "test_question_erasure_v7.py",
+        "test_governed_models_v7.py",
+        "test_question_proof_reuse_v7.py",
+        "test_question_snapshot_security_v7.py"
+      ],
+      "matched_passing_test_cases": 183,
+      "passing_node_ids_sha256": "23d7717654dfef55399528b26ffd4dd6dd051c4d04ecd4e4451b8c8ec561353d"
+    },
+    {
+      "id": "N01-01",
+      "owner": "AM61-T06",
+      "inherited_status": "部分：工具结果/省略，未覆盖多块",
+      "status": "partial",
+      "scope": "Trusted capture-profile and SDK/MCP fixture regressions passed. No deployed host complete-event adapter or general multi-block/stream-interruption capture acceptance is asserted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_capture_profile.py",
+        "test_capture_composite_acceptance.py",
+        "test_durable_transport.py"
+      ],
+      "matched_passing_test_cases": 23,
+      "passing_node_ids_sha256": "b19bd22494c44f39f6377cfeb98f55682beff8088738c9267635c50ecaff083a"
+    },
+    {
+      "id": "N01-02",
+      "owner": "AM61-T06",
+      "inherited_status": "部分：宿主标记与三条接纳入口，未覆盖完整谱系",
+      "status": "partial",
+      "scope": "Trusted capture-profile and SDK/MCP fixture regressions passed. No deployed host complete-event adapter or general multi-block/stream-interruption capture acceptance is asserted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_capture_profile.py",
+        "test_capture_composite_acceptance.py",
+        "test_durable_transport.py"
+      ],
+      "matched_passing_test_cases": 23,
+      "passing_node_ids_sha256": "b19bd22494c44f39f6377cfeb98f55682beff8088738c9267635c50ecaff083a"
+    },
+    {
+      "id": "N01-03",
+      "owner": "AM61-T06",
+      "inherited_status": "部分：宿主 origin/actor/scope 绑定及 SDK/MCP 同合同已测；完整事件全集适配待补",
+      "status": "partial",
+      "scope": "Trusted capture-profile and SDK/MCP fixture regressions passed. No deployed host complete-event adapter or general multi-block/stream-interruption capture acceptance is asserted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_capture_profile.py",
+        "test_capture_composite_acceptance.py",
+        "test_durable_transport.py"
+      ],
+      "matched_passing_test_cases": 23,
+      "passing_node_ids_sha256": "b19bd22494c44f39f6377cfeb98f55682beff8088738c9267635c50ecaff083a"
+    },
+    {
+      "id": "N02-01",
+      "owner": "AM61-T17",
+      "inherited_status": "部分：SDK/MCP append/revise 丢确认与异载荷冲突、真实接收进程强杀恢复、purge 确认丢失重启已测；完整生命周期仍待补",
+      "status": "partial",
+      "scope": "Controlled durable producer/outbox SDK/MCP contracts, identity conflicts, current-epoch replay rejection and real provider process recovery passed. Full external/legacy-device fleet lifecycle remains unaccepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_durable_retention.py",
+        "test_durable_producer.py",
+        "test_durable_transport.py",
+        "test_durable_process_recovery.py"
+      ],
+      "matched_passing_test_cases": 54,
+      "passing_node_ids_sha256": "df332579838a8609b14d18e375a3a451cbc40ff62cc33ce1ccaf3478e994948b"
+    },
+    {
+      "id": "N02-02",
+      "owner": "AM61-T17",
+      "inherited_status": "通过（受控 producer）：多 producer 乱序/重复与双后端竞争已测；新 opt-in received/settled 分开，取消不伪造接收",
+      "status": "partial",
+      "scope": "Controlled durable producer/outbox SDK/MCP contracts, identity conflicts, current-epoch replay rejection and real provider process recovery passed. Full external/legacy-device fleet lifecycle remains unaccepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_durable_retention.py",
+        "test_durable_producer.py",
+        "test_durable_transport.py",
+        "test_durable_process_recovery.py"
+      ],
+      "matched_passing_test_cases": 54,
+      "passing_node_ids_sha256": "df332579838a8609b14d18e375a3a451cbc40ff62cc33ce1ccaf3478e994948b"
+    },
+    {
+      "id": "N02-03",
+      "owner": "AM61-T17",
+      "inherited_status": "通过（双端 opt-in SDK/MCP）：旧 epoch 离线正文先清理再拒绝上传，未知对象删除同步、新 epoch 与旧会话分离已测；历史设备范围见 stage-04",
+      "status": "partial",
+      "scope": "Controlled durable producer/outbox SDK/MCP contracts, identity conflicts, current-epoch replay rejection and real provider process recovery passed. Full external/legacy-device fleet lifecycle remains unaccepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_durable_retention.py",
+        "test_durable_producer.py",
+        "test_durable_transport.py",
+        "test_durable_process_recovery.py"
+      ],
+      "matched_passing_test_cases": 54,
+      "passing_node_ids_sha256": "df332579838a8609b14d18e375a3a451cbc40ff62cc33ce1ccaf3478e994948b"
+    },
+    {
+      "id": "N03-01",
+      "owner": "AM61-T18",
+      "inherited_status": "通过（受控本地刷新集合）：固定领取、合并新责任、原子覆盖与后继调度、固定请求回执已测；具体 Observation/视图仍待专属验收",
+      "status": "partial",
+      "scope": "Supported local resource/derived processors passed fixed target, successor, fencing, age/progress, quota and real process recovery contracts. Arbitrary external processing side effects are outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_resource_refresh.py",
+        "test_durable_execution.py",
+        "test_refresh_demand.py",
+        "test_refresh_scheduler_process.py"
+      ],
+      "matched_passing_test_cases": 122,
+      "passing_node_ids_sha256": "ab30dd0a11bb1e807c5f82abfa44699a1018af7ee9834ca5a7715bc66621cef5"
+    },
+    {
+      "id": "N03-02",
+      "owner": "AM61-T18",
+      "inherited_status": "通过（受控本地刷新）：跨连接资源排他、不同资源可前进、旧 fencing 与真实 SIGKILL 提交恢复已测；派生/外部处理仍待专属验收",
+      "status": "partial",
+      "scope": "Supported local resource/derived processors passed fixed target, successor, fencing, age/progress, quota and real process recovery contracts. Arbitrary external processing side effects are outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_resource_refresh.py",
+        "test_durable_execution.py",
+        "test_refresh_demand.py",
+        "test_refresh_scheduler_process.py"
+      ],
+      "matched_passing_test_cases": 122,
+      "passing_node_ids_sha256": "ab30dd0a11bb1e807c5f82abfa44699a1018af7ee9834ca5a7715bc66621cef5"
+    },
+    {
+      "id": "N03-03",
+      "owner": "AM61-T18",
+      "inherited_status": "通过（受控本地刷新）：defer 不占故障次数且单独计数、心跳/checkpoint 不推进进度、独立年龄/无进度时限、已提交范围与剩余取消已测",
+      "status": "partial",
+      "scope": "Supported local resource/derived processors passed fixed target, successor, fencing, age/progress, quota and real process recovery contracts. Arbitrary external processing side effects are outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_resource_refresh.py",
+        "test_durable_execution.py",
+        "test_refresh_demand.py",
+        "test_refresh_scheduler_process.py"
+      ],
+      "matched_passing_test_cases": 122,
+      "passing_node_ids_sha256": "ab30dd0a11bb1e807c5f82abfa44699a1018af7ee9834ca5a7715bc66621cef5"
+    },
+    {
+      "id": "N04-01",
+      "owner": "AM61-T31",
+      "inherited_status": "第十五阶段有界 full：定义/query 变化使旧页面失效，实际父与完整输入 CAS 已验证；一般模板/delta 未验收",
+      "status": "partial",
+      "scope": "Registered current language/project full, whitelisted delta/noop and deterministic typed patch regressions passed. General scenario/model patch and cross-scope composition are not enabled. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_derived_pages.py",
+        "test_derived_lifecycle_audit.py",
+        "test_question_delta_v7.py"
+      ],
+      "matched_passing_test_cases": 182,
+      "passing_node_ids_sha256": "a6ad4840a2fc4d442cdc5b4617448c15af703cfb50358d009bc47d58658b0e86"
+    },
+    {
+      "id": "N04-02",
+      "owner": "AM61-T31",
+      "inherited_status": "第十五阶段 full 空输出有完整证书，失效/失败不交付旧页；delta/补丁未启用",
+      "status": "partial",
+      "scope": "Registered current language/project full, whitelisted delta/noop and deterministic typed patch regressions passed. General scenario/model patch and cross-scope composition are not enabled. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_derived_pages.py",
+        "test_derived_lifecycle_audit.py",
+        "test_question_delta_v7.py"
+      ],
+      "matched_passing_test_cases": 182,
+      "passing_node_ids_sha256": "a6ad4840a2fc4d442cdc5b4617448c15af703cfb50358d009bc47d58658b0e86"
+    },
+    {
+      "id": "N04-03",
+      "owner": "AM61-T31",
+      "inherited_status": "第十五阶段当前语言页：新增成员阻断固定旧发布并父优先刷新通过；一般场景/跨范围未验收",
+      "status": "partial",
+      "scope": "Registered current language/project full, whitelisted delta/noop and deterministic typed patch regressions passed. General scenario/model patch and cross-scope composition are not enabled. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_derived_pages.py",
+        "test_derived_lifecycle_audit.py",
+        "test_question_delta_v7.py"
+      ],
+      "matched_passing_test_cases": 182,
+      "passing_node_ids_sha256": "a6ad4840a2fc4d442cdc5b4617448c15af703cfb50358d009bc47d58658b0e86"
+    },
+    {
+      "id": "N05-01",
+      "owner": "AM61-T22",
+      "inherited_status": "通过（有限捕获请求）：source_persisted 可 reached 而 L1 清单未闭合，固定目标与原接收令牌已测",
+      "status": "partial",
+      "scope": "Finite persisted-source versus closed admitted-publication readiness, unchanged targets and local continuous index coverage passed. General external indexes and dynamic remote ACL propagation are not accepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_durable_readiness.py",
+        "test_reprocessing_readiness.py",
+        "test_publication_batches.py",
+        "test_question_runtime_v7.py"
+      ],
+      "matched_passing_test_cases": 205,
+      "passing_node_ids_sha256": "dd40f0c2f3bbba68193ec31bc08e2b17f82feab03752bea6d722414bbde5c43a"
+    },
+    {
+      "id": "N05-02",
+      "owner": "AM61-T22",
+      "inherited_status": "部分：闭合零输出/全部待决、跨请求发布汇总、本地索引连续覆盖/部分落后及显式重处理目标已测；单请求整槽分批及闭合/逐令牌覆盖已测；派生/外部索引仍待补",
+      "status": "partial",
+      "scope": "Finite persisted-source versus closed admitted-publication readiness, unchanged targets and local continuous index coverage passed. General external indexes and dynamic remote ACL propagation are not accepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_durable_readiness.py",
+        "test_reprocessing_readiness.py",
+        "test_publication_batches.py",
+        "test_question_runtime_v7.py"
+      ],
+      "matched_passing_test_cases": 205,
+      "passing_node_ids_sha256": "dd40f0c2f3bbba68193ec31bc08e2b17f82feab03752bea6d722414bbde5c43a"
+    },
+    {
+      "id": "N05-03",
+      "owner": "AM61-T22",
+      "inherited_status": "部分：新输入/新 generation 不扩大旧目标、deadline 不取消及 scope/source 删除阻断已测；通用动态 ACL/外部用途守卫待补",
+      "status": "partial",
+      "scope": "Finite persisted-source versus closed admitted-publication readiness, unchanged targets and local continuous index coverage passed. General external indexes and dynamic remote ACL propagation are not accepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_durable_readiness.py",
+        "test_reprocessing_readiness.py",
+        "test_publication_batches.py",
+        "test_question_runtime_v7.py"
+      ],
+      "matched_passing_test_cases": 205,
+      "passing_node_ids_sha256": "dd40f0c2f3bbba68193ec31bc08e2b17f82feab03752bea6d722414bbde5c43a"
+    },
+    {
+      "id": "N06-01",
+      "owner": "AM61-T34",
+      "inherited_status": "未执行",
+      "status": "partial",
+      "scope": "Offline evidence/support scoring and controlled runtime trace regressions passed. Licensed real gold, model-stage attribution and end-to-end useful-answer quality are not measured. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_retrieval_trace.py",
+        "test_retrieval_evaluation.py",
+        "test_evidence_evaluation.py"
+      ],
+      "matched_passing_test_cases": 33,
+      "passing_node_ids_sha256": "56c9953e98b7867f7fe87eaad2f78a2e59d1298f42bb7694417120b6a8134c64"
+    },
+    {
+      "id": "N06-02",
+      "owner": "AM61-T34",
+      "inherited_status": "部分：离线 AND/OR，运行 trace 待补",
+      "status": "partial",
+      "scope": "Offline evidence/support scoring and controlled runtime trace regressions passed. Licensed real gold, model-stage attribution and end-to-end useful-answer quality are not measured. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_retrieval_trace.py",
+        "test_retrieval_evaluation.py",
+        "test_evidence_evaluation.py"
+      ],
+      "matched_passing_test_cases": 33,
+      "passing_node_ids_sha256": "56c9953e98b7867f7fe87eaad2f78a2e59d1298f42bb7694417120b6a8134c64"
+    },
+    {
+      "id": "N06-03",
+      "owner": "AM61-T34",
+      "inherited_status": "部分：gold 资格，实时读取资格待补",
+      "status": "partial",
+      "scope": "Offline evidence/support scoring and controlled runtime trace regressions passed. Licensed real gold, model-stage attribution and end-to-end useful-answer quality are not measured. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_retrieval_trace.py",
+        "test_retrieval_evaluation.py",
+        "test_evidence_evaluation.py"
+      ],
+      "matched_passing_test_cases": 33,
+      "passing_node_ids_sha256": "56c9953e98b7867f7fe87eaad2f78a2e59d1298f42bb7694417120b6a8134c64"
+    },
+    {
+      "id": "N07-01",
+      "owner": "AM61-T36",
+      "inherited_status": "未执行",
+      "status": "partial",
+      "scope": "Bounded model payload/input/configuration contracts and ontology/embedding regressions passed. Real requested provider/tokenizer identity, failover quality and full embedding migration acceptance are not established. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_semantic_reranker.py",
+        "test_ontology_upgrade.py",
+        "test_governed_models_v7.py"
+      ],
+      "matched_passing_test_cases": 65,
+      "passing_node_ids_sha256": "3ac470e0d7791cee439dedf4612614edf96c9e6cc15339127eedb2e6bb09bfca"
+    },
+    {
+      "id": "N07-02",
+      "owner": "AM61-T36",
+      "inherited_status": "未执行",
+      "status": "partial",
+      "scope": "Bounded model payload/input/configuration contracts and ontology/embedding regressions passed. Real requested provider/tokenizer identity, failover quality and full embedding migration acceptance are not established. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_semantic_reranker.py",
+        "test_ontology_upgrade.py",
+        "test_governed_models_v7.py"
+      ],
+      "matched_passing_test_cases": 65,
+      "passing_node_ids_sha256": "3ac470e0d7791cee439dedf4612614edf96c9e6cc15339127eedb2e6bb09bfca"
+    },
+    {
+      "id": "N07-03",
+      "owner": "AM61-T36",
+      "inherited_status": "未执行",
+      "status": "partial",
+      "scope": "Bounded model payload/input/configuration contracts and ontology/embedding regressions passed. Real requested provider/tokenizer identity, failover quality and full embedding migration acceptance are not established. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_semantic_reranker.py",
+        "test_ontology_upgrade.py",
+        "test_governed_models_v7.py"
+      ],
+      "matched_passing_test_cases": 65,
+      "passing_node_ids_sha256": "3ac470e0d7791cee439dedf4612614edf96c9e6cc15339127eedb2e6bb09bfca"
+    },
+    {
+      "id": "N08-01",
+      "owner": "AM61-T38",
+      "inherited_status": "未执行",
+      "status": "insufficient_data",
+      "scope": "Frozen synthetic study/scorer and comparison protocol regressions passed, including preserved 17-event/20-check fixture semantics. The fixture explicitly says end-to-end execution is false; real held-out quality/cost data are absent. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_memory_v61_fixtures.py",
+        "test_memory_evaluation_protocol_acceptance.py",
+        "test_question_cost_v7.py"
+      ],
+      "matched_passing_test_cases": 78,
+      "passing_node_ids_sha256": "8f3d5bcf8c50723ee93267c75998555c788d8c1c0e8db3fd10bf0d7e52f0c22a"
+    },
+    {
+      "id": "N08-02",
+      "owner": "AM61-T38",
+      "inherited_status": "部分：17/20 已适配，端到端未执行",
+      "status": "insufficient_data",
+      "scope": "Frozen synthetic study/scorer and comparison protocol regressions passed, including preserved 17-event/20-check fixture semantics. The fixture explicitly says end-to-end execution is false; real held-out quality/cost data are absent. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_memory_v61_fixtures.py",
+        "test_memory_evaluation_protocol_acceptance.py",
+        "test_question_cost_v7.py"
+      ],
+      "matched_passing_test_cases": 78,
+      "passing_node_ids_sha256": "8f3d5bcf8c50723ee93267c75998555c788d8c1c0e8db3fd10bf0d7e52f0c22a"
+    },
+    {
+      "id": "N08-03",
+      "owner": "AM61-T38",
+      "inherited_status": "未执行",
+      "status": "insufficient_data",
+      "scope": "Frozen synthetic study/scorer and comparison protocol regressions passed, including preserved 17-event/20-check fixture semantics. The fixture explicitly says end-to-end execution is false; real held-out quality/cost data are absent. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_memory_v61_fixtures.py",
+        "test_memory_evaluation_protocol_acceptance.py",
+        "test_question_cost_v7.py"
+      ],
+      "matched_passing_test_cases": 78,
+      "passing_node_ids_sha256": "8f3d5bcf8c50723ee93267c75998555c788d8c1c0e8db3fd10bf0d7e52f0c22a"
+    },
+    {
+      "id": "R05-01",
+      "owner": "AM61-T09",
+      "inherited_status": "部分：必要字段/限定完整性、点证据不延长、跨来源时间 AND/OR 已测；部分字段独立持久发布未启用",
+      "status": "partial",
+      "scope": "Explicit qualification, partial field support and compatible current parent/page regressions passed. A general asynchronous semantic verifier remains unavailable. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_fact_qualification.py",
+        "test_project_admission_v7.py",
+        "test_v7_qualified_pages.py"
+      ],
+      "matched_passing_test_cases": 214,
+      "passing_node_ids_sha256": "e770792b822bdd2affb12f8229642c3a81f374e2f6822f7f0728bce9e5deccec"
+    },
+    {
+      "id": "R05-02",
+      "owner": "AM61-T09",
+      "inherited_status": "部分：辅助 OR 分支擦除幸存、AND 缺项失效、业务版本与来源族核验已测；完整异步核验待补",
+      "status": "partial",
+      "scope": "Explicit qualification, partial field support and compatible current parent/page regressions passed. A general asynchronous semantic verifier remains unavailable. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_fact_qualification.py",
+        "test_project_admission_v7.py",
+        "test_v7_qualified_pages.py"
+      ],
+      "matched_passing_test_cases": 214,
+      "passing_node_ids_sha256": "e770792b822bdd2affb12f8229642c3a81f374e2f6822f7f0728bce9e5deccec"
+    },
+    {
+      "id": "R06-01",
+      "owner": "AM61-T10",
+      "inherited_status": "已测同 scope 单值：独立终止依据、B 撤证、终止证据丢失均不复活 A",
+      "status": "partial",
+      "scope": "Independent valid/known history, contribution withdrawal and no-resurrection regressions passed. General correction of transition start times remains unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_contribution_lifecycle.py",
+        "test_atom_temporal.py",
+        "test_bitemporal_claims.py"
+      ],
+      "matched_passing_test_cases": 106,
+      "passing_node_ids_sha256": "36bb238b6b3f5959c09a29aa0ded61781e522a8111f1547929d7284000de6eba"
+    },
+    {
+      "id": "R06-02",
+      "owner": "AM61-T10",
+      "inherited_status": "部分：新证据显式延长/取消错误终止、历史及撤证已测；移动起点未启用",
+      "status": "partial",
+      "scope": "Independent valid/known history, contribution withdrawal and no-resurrection regressions passed. General correction of transition start times remains unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_contribution_lifecycle.py",
+        "test_atom_temporal.py",
+        "test_bitemporal_claims.py"
+      ],
+      "matched_passing_test_cases": 106,
+      "passing_node_ids_sha256": "36bb238b6b3f5959c09a29aa0ded61781e522a8111f1547929d7284000de6eba"
+    },
+    {
+      "id": "R07-01",
+      "owner": "AM61-T12",
+      "inherited_status": "跨槽未启用且整项拒绝已测；同槽 E1 更正保留 E2 的对应切片通过",
+      "status": "partial",
+      "scope": "Same-slot correction/CAS and explicit cross-slot rejection regressions passed. General cross-slot atomic semantic correction remains unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_source_revisions.py",
+        "test_reprocessing.py"
+      ],
+      "matched_passing_test_cases": 37,
+      "passing_node_ids_sha256": "a84abb156f6085c6f7fb29549d0ddda78f505c48b1cb2d118ff66bbc72d8c690"
+    },
+    {
+      "id": "R07-02",
+      "owner": "AM61-T12",
+      "inherited_status": "同槽 CAS/新增贡献/竞争/越权/失败回滚已测；跨槽明确拒绝",
+      "status": "partial",
+      "scope": "Same-slot correction/CAS and explicit cross-slot rejection regressions passed. General cross-slot atomic semantic correction remains unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_source_revisions.py",
+        "test_reprocessing.py"
+      ],
+      "matched_passing_test_cases": 37,
+      "passing_node_ids_sha256": "a84abb156f6085c6f7fb29549d0ddda78f505c48b1cb2d118ff66bbc72d8c690"
+    },
+    {
+      "id": "R08-01",
+      "owner": "AM61-T26",
+      "inherited_status": "第十二阶段当前本地 facet 切片通过；完整扩展未验收",
+      "status": "partial",
+      "scope": "Finite registered current project first-query/publication races, empty/truncated census and invalidation regressions passed on both providers. No arbitrary query-program capability is claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_v7_subscriptions.py",
+        "test_v7_project_indexes.py",
+        "test_question_runtime_v7.py"
+      ],
+      "matched_passing_test_cases": 103,
+      "passing_node_ids_sha256": "6d7c69559e35d6c325e7c598bbeebab783ebee15acd999a81ec58ba87f68e767"
+    },
+    {
+      "id": "R08-02",
+      "owner": "AM61-T26",
+      "inherited_status": "第十二阶段当前本地 facet 切片通过；完整扩展未验收",
+      "status": "partial",
+      "scope": "Finite registered current project first-query/publication races, empty/truncated census and invalidation regressions passed on both providers. No arbitrary query-program capability is claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_v7_subscriptions.py",
+        "test_v7_project_indexes.py",
+        "test_question_runtime_v7.py"
+      ],
+      "matched_passing_test_cases": 103,
+      "passing_node_ids_sha256": "6d7c69559e35d6c325e7c598bbeebab783ebee15acd999a81ec58ba87f68e767"
+    },
+    {
+      "id": "R09-01",
+      "owner": "AM61-T28",
+      "inherited_status": "部分：B.1–B.3 语言条件/非条件检查点与稳定区间、旧上下文/政策/资格、更正/撤回及缺口拒绝已测；一般谓词/跨范围历史待补",
+      "status": "partial",
+      "scope": "Bounded legacy language historical point/interval and current authorization/erasure regressions passed. Generic historical project questions and pages remain explicitly unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_derived_history.py",
+        "test_derived_context_history.py",
+        "test_derived_coverage.py",
+        "test_question_transport_v7.py"
+      ],
+      "matched_passing_test_cases": 305,
+      "passing_node_ids_sha256": "03ff8d49b84c97fc024cec30bd1981f1569a7c28c45a37369f352e23c2ee7cd9"
+    },
+    {
+      "id": "R09-02",
+      "owner": "AM61-T28",
+      "inherited_status": "部分：B.1–B.3 条件/非条件点与区间的当前撤权/期限/floor、字段证据擦除与最终交付已测；通用父传播待补",
+      "status": "partial",
+      "scope": "Bounded legacy language historical point/interval and current authorization/erasure regressions passed. Generic historical project questions and pages remain explicitly unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_derived_history.py",
+        "test_derived_context_history.py",
+        "test_derived_coverage.py",
+        "test_question_transport_v7.py"
+      ],
+      "matched_passing_test_cases": 305,
+      "passing_node_ids_sha256": "03ff8d49b84c97fc024cec30bd1981f1569a7c28c45a37369f352e23c2ee7cd9"
+    },
+    {
+      "id": "R10-01",
+      "owner": "AM61-T15",
+      "inherited_status": "部分：ticket/scope epoch 屏障、事务 A 真正强杀前后原子恢复已测；外部远端在途交付守卫待补",
+      "status": "partial",
+      "scope": "Current epoch/ticket/outbox erasure and real receive-process recovery passed. Recall of already-dispatched external bytes and a deployed remote in-flight delivery lifecycle are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_durable_process_recovery.py",
+        "test_durable_purge.py",
+        "test_durable_transport.py"
+      ],
+      "matched_passing_test_cases": 52,
+      "passing_node_ids_sha256": "8f1b4a8c5761e279011d73cccbf3f807659e5fa1874bc8b4da0c00b2e0ad98e3"
+    },
+    {
+      "id": "R10-02",
+      "owner": "AM61-T15",
+      "inherited_status": "通过（受控 SDK/MCP）：旧 producer/ticket 撤销；新授权 epoch 输入可接收，旧离线正文先清理、旧身份禁止搬入新会话；revise 沿用确认合同",
+      "status": "partial",
+      "scope": "Current epoch/ticket/outbox erasure and real receive-process recovery passed. Recall of already-dispatched external bytes and a deployed remote in-flight delivery lifecycle are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_durable_process_recovery.py",
+        "test_durable_purge.py",
+        "test_durable_transport.py"
+      ],
+      "matched_passing_test_cases": 52,
+      "passing_node_ids_sha256": "8f1b4a8c5761e279011d73cccbf3f807659e5fa1874bc8b4da0c00b2e0ad98e3"
+    },
+    {
+      "id": "R11-01",
+      "owner": "AM61-T22",
+      "inherited_status": "通过（有限捕获请求）：空未闭合清单不达到 L1；闭合零发布明确 no_outputs；opt-in 本地候选索引需闭合和连续覆盖，未配置通道仍 unsupported",
+      "status": "partial",
+      "scope": "Pinned finite publication-manifest closure and continuous local index coverage regressions passed. General external index implementations are not accepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_publication_batches.py",
+        "test_durable_readiness.py",
+        "test_question_runtime_v7.py"
+      ],
+      "matched_passing_test_cases": 147,
+      "passing_node_ids_sha256": "4cfdb0ef5bb2bd32a5628398f3cb2381e66c3839889b8789e2757ef646b20dc4"
+    },
+    {
+      "id": "R11-02",
+      "owner": "AM61-T22",
+      "inherited_status": "通过（opt-in 本地候选索引）：多请求固定令牌集合全部闭合，逐令牌实际证明与连续前缀均到位才 reached；后续序号先完成不越缺口。显式实际修复/新流基线切换已测，旧目标不漂移；单请求多发布、部分提交续跑、闭合和逐批修复/切流已测；外部索引仍待补",
+      "status": "partial",
+      "scope": "Pinned finite publication-manifest closure and continuous local index coverage regressions passed. General external index implementations are not accepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_publication_batches.py",
+        "test_durable_readiness.py",
+        "test_question_runtime_v7.py"
+      ],
+      "matched_passing_test_cases": 147,
+      "passing_node_ids_sha256": "4cfdb0ef5bb2bd32a5628398f3cb2381e66c3839889b8789e2757ef646b20dc4"
+    },
+    {
+      "id": "R12-01",
+      "owner": "AM61-T21",
+      "inherited_status": "未执行",
+      "status": "partial",
+      "scope": "B5 real database atomic multi-account reservations and independent SIGKILL/recording-HTTP acceptance boundaries passed; unknown cost and synthetic invoice replay remain durable. No actual inference-provider bill or quality/cost experiment exists. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_model_budget_v7.py",
+        "test_governed_models_v7.py"
+      ],
+      "matched_passing_test_cases": 65,
+      "passing_node_ids_sha256": "5979866b1189cca346a6338287fb0766d61b5671d68a2019d8183d2011362163"
+    },
+    {
+      "id": "R12-02",
+      "owner": "AM61-T21",
+      "inherited_status": "未执行",
+      "status": "partial",
+      "scope": "B5 real database atomic multi-account reservations and independent SIGKILL/recording-HTTP acceptance boundaries passed; unknown cost and synthetic invoice replay remain durable. No actual inference-provider bill or quality/cost experiment exists. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_model_budget_v7.py",
+        "test_governed_models_v7.py",
+        "test_model_budget_recovery_v7.py"
+      ],
+      "matched_passing_test_cases": 79,
+      "passing_node_ids_sha256": "f97eb5636f350ad0d2ecf5ef8ed94c7b4cf2e9dbdb8892180e9883b9b8c81ee0"
+    },
+    {
+      "id": "R13-01",
+      "owner": "AM61-T39",
+      "inherited_status": "部分：质量门回归，实际适配器待接入",
+      "status": "insufficient_data",
+      "scope": "Fail-closed frozen profile/sample/threshold and quality-gate protocol regressions passed. Real observations, calibrated thresholds, licensed gold and actual provider comparison remain unavailable. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_release_acceptance.py",
+        "test_question_cost_v7.py",
+        "test_retrieval_evaluation.py"
+      ],
+      "matched_passing_test_cases": 79,
+      "passing_node_ids_sha256": "6df37a428ab1b813c84130ab62bd56ca3e1a8742af8a767ecbb7473e68129636"
+    },
+    {
+      "id": "R13-02",
+      "owner": "AM61-T39",
+      "inherited_status": "部分：冻结/样本/配置检查，真实校准待补",
+      "status": "insufficient_data",
+      "scope": "Fail-closed frozen profile/sample/threshold and quality-gate protocol regressions passed. Real observations, calibrated thresholds, licensed gold and actual provider comparison remain unavailable. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+      "executed_selectors": [
+        "test_release_acceptance.py",
+        "test_question_cost_v7.py",
+        "test_retrieval_evaluation.py"
+      ],
+      "matched_passing_test_cases": 79,
+      "passing_node_ids_sha256": "6df37a428ab1b813c84130ab62bd56ca3e1a8742af8a767ecbb7473e68129636"
+    },
+    {
+      "id": "Q7-01",
+      "owner": "AM70-T03",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Finite admitted project registration, empty census and first-query/publication races on both providers.",
+      "executed_selectors": [
+        "test_v7_subscriptions.py::test_registered_empty_subscription_precedes_census_and_cas",
+        "test_v7_project_indexes.py::test_first_query_lock_fences_later_writer_and_subscription_dirties_atomically",
+        "test_question_runtime_v7.py::test_compute_publish_cas_rejects_every_changed_authority_input"
+      ],
+      "matched_passing_test_cases": 14,
+      "passing_node_ids_sha256": "8b9084b8d79db1633f99d8b6e6a6eee83c598126cc73bf249af3e86ed0131658"
+    },
+    {
+      "id": "Q7-02",
+      "owner": "AM70-T03",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Old/new project and field membership, removals and erasure of persisted/unpublished routes.",
+      "executed_selectors": [
+        "test_v7_subscriptions.py::test_membership_delta_invalidates_both_old_and_new_slot_keys",
+        "test_v7_project_indexes.py::test_project_barriers_exist_before_first_subscription_and_track_moves",
+        "test_v7_project_indexes.py::test_project_routes_erased_in_all_affected_projections_and_real_backup"
+      ],
+      "matched_passing_test_cases": 8,
+      "passing_node_ids_sha256": "ade4a928387b9994bd98099d5e81481207e4ea67df2d706223e5b3b988085f47"
+    },
+    {
+      "id": "Q7-03",
+      "owner": "AM70-T03",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Bounded conservative scope fallback and fail-closed incomplete/unknown indexes.",
+      "executed_selectors": [
+        "test_v7_subscriptions.py::test_scope_fallback_is_bounded_metered_and_invalidates_snapshot",
+        "test_v7_subscriptions.py::test_oversized_backfill_selects_scope_fallback_without_partial_index_claim",
+        "test_v7_project_indexes.py::test_unknown_or_incomplete_index_fails_closed_before_bodies"
+      ],
+      "matched_passing_test_cases": 10,
+      "passing_node_ids_sha256": "9d9ab194e8f8023090158c6669cbe4d5f89d63729942ec7d93130d3e71eceb1b"
+    },
+    {
+      "id": "Q7-04",
+      "owner": "AM70-T14",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Atomic current-provider index cutover, failed backfill rollback and concurrent writes; old writers must be stopped.",
+      "executed_selectors": [
+        "test_v7_subscriptions.py::test_backfill_is_atomic_and_old_targets_fail_closed",
+        "test_v7_project_indexes.py::test_backfill_failure_rolls_back_cutover_and_retry_rebuilds_from_persisted_json",
+        "test_v7_project_indexes.py::test_first_query_lock_fences_later_writer_and_subscription_dirties_atomically"
+      ],
+      "matched_passing_test_cases": 6,
+      "passing_node_ids_sha256": "e46cd613c7f7ca72b274900e44fcddcae3124f160de36bd03cabf6e731733150"
+    },
+    {
+      "id": "Q7-05",
+      "owner": "AM70-T05",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Finite current question/scheduler singleflight, exact targets and separately guarded reads.",
+      "executed_selectors": [
+        "test_refresh_demand.py::test_fixed_coverage_receipt_coalesces_and_cannot_fake_publication",
+        "test_question_runtime_v7.py::test_actual_registration_review_publish_guarded_read_and_singleflight",
+        "test_question_transport_v7.py::test_transport_authority_injection_wrong_scope_and_history_fail_closed"
+      ],
+      "matched_passing_test_cases": 8,
+      "passing_node_ids_sha256": "b8aff233f1dc709f9567ca9632db13e9e1210378ead0e00099ddb8dc1777e37d"
+    },
+    {
+      "id": "Q7-06",
+      "owner": "AM70-T05",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Pinned claim, persistent successor, coverage versus unchanged legacy exact semantics under process recovery.",
+      "executed_selectors": [
+        "test_refresh_demand.py::test_new_dirty_keeps_fixed_receipt_and_successor_legacy_remains_exact",
+        "test_refresh_demand.py::test_compatible_full_successor_finishes_finite_coverage_but_not_exact",
+        "test_refresh_scheduler_process.py::test_sigkill_at_publish_commit_recovers_exact_responsibility"
+      ],
+      "matched_passing_test_cases": 12,
+      "passing_node_ids_sha256": "a5696f8be691e0fd5bcf5dac422296b0e5ee4cf392693e64634b8a357de2576a"
+    },
+    {
+      "id": "Q7-07",
+      "owner": "AM70-T05",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Eligibility and explicit deferred/deadline results; no guarantee of completion beyond budget.",
+      "executed_selectors": [
+        "test_refresh_demand.py::test_cold_dirty_waits_for_request_and_hot_debounce_never_resets_first",
+        "test_refresh_scheduler_boundaries.py::test_completion_preserves_actual_deadline_result"
+      ],
+      "matched_passing_test_cases": 6,
+      "passing_node_ids_sha256": "2c1b7dd2ea4e195045cb0eec5644408797ba7cab46b2cb958f14170a20a2f85f"
+    },
+    {
+      "id": "Q7-08",
+      "owner": "AM70-T07",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Durable due/high-water clock, true restart and backwards/forwards delivery guards; slow-provider test awaits observed durable completion.",
+      "executed_selectors": [
+        "test_refresh_scheduler_process.py::test_future_due_survives_host_sigkill_and_runs_only_after_durable_deadline",
+        "test_refresh_scheduler_clock_storage.py::test_signed_current_checkpoint_raises_old_backup_clock_floor",
+        "test_question_runtime_v7.py::test_durable_clock_rollback_cannot_revive_expired_question_body",
+        "test_refresh_clock_delivery.py"
+      ],
+      "matched_passing_test_cases": 42,
+      "passing_node_ids_sha256": "96fc3e1c34d296d083689b1faf26b281297c385ddf38da888aa496d002173243"
+    },
+    {
+      "id": "Q7-09",
+      "owner": "AM70-T06",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Cold invalidation and finite requested work without automatic unrequested computation.",
+      "executed_selectors": [
+        "test_refresh_demand.py::test_cold_dirty_waits_for_request_and_hot_debounce_never_resets_first",
+        "test_refresh_scheduler_boundaries.py::test_cold_finite_request_does_not_chase_unrequested_new_dirty"
+      ],
+      "matched_passing_test_cases": 4,
+      "passing_node_ids_sha256": "f2509c440583805b64ca9e458ca1f0b916659bc5b1876b3bc5890168cd63f11f"
+    },
+    {
+      "id": "Q7-10",
+      "owner": "AM70-T06",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Temporary cold-parent demand sharing bounded scheduler resources.",
+      "executed_selectors": [
+        "test_refresh_demand.py::test_hot_child_temporarily_pulls_cold_parent_under_shared_budget",
+        "test_refresh_scheduler_boundaries.py::test_cold_parent_auto_adoption_cannot_bypass_legacy_lease_guard"
+      ],
+      "matched_passing_test_cases": 4,
+      "passing_node_ids_sha256": "09e5a68ede28b50b38fd39babb5f41726bb843843b4dd794ceac8ee0030c7203"
+    },
+    {
+      "id": "Q7-11",
+      "owner": "AM70-T06",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Resource quota/fairness/aging and independent-process last-slot competition, not a production throughput SLA.",
+      "executed_selectors": [
+        "test_refresh_demand.py::test_aging_progresses_old_low_priority_ahead_of_new_high_priority_burst",
+        "test_refresh_scheduler_boundaries.py::test_pending_quota_cannot_starve_small_tenant_under_continuous_large_tenant_input",
+        "test_refresh_scheduler_process.py::test_two_independent_scheduler_processes_compete_for_last_shared_quota"
+      ],
+      "matched_passing_test_cases": 6,
+      "passing_node_ids_sha256": "126045f25d4053194e1106fcd12d124ea97397da9f0d2caf918a9cb09a301580"
+    },
+    {
+      "id": "Q7-12",
+      "owner": "AM70-T07",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Unsupported worker cannot claim/consume its incompatible responsibilities.",
+      "executed_selectors": [
+        "test_refresh_demand.py::test_shared_quota_fair_rotation_and_unsupported_routes",
+        "test_derived_lifecycle_audit.py::test_unsupported_page_worker_preserves_refresh_responsibility"
+      ],
+      "matched_passing_test_cases": 6,
+      "passing_node_ids_sha256": "954be4b35fcb8346a66416533168ee4e5178854ff8262f874d2d49001fc1e54b"
+    },
+    {
+      "id": "Q7-13",
+      "owner": "AM70-T04",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Actual finite closed admitted-publication coverage distinguished from source-persisted receipts.",
+      "executed_selectors": [
+        "test_question_runtime_v7.py::test_finite_manifest_target_is_real_closed_and_lease_fenced"
+      ],
+      "matched_passing_test_cases": 2,
+      "passing_node_ids_sha256": "5d82570cd762eefbd6bf36603bd77cc1e778c112daa29365f97f0de88c67e08d"
+    },
+    {
+      "id": "Q7-14",
+      "owner": "AM70-T08",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Four host-registered finite templates through embedded and MCP reads with zero model calls.",
+      "executed_selectors": [
+        "test_question_runtime_v7.py::test_actual_registration_review_publish_guarded_read_and_singleflight",
+        "test_question_transport_v7.py::test_questions_opt_in_and_zero_model_transport_closed_loop"
+      ],
+      "matched_passing_test_cases": 6,
+      "passing_node_ids_sha256": "6bd7f6fd3f9cf3dd9de52a474782a2bfcbd117cc9177f0991d55c7e009108e34"
+    },
+    {
+      "id": "Q7-15",
+      "owner": "AM70-T08",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Exact aliases and parameter conflicts fail closed; unrestricted natural-language routing is not enabled.",
+      "executed_selectors": [
+        "test_question_transport_v7.py::test_transport_authority_injection_wrong_scope_and_history_fail_closed",
+        "test_question_transport_v7.py::test_questions_opt_in_and_zero_model_transport_closed_loop"
+      ],
+      "matched_passing_test_cases": 8,
+      "passing_node_ids_sha256": "523f818fb54d41c3d111ac1dd189b6ff2adcd6c133f75b5d248b3f3d7e02aef5"
+    },
+    {
+      "id": "Q7-16",
+      "owner": "AM70-T02",
+      "inherited_status": null,
+      "status": "partial",
+      "scope": "Synthetic complete-census/unknown/conflict/qualification semantics passed; licensed real-domain gold and quality remain missing.",
+      "executed_selectors": [
+        "test_question_runtime_v7.py::test_all_four_templates_explicit_unknown_contested_and_incomplete",
+        "test_v7_project_indexes.py::test_real_overflow_sentinel_precedes_all_body_reads",
+        "test_question_runtime_v7.py::test_nonempty_full_status_commitments_risks_with_unknown_state_and_qualifiers"
+      ],
+      "matched_passing_test_cases": 6,
+      "passing_node_ids_sha256": "585c0a0bdc39768e6c1205c7c8cf4364c1f2a18613ec5c82f6903e3e8ee5acb3"
+    },
+    {
+      "id": "Q7-17",
+      "owner": "AM70-T10",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Whitelisted complete-group deterministic delta is equivalent to same-snapshot full across business values, members and proofs.",
+      "executed_selectors": [
+        "test_question_delta_v7.py::test_randomized_add_modify_remove_withdraw_qualification_and_time_replay",
+        "test_question_delta_v7.py::test_keyed_aggregate_extrema_distinct_unknown_missing_unit_and_retractions"
+      ],
+      "matched_passing_test_cases": 6,
+      "passing_node_ids_sha256": "62180e56e31e3cdb2fa2dd5d2c1df35441584aeb96d1bd6ee9bb1788498f77cd"
+    },
+    {
+      "id": "Q7-18",
+      "owner": "AM70-T10",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Incompatible definition/schema/policy/operator and corrupt optimization state force full or reject.",
+      "executed_selectors": [
+        "test_question_delta_v7.py::test_unproved_delta_forces_real_full_without_false_frontier",
+        "test_b4_adversarial_review.py::test_integrated_unprovable_optimization_rebuilds_after_restart"
+      ],
+      "matched_passing_test_cases": 14,
+      "passing_node_ids_sha256": "4d131b2eb5a08ee30cc0df7e7c69c30f5b8166f22329a04e819930b2f96e7217"
+    },
+    {
+      "id": "Q7-19",
+      "owner": "AM70-T10",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Duplicate/out-of-order changes normalize; missing or corrupt sequence cannot be resealed as continuous.",
+      "executed_selectors": [
+        "test_question_delta_v7.py::test_log_duplicates_and_disorder_canonicalize_but_missing_sequence_does_not",
+        "test_question_delta_v7.py::test_append_never_reseals_corrupt_prior_log_as_continuous"
+      ],
+      "matched_passing_test_cases": 2,
+      "passing_node_ids_sha256": "1e413cd7ea0a7c68496add2081c356b4b008a10ed12174a58c0677d0053d32d7"
+    },
+    {
+      "id": "Q7-20",
+      "owner": "AM70-T04",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Current-only project interface explicitly rejects history. Existing bounded L1/language historical contracts are separately covered; no generic historical project capability.",
+      "executed_selectors": [
+        "test_question_transport_v7.py::test_transport_authority_injection_wrong_scope_and_history_fail_closed"
+      ],
+      "matched_passing_test_cases": 4,
+      "passing_node_ids_sha256": "32f83d6bf7ebf6241b7b8e2dae689165ea9618d984b553d7ba63d4121c1821db"
+    },
+    {
+      "id": "Q7-21",
+      "owner": "AM70-T11",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Immutable content/generation with renewed certificate and bounded source-sensitive downstream validation.",
+      "executed_selectors": [
+        "test_question_proof_reuse_v7.py::test_safe_noop_advances_actual_coverage_and_certificate_but_not_generation",
+        "test_question_page_validation_v7.py::test_noop_parent_keeps_immutable_page_generation_but_requires_bounded_certificate_work",
+        "test_question_page_validation_v7.py::test_source_sensitive_page_rebuilds_same_business_value_new_evidence"
+      ],
+      "matched_passing_test_cases": 6,
+      "passing_node_ids_sha256": "8364386e282797bec006c12c014f0e5ecc85b96a5ba8811598b1327a7aed45dd"
+    },
+    {
+      "id": "Q7-22",
+      "owner": "AM70-T11",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Original private processing ancestry remains guarded before body access; only independent approved full generation may discard it.",
+      "executed_selectors": [
+        "test_question_proof_reuse_v7.py::test_revoked_original_private_source_denied_prebody_then_independent_full_public_context",
+        "test_question_page_validation_v7.py::test_revoked_page_original_certificate_blocks_prebody_even_after_parent_new_full",
+        "test_b4_adversarial_review.py::test_answer_regenerates_independently_after_original_private_source_is_revoked"
+      ],
+      "matched_passing_test_cases": 6,
+      "passing_node_ids_sha256": "af8dd8af9683663cfe2e3ef0fa1640a0b3b76381ba3034e3c2752a940fd354de"
+    },
+    {
+      "id": "Q7-23",
+      "owner": "AM70-T09",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Host-only typed append/insert/replace/remove, stable block identities, atomic versions/lineage and real whole-page capacity; arbitrary model patches remain disabled.",
+      "executed_selectors": [
+        "test_question_pages_v7.py",
+        "test_v7_qualified_pages.py",
+        "test_derived_lifecycle_audit.py::test_page_output_limit_measures_delivered_materialized_body",
+        "test_question_page_patches_v7.py",
+        "test_question_page_patch_review_v7.py"
+      ],
+      "matched_passing_test_cases": 284,
+      "passing_node_ids_sha256": "49fe5ef6eef3f21c3442d98cbf3f824c95564376f6105e8dc45ea60f3468d07c"
+    },
+    {
+      "id": "Q7-24",
+      "owner": "AM70-T04",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Owned snapshots plus authority/query/source/lease/version CAS; losing publishes do not replace current state.",
+      "executed_selectors": [
+        "test_question_runtime_v7.py::test_compute_publish_cas_rejects_every_changed_authority_input",
+        "test_question_runtime_v7.py::test_publish_owns_all_caller_inputs_before_waiting_for_transaction",
+        "test_question_proof_reuse_v7.py::test_forged_optimization_inputs_cannot_cross_atomic_publish",
+        "test_question_snapshot_security_v7.py"
+      ],
+      "matched_passing_test_cases": 42,
+      "passing_node_ids_sha256": "5c17388041d3b3c35e3dd9b89886fb93dedb75a9dff147fc38556e013e3b396e"
+    },
+    {
+      "id": "Q7-25",
+      "owner": "AM70-T12",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Exact model configuration/context cache coordinates and separately guarded host-bound requests; no semantic similarity reuse.",
+      "executed_selectors": [
+        "test_governed_models_v7.py::test_exact_coordinates_never_use_semantic_similarity",
+        "test_governed_models_v7.py::test_exact_configuration_change_always_misses",
+        "test_question_models_v7.py::test_explicit_model_route_uses_registered_real_question_and_exact_cache"
+      ],
+      "matched_passing_test_cases": 27,
+      "passing_node_ids_sha256": "efa18abff06687b80f10a9abe4752bacb167c9e25dfe0d5e444a336f66332b5c"
+    },
+    {
+      "id": "Q7-26",
+      "owner": "AM70-T12",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Before-body, dispatch and final delivery authorization, cache erasure and immutable serialized envelope binding; fake model output only.",
+      "executed_selectors": [
+        "test_governed_models_v7.py::test_erasure_prevents_all_new_delivery_and_scrubs_cached_bodies",
+        "test_governed_models_v7.py::test_old_backup_erasure_scrubs_model_outputs_but_keeps_minimal_cost_debt",
+        "test_b5_independent_security_v7.py",
+        "test_question_models_v7.py::test_erasing_question_content_scrubs_dependent_model_cache"
+      ],
+      "matched_passing_test_cases": 51,
+      "passing_node_ids_sha256": "e85b814f8f465cb040b49ca79f4ce6847ea00a16003ace8669b06946cadb80bc"
+    },
+    {
+      "id": "Q7-27",
+      "owner": "AM70-T12",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Immutable provider/model/runtime/prompt/options/output identity and fail-closed unknown billing tested with recording local HTTP fixtures; no real inference execution.",
+      "executed_selectors": [
+        "test_governed_models_v7.py::test_exact_configuration_change_always_misses",
+        "test_ollama_port_v7.py"
+      ],
+      "matched_passing_test_cases": 18,
+      "passing_node_ids_sha256": "a14917b44a2f1642fe9820d3e8a182eca1f5e6b5c374de61218fb9194a245f72"
+    },
+    {
+      "id": "Q7-28",
+      "owner": "AM70-T12",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Atomic multi-account intent, real SIGKILL at SQL and recording HTTP receipt boundaries, idempotent synthetic invoice settlement and durable unknown debt. Actual inference-provider acceptance is not asserted.",
+      "executed_selectors": [
+        "test_model_budget_recovery_v7.py::test_sigkill_does_not_release_accepted_or_unknown_cost",
+        "test_model_budget_recovery_v7.py::test_sigkill_after_recording_provider_accepts_body_keeps_debt_and_fences_delivery",
+        "test_model_budget_v7.py::test_duplicate_provider_bill_cannot_charge_second_attempt"
+      ],
+      "matched_passing_test_cases": 12,
+      "passing_node_ids_sha256": "5642b97101cbea9bfc17353bd078d865f33250e3ba1c6e5e8fa7b94c0db3136d"
+    },
+    {
+      "id": "Q7-29",
+      "owner": "AM70-T07",
+      "inherited_status": null,
+      "status": "passed",
+      "scope": "Independent SIGKILL/restart for full/delta/proof publications, scheduler due/dirty/responsibility recovery and polling without notification.",
+      "executed_selectors": [
+        "test_question_process_recovery_v7.py::test_question_commit_sigkill_recovers_all_state_without_duplicate_publication",
+        "test_refresh_scheduler_process.py::test_sigkill_at_publish_commit_recovers_exact_responsibility",
+        "test_refresh_scheduler_process.py::test_independent_running_host_polls_durable_work_without_notification"
+      ],
+      "matched_passing_test_cases": 22,
+      "passing_node_ids_sha256": "828f62767ad958091ef7e9dd72fb73f3f0df0d79c4f612cac53d39c459c3c3c1"
+    },
+    {
+      "id": "Q7-30",
+      "owner": "AM70-T14",
+      "inherited_status": null,
+      "status": "partial",
+      "scope": "Actual SQLite backup and PG dump/restore with independently pinned deletion/finance journals; question, patched-page and model-cache lineage. Real prior-source upgrade/quiescent incompatible rollback probe passes. Online mixed-version writing and generic old-binary safety remain unsupported.",
+      "executed_selectors": [
+        "test_question_runtime_v7.py::test_question_erasure_and_real_old_backup_replay_scrub_complete_generation",
+        "test_b4_adversarial_review.py::test_delta_state_and_pending_page_validation_are_scrubbed_from_real_backup",
+        "test_governed_models_v7.py::test_old_backup_erasure_scrubs_model_outputs_but_keeps_minimal_cost_debt",
+        "test_model_budget_recovery_v7.py::test_independently_pinned_money_replay_restores_postbackup_debt",
+        "operational/v7_upgrade_drill.py::test_old_source_upgrade_and_quiescent_rollback_preserve_contracts",
+        "test_question_page_patches_v7.py::test_patch_erasure_and_actual_backup_replay_include_all_original_revisions",
+        "test_question_page_patch_review_v7.py::test_removed_private_block_remains_guarded_and_erased_from_real_backup"
+      ],
+      "matched_passing_test_cases": 22,
+      "passing_node_ids_sha256": "9faea690543c88f3e8e5a52c22e917abd9345b034fc27a961688a7d8ab07391f"
+    },
+    {
+      "id": "Q7-31",
+      "owner": "AM70-T13",
+      "inherited_status": null,
+      "status": "partial",
+      "scope": "Runtime accounting projection and all-phase/unknown/debt rejection contracts pass; complete repeated real workload, measured resources and billing reconciliation remain unmeasured.",
+      "executed_selectors": [
+        "test_model_cost_runtime_v7.py::test_actual_runtime_projection_counts_calls_once_and_never_prices_local_unknown_zero",
+        "test_model_cost_runtime_v7.py::test_partial_phase_inventory_stays_unaccounted_and_overlap_is_rejected"
+      ],
+      "matched_passing_test_cases": 3,
+      "passing_node_ids_sha256": "d3e53c25a3fc6a6fe3ad3d7621aa84c64278f33a16672cbb4c014fb1fd96479a"
+    },
+    {
+      "id": "Q7-32",
+      "owner": "AM70-T15",
+      "inherited_status": null,
+      "status": "insufficient_data",
+      "scope": "Blocked: actual installed Ollama Qwen3.5 9B endpoint/model identity, licensed held-out gold, frozen judge/thresholds/sample/group/statistical protocol and repeated quality/whole-cost observations are absent.",
+      "executed_selectors": [],
+      "matched_passing_test_cases": 0,
+      "passing_node_ids_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    }
+  ],
+  "artifacts": {
+    "agent_memory-0.1.0-py3-none-any.whl": "e6f277f5a1203941f0e95dde00d3485be502548e16a7d18b98ad414648a146fa",
+    "agent_memory-0.1.0.tar.gz": "30b2a22e002393915c882df39ab6273ebea6282780653f961daba317e9d14394",
+    "agent_memory_evolution-0.1.0-py3-none-any.whl": "9da080667f34325c77080a56d96ddbf39eb69bf6371a2226226e8816455a875b",
+    "agent_memory_evolution-0.1.0.tar.gz": "caad545544fab4e50001f7c98c4ae4643a02d725e77dbddbad4405a3edb16571",
+    "agent_memory_langgraph-0.1.0-py3-none-any.whl": "ae2ad1ce6339d0b1ea1d95b841b301e40c6af034308fea4146af76a93396b48e",
+    "agent_memory_langgraph-0.1.0.tar.gz": "0ca9e465ff074a1abdd79e2377ea1aa1b55135359cd5b93c7dc6515b12e963d9",
+    "agent_memory_mcp-0.1.0-py3-none-any.whl": "465887469baf58b174b1f50bc09eae89ba36a8ad9bd83feb34ecd783c74c5277",
+    "agent_memory_mcp-0.1.0.tar.gz": "1c17dc71636d9fa1b5cc0e88076613ad2f20adc0ff1090f442aca09cdf966e04",
+    "agent_memory_postgres-0.1.0-py3-none-any.whl": "995a7b95e2de08bd77142c0e72c750a9a191551f37f71e764cb98ca3d07cd962",
+    "agent_memory_postgres-0.1.0.tar.gz": "6aacd2028b15e057463207b02be694a9f9e9a8af8fd6bb1e922c7a36f26bc643",
+    "agent_memory_sdk-0.1.0-py3-none-any.whl": "85b5d39d838bff1ac8c100d0ca539c03bac7be28687b57572ccc55082858d86d",
+    "agent_memory_sdk-0.1.0.tar.gz": "e5eaee783e45e50c9608db7911269f18cd53b36ba9a7d0de9cd5dec6e3f3e298"
+  },
+  "installed_smoke": {
+    "full_v7_acceptance": false,
+    "migration_sha256": {
+      "001_core.sql": "059a160ccfaaa482682d283aefdab49ac21c9236f1a5a73ac5cfe23ee061271c",
+      "002_pgvector.sql": "235aec55688b5dffc7d87ed74b24b0e5a2906408e91b3678007b78b6982b6d6b",
+      "003_feedback.sql": "bb27c9c7a90e71732edcc3ec8ce4eb728a7d5e16a854b9e5863a417de446d5a1",
+      "004_claim_history.sql": "2a2ea22e49bada1cb991084851d067ed1d31219d24e079ad9919064b550cf7fd",
+      "005_admission.sql": "bee5a5ad0e9c419530579655a6448b6b1745f3859081bdfc4c02a6e0e4b5ca55",
+      "006_retention.sql": "cf8395443b7c221bca02b62f6420826e9e68d81a6d678fbcfc0c96797c64f152",
+      "007_producers.sql": "900891ab170788723ea4033f5b6f1771e359d2cd0c39e03e223e082f7a2eea5d",
+      "008_retention_heads.sql": "e0610ec6aa0a86c9247ebc62e6606069c71e2b0a4532bed7fc75b206c079e72f",
+      "009_purge_journal.sql": "c548cdea26c49160a0a86a48e6ca45d0342fda9754c870f1e7f6bd8abd19d8cb",
+      "010_delivery_contracts.sql": "e05449009303bae2941c8536313efdbe3f890fe14a9d89203ff3f34be291ffac",
+      "011_candidate_index.sql": "39e133c7c5ab8b608ce5736154867da70a4319cf6ac9eb5077a14bb22678aa07",
+      "012_resource_refresh.sql": "9a428a3bf63a64c91103b59b0836a5ed1d700fc5fcb3f1891ea2fb52201f6d86",
+      "013_index_recovery.sql": "966d5c3f01f5e28206e7d4ea44b73272a32d4a5c1fcb07799fc240bfdd2e3961",
+      "014_purge_restore.sql": "daa95a16e088db62a1a7326b5b001fe2a61aa639516d404e744547eb66c6fe2a",
+      "015_derived_observations.sql": "c5dfebf9086d499c97ec464d08500e468898729db85fff41c0d486ad518151c5",
+      "016_memory_erasure.sql": "53698480b9cd691ac955e8a0abbe6779d175c7cdf005d4659d640df4a012070c",
+      "017_refresh_schedule.sql": "65fdb9070f5941de68e02b426e12b2def30043caec035393c65711b2ffa74f91",
+      "018_project_candidate_index.sql": "ff9cbb40c4d6c8e180ebbeba82dbf14257ae4fe051c2d8952a52769a84ca7dcd",
+      "019_model_budget.sql": "1382dd34c8f1c6a8c8f093e0e7afa06977679c507b9e31af67dc7fc4691e97fa"
+    },
+    "packages": [
+      {
+        "distribution": "agent-memory",
+        "entry_points": [
+          "sqlite"
+        ],
+        "installed_from_artifact": true,
+        "version": "0.1.0"
+      },
+      {
+        "distribution": "agent-memory-evolution",
+        "entry_points": [
+          "evolution"
+        ],
+        "installed_from_artifact": true,
+        "version": "0.1.0"
+      },
+      {
+        "distribution": "agent-memory-langgraph",
+        "entry_points": [
+          "langgraph"
+        ],
+        "installed_from_artifact": true,
+        "version": "0.1.0"
+      },
+      {
+        "distribution": "agent-memory-sdk",
+        "entry_points": [],
+        "installed_from_artifact": true,
+        "version": "0.1.0"
+      },
+      {
+        "distribution": "agent-memory-mcp",
+        "entry_points": [
+          "agent-memory-mcp",
+          "mcp-v2"
+        ],
+        "installed_from_artifact": true,
+        "version": "0.1.0"
+      },
+      {
+        "distribution": "agent-memory-postgres",
+        "entry_points": [
+          "agent-memory-consolidate",
+          "agent-memory-health",
+          "agent-memory-preflight",
+          "agent-memory-release-scan",
+          "agent-memory-sensitive-scan",
+          "postgres"
+        ],
+        "installed_from_artifact": true,
+        "version": "0.1.0"
+      }
+    ],
+    "production_benefit_claim": false,
+    "scope": "six installed distributions and SQLite smoke only",
+    "status": "passed"
+  },
+  "installed_source_equivalence": {
+    "matched_python_files": 236,
+    "separately_smoke_verified_sql_migrations": 19,
+    "sha256": "597f9a845c58c489de3eddc389b76f3782559792c0a23e0c0346dfd3d0eb839d"
+  },
+  "installed_dependencies_sha256": "d8da50a58a7997d0a20ceb16e0ef17728adf852997fd5ffc0065c521967cc9ec",
+  "sensitive_scan": {
+    "roots": [
+      ".",
+      "/workspace/shared/agent-memory-evidence/b6/final-integrated/distributions"
+    ],
+    "scanned_files": 643,
+    "scanned_archives": 12,
+    "skipped_large_files": 0,
+    "total_findings": 0,
+    "scan_complete": true,
+    "hits": [],
+    "violations": [],
+    "is_healthy": true
+  },
+  "sensitive_scan_sha256": "844c7acca2abd89db9e8a420b43107e9a08b439c9a8557fcfdcd41e41847d846",
+  "build_install": {
+    "status": "passed",
+    "source_commit": "a90a4463171c8512689e6150c89af1a32ac14a1d",
+    "source_tree": "3a6d442ef632c9c83b82e205d8b09a219babb3a2",
+    "source_clean_at_start": true,
+    "sdists": 6,
+    "wheels": 6,
+    "distributions_installed": 6,
+    "fresh_external_environment": true,
+    "offline_dependency_cache": true,
+    "isolated_python": true,
+    "started_utc": "2026-10-08T20:42:36Z",
+    "ended_utc": "2026-10-08T20:42:44Z",
+    "exit_code": 0,
+    "command": "for package in . packages/evolution packages/langgraph packages/python-sdk packages/mcp-server packages/postgres; do .venv/bin/python -m build --no-isolation --outdir <fresh-dist> \"$package\"; done; uv venv --python /usr/bin/python3.13 <fresh-external-install>; uv pip install --offline --python <install>/bin/python <fresh-dist>/*.whl; uv pip check --python <install>/bin/python; cd <external>; <install>/bin/python -I <source>/tests/operational/v7_installed_smoke.py --source-root <source>; agent-memory-release-scan --json --fail-on-violation <source> <fresh-dist>",
+    "build_install_log_sha256": "68fdfe5caf1eb9160bff444fc600144d4a2ba8b7fa00f4910f16ebd36f6b2ec5",
+    "scope": "All final README/ledger/report documents are present in this clean build source. The subsequent evidence-only commit updates artifact/source hashes, not runtime/tests."
+  },
+  "prior_recovery_soak": {
+    "status": "passed",
+    "error": null,
+    "requested_seconds": 1800,
+    "elapsed_seconds": 1800.2384238999985,
+    "concurrency": 4,
+    "completed_cycles": 32688,
+    "retired_generations": 8172,
+    "restarts": 408,
+    "max_rss_bytes": 53571584,
+    "baseline_fd": 7,
+    "peak_fd": 7,
+    "recent_cycle_p95_ms": 203.5515010029485,
+    "boundary": "single-host recovery lifecycle; not distributed or saturation throughput",
+    "source_commit": "f6b6a7a904cbd6c90cb51a700fa655c680a17315",
+    "report_sha256": "4689c1ea2dc2b37c25e45f2196bf8195681d2f203a28ed2f3c45fbd963111a66",
+    "reused_historical_evidence": true,
+    "final_source_rerun": false,
+    "scope": "Single-host non-model recovery lifecycle only. Security/page/model changes occurred after this run; it is not final-tree model/patch soak, saturation, distributed or production-scale acceptance."
+  },
+  "rollback_boundary": {
+    "legacy_upstream_commit": "7f824dd49b18935c6b47f5eb32aa32efdbd8cf01",
+    "local_snapshot_commit": "23c66ff0f4858eded2cbf79d3b6e23a50173746b",
+    "legacy_question_read": "derived_definition_configuration_changed",
+    "legacy_coverage_status": "derived_target_unavailable",
+    "legacy_worker": "KeyError:query before claiming; V7 records unchanged",
+    "scope": "Stopped writers, actual old-source create/new-source upgrade/old incompatible read-and-worker probe/compatible forward resume. Not online mixed-version writing or supported operational downgrade."
+  },
+  "external_gaps": "Blocked: actual installed Ollama Qwen3.5 9B endpoint/model identity, licensed held-out gold, frozen judge/thresholds/sample/group/statistical protocol and repeated quality/whole-cost observations are absent.",
+  "preserved": {
+    "frozen_design_sha256": "309104c81b2e89ce74137903312ecbeaa036ba192d47fcfbdd555cdd4dc907b9",
+    "inherited_task_sha256": "14f90d83cb2425177aa22ad2dd1cf7fa90e4c56416ae93a02c7ff134ad8810f5",
+    "inherited_states": {
+      "DONE": 1,
+      "IN_PROGRESS": 33,
+      "TODO": 10
+    },
+    "software_version": "0.1.0 / Alpha"
+  },
+  "raw_evidence_location": "Parent validation workspace: agent-memory-evidence/b6/final-integrated. Filenames and hashes here identify preserved JUnit, logs and archives; private environment configuration is not included.",
+  "preliminary_attempt": {
+    "tests": "3789",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "29",
+    "time": "709.622",
+    "status": "incomplete_environment_not_final_acceptance",
+    "reason": "AGENT_MEMORY_ONTOLOGY_TEST_DSN was not exported. Primary PG tests ran; ontology variants were skipped. Entire suite rerun with both required DSN entrypoints, not counted as accepted final run.",
+    "junit_sha256": "c07fd8fbd7cb164086f949897917639fb3f04582d457f827127de1adc4ed93c5"
+  },
+  "documentation_checks": {
+    "command": ".venv/bin/python -m pytest -q tests/test_v7_acceptance_inventory.py tests/test_v7_b6_evidence_plan.py tests/test_architecture.py tests/test_release_acceptance.py tests/test_comparison_adapters.py tests/test_recovery_context_acceptance.py packages/postgres/tests/test_release_scan.py --junitxml=<evidence>/documentation-final.xml -ra",
+    "tests": "132",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "2.479",
+    "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+    "working_tree": "B6 report, README, plan and ledger changes; no production or test-code changes. Final artifact/evidence hashes are added afterward.",
+    "junit_sha256": "66c83caa3dce01cf4c018137a76a2a0de97ac69377111a58097bb57c9d0d0f5f"
+  },
+  "independent_page_review": {
+    "production_commit": "2b0e06f1aaa7e125e03b5ce2ef26d8155e96a403",
+    "review_test_commit": "e4f63c0e1da30089ce56c5dd4fbdcdb8b91b9add",
+    "compatibility_passed": 138,
+    "expanded_review_passed": 26,
+    "unique_passing_cases": 156,
+    "skipped": 0,
+    "review_json_sha256": "78982c8e9de44e60e9694aafd655d13e2518c9b1b23679cc108fa22eb0eafd8d"
+  },
+  "strict_release_report": {
+    "path": "docs/design/v7.0.0/release-report-b6.json",
+    "status": "blocked",
+    "resource": "unmeasured for final-source real-model whole-cost acceptance; prior non-model soak remains supplementary",
+    "skips_waived": false
+  },
+  "initial_artifact_run": {
+    "artifacts": {
+      "agent_memory-0.1.0-py3-none-any.whl": "04251a763d53360c659938f3124d7f59c5c6eb3b4caa64bc5013e4f1ab01d31f",
+      "agent_memory-0.1.0.tar.gz": "3e8e6053efe41311896d464b087dd897b27aef49e385aa5735e13749f6fce966",
+      "agent_memory_evolution-0.1.0-py3-none-any.whl": "9da080667f34325c77080a56d96ddbf39eb69bf6371a2226226e8816455a875b",
+      "agent_memory_evolution-0.1.0.tar.gz": "caad545544fab4e50001f7c98c4ae4643a02d725e77dbddbad4405a3edb16571",
+      "agent_memory_langgraph-0.1.0-py3-none-any.whl": "ae2ad1ce6339d0b1ea1d95b841b301e40c6af034308fea4146af76a93396b48e",
+      "agent_memory_langgraph-0.1.0.tar.gz": "0ca9e465ff074a1abdd79e2377ea1aa1b55135359cd5b93c7dc6515b12e963d9",
+      "agent_memory_mcp-0.1.0-py3-none-any.whl": "465887469baf58b174b1f50bc09eae89ba36a8ad9bd83feb34ecd783c74c5277",
+      "agent_memory_mcp-0.1.0.tar.gz": "1c17dc71636d9fa1b5cc0e88076613ad2f20adc0ff1090f442aca09cdf966e04",
+      "agent_memory_postgres-0.1.0-py3-none-any.whl": "995a7b95e2de08bd77142c0e72c750a9a191551f37f71e764cb98ca3d07cd962",
+      "agent_memory_postgres-0.1.0.tar.gz": "6aacd2028b15e057463207b02be694a9f9e9a8af8fd6bb1e922c7a36f26bc643",
+      "agent_memory_sdk-0.1.0-py3-none-any.whl": "85b5d39d838bff1ac8c100d0ca539c03bac7be28687b57572ccc55082858d86d",
+      "agent_memory_sdk-0.1.0.tar.gz": "e5eaee783e45e50c9608db7911269f18cd53b36ba9a7d0de9cd5dec6e3f3e298"
+    },
+    "build_install": {
+      "status": "passed",
+      "source_commit": "22f6f84954894c48c19f3d70d8f4b77ca5364c7d",
+      "sdists": 6,
+      "wheels": 6,
+      "distributions_installed": 6,
+      "fresh_external_environment": true,
+      "offline_dependency_cache": true,
+      "isolated_python": true,
+      "build_log_sha256": "be446066ce2a70b2ebe0870a8a82f6f8edacf57addc3667325072122c0b86ee3",
+      "corrected_install_log_sha256": "ee5c264bf2c442c765fa356dbe658dd638c28e78a5c2296218986cfb0ab32917",
+      "initial_environment_errors": "Initial default uv cache path was read-only; alternate incomplete cache lacked langgraph. Correct existing offline cache /tmp/uv-v7-cache completed the same authorized install; no dependency/network/model download."
+    },
+    "installed_dependencies_sha256": "d8da50a58a7997d0a20ceb16e0ef17728adf852997fd5ffc0065c521967cc9ec",
+    "sensitive_scan": {
+      "roots": [
+        ".",
+        "/workspace/shared/agent-memory-evidence/b6/final-integrated/distributions"
+      ],
+      "scanned_files": 640,
+      "scanned_archives": 12,
+      "skipped_large_files": 0,
+      "total_findings": 0,
+      "scan_complete": true,
+      "hits": [],
+      "violations": [],
+      "is_healthy": true
+    },
+    "sensitive_scan_sha256": "ff9a273c8b951352d1a999cb5ccfb4322bb8ecf78de115bf975531ce1f6aeb55",
+    "preserved_directory": "initial-artifact-run"
+  },
+  "installed_smoke_sha256": "8577ac6b5ed624e4ab155665977e6664e2f1716ab59fe112ddc3c817ea2b1406",
+  "runtime_test_build_input_equivalence": {
+    "test_source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+    "artifact_source_commit": "a90a4463171c8512689e6150c89af1a32ac14a1d",
+    "identical_git_objects": {
+      "src": "de4df7b6ced8532ba39c9efe24b586c2a65276e3",
+      "packages": "551162f9f52651155ded52ee92b1491a173b4646",
+      "tests": "f242af7aa82b9a211a115b677195c6948b00a6a9",
+      "tools": "f3ba9d4fd519c126b42521bd44360c860ccccf4f",
+      "setup.sh": "394939be01d3e06b09699be2f48e861b784b9bb8",
+      "pyproject.toml": "889751753fbd95fafeb995cfdbd25d9a2f7a17d0"
+    },
+    "later_changes_are_documentation_and_evidence_only": true
+  },
+  "final_artifact_documentation_checks": {
+    "tests": "132",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "2.648",
+    "source_commit": "a90a4463171c8512689e6150c89af1a32ac14a1d",
+    "working_tree": "Only artifact/source evidence metadata in validation-b6.json changed; all runtime, package, test and build input objects match complete-suite source. This result metadata was added after the check.",
+    "command": ".venv/bin/python -m pytest -q tests/test_v7_acceptance_inventory.py tests/test_v7_b6_evidence_plan.py tests/test_architecture.py tests/test_release_acceptance.py tests/test_comparison_adapters.py tests/test_recovery_context_acceptance.py packages/postgres/tests/test_release_scan.py --junitxml=<evidence>/documentation-committed-artifacts.xml -ra",
+    "junit_sha256": "72835495bc55532878ef49247aae3f0cf38f8dd8043b6552853f4cbcb6635000"
+  }
+}

@@ -214,7 +214,7 @@ The public boundary is `MemoryProvider`. Optional packages use lazy discovery; i
 
 ## Capability status and roadmap
 
-The current documented delivery baseline is **[V7-B4: deterministic project deltas and immutable proof reuse](docs/design/v7.0.0/batch-b4.md)**, building on the existing language and L1 lifecycle. The software package is **v0.1.0 / Alpha**; architecture, protocol, and package versions are tracked separately.
+The current documented delivery baseline is **[V7-B6: integrated engineering verification](docs/design/v7.0.0/batch-b6.md)**, building on the existing language and L1 lifecycle. The software package is **v0.1.0 / Alpha**; architecture, protocol, and package versions are tracked separately.
 
 | Capability | Current implementation | Evidence |
 | --- | --- | --- |
@@ -227,12 +227,13 @@ The current documented delivery baseline is **[V7-B4: deterministic project delt
 | Query and host permissions | Versioned current queries, expiring local authority, source-grant binding, and checks before final delivery | [Stage 14A](docs/design/v6.1.0/stage-14a.md) |
 | Current language L2 pages | Typed Scenario/Page/Block versions, stable block identities, atomic full rebuild, fixed readiness targets, guarded delivery, and transitive erasure | [Stage 15](docs/design/v6.1.0/stage-15.md) |
 | Trusted project questions | Host-reviewed owner, status, commitments and risks; deterministic full/delta answers and guarded proof reuse, shared durable refresh, exact routing and opt-in SDK/MCP reads | [B3](docs/design/v7.0.0/batch-b3.md) · [B4](docs/design/v7.0.0/batch-b4.md) · [Example](examples/project_questions.py) |
-| Qualified current parents and project L2 pages | Compatible trusted contexts, preserved conditions/exceptions, stable blocks and immutable provenance; guarded whole-page delivery | [B3](docs/design/v7.0.0/batch-b3.md) |
+| Qualified current parents and project L2 pages | Compatible trusted contexts, preserved conditions/exceptions, stable blocks, host-only typed patches and immutable provenance; guarded whole-page delivery | [B3](docs/design/v7.0.0/batch-b3.md) · [Typed patches](docs/design/v7.0.0/typed-page-patches.md) |
+| Governed model/cache contracts (opt-in) | Host-bound immutable provider/input/output identity, exact caching, multi-account reservations and unknown-cost recovery; synthetic protocol evidence only | [B5](docs/design/v7.0.0/batch-b5.md) · [B6](docs/design/v7.0.0/batch-b6.md) |
 | Retrieval and feedback foundations | Scoped, bounded recall; optional lexical/hybrid candidates; outcome-linked Episode/Procedure and gated Evolution components | [Architecture](docs/ARCHITECTURE.md) · [Feedback](docs/FEEDBACK_CONTRACT.md) |
 
 Observation remains limited to documented language templates. Published-point and certified-interval history preserve frozen policies/context and current access checks; gaps are rejected. Current `locale-parents/1` views bind fixed parent revisions and transitive processing permissions. Current `language-scenario/1` pages combine 1–4 non-conditional language Observation parents in the same exact scope, with compatible subject, purpose, and authority.
 
-With explicit `qualified_current=True`, `locale-qualified-parents/1` and `language-qualified-scenario/1` preserve trusted conditions and exceptions. `QuestionService` separately supports finite current project questions and host-triggered full project-page publication. Pass `questions=service` to the SDK/MCP adapter to expose this optional surface. Historical parents/pages, pages as parents, legacy facet/page delta and free-form partial block edits, generic scenarios, cross-scope composition, remote ACL synchronization, models and L3 remain disabled or planned. The bounded page delivery does not complete the full L2/L3 lifecycle. L1's existing bitemporal queries remain independently available; `l1_decided` means processing completed, not that a fact is true.
+With explicit `qualified_current=True`, `locale-qualified-parents/1` and `language-qualified-scenario/1` preserve trusted conditions and exceptions. `QuestionService` separately supports finite current project questions and host-triggered full project-page publication, validated reuse, and [bounded deterministic typed block patches](docs/design/v7.0.0/typed-page-patches.md). Pass `questions=service` to the SDK/MCP adapter to expose this optional surface. Historical parents/pages, pages as parents, legacy facet/page delta and free-form partial block edits, generic scenarios, cross-scope composition, remote ACL synchronization and L3 remain disabled or planned. The bounded page delivery does not complete the full L2/L3 lifecycle. L1's existing bitemporal queries remain independently available; `l1_decided` means processing completed, not that a fact is true.
 
 Validation records include SQLite and real PostgreSQL contracts, cross-connection races, process-kill recovery, and backup replay. The [stage 12 full-suite report](docs/design/v6.1.0/stage-12-full-test.md) is an older baseline; [stage 13](docs/design/v6.1.0/stage-13.md) and stage 14 [A](docs/design/v6.1.0/stage-14a.md)/[B.3](docs/design/v6.1.0/stage-14b3.md)/[C](docs/design/v6.1.0/stage-14c.md) record targeted and affected regression runs. [Stage 15](docs/design/v6.1.0/stage-15.md) records a full repository/package run and build/install verification, with [independent evidence](docs/design/v6.1.0/validation-stage-15.json). Each report applies to its recorded code baseline; counts are not cumulative. Production acceptance, real-domain extraction quality, and full M0/M1/M2 milestone acceptance remain open.
 
@@ -246,7 +247,7 @@ Upgrade requires stopping old writers. The project candidate index is additive; 
 
 B2's [verified lifecycle evidence](docs/design/v7.0.0/validation-b2.json) includes fixed responsibilities, fair shared limits, clock guards and process-kill recovery. Its deterministic resource limits do not represent model-spend budgets or measured production savings.
 
-Next steps follow the [v7 plan](docs/design/v7.0.0/plan.md) and [task ledger](docs/design/v7.0.0/task.md): governed model caching, then complete recovery, compatibility and real-cost acceptance. All 44 previous task statuses remain preserved. Synthetic deterministic tests do not establish licensed real-data quality, production savings or full M0/M1/M2 acceptance; those gates remain open.
+Remaining acceptance follows the [v7 plan](docs/design/v7.0.0/plan.md) and [task ledger](docs/design/v7.0.0/task.md): actual Ollama configuration, licensed held-out domain quality and whole-cost comparison. The governed model/cache contracts are implemented; they do not establish those external results. All 44 previous task statuses remain preserved. Synthetic deterministic tests do not establish licensed real-data quality, production savings or full M0/M1/M2 acceptance; those gates remain open.
 
 Advanced retrieval and optional read-only Reflect remain on the [task ledger](docs/design/v6.1.0/task.md). Remote deployments use the [security policy](SECURITY.md) and [threat model](docs/THREAT_MODEL.md); external caches, remote ACL systems, and provider-held copies need their own integration contracts.
 
@@ -283,3 +284,5 @@ Integration and live PostgreSQL tests have additional setup; see [CI](.github/wo
 ## License
 
 [Apache License 2.0](LICENSE).
+
+B6 fixed-source verification: 3783 passed and 6 explicitly retained PostgreSQL-only SQLite skips across the complete repository/all package suite; actual PG counterparts passed. Six distributions were built/clean-installed and the source/12 archives scanned with zero findings. See [the scoped report](docs/design/v7.0.0/batch-b6.md); real Ollama/domain quality and whole-cost acceptance remain blocked.

@@ -61,6 +61,16 @@ jobs:
           for package in . packages/evolution packages/langgraph packages/python-sdk packages/mcp-server packages/postgres; do
             python -m build "$package"
           done
+      - name: Install and verify all built wheels outside the checkout
+        run: |
+          python -m venv "$RUNNER_TEMP/wheel-install"
+          "$RUNNER_TEMP/wheel-install/bin/python" -m pip install dist/*.whl packages/*/dist/*.whl
+          "$RUNNER_TEMP/wheel-install/bin/python" -m pip check
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/wheel-install/bin/python" -I "$GITHUB_WORKSPACE/tests/operational/v7_installed_smoke.py" --source-root "$GITHUB_WORKSPACE"
+      - name: Scan source and all build archives without lowering the threshold
+        run: |
+          "$RUNNER_TEMP/wheel-install/bin/agent-memory-release-scan" --json --fail-on-violation .
 
   postgres-live:
     runs-on: ubuntu-latest
@@ -80,6 +90,8 @@ jobs:
           --health-retries 12
     env:
       AGENT_MEMORY_TEST_POSTGRES_DSN: >-
+        postgresql://memory:memory-test-password@localhost:5432/agent_memory_test
+      AGENT_MEMORY_ONTOLOGY_TEST_DSN: >-
         postgresql://memory:memory-test-password@localhost:5432/agent_memory_test
     steps:
       - uses: actions/checkout@v4
@@ -102,29 +114,28 @@ jobs:
           /usr/lib/postgresql/17/bin/pg_dump --version
           /usr/lib/postgresql/17/bin/psql --version
       - run: |
-          python -m pip install -e '.[dev]'
-          python -m pip install -e packages/postgres
-          python -m pip install -e packages/python-sdk
+          python -m pip install -e '.[dev]' tiktoken==0.14.0
+          python -m pip install -e packages/evolution -e packages/langgraph
+          python -m pip install -e packages/postgres -e packages/python-sdk
           python -m pip install -e 'packages/mcp-server[dev]'
-      - run: >-
-          python -m pytest -q packages/postgres/tests
-          tests/test_bitemporal_claims.py tests/test_atom_admission.py tests/test_atom_temporal.py
-          tests/test_atom_edges.py tests/test_atom_extraction.py
-          tests/test_durable_retention.py tests/test_durable_execution.py
-          tests/test_durable_producer.py tests/test_durable_transport.py
-          tests/test_reprocessing.py tests/test_source_revisions.py
-          tests/test_contextual_memory.py tests/test_artifact_erasure.py
-          tests/test_derived_*.py tests/test_purge_restore.py tests/test_durable_purge.py
-          tests/test_v7_subscriptions.py tests/test_v7_backend_lifecycle.py
-          tests/test_refresh*.py
-          tests/test_project_admission_v7.py tests/test_project_questions_v7.py
-          tests/test_question_runtime_v7.py tests/test_question_transport_v7.py
-          tests/test_question_pages_v7.py tests/test_question_erasure_v7.py
-          tests/test_question_snapshot_security_v7.py
-          tests/test_governed_models_v7.py tests/test_model_budget_v7.py
-          tests/test_ollama_port_v7.py tests/test_model_budget_recovery_v7.py
-          tests/test_model_cost_runtime_v7.py tests/test_question_models_v7.py
-          tests/test_b5_independent_security_v7.py
-          tests/test_question_delta_v7.py tests/test_question_proof_reuse_v7.py
-          tests/test_question_page_validation_v7.py tests/test_b4_adversarial_review.py
-          tests/test_v7_project_indexes.py tests/test_v7_qualified_pages.py
+      - name: Complete repository and package contracts on both real backends
+        run: >-
+          python -m pytest -q tests packages/evolution/tests packages/langgraph/tests
+          packages/python-sdk/tests packages/mcp-server/tests packages/postgres/tests
+          --junitxml=full-dual.xml -ra
+      - name: Actual pre-V7 source upgrade and quiescent rollback probe
+        run: |
+          git fetch --depth=1 origin 7f824dd49b18935c6b47f5eb32aa32efdbd8cf01
+          export AGENT_MEMORY_LEGACY_SOURCE="$RUNNER_TEMP/pre-v7-source"
+          mkdir "$AGENT_MEMORY_LEGACY_SOURCE"
+          git archive 7f824dd49b18935c6b47f5eb32aa32efdbd8cf01 | tar -x -C "$AGENT_MEMORY_LEGACY_SOURCE"
+          python -m pytest -q tests/operational/v7_upgrade_drill.py --junitxml=version-drill.xml -ra
+      - name: Preserve complete backend test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v7-live-backend-evidence
+          path: |
+            full-dual.xml
+            version-drill.xml
+          if-no-files-found: warn

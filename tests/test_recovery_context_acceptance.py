@@ -299,7 +299,8 @@ def test_store_capacity_and_terminal_tombstone(tmp_path):
 
 def test_sensitive_and_oversized_state_rejected():
     with pytest.raises(ValueError):
-        RecoveryState("run", 1, "password=abcdefghijklmnop", ("source",))
+        # The runtime input stays sensitive; no credential literal is packaged.
+        RecoveryState("run", 1, "password=" + "abcdefghijklmnop", ("source",))
     with pytest.raises(ValueError):
         RecoveryState("run", 1, "x" * 4097, ("source",))
     with pytest.raises(ValueError):

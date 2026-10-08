@@ -1,0 +1,295 @@
+{
+  "schema": "v7-batch-validation/1",
+  "batch": "V7-B6 preparation",
+  "date": "2026-10-08",
+  "source_commit": "612131d833ad8aa1a2c55dfdfd399d2d0fde527e",
+  "source_tree": "d7bbf632a79280c9b93e9916e619f95e5d907a2c",
+  "integrated_b3_commit": "a754ede",
+  "full_v7_acceptance": false,
+  "production_benefit_claim": false,
+  "final_release_status": "blocked",
+  "environment": {
+    "python": "3.13.5",
+    "postgresql": "17.11",
+    "scope": "disposable local databases and external temporary artifact-install environment; no deployment",
+    "optional_vector_scope": "not exercised by the version drill or installed smoke",
+    "tool_versions": {
+      "pytest": "8.4.2",
+      "build": "1.6.1",
+      "hatchling": "1.32.4",
+      "psycopg": "3.3.6",
+      "psycopg-pool": "3.3.3",
+      "mcp": "2.3.0",
+      "langgraph": "1.2.14"
+    }
+  },
+  "legacy_source": {
+    "local_snapshot_commit": "23c66ff0f4858eded2cbf79d3b6e23a50173746b",
+    "upstream_commit": "7f824dd49b18935c6b47f5eb32aa32efdbd8cf01",
+    "source_materialization": "git archive into an empty external temporary directory",
+    "current_and_legacy_writers_overlap": false,
+    "git_tree": "8963bb5c1be094cd56668d9b1dd7b103dd93d474"
+  },
+  "commands": [
+    {
+      "command": ".venv/bin/python -m pytest -q tests/test_comparison_adapters.py tests/test_recovery_context_acceptance.py tests/test_release_acceptance.py packages/postgres/tests/test_release_scan.py tests/test_v7_acceptance_inventory.py tests/test_v7_b6_evidence_plan.py --junitxml=<focused-final.xml>",
+      "status": "passed",
+      "passed": 39,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 0.931,
+      "started_at": "2026-10-08T14:52:44.982766-04:00",
+      "exit_code": 0,
+      "junit_sha256": "08002d125a814f8a06f63a3deaed58c421d82f0caa8cc7052efebddca3f955af"
+    },
+    {
+      "command": "AGENT_MEMORY_LEGACY_SOURCE=<pinned legacy source> <serialized disposable PostgreSQL wrapper> .venv/bin/python -m pytest -q tests/operational/v7_upgrade_drill.py --junitxml=<upgrade-dual-final.xml>",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 3.094,
+      "started_at": "2026-10-08T14:58:34.048488-04:00",
+      "exit_code": 0,
+      "junit_sha256": "f1c70d25bba5895941b226013101e490afced469da02e2ccc4ae0f97146ce862"
+    },
+    {
+      "command": "for package in . packages/evolution packages/langgraph packages/python-sdk packages/mcp-server packages/postgres; do .venv/bin/python -m build --no-isolation --outdir <fresh distribution directory> \"$package\"; done",
+      "status": "passed",
+      "exit_code": 0,
+      "sdists": 6,
+      "wheels": 6
+    },
+    {
+      "command": "uv venv --python /usr/bin/python3.13 <fresh external environment>; uv pip install --offline --python <fresh external environment>/bin/python <fresh distribution directory>/*.whl; uv pip check --python <fresh external environment>/bin/python",
+      "status": "passed",
+      "exit_code": 0,
+      "distributions": 6
+    },
+    {
+      "command": "cd <external temporary directory>; <fresh external environment>/bin/python -I <repository>/tests/operational/v7_installed_smoke.py --source-root <repository>",
+      "status": "passed",
+      "exit_code": 0
+    },
+    {
+      "command": ".venv/bin/agent-memory-release-scan --json --fail-on-violation . <fresh distribution directory>",
+      "status": "passed",
+      "exit_code": 0,
+      "findings": 0,
+      "scan_complete": true
+    }
+  ],
+  "artifacts": {
+    "agent_memory-0.1.0-py3-none-any.whl": "971031083dc07119a80b470b58fc4de2956ccee96834aff687d0ad6d2f92b902",
+    "agent_memory-0.1.0.tar.gz": "9caec7a0a558c09cb88d48a8c857d6051ccb99f7660f6f862d421bd94952e325",
+    "agent_memory_evolution-0.1.0-py3-none-any.whl": "9da080667f34325c77080a56d96ddbf39eb69bf6371a2226226e8816455a875b",
+    "agent_memory_evolution-0.1.0.tar.gz": "caad545544fab4e50001f7c98c4ae4643a02d725e77dbddbad4405a3edb16571",
+    "agent_memory_langgraph-0.1.0-py3-none-any.whl": "ae2ad1ce6339d0b1ea1d95b841b301e40c6af034308fea4146af76a93396b48e",
+    "agent_memory_langgraph-0.1.0.tar.gz": "0ca9e465ff074a1abdd79e2377ea1aa1b55135359cd5b93c7dc6515b12e963d9",
+    "agent_memory_mcp-0.1.0-py3-none-any.whl": "465887469baf58b174b1f50bc09eae89ba36a8ad9bd83feb34ecd783c74c5277",
+    "agent_memory_mcp-0.1.0.tar.gz": "1c17dc71636d9fa1b5cc0e88076613ad2f20adc0ff1090f442aca09cdf966e04",
+    "agent_memory_postgres-0.1.0-py3-none-any.whl": "320b2f25890ef79225f316accd5e817c467aeebbca16b5867ae9fb0468b14c4a",
+    "agent_memory_postgres-0.1.0.tar.gz": "27c0d195fc1cad11becfa4795d1ec9375fb476d3b7bab49fd13e3e45d90679c5",
+    "agent_memory_sdk-0.1.0-py3-none-any.whl": "999ec5e79c290d1673f8d307bcc15ca9f6cd81ab9e07ee88a985e1117920f858",
+    "agent_memory_sdk-0.1.0.tar.gz": "c1e23927ffd93b9ab112cc5427f276781affc9a0a45fe3c50f0eabda77dcf1b6"
+  },
+  "installed_smoke": {
+    "full_v7_acceptance": false,
+    "migration_sha256": {
+      "001_core.sql": "059a160ccfaaa482682d283aefdab49ac21c9236f1a5a73ac5cfe23ee061271c",
+      "002_pgvector.sql": "235aec55688b5dffc7d87ed74b24b0e5a2906408e91b3678007b78b6982b6d6b",
+      "003_feedback.sql": "bb27c9c7a90e71732edcc3ec8ce4eb728a7d5e16a854b9e5863a417de446d5a1",
+      "004_claim_history.sql": "2a2ea22e49bada1cb991084851d067ed1d31219d24e079ad9919064b550cf7fd",
+      "005_admission.sql": "bee5a5ad0e9c419530579655a6448b6b1745f3859081bdfc4c02a6e0e4b5ca55",
+      "006_retention.sql": "cf8395443b7c221bca02b62f6420826e9e68d81a6d678fbcfc0c96797c64f152",
+      "007_producers.sql": "900891ab170788723ea4033f5b6f1771e359d2cd0c39e03e223e082f7a2eea5d",
+      "008_retention_heads.sql": "e0610ec6aa0a86c9247ebc62e6606069c71e2b0a4532bed7fc75b206c079e72f",
+      "009_purge_journal.sql": "c548cdea26c49160a0a86a48e6ca45d0342fda9754c870f1e7f6bd8abd19d8cb",
+      "010_delivery_contracts.sql": "e05449009303bae2941c8536313efdbe3f890fe14a9d89203ff3f34be291ffac",
+      "011_candidate_index.sql": "39e133c7c5ab8b608ce5736154867da70a4319cf6ac9eb5077a14bb22678aa07",
+      "012_resource_refresh.sql": "9a428a3bf63a64c91103b59b0836a5ed1d700fc5fcb3f1891ea2fb52201f6d86",
+      "013_index_recovery.sql": "966d5c3f01f5e28206e7d4ea44b73272a32d4a5c1fcb07799fc240bfdd2e3961",
+      "014_purge_restore.sql": "daa95a16e088db62a1a7326b5b001fe2a61aa639516d404e744547eb66c6fe2a",
+      "015_derived_observations.sql": "c5dfebf9086d499c97ec464d08500e468898729db85fff41c0d486ad518151c5",
+      "016_memory_erasure.sql": "53698480b9cd691ac955e8a0abbe6779d175c7cdf005d4659d640df4a012070c",
+      "017_refresh_schedule.sql": "65fdb9070f5941de68e02b426e12b2def30043caec035393c65711b2ffa74f91",
+      "018_project_candidate_index.sql": "ff9cbb40c4d6c8e180ebbeba82dbf14257ae4fe051c2d8952a52769a84ca7dcd"
+    },
+    "packages": [
+      {
+        "distribution": "agent-memory",
+        "entry_points": [
+          "sqlite"
+        ],
+        "installed_from_artifact": true,
+        "version": "0.1.0"
+      },
+      {
+        "distribution": "agent-memory-evolution",
+        "entry_points": [
+          "evolution"
+        ],
+        "installed_from_artifact": true,
+        "version": "0.1.0"
+      },
+      {
+        "distribution": "agent-memory-langgraph",
+        "entry_points": [
+          "langgraph"
+        ],
+        "installed_from_artifact": true,
+        "version": "0.1.0"
+      },
+      {
+        "distribution": "agent-memory-sdk",
+        "entry_points": [],
+        "installed_from_artifact": true,
+        "version": "0.1.0"
+      },
+      {
+        "distribution": "agent-memory-mcp",
+        "entry_points": [
+          "agent-memory-mcp",
+          "mcp-v2"
+        ],
+        "installed_from_artifact": true,
+        "version": "0.1.0"
+      },
+      {
+        "distribution": "agent-memory-postgres",
+        "entry_points": [
+          "agent-memory-consolidate",
+          "agent-memory-health",
+          "agent-memory-preflight",
+          "agent-memory-release-scan",
+          "agent-memory-sensitive-scan",
+          "postgres"
+        ],
+        "installed_from_artifact": true,
+        "version": "0.1.0"
+      }
+    ],
+    "production_benefit_claim": false,
+    "scope": "six installed distributions and SQLite smoke only",
+    "status": "passed"
+  },
+  "sensitive_scan": {
+    "roots": [
+      "repository",
+      "built distributions"
+    ],
+    "scanned_files": 600,
+    "scanned_archives": 12,
+    "skipped_large_files": 0,
+    "total_findings": 0,
+    "scan_complete": true,
+    "hits": [],
+    "violations": [],
+    "is_healthy": true
+  },
+  "false_positive_cleanup": {
+    "original_findings": 3,
+    "changes": [
+      "Rephrased ordinary authorization-token prose.",
+      "Split two synthetic sensitive fixture literals into concatenated operands; exact runtime strings and rejection checks preserved."
+    ],
+    "scanner_rules_changed": false,
+    "scanner_threshold_changed": false,
+    "paths_excluded": false
+  },
+  "rollback_observation": {
+    "legacy_question_read": "derived_definition_configuration_changed",
+    "legacy_coverage_status": "derived_target_unavailable",
+    "legacy_worker": "KeyError:query before claiming; transaction leaves new V7 records unchanged",
+    "operating_boundary": "Old binary is incompatible with V7 context and is not a supported running downgrade. Stopped writers and compatible forward recovery remain required.",
+    "pending_responsibility": "Preserved through old probe; compatible current worker subsequently completes it."
+  },
+  "not_run_or_blocked": [
+    "Final full repository plus all extension tests after B4/B5 integration.",
+    "Final integrated rerun of B4/B5 new-object process-kill, backup/cache erasure and restored dispatch uncertainty tests. These exist in current B5; candidate 78-pass run lacks stored JUnit and final B5 rerun is pending.",
+    "Actual-model Q7-32 licensed held-out quality-cost experiment and frozen profile/judge/statistics.",
+    "All eleven release-check kinds have not been assembled into a final acceptance report."
+  ],
+  "preserved": "Frozen design and all 44 inherited AM61 states unchanged. All 98 evidence-plan final verification states remain not_run; none is promoted by this preparation record.",
+  "installed_smoke_artifact_sha256": "80ad7ea0eb213c285e10c2dea435748ea85f02e1a2b6ba40c490d7a51abb0af6",
+  "sensitive_scan_artifact_sha256": "4dc67eb4f4645de312784a15332d46f6329323cb2128cabb840405d7e205118d",
+  "installed_dependency_inventory_sha256": "3e2e9bdd28b715d873352887c3e62d1579ae18c342913f0f1e253c67fc791b78",
+  "installed_dependencies": {
+    "PyJWT": "2.15.1",
+    "PyYAML": "6.0.3",
+    "agent-memory": "0.1.0",
+    "agent-memory-evolution": "0.1.0",
+    "agent-memory-langgraph": "0.1.0",
+    "agent-memory-mcp": "0.1.0",
+    "agent-memory-postgres": "0.1.0",
+    "agent-memory-sdk": "0.1.0",
+    "annotated-types": "0.8.0",
+    "anyio": "4.15.1",
+    "attrs": "26.1.0",
+    "certifi": "2026.7.22",
+    "cffi": "2.1.1",
+    "charset-normalizer": "3.5.2",
+    "click": "8.5.0",
+    "cryptography": "50.0.2",
+    "distro": "1.9.0",
+    "h11": "0.16.0",
+    "httpcore": "1.0.9",
+    "httpcore2": "2.13.1",
+    "httpx": "0.28.1",
+    "httpx2": "2.13.1",
+    "idna": "3.20",
+    "jsonpatch": "1.33",
+    "jsonpointer": "3.2.0",
+    "jsonschema": "4.26.0",
+    "jsonschema-specifications": "2025.9.1",
+    "langchain-core": "1.6.8",
+    "langchain-protocol": "0.0.19",
+    "langgraph": "1.2.14",
+    "langgraph-checkpoint": "4.2.0",
+    "langgraph-prebuilt": "1.1.0",
+    "langgraph-sdk": "0.4.6",
+    "langsmith": "0.14.4",
+    "mcp": "2.3.0",
+    "mcp-types": "2.3.0",
+    "opentelemetry-api": "1.45.1",
+    "orjson": "3.13.0",
+    "ormsgpack": "1.12.2",
+    "packaging": "26.3",
+    "psycopg": "3.3.6",
+    "psycopg-binary": "3.3.6",
+    "psycopg-pool": "3.3.3",
+    "pycparser": "3.1",
+    "pydantic": "2.14.0",
+    "pydantic_core": "2.50.0",
+    "python-multipart": "0.0.32",
+    "referencing": "0.37.0",
+    "requests": "2.34.2",
+    "requests-toolbelt": "1.0.0",
+    "rpds-py": "2026.9.1",
+    "sniffio": "1.3.1",
+    "sse-starlette": "3.5.0",
+    "starlette": "1.7.0",
+    "tenacity": "9.2.1",
+    "truststore": "0.10.4",
+    "typing-inspection": "0.4.4",
+    "typing_extensions": "4.16.0",
+    "urllib3": "2.8.0",
+    "uuid_utils": "0.17.1",
+    "uvicorn": "0.54.0",
+    "websockets": "16.1.1",
+    "xxhash": "4.0.1",
+    "zstandard": "0.25.0"
+  },
+  "later_review": {
+    "b5_commit": "0b33d00",
+    "scope": "read-only inspection of real kill-before-commit/after-commit/settlement subprocess and independent backup restoration; not execution on this B6 tree",
+    "files": [
+      "tests/test_model_budget_recovery_v7.py",
+      "tests/fixtures/model_budget_crash_child.py",
+      "tests/test_governed_models_v7.py"
+    ],
+    "provider_acceptance_boundary": "Actual provider acceptance and real-model effects are not proved by synthetic local invoice/intent crash tests."
+  }
+}
