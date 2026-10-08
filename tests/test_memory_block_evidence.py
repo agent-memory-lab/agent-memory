@@ -16,7 +16,7 @@ def run(coroutine):
     return asyncio.run(coroutine)
 
 
-def test_forget_event_updates_then_removes_dependent_block(tmp_path) -> None:
+def test_forget_any_source_removes_dependent_free_text_block(tmp_path) -> None:
     async def scenario() -> None:
         kernel = build_local_kernel(tmp_path / "memory.db")
         await kernel.initialize()
@@ -45,10 +45,8 @@ def test_forget_event_updates_then_removes_dependent_block(tmp_path) -> None:
         )
         updated = await kernel.read_block(scope, block.id)
         assert partial.affected_artifacts == 1
-        assert updated is not None
-        assert updated.event_ids == (second.id,)
-        assert updated.provenance.source_event_ids == (second.id,)
-        assert updated.version == 2
+        # Remaining evidence cannot prove which prose came from the erased source.
+        assert updated is None
 
         final = await kernel.forget(
             ForgetRequest(
@@ -57,7 +55,7 @@ def test_forget_event_updates_then_removes_dependent_block(tmp_path) -> None:
                 mode=ForgetMode.ERASE,
             )
         )
-        assert final.affected_artifacts == 1
+        assert final.affected_artifacts == 0
         assert await kernel.read_block(scope, block.id) is None
 
     run(scenario())

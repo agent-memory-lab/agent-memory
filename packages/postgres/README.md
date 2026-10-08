@@ -50,6 +50,14 @@ relevant_blocks = await semantic_blocks.search(scope, "deployment preferences")
 Use `reindex(blocks)` for an explicit, operator-controlled backfill. This sidecar is not loaded
 by SQLite or by the core package, and it retains no vectors in the agent process.
 
+Direct index deletion requires `await index.delete(block_id, scope=scope)` with the exact
+owning scope. Upsert rejects an existing block id owned by another scope; it never moves
+that vector. `PgVectorBlockMemory.forget_block` removes the sidecar after the primary
+provider confirms an affected artifact, or confirms the block is absent on an idempotent
+retry. A still-visible block or primary-store exception preserves its vector. Exact-scope
+cleanup also works after a sidecar restart. These vector API changes require no vector-table
+migration; erasure fencing adds a separate typed identity-only table at initialization.
+
 ## Controlled background consolidation
 
 The PostgreSQL queue is intentionally separate from the request path. Start a worker explicitly;

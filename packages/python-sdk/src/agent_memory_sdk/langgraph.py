@@ -9,7 +9,7 @@ a stream so event IDs and content hashes remain stable.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from hashlib import sha256
 from typing import Any
 
@@ -23,17 +23,25 @@ def _role(message: Any) -> str | None:
         value = message.get("type", message.get("role"))
     else:
         value = getattr(message, "type", None)
-    return {
-        "human": "user",
-        "user": "user",
-        "ai": "model",
-        "assistant": "model",
-        "tool": "tool",
-    }.get(value) if isinstance(value, str) else None
+    return (
+        {
+            "human": "user",
+            "user": "user",
+            "ai": "model",
+            "assistant": "model",
+            "tool": "tool",
+        }.get(value)
+        if isinstance(value, str)
+        else None
+    )
 
 
 def _content(message: Any) -> str:
-    raw = message.get("content") if isinstance(message, Mapping) else getattr(message, "content", None)
+    raw = (
+        message.get("content")
+        if isinstance(message, Mapping)
+        else getattr(message, "content", None)
+    )
     if isinstance(raw, str):
         return raw
     if isinstance(raw, (list, tuple)) and len(raw) <= 32:
@@ -63,14 +71,16 @@ class LangGraphCaptureAdapter:
     ) -> None:
         if not isinstance(run_id, str) or not run_id.strip():
             raise ValueError("run_id must be a stable, nonempty host identifier")
-        when = started_at or datetime.now(timezone.utc)
+        when = started_at or datetime.now(UTC)
         if not isinstance(when, datetime) or when.utcoffset() is None:
             raise ValueError("started_at must include a timezone")
         self._capture = capture
         self._run_id = run_id
-        self._occurred_at = when.astimezone(timezone.utc).isoformat()
+        self._occurred_at = when.astimezone(UTC).isoformat()
         self._sequence = 0
         self._seen: set[str] = set()
+        # Retain only identity metadata for retries, never raw failed message content.
+        self._pending: dict[str, tuple[int, str, tuple[str, ...]]] = {}
 
     def _event(
         self,
@@ -98,7 +108,12 @@ class LangGraphCaptureAdapter:
             return {"status": "skipped", "reason": "capture_adapter_failed"}
 
     async def observe(self, part: Mapping[str, Any]) -> tuple[dict[str, Any], ...]:
-        """Map message updates only; never infer feedback from a graph state."""
+        """Capture every new completed message, including batched tool results.
+
+        Replayed histories are deduplicated by message identity and content. A
+        failed admission can be retried on a later update with its original
+        event ID and payload, including after an uncertain capture result.
+        """
 
         if not isinstance(part, Mapping) or part.get("type") != "updates":
             return ()
@@ -106,48 +121,62 @@ class LangGraphCaptureAdapter:
         if not isinstance(updates, Mapping):
             return ()
         namespace = part.get("ns", ())
-        if not isinstance(namespace, (tuple, list)) or any(not isinstance(name, str) for name in namespace):
+        if not isinstance(namespace, (tuple, list)) or any(
+            not isinstance(name, str) for name in namespace
+        ):
             namespace = ()
         receipts: list[dict[str, Any]] = []
+        attempted: set[str] = set()
         for node, update in updates.items():
             if not isinstance(node, str) or not isinstance(update, Mapping):
                 continue
             messages = update.get("messages")
             if not isinstance(messages, (list, tuple)) or not messages:
                 continue
-            try:
-                message = messages[-1]
-                role = _role(message)
-                text = _content(message)
-                message_id = _message_id(message)
-            except Exception:
-                continue
-            if role is None or (role != "tool" and not text):
-                continue
-            if message_id is None and (len(messages) > 1 or role == "user"):
-                continue  # Ambiguous history without an identity is not new evidence.
-            key = sha256(
-                f"{role}\x00{message_id or 'unidentified'}\x00{text}".encode("utf-8")
-            ).hexdigest()
-            if key in self._seen:
-                continue
-            if len(self._seen) >= 2_048:
-                receipts.append({"status": "skipped", "reason": "capture_history_limit"})
-                continue
-            self._seen.add(key)
-            self._sequence += 1
-            payload = {"node": node, "namespace": list(namespace)}
-            if role == "tool":
-                payload["result"] = text
-                event_type, content = "tool.completed", "Tool completed."
-            else:
-                event_type, content = "message.received", text
-            receipt = await self._safe_capture(
-                self._event(
-                    f"update:{self._sequence}", event_type, role, content, payload
-                )
-            )
-            receipts.append(receipt)
+            for message in messages:
+                try:
+                    role = _role(message)
+                    text = _content(message)
+                    message_id = _message_id(message)
+                except Exception:
+                    continue
+                if role is None or (role != "tool" and not text):
+                    continue
+                if message_id is None and (len(messages) > 1 or role == "user"):
+                    continue  # Ambiguous history without an identity is not new evidence.
+                key = sha256(
+                    f"{role}\x00{message_id or 'unidentified'}\x00{text}".encode()
+                ).hexdigest()
+                if key in self._seen or key in attempted:
+                    continue
+                identity = self._pending.get(key)
+                if identity is None:
+                    if len(self._seen) + len(self._pending) >= 2_048:
+                        receipts.append({"status": "skipped", "reason": "capture_history_limit"})
+                        continue
+                    self._sequence += 1
+                    identity = self._sequence, node, tuple(namespace)
+                    self._pending[key] = identity
+                sequence, original_node, original_namespace = identity
+                payload = {"node": original_node, "namespace": list(original_namespace)}
+                if role == "tool":
+                    payload["result"] = text
+                    event_type, content = "tool.completed", "Tool completed."
+                else:
+                    event_type, content = "message.received", text
+                event = self._event(f"update:{sequence}", event_type, role, content, payload)
+                attempted.add(key)
+                receipt = await self._safe_capture(event)
+                if receipt.get("event_id") == event["event_id"] and receipt.get("status") in {
+                    "staged",
+                    "pending",
+                    "leased",
+                    "done",
+                    "dead",
+                }:
+                    self._seen.add(key)
+                    self._pending.pop(key, None)
+                receipts.append(receipt)
         return tuple(receipts)
 
     async def astream_updates(

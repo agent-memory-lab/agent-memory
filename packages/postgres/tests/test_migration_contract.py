@@ -36,9 +36,22 @@ def test_feedback_migration_is_additive_and_indexed():
 
 
 def test_derived_migration_is_additive_and_reverse_indexed():
-    sql = (Path(__file__).parents[1] / "migrations" / "015_derived_observations.sql").read_text().lower()
+    sql = (
+        (Path(__file__).parents[1] / "migrations" / "015_derived_observations.sql")
+        .read_text()
+        .lower()
+    )
     assert "agent_memory_derived_reverse_idx" in sql
     assert "edge_kind in ('support','processing','query')" in sql
     assert "agent_memory_derived_atom_slot_idx" in sql
     assert "alter table agent_memory_claims" not in sql
     assert "drop table" not in sql
+
+
+def test_artifact_erasure_migration_is_additive_and_identity_only():
+    sql = (Path(__file__).parents[1] / "migrations" / "016_memory_erasure.sql").read_text().lower()
+    assert "create table if not exists agent_memory_memory_tombstones" in sql
+    assert "primary key (partition_key, memory_table, id)" in sql
+    assert "agent_memory_memory_tombstones_scope_idx" in sql
+    assert "payload_json" not in sql and "content" not in sql
+    assert "drop table" not in sql and "alter table" not in sql

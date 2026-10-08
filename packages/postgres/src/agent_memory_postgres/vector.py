@@ -73,23 +73,17 @@ class PgVectorIndex:
     ) -> None:
         vector = self._validated_vector(embedding)
         async with self._pool.connection() as connection:
-            await connection.execute(
+            cursor = await connection.execute(
                 """
                 INSERT INTO agent_memory_vectors (
                     memory_id, partition_key, tenant_id, namespace, user_id, agent_id,
                     workspace_id, session_id, embedding, model
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::vector, %s)
                 ON CONFLICT (memory_id) DO UPDATE SET
-                    partition_key = excluded.partition_key,
-                    tenant_id = excluded.tenant_id,
-                    namespace = excluded.namespace,
-                    user_id = excluded.user_id,
-                    agent_id = excluded.agent_id,
-                    workspace_id = excluded.workspace_id,
-                    session_id = excluded.session_id,
                     embedding = excluded.embedding,
                     model = excluded.model,
                     created_at = now()
+                WHERE agent_memory_vectors.partition_key = excluded.partition_key
                 """,
                 (
                     memory_id,
@@ -104,6 +98,8 @@ class PgVectorIndex:
                     model,
                 ),
             )
+            if cursor.rowcount == 0:
+                raise ValueError("memory id is already indexed outside the authorized scope")
 
     async def search(
         self,
@@ -141,12 +137,16 @@ class PgVectorIndex:
                 for row in await cursor.fetchall()
             )
 
-    async def delete(self, memory_id: str) -> None:
-        """Remove a vector without touching the authoritative memory record."""
+    async def delete(self, memory_id: str, *, scope: MemoryScope) -> None:
+        """Remove a vector in the exact scope, without touching primary storage.
+
+        Unlike search visibility, index mutations never include ancestor scopes.
+        The scope is required even when the caller has already authorized deletion.
+        """
         async with self._pool.connection() as connection:
             await connection.execute(
-                "DELETE FROM agent_memory_vectors WHERE memory_id = %s",
-                (memory_id,),
+                "DELETE FROM agent_memory_vectors WHERE memory_id = %s AND partition_key = %s",
+                (memory_id, scope.partition_key()),
             )
 
     def _validated_vector(self, embedding: Sequence[float]) -> tuple[float, ...]:
