@@ -4,11 +4,11 @@
 | --- | --- |
 | 设计 | [Agent Memory v7.0.0](../AGENT_MEMORY_DESIGN_V7.0.0.md) |
 | 正文 SHA-256 | `309104c81b2e89ce74137903312ecbeaa036ba192d47fcfbdd555cdd4dc907b9` |
-| 台账版本 | revision 5 / 2026-10-08 |
+| 台账版本 | revision 6 / 2026-10-08 |
 | 继承审计起点 | `583e20d55ea85023f751084f5b86b29e1e92e5bf` |
 | B3 被测实现 | `a6472feb25ee2b7ef4a3188488a34806fcf7e4a7`；见 [逐次验证](validation-b3.json) |
 | 发布整合 | 按 B0–B6 分批 PR 集成；远端最终 head 与 CI 另行核验，本记录不宣告部署 |
-| 本次范围 | B0–B3 有限当前运行切片；本批记录见 [B3](batch-b3.md)，后续能力仍按门禁实施 |
+| 本次范围 | B0–B6 有界工程实现与最终运行验证；见 [B6](batch-b6.md)。真实领域/模型质量与全成本门仍开放 |
 
 ## 1. 目标与继承关系
 
@@ -99,6 +99,10 @@ T13 从 B0 记录基线，T14 从 B0/B1 设计并实现适用迁移，T15 的验
 每批附目标/实际行为、受影响能力、测试命令与结果、未覆盖项、迁移开关、回滚方式与代码 SHA。
 更新中英文 README 的目标与实现边界，设计版本、软件版本和协议版本分别管理。
 
-B3 运行实现、支持边界与本轮证据见 [batch-b3.md](batch-b3.md) 和 [validation-b3.json](validation-b3.json)。设计正文不变；后续批次不沿用本轮通过数。
+B3/B4/B5 分批证据保留；最终有界集成、类型化页面补丁、全量双后端、进程故障、六包构建安装与扫描见 [B6](batch-b6.md) 和 [validation-b6.json](validation-b6.json)。设计正文不变，各次通过数不累计。真实 Ollama/许可 gold/裁判阈值与统计比较未验收。
 
 B2 专项调度与恢复证据另见 [batch-b2.md](batch-b2.md) / [validation-b2.json](validation-b2.json)；B3 增加有限 QuestionView 处理器集成，模型金额预算与生产收益门仍由后续批次验收。
+
+## B6 工程验证状态（2026-10-08）
+
+最终执行源码 `4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c`；完整运行结果 3783 通过、6 PostgreSQL 专属 SQLite skip，逐项保留原因及已通过的 PG 对应项。98 项映射已按实际范围更新，44 项 AM61 状态不变。没有真实模型/数据证据时，工程通过不替代 Q7-32；详细命令、范围及开放门见 [B6](batch-b6.md)。

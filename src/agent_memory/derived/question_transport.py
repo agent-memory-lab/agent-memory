@@ -87,6 +87,12 @@ async def call(service, operation, payload, context):
             pages=PAGE_TEMPLATE if pages else None,
             page_publication="trusted_host_full_or_validated_reuse" if pages else None,
             page_parent_limit=4,
+            page_patch=(dict(
+                contract="project-question-page-typed-patch/1", authority="trusted_host_only",
+                operations=["append", "insert", "replace", "remove"],
+                max_operations=32, max_blocks=16, free_form=False,
+                expected_versions=["page_content", "page_certificate", "affected_or_anchor_block"],
+            ) if pages else None),
         )
     if operation == "model_answer":
         from ..retrieval.model_contracts import ModelError

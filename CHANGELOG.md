@@ -7,6 +7,11 @@ the first stable release.
 
 ### Added
 
+- Host-only deterministic QuestionView page append/insert/replace/remove with page/certificate
+  and affected-block CAS, exact retained revisions, multi-generation processing lineage,
+  bounded whole-page delivery, and live/backup erasure. SDK/MCP retain read-only page access.
+  Scope, conflicts and compatibility: [Q7-23 typed patches](docs/design/v7.0.0/typed-page-patches.md).
+
 - V7-B4 complete-group project deltas, old-remove/new-add aggregates and verified full fallback;
   immutable original generation versus current certificates, safe noops and bounded fair page validation.
   Original source permissions/expiry, snapshot ownership and erasure remain enforced. Version-2

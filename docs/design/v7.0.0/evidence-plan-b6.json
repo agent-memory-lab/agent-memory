@@ -1,0 +1,1323 @@
+{
+  "schema": "v7-b6-evidence-plan/1",
+  "source_commit": "3dec354ed3879aa38c7dd652779bb7956861b8f1",
+  "purpose": "Candidate evidence locations and remaining assertions, not an acceptance report. No case is promoted by this plan.",
+  "full_v7_acceptance": false,
+  "production_benefit_claim": false,
+  "cases": [
+    {
+      "id": "R01-01",
+      "owner": "AM61-T11",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_contextual_memory.py",
+        "tests/test_derived_contextual.py",
+        "tests/test_derived_context_history.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "General cross-scope policy composition and unsupported set/constraint semantics are not proven by the bounded language slice."
+    },
+    {
+      "id": "R01-02",
+      "owner": "AM61-T11",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_contextual_memory.py",
+        "tests/test_derived_contextual.py",
+        "tests/test_derived_context_history.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "General cross-scope policy composition and unsupported set/constraint semantics are not proven by the bounded language slice."
+    },
+    {
+      "id": "R01-03",
+      "owner": "AM61-T11",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_contextual_memory.py",
+        "tests/test_derived_contextual.py",
+        "tests/test_derived_context_history.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "General cross-scope policy composition and unsupported set/constraint semantics are not proven by the bounded language slice."
+    },
+    {
+      "id": "R01-04",
+      "owner": "AM61-T11",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_contextual_memory.py",
+        "tests/test_derived_contextual.py",
+        "tests/test_derived_context_history.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "General cross-scope policy composition and unsupported set/constraint semantics are not proven by the bounded language slice."
+    },
+    {
+      "id": "R01-05",
+      "owner": "AM61-T11",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_contextual_memory.py",
+        "tests/test_derived_contextual.py",
+        "tests/test_derived_context_history.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "General cross-scope policy composition and unsupported set/constraint semantics are not proven by the bounded language slice."
+    },
+    {
+      "id": "R01-06",
+      "owner": "AM61-T11",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_contextual_memory.py",
+        "tests/test_derived_contextual.py",
+        "tests/test_derived_context_history.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "General cross-scope policy composition and unsupported set/constraint semantics are not proven by the bounded language slice."
+    },
+    {
+      "id": "R02-01",
+      "owner": "AM61-T20",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_reprocessing.py",
+        "tests/test_source_revisions.py",
+        "tests/test_contribution_lifecycle.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Whole-source and ordinary contribution contracts do not prove unsupported partial-coverage/cross-slot replacement."
+    },
+    {
+      "id": "R02-02",
+      "owner": "AM61-T20",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_reprocessing.py",
+        "tests/test_source_revisions.py",
+        "tests/test_contribution_lifecycle.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Whole-source and ordinary contribution contracts do not prove unsupported partial-coverage/cross-slot replacement."
+    },
+    {
+      "id": "R02-03",
+      "owner": "AM61-T20",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_reprocessing.py",
+        "tests/test_source_revisions.py",
+        "tests/test_contribution_lifecycle.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Whole-source and ordinary contribution contracts do not prove unsupported partial-coverage/cross-slot replacement."
+    },
+    {
+      "id": "R02-04",
+      "owner": "AM61-T20",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_reprocessing.py",
+        "tests/test_source_revisions.py",
+        "tests/test_contribution_lifecycle.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Whole-source and ordinary contribution contracts do not prove unsupported partial-coverage/cross-slot replacement."
+    },
+    {
+      "id": "R02-05",
+      "owner": "AM61-T20",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_reprocessing.py",
+        "tests/test_source_revisions.py",
+        "tests/test_contribution_lifecycle.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Whole-source and ordinary contribution contracts do not prove unsupported partial-coverage/cross-slot replacement."
+    },
+    {
+      "id": "R02-06",
+      "owner": "AM61-T20",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_reprocessing.py",
+        "tests/test_source_revisions.py",
+        "tests/test_contribution_lifecycle.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Whole-source and ordinary contribution contracts do not prove unsupported partial-coverage/cross-slot replacement."
+    },
+    {
+      "id": "R03-01",
+      "owner": "AM61-T13",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_governed_recall_integration.py",
+        "tests/test_question_transport_v7.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_governed_models_v7.py"
+      ],
+      "required_review": "B5 must bind input, dispatch and final delivery checks; streaming and invisible provider context remain unsupported unless explicitly verified."
+    },
+    {
+      "id": "R03-02",
+      "owner": "AM61-T13",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_governed_recall_integration.py",
+        "tests/test_question_transport_v7.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_governed_models_v7.py"
+      ],
+      "required_review": "B5 must bind input, dispatch and final delivery checks; streaming and invisible provider context remain unsupported unless explicitly verified."
+    },
+    {
+      "id": "R03-03",
+      "owner": "AM61-T13",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_governed_recall_integration.py",
+        "tests/test_question_transport_v7.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_governed_models_v7.py"
+      ],
+      "required_review": "B5 must bind input, dispatch and final delivery checks; streaming and invisible provider context remain unsupported unless explicitly verified."
+    },
+    {
+      "id": "R03-04",
+      "owner": "AM61-T13",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_governed_recall_integration.py",
+        "tests/test_question_transport_v7.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_governed_models_v7.py"
+      ],
+      "required_review": "B5 must bind input, dispatch and final delivery checks; streaming and invisible provider context remain unsupported unless explicitly verified."
+    },
+    {
+      "id": "R03-05",
+      "owner": "AM61-T13",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_governed_recall_integration.py",
+        "tests/test_question_transport_v7.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_governed_models_v7.py"
+      ],
+      "required_review": "B5 must bind input, dispatch and final delivery checks; streaming and invisible provider context remain unsupported unless explicitly verified."
+    },
+    {
+      "id": "R03-06",
+      "owner": "AM61-T13",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_governed_recall_integration.py",
+        "tests/test_question_transport_v7.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_governed_models_v7.py"
+      ],
+      "required_review": "B5 must bind input, dispatch and final delivery checks; streaming and invisible provider context remain unsupported unless explicitly verified."
+    },
+    {
+      "id": "R04-01",
+      "owner": "AM61-T25",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_derived_observations.py",
+        "tests/test_question_erasure_v7.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_governed_models_v7.py",
+        "tests/test_question_proof_reuse_v7.py",
+        "tests/test_question_snapshot_security_v7.py"
+      ],
+      "required_review": "Trace full processing ancestry, not citations; B4/B5 proof/cache changes require final rerun. Authorized declassification is not implied."
+    },
+    {
+      "id": "R04-02",
+      "owner": "AM61-T25",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_derived_observations.py",
+        "tests/test_question_erasure_v7.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_governed_models_v7.py",
+        "tests/test_question_proof_reuse_v7.py",
+        "tests/test_question_snapshot_security_v7.py"
+      ],
+      "required_review": "Trace full processing ancestry, not citations; B4/B5 proof/cache changes require final rerun. Authorized declassification is not implied."
+    },
+    {
+      "id": "R04-03",
+      "owner": "AM61-T25",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_derived_observations.py",
+        "tests/test_question_erasure_v7.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_governed_models_v7.py",
+        "tests/test_question_proof_reuse_v7.py",
+        "tests/test_question_snapshot_security_v7.py"
+      ],
+      "required_review": "Trace full processing ancestry, not citations; B4/B5 proof/cache changes require final rerun. Authorized declassification is not implied."
+    },
+    {
+      "id": "R04-04",
+      "owner": "AM61-T25",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_derived_observations.py",
+        "tests/test_question_erasure_v7.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_governed_models_v7.py",
+        "tests/test_question_proof_reuse_v7.py",
+        "tests/test_question_snapshot_security_v7.py"
+      ],
+      "required_review": "Trace full processing ancestry, not citations; B4/B5 proof/cache changes require final rerun. Authorized declassification is not implied."
+    },
+    {
+      "id": "R04-05",
+      "owner": "AM61-T25",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_derived_observations.py",
+        "tests/test_question_erasure_v7.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_governed_models_v7.py",
+        "tests/test_question_proof_reuse_v7.py",
+        "tests/test_question_snapshot_security_v7.py"
+      ],
+      "required_review": "Trace full processing ancestry, not citations; B4/B5 proof/cache changes require final rerun. Authorized declassification is not implied."
+    },
+    {
+      "id": "R04-06",
+      "owner": "AM61-T25",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_derived_observations.py",
+        "tests/test_question_erasure_v7.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_governed_models_v7.py",
+        "tests/test_question_proof_reuse_v7.py",
+        "tests/test_question_snapshot_security_v7.py"
+      ],
+      "required_review": "Trace full processing ancestry, not citations; B4/B5 proof/cache changes require final rerun. Authorized declassification is not implied."
+    },
+    {
+      "id": "N01-01",
+      "owner": "AM61-T06",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_capture_profile.py",
+        "tests/test_capture_composite_acceptance.py",
+        "tests/test_durable_transport.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Distinguish synthetic trusted fixture coverage from a real host complete-event adapter."
+    },
+    {
+      "id": "N01-02",
+      "owner": "AM61-T06",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_capture_profile.py",
+        "tests/test_capture_composite_acceptance.py",
+        "tests/test_durable_transport.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Distinguish synthetic trusted fixture coverage from a real host complete-event adapter."
+    },
+    {
+      "id": "N01-03",
+      "owner": "AM61-T06",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_capture_profile.py",
+        "tests/test_capture_composite_acceptance.py",
+        "tests/test_durable_transport.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Distinguish synthetic trusted fixture coverage from a real host complete-event adapter."
+    },
+    {
+      "id": "N02-01",
+      "owner": "AM61-T17",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_durable_retention.py",
+        "tests/test_durable_producer.py",
+        "tests/test_durable_transport.py",
+        "tests/test_durable_process_recovery.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Run live backends and real process recovery; old epoch replay must stay denied."
+    },
+    {
+      "id": "N02-02",
+      "owner": "AM61-T17",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_durable_retention.py",
+        "tests/test_durable_producer.py",
+        "tests/test_durable_transport.py",
+        "tests/test_durable_process_recovery.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Run live backends and real process recovery; old epoch replay must stay denied."
+    },
+    {
+      "id": "N02-03",
+      "owner": "AM61-T17",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_durable_retention.py",
+        "tests/test_durable_producer.py",
+        "tests/test_durable_transport.py",
+        "tests/test_durable_process_recovery.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Run live backends and real process recovery; old epoch replay must stay denied."
+    },
+    {
+      "id": "N03-01",
+      "owner": "AM61-T18",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_resource_refresh.py",
+        "tests/test_durable_execution.py",
+        "tests/test_refresh_demand.py",
+        "tests/test_refresh_scheduler_process.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Retain exact resource coverage, fencing, age and progress assertions separately from the final response text."
+    },
+    {
+      "id": "N03-02",
+      "owner": "AM61-T18",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_resource_refresh.py",
+        "tests/test_durable_execution.py",
+        "tests/test_refresh_demand.py",
+        "tests/test_refresh_scheduler_process.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Retain exact resource coverage, fencing, age and progress assertions separately from the final response text."
+    },
+    {
+      "id": "N03-03",
+      "owner": "AM61-T18",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_resource_refresh.py",
+        "tests/test_durable_execution.py",
+        "tests/test_refresh_demand.py",
+        "tests/test_refresh_scheduler_process.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Retain exact resource coverage, fencing, age and progress assertions separately from the final response text."
+    },
+    {
+      "id": "N04-01",
+      "owner": "AM61-T31",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_derived_pages.py",
+        "tests/test_derived_lifecycle_audit.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_question_delta_v7.py"
+      ],
+      "required_review": "B4 delta/noop-specific evidence must be added after integration; prior full-page tests alone are insufficient."
+    },
+    {
+      "id": "N04-02",
+      "owner": "AM61-T31",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_derived_pages.py",
+        "tests/test_derived_lifecycle_audit.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_question_delta_v7.py"
+      ],
+      "required_review": "B4 delta/noop-specific evidence must be added after integration; prior full-page tests alone are insufficient."
+    },
+    {
+      "id": "N04-03",
+      "owner": "AM61-T31",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_derived_pages.py",
+        "tests/test_derived_lifecycle_audit.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_question_delta_v7.py"
+      ],
+      "required_review": "B4 delta/noop-specific evidence must be added after integration; prior full-page tests alone are insufficient."
+    },
+    {
+      "id": "N05-01",
+      "owner": "AM61-T22",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_durable_readiness.py",
+        "tests/test_reprocessing_readiness.py",
+        "tests/test_publication_batches.py",
+        "tests/test_question_runtime_v7.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Source receipt and finite admitted-publication closure are distinct; never broaden fixed targets."
+    },
+    {
+      "id": "N05-02",
+      "owner": "AM61-T22",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_durable_readiness.py",
+        "tests/test_reprocessing_readiness.py",
+        "tests/test_publication_batches.py",
+        "tests/test_question_runtime_v7.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Source receipt and finite admitted-publication closure are distinct; never broaden fixed targets."
+    },
+    {
+      "id": "N05-03",
+      "owner": "AM61-T22",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_durable_readiness.py",
+        "tests/test_reprocessing_readiness.py",
+        "tests/test_publication_batches.py",
+        "tests/test_question_runtime_v7.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Source receipt and finite admitted-publication closure are distinct; never broaden fixed targets."
+    },
+    {
+      "id": "N06-01",
+      "owner": "AM61-T34",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_retrieval_trace.py",
+        "tests/test_retrieval_evaluation.py",
+        "tests/test_evidence_evaluation.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Offline support scoring does not alone prove full runtime attribution or model quality."
+    },
+    {
+      "id": "N06-02",
+      "owner": "AM61-T34",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_retrieval_trace.py",
+        "tests/test_retrieval_evaluation.py",
+        "tests/test_evidence_evaluation.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Offline support scoring does not alone prove full runtime attribution or model quality."
+    },
+    {
+      "id": "N06-03",
+      "owner": "AM61-T34",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_retrieval_trace.py",
+        "tests/test_retrieval_evaluation.py",
+        "tests/test_evidence_evaluation.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Offline support scoring does not alone prove full runtime attribution or model quality."
+    },
+    {
+      "id": "N07-01",
+      "owner": "AM61-T36",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_semantic_reranker.py",
+        "tests/test_ontology_upgrade.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_governed_models_v7.py"
+      ],
+      "required_review": "Actual provider/tokenizer/embedding identity must be demonstrated; synthetic input-budget tests are narrower."
+    },
+    {
+      "id": "N07-02",
+      "owner": "AM61-T36",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_semantic_reranker.py",
+        "tests/test_ontology_upgrade.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_governed_models_v7.py"
+      ],
+      "required_review": "Actual provider/tokenizer/embedding identity must be demonstrated; synthetic input-budget tests are narrower."
+    },
+    {
+      "id": "N07-03",
+      "owner": "AM61-T36",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_semantic_reranker.py",
+        "tests/test_ontology_upgrade.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_governed_models_v7.py"
+      ],
+      "required_review": "Actual provider/tokenizer/embedding identity must be demonstrated; synthetic input-budget tests are narrower."
+    },
+    {
+      "id": "N08-01",
+      "owner": "AM61-T38",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_memory_v61_fixtures.py",
+        "tests/test_memory_evaluation_protocol_acceptance.py",
+        "tests/test_question_cost_v7.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Real held-out event replay and semantic quality remain blocked by licensed dataset, gold, model and judge/profile."
+    },
+    {
+      "id": "N08-02",
+      "owner": "AM61-T38",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_memory_v61_fixtures.py",
+        "tests/test_memory_evaluation_protocol_acceptance.py",
+        "tests/test_question_cost_v7.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Real held-out event replay and semantic quality remain blocked by licensed dataset, gold, model and judge/profile."
+    },
+    {
+      "id": "N08-03",
+      "owner": "AM61-T38",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_memory_v61_fixtures.py",
+        "tests/test_memory_evaluation_protocol_acceptance.py",
+        "tests/test_question_cost_v7.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Real held-out event replay and semantic quality remain blocked by licensed dataset, gold, model and judge/profile."
+    },
+    {
+      "id": "R05-01",
+      "owner": "AM61-T09",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_fact_qualification.py",
+        "tests/test_project_admission_v7.py",
+        "tests/test_v7_qualified_pages.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Explicit qualification and bounded independently complete fields only; do not infer a general asynchronous verifier."
+    },
+    {
+      "id": "R05-02",
+      "owner": "AM61-T09",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_fact_qualification.py",
+        "tests/test_project_admission_v7.py",
+        "tests/test_v7_qualified_pages.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Explicit qualification and bounded independently complete fields only; do not infer a general asynchronous verifier."
+    },
+    {
+      "id": "R06-01",
+      "owner": "AM61-T10",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_contribution_lifecycle.py",
+        "tests/test_atom_temporal.py",
+        "tests/test_bitemporal_claims.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Preserve historical cognition and no resurrection; unsupported movement of transition starts remains excluded."
+    },
+    {
+      "id": "R06-02",
+      "owner": "AM61-T10",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_contribution_lifecycle.py",
+        "tests/test_atom_temporal.py",
+        "tests/test_bitemporal_claims.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Preserve historical cognition and no resurrection; unsupported movement of transition starts remains excluded."
+    },
+    {
+      "id": "R07-01",
+      "owner": "AM61-T12",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_source_revisions.py",
+        "tests/test_reprocessing.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Same-slot correction is not general cross-slot atomic semantic correction; explicit rejection is narrower evidence."
+    },
+    {
+      "id": "R07-02",
+      "owner": "AM61-T12",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_source_revisions.py",
+        "tests/test_reprocessing.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Same-slot correction is not general cross-slot atomic semantic correction; explicit rejection is narrower evidence."
+    },
+    {
+      "id": "R08-01",
+      "owner": "AM61-T26",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_v7_subscriptions.py",
+        "tests/test_v7_project_indexes.py",
+        "tests/test_question_runtime_v7.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Verify first registration, query and publication races plus truncated/empty census on each applicable backend."
+    },
+    {
+      "id": "R08-02",
+      "owner": "AM61-T26",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_v7_subscriptions.py",
+        "tests/test_v7_project_indexes.py",
+        "tests/test_question_runtime_v7.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Verify first registration, query and publication races plus truncated/empty census on each applicable backend."
+    },
+    {
+      "id": "R09-01",
+      "owner": "AM61-T28",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_derived_history.py",
+        "tests/test_derived_context_history.py",
+        "tests/test_derived_coverage.py",
+        "tests/test_question_transport_v7.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Bounded legacy language historical support is separate from explicitly unsupported generic historical project questions."
+    },
+    {
+      "id": "R09-02",
+      "owner": "AM61-T28",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_derived_history.py",
+        "tests/test_derived_context_history.py",
+        "tests/test_derived_coverage.py",
+        "tests/test_question_transport_v7.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Bounded legacy language historical support is separate from explicitly unsupported generic historical project questions."
+    },
+    {
+      "id": "R10-01",
+      "owner": "AM61-T15",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_durable_process_recovery.py",
+        "tests/test_durable_purge.py",
+        "tests/test_durable_transport.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Current epoch must fence old tickets and offline replay; external in-flight byte recall is not claimed."
+    },
+    {
+      "id": "R10-02",
+      "owner": "AM61-T15",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_durable_process_recovery.py",
+        "tests/test_durable_purge.py",
+        "tests/test_durable_transport.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Current epoch must fence old tickets and offline replay; external in-flight byte recall is not claimed."
+    },
+    {
+      "id": "R11-01",
+      "owner": "AM61-T22",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_publication_batches.py",
+        "tests/test_durable_readiness.py",
+        "tests/test_question_runtime_v7.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "An empty unclosed manifest is not zero-output completion; every pinned publication and continuous coverage is needed."
+    },
+    {
+      "id": "R11-02",
+      "owner": "AM61-T22",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_publication_batches.py",
+        "tests/test_durable_readiness.py",
+        "tests/test_question_runtime_v7.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "An empty unclosed manifest is not zero-output completion; every pinned publication and continuous coverage is needed."
+    },
+    {
+      "id": "R12-01",
+      "owner": "AM61-T21",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [],
+      "pending_test_paths": [
+        "tests/test_model_budget_v7.py",
+        "tests/test_governed_models_v7.py"
+      ],
+      "required_review": "B5 must show durable multi-account reservation, intent uncertainty and idempotent actual settlement on both backends."
+    },
+    {
+      "id": "R12-02",
+      "owner": "AM61-T21",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [],
+      "pending_test_paths": [
+        "tests/test_model_budget_v7.py",
+        "tests/test_governed_models_v7.py",
+        "tests/test_model_budget_recovery_v7.py"
+      ],
+      "required_review": "B5 must show durable multi-account reservation, intent uncertainty and idempotent actual settlement on both backends."
+    },
+    {
+      "id": "R13-01",
+      "owner": "AM61-T39",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_release_acceptance.py",
+        "tests/test_question_cost_v7.py",
+        "tests/test_retrieval_evaluation.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Protocol gates do not supply missing actual-domain thresholds, licensed observations or provider experiments."
+    },
+    {
+      "id": "R13-02",
+      "owner": "AM61-T39",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_release_acceptance.py",
+        "tests/test_question_cost_v7.py",
+        "tests/test_retrieval_evaluation.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Protocol gates do not supply missing actual-domain thresholds, licensed observations or provider experiments."
+    },
+    {
+      "id": "Q7-01",
+      "owner": "AM70-T03",
+      "ledger_status_at_preparation": "partial",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_v7_subscriptions.py",
+        "tests/test_v7_project_indexes.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "First registration, in-query change and pre-publication change; empty results must become unavailable."
+    },
+    {
+      "id": "Q7-02",
+      "owner": "AM70-T03",
+      "ledger_status_at_preparation": "partial",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_v7_subscriptions.py",
+        "tests/test_v7_project_indexes.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Old/new project and field keys, removals, source revision and erase routes."
+    },
+    {
+      "id": "Q7-03",
+      "owner": "AM70-T03",
+      "ledger_status_at_preparation": "partial",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_v7_subscriptions.py",
+        "tests/test_v7_project_indexes.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Explicit conservative fallback, bounded behavior and incomplete/unknown index rejection."
+    },
+    {
+      "id": "Q7-04",
+      "owner": "AM70-T14",
+      "ledger_status_at_preparation": "partial",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_v7_backend_lifecycle.py",
+        "tests/test_v7_subscriptions.py",
+        "tests/test_v7_project_indexes.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Atomic backfill, racing writer, failed cutover and re-upgrade; old writers must be stopped."
+    },
+    {
+      "id": "Q7-05",
+      "owner": "AM70-T05",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_refresh_demand.py",
+        "tests/test_question_runtime_v7.py",
+        "tests/test_question_transport_v7.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Singleflight and shared quota plus independent reader authorization."
+    },
+    {
+      "id": "Q7-06",
+      "owner": "AM70-T05",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_refresh_demand.py",
+        "tests/test_refresh_scheduler_process.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Pinned claim, durable successor, legacy exact versus finite coverage receipt after restart."
+    },
+    {
+      "id": "Q7-07",
+      "owner": "AM70-T05",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_refresh_demand.py",
+        "tests/test_refresh_scheduler_boundaries.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Max-wait eligibility without deadline-success fabrication under resource deferral."
+    },
+    {
+      "id": "Q7-08",
+      "owner": "AM70-T07",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_refresh_scheduler_clock_storage.py",
+        "tests/test_refresh_scheduler_process.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_refresh_clock_delivery.py"
+      ],
+      "required_review": "Durable due/high-water time, backward and forward jumps including final delivery."
+    },
+    {
+      "id": "Q7-09",
+      "owner": "AM70-T06",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_refresh_demand.py",
+        "tests/test_refresh_scheduler_boundaries.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Cold invalidation without unrequested compute, finite foreground demand."
+    },
+    {
+      "id": "Q7-10",
+      "owner": "AM70-T06",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_refresh_demand.py",
+        "tests/test_refresh_scheduler_boundaries.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Temporary parent demand with shared resource budget, no endless precomputation."
+    },
+    {
+      "id": "Q7-11",
+      "owner": "AM70-T06",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_refresh_schedule_storage.py",
+        "tests/test_refresh_scheduler_boundaries.py",
+        "tests/test_refresh_scheduler_process.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Pending/running quotas, small-tenant progress, aging and independent-process last-slot race."
+    },
+    {
+      "id": "Q7-12",
+      "owner": "AM70-T07",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_refresh_demand.py",
+        "tests/test_derived_lifecycle_audit.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Unsupported processor cannot consume obligations; compatible worker can recover."
+    },
+    {
+      "id": "Q7-13",
+      "owner": "AM70-T04",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_publication_batches.py",
+        "tests/test_question_runtime_v7.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Actual finite closed publication target, not source-persisted token."
+    },
+    {
+      "id": "Q7-14",
+      "owner": "AM70-T08",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_question_runtime_v7.py",
+        "tests/test_question_transport_v7.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Four registered templates via embedded/MCP paths with zero model calls, qualifiers and citations."
+    },
+    {
+      "id": "Q7-15",
+      "owner": "AM70-T08",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_question_runtime_v7.py",
+        "tests/test_question_transport_v7.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Ambiguous aliases and conflicting parameters abstain; natural-language model routing remains bounded."
+    },
+    {
+      "id": "Q7-16",
+      "owner": "AM70-T02",
+      "ledger_status_at_preparation": "partial",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_project_questions_v7.py",
+        "tests/test_project_admission_v7.py",
+        "tests/test_question_runtime_v7.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "No completion evidence means unknown; empty known-scope risks are not world negation; truncation is explicit."
+    },
+    {
+      "id": "Q7-17",
+      "owner": "AM70-T10",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_project_questions_v7.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_question_delta_v7.py"
+      ],
+      "required_review": "Pending B4: full-oracle equivalence across add/change/remove/time and qualifiers/proofs, not only displayed text."
+    },
+    {
+      "id": "Q7-18",
+      "owner": "AM70-T10",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_project_questions_v7.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_question_delta_v7.py"
+      ],
+      "required_review": "Pending B4: incompatible schema/policy/definition/operator forces full or rejects delta."
+    },
+    {
+      "id": "Q7-19",
+      "owner": "AM70-T10",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_project_questions_v7.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_question_delta_v7.py"
+      ],
+      "required_review": "Pending B4: duplicate/out-of-order/gap replay cannot advance fabricated frontier."
+    },
+    {
+      "id": "Q7-20",
+      "owner": "AM70-T04",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_atom_temporal.py",
+        "tests/test_bitemporal_claims.py",
+        "tests/test_question_transport_v7.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Late valid time and preserved old known history; generic historical QuestionView remains explicit unsupported."
+    },
+    {
+      "id": "Q7-21",
+      "owner": "AM70-T11",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_question_runtime_v7.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_question_proof_reuse_v7.py",
+        "tests/test_question_snapshot_security_v7.py",
+        "tests/test_question_page_validation_v7.py"
+      ],
+      "required_review": "Pending B4: changed evidence updates certificate and all dependent proof responsibilities."
+    },
+    {
+      "id": "Q7-22",
+      "owner": "AM70-T11",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_question_erasure_v7.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_governed_models_v7.py",
+        "tests/test_question_proof_reuse_v7.py",
+        "tests/test_question_snapshot_security_v7.py"
+      ],
+      "required_review": "Pending B4/B5: private processing ancestry remains immutable despite identical public text."
+    },
+    {
+      "id": "Q7-23",
+      "owner": "AM70-T09",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_question_pages_v7.py",
+        "tests/test_v7_qualified_pages.py",
+        "tests/test_derived_lifecycle_audit.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_question_page_validation_v7.py"
+      ],
+      "required_review": "Stable blocks, complete whole-page lineage/output limit and final delivery guard."
+    },
+    {
+      "id": "Q7-24",
+      "owner": "AM70-T04",
+      "ledger_status_at_preparation": "partial",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_question_runtime_v7.py",
+        "tests/test_v7_backend_lifecycle.py",
+        "tests/test_admission_input_ownership.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Owned input snapshots, changed source/query/security/lease rejects publication, successor persists."
+    },
+    {
+      "id": "Q7-25",
+      "owner": "AM70-T12",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [],
+      "pending_test_paths": [
+        "tests/test_governed_models_v7.py",
+        "tests/test_question_models_v7.py"
+      ],
+      "required_review": "Pending B5: exact context/user/project/time/purpose/provider key plus current authority."
+    },
+    {
+      "id": "Q7-26",
+      "owner": "AM70-T12",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_question_erasure_v7.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_governed_models_v7.py",
+        "tests/test_question_models_v7.py"
+      ],
+      "required_review": "Pending B5: cache/dispatch/delivery erasure and revocation ordering on both backends."
+    },
+    {
+      "id": "Q7-27",
+      "owner": "AM70-T12",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [],
+      "pending_test_paths": [
+        "tests/test_governed_models_v7.py",
+        "tests/test_ollama_port_v7.py",
+        "tests/test_question_models_v7.py"
+      ],
+      "required_review": "Pending B5: provider/prompt/config changes miss, full input manifest; unknown costs remain unknown."
+    },
+    {
+      "id": "Q7-28",
+      "owner": "AM70-T12",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [],
+      "pending_test_paths": [
+        "tests/test_model_budget_v7.py",
+        "tests/test_governed_models_v7.py",
+        "tests/test_model_budget_recovery_v7.py"
+      ],
+      "required_review": "B5 commit 0b33d00 adds actual SIGKILL before/after durable intent and settlement with independent repositories. Rerun after integration; actual provider acceptance remains Q7-32 evidence, not proved by synthetic invoice."
+    },
+    {
+      "id": "Q7-29",
+      "owner": "AM70-T07",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_refresh_scheduler_process.py"
+      ],
+      "pending_test_paths": [],
+      "required_review": "Dual-backend SIGKILL before/after publication and actual polling with notification loss; extend to new B4/B5 persistence."
+    },
+    {
+      "id": "Q7-30",
+      "owner": "AM70-T14",
+      "ledger_status_at_preparation": "partial",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_purge_restore.py",
+        "tests/test_v7_subscriptions.py",
+        "tests/test_refresh_schedule_storage.py",
+        "tests/test_question_runtime_v7.py",
+        "tests/test_v7_project_indexes.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_model_budget_recovery_v7.py",
+        "tests/test_question_models_v7.py",
+        "tests/test_governed_models_v7.py"
+      ],
+      "required_review": "Real backup/current-journal replay of all new kinds; add B4/B5 cache/manifest kinds and run isolated actual-source upgrade drill."
+    },
+    {
+      "id": "Q7-31",
+      "owner": "AM70-T13",
+      "ledger_status_at_preparation": "partial",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_question_cost_v7.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_model_budget_v7.py",
+        "tests/test_governed_models_v7.py",
+        "tests/test_model_cost_runtime_v7.py"
+      ],
+      "required_review": "All phases, cold/zero-hit/failed/retried work and finite debt; protocol tests alone are not a reconciled real workload."
+    },
+    {
+      "id": "Q7-32",
+      "owner": "AM70-T15",
+      "ledger_status_at_preparation": "not_run",
+      "final_verification": "not_run",
+      "candidate_test_paths": [
+        "tests/test_question_cost_v7.py"
+      ],
+      "pending_test_paths": [
+        "tests/test_ollama_port_v7.py"
+      ],
+      "required_review": "BLOCKED: actual Qwen3.5 9B endpoint/model identity, licensed held-out gold, frozen judge/thresholds/statistics and repeated full workload."
+    }
+  ]
+}

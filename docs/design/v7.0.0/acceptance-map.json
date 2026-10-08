@@ -1,7 +1,7 @@
 {
   "schema": "v7-acceptance-map/1",
-  "baseline": "2ed003771e4c0fc7307a600736bc8dfbe6af3638",
-  "batch": "B4",
+  "baseline": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+  "batch": "B6 final engineering verification",
   "runtime_capabilities": [
     "finite_current_project_full_questions_opt_in",
     "exact_registered_question_routing",
@@ -9,7 +9,10 @@
     "host_published_full_project_pages",
     "finite_project_complete_group_delta",
     "immutable_generation_current_certificate_reuse",
-    "bounded_fair_source_sensitive_page_validation"
+    "bounded_fair_source_sensitive_page_validation",
+    "bounded_host_only_typed_page_patches",
+    "host_bound_governed_model_exact_cache",
+    "durable_multi_account_model_budget_and_unknown_debt"
   ],
   "notes": [
     "Protocol unit tests do not establish full runtime acceptance.",
@@ -17,7 +20,10 @@
     "Unsupported, deferred, not_run and insufficient_data are never passes.",
     "B3 passes are bounded to explicitly host-enabled current full templates; no delta, model, historical page or production quality acceptance is inferred.",
     "B4 passes cover registered deterministic project operators and the finite QuestionView-to-page layer; no model patch, arbitrary query program or production savings claim.",
-    "B4 cached-body correction2ed0037 passed184 affected dual-provider cases. Every cached body has before/after expiry/context/registration guards; earlier counts remain separate."
+    "B4 cached-body correction2ed0037 passed184 affected dual-provider cases. Every cached body has before/after expiry/context/registration guards; earlier counts remain separate.",
+    "B6 final-source suite and explicit reviewed scenario scopes are in validation-b6.json. Related-suite execution never promotes an inherited scenario by itself.",
+    "All 44 AM61 task states remain unchanged; real Ollama/domain quality and whole-cost gates remain unresolved.",
+    "Historical evidence-plan-b6.json remains a preparation inventory, not the final verification report."
   ],
   "cases": [
     {
@@ -25,538 +31,1491 @@
       "scenario": "用户中文，项目 A 英文，批准覆盖；另测同用户存储槽分别适用 A/B 的两条偏好",
       "owner": "AM61-T11",
       "inherited_status": "部分：同存储槽项目 A/B 条件分段与显式偏序已测；跨存储范围路由待补",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R01-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Bounded same-slot language/context precedence, three-valued conditions and frozen language-history regressions passed. General cross-scope composition, sets and constraint semantics remain unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_contextual_memory.py",
+            "test_derived_contextual.py",
+            "test_derived_context_history.py"
+          ],
+          "matched_passing_test_cases": 234,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R01-02",
       "scenario": "不可比较范围异值；交换入库/候选顺序；循环优先政策",
       "owner": "AM61-T11",
       "inherited_status": "部分：顺序无关、不可比较异值、循环优先政策拒绝已测；跨范围完整矩阵待补",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R01-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Bounded same-slot language/context precedence, three-valued conditions and frozen language-history regressions passed. General cross-scope composition, sets and constraint semantics remain unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_contextual_memory.py",
+            "test_derived_contextual.py",
+            "test_derived_context_history.py"
+          ],
+          "matched_passing_test_cases": 234,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R01-03",
       "scenario": "高优先项分别为争议、无记录、到期、block_inheritance",
       "owner": "AM61-T11",
       "inherited_status": "部分：高优先争议/未知不回退，到期不恢复旧值；可配置 fallback/block_inheritance 待补",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R01-03",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Bounded same-slot language/context precedence, three-valued conditions and frozen language-history regressions passed. General cross-scope composition, sets and constraint semantics remain unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_contextual_memory.py",
+            "test_derived_contextual.py",
+            "test_derived_context_history.py"
+          ],
+          "matched_passing_test_cases": 234,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R01-04",
       "scenario": "用户周五例外与团队维护禁止同时适用；时区未知",
       "owner": "AM61-T11",
       "inherited_status": "部分：例外三值与时区未知已测；团队约束合取保持 unsupported",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R01-04",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Bounded same-slot language/context precedence, three-valued conditions and frozen language-history regressions passed. General cross-scope composition, sets and constraint semantics remain unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_contextual_memory.py",
+            "test_derived_contextual.py",
+            "test_derived_context_history.py"
+          ],
+          "matched_passing_test_cases": 234,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R01-05",
       "scenario": "Python/SQL 部分成员观察与 Python 反证",
       "owner": "AM61-T11",
       "inherited_status": "未执行",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "unsupported",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R01-05",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Set membership/constraint semantics remain unsupported; related language-policy regression passes do not implement this scenario.",
+          "executed_selectors": [
+            "test_contextual_memory.py",
+            "test_derived_contextual.py",
+            "test_derived_context_history.py"
+          ],
+          "matched_passing_test_cases": 234,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R01-06",
       "scenario": "K1/K2 合成政策不同，今天撤权；历史政策缺失",
       "owner": "AM61-T11",
       "inherited_status": "部分：政策版本不符拒绝、历史/当前擦除分开；动态 ACL/实体政策历史注册待补",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R01-06",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Bounded same-slot language/context precedence, three-valued conditions and frozen language-history regressions passed. General cross-scope composition, sets and constraint semantics remain unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_contextual_memory.py",
+            "test_derived_contextual.py",
+            "test_derived_context_history.py"
+          ],
+          "matched_passing_test_cases": 234,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R02-01",
       "scenario": "新提取零候选，但旧候选逐项复核仍 supported",
       "owner": "AM61-T20",
       "inherited_status": "通过（整来源模式）：零候选逐项复核仍 supported，保留身份且不增加独立证据",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R02-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Whole-source reprocessing, same-slot ordinary contribution replacement, independent support, CAS and erasure regressions passed. General partial coverage/cross-slot replacement and remote authorization histories remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_reprocessing.py",
+            "test_source_revisions.py",
+            "test_contribution_lifecycle.py"
+          ],
+          "matched_passing_test_cases": 77,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R02-02",
       "scenario": "旧误提被明确判为 unsupported，新解释通过",
       "owner": "AM61-T20",
       "inherited_status": "通过（同槽普通贡献）：明确 unsupported 退出，新解释原子接替；历史 known_at 保留",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R02-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Whole-source reprocessing, same-slot ordinary contribution replacement, independent support, CAS and erasure regressions passed. General partial coverage/cross-slot replacement and remote authorization histories remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_reprocessing.py",
+            "test_source_revisions.py",
+            "test_contribution_lifecycle.py"
+          ],
+          "matched_passing_test_cases": 77,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R02-03",
       "scenario": "生成截断/审查缺项；完整审查但资格未知",
       "owner": "AM61-T20",
       "inherited_status": "部分：复核缺项/未知与 allow_pending 已测；复杂生成完整性和局部覆盖待扩展",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R02-03",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Whole-source reprocessing, same-slot ordinary contribution replacement, independent support, CAS and erasure regressions passed. General partial coverage/cross-slot replacement and remote authorization histories remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_reprocessing.py",
+            "test_source_revisions.py",
+            "test_contribution_lifecycle.py"
+          ],
+          "matched_passing_test_cases": 77,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R02-04",
       "scenario": "撤去来源 A 支持，独立来源 B 仍支持同值",
       "owner": "AM61-T20",
       "inherited_status": "部分：来源 A 的独立记录退出不影响 B；组合贡献 AND/OR 待扩展",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R02-04",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Whole-source reprocessing, same-slot ordinary contribution replacement, independent support, CAS and erasure regressions passed. General partial coverage/cross-slot replacement and remote authorization histories remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_reprocessing.py",
+            "test_source_revisions.py",
+            "test_contribution_lifecycle.py"
+          ],
+          "matched_passing_test_cases": 77,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R02-05",
       "scenario": "覆盖重叠或不相交的两个替代及并发 additive",
       "owner": "AM61-T20",
       "inherited_status": "部分：整来源 additive/replace 共享 CAS，失败不改基线；部分覆盖明确拒绝",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R02-05",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Whole-source reprocessing, same-slot ordinary contribution replacement, independent support, CAS and erasure regressions passed. General partial coverage/cross-slot replacement and remote authorization histories remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_reprocessing.py",
+            "test_source_revisions.py",
+            "test_contribution_lifecycle.py"
+          ],
+          "matched_passing_test_cases": 77,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R02-06",
       "scenario": "对账期间删除/撤权、提交崩溃或回执丢失",
       "owner": "AM61-T20",
       "inherited_status": "部分：删除、贡献版本改变、事务异常与阶段重用已测；动态撤权/真实进程强杀待补",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R02-06",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Whole-source reprocessing, same-slot ordinary contribution replacement, independent support, CAS and erasure regressions passed. General partial coverage/cross-slot replacement and remote authorization histories remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_reprocessing.py",
+            "test_source_revisions.py",
+            "test_contribution_lifecycle.py"
+          ],
+          "matched_passing_test_cases": 77,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R03-01",
       "scenario": "旧索引命中已撤权正文，拟送外部精排",
       "owner": "AM61-T13",
       "inherited_status": "未执行",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R03-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "B5 non-streaming source/QuestionView input, immutable provider dispatch and final/cache delivery guards passed using controlled recording transports. Remote ACL synchronization, chunk streaming and unobservable provider context are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_governed_recall_integration.py",
+            "test_question_transport_v7.py",
+            "test_governed_models_v7.py"
+          ],
+          "matched_passing_test_cases": 71,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R03-02",
       "scenario": "有读取权但无指定供应商/区域处理权",
       "owner": "AM61-T13",
       "inherited_status": "未执行",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R03-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "B5 non-streaming source/QuestionView input, immutable provider dispatch and final/cache delivery guards passed using controlled recording transports. Remote ACL synchronization, chunk streaming and unobservable provider context are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_governed_recall_integration.py",
+            "test_question_transport_v7.py",
+            "test_governed_models_v7.py"
+          ],
+          "matched_passing_test_cases": 71,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R03-03",
       "scenario": "Reflect 读取后、交付授权前擦除；缓存命中也同样",
       "owner": "AM61-T13",
       "inherited_status": "未执行",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R03-03",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "B5 non-streaming source/QuestionView input, immutable provider dispatch and final/cache delivery guards passed using controlled recording transports. Remote ACL synchronization, chunk streaming and unobservable provider context are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_governed_recall_integration.py",
+            "test_question_transport_v7.py",
+            "test_governed_models_v7.py"
+          ],
+          "matched_passing_test_cases": 71,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R03-04",
       "scenario": "删除分别发生在 dispatch/交付授权点前后",
       "owner": "AM61-T13",
       "inherited_status": "未执行",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R03-04",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "B5 non-streaming source/QuestionView input, immutable provider dispatch and final/cache delivery guards passed using controlled recording transports. Remote ACL synchronization, chunk streaming and unobservable provider context are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_governed_recall_integration.py",
+            "test_question_transport_v7.py",
+            "test_governed_models_v7.py"
+          ],
+          "matched_passing_test_cases": 71,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R03-05",
       "scenario": "输出中途撤权、适配器无逐 chunk 授权",
       "owner": "AM61-T13",
       "inherited_status": "未执行",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "unsupported",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R03-05",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Streaming/chunk-level model delivery is not enabled; non-streaming final delivery guards do not satisfy this scenario.",
+          "executed_selectors": [
+            "test_governed_recall_integration.py",
+            "test_question_transport_v7.py",
+            "test_governed_models_v7.py"
+          ],
+          "matched_passing_test_cases": 71,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R03-06",
       "scenario": "外部 ACL 不可验证、远程模型暗含额外上下文",
       "owner": "AM61-T13",
       "inherited_status": "未执行",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R03-06",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "B5 non-streaming source/QuestionView input, immutable provider dispatch and final/cache delivery guards passed using controlled recording transports. Remote ACL synchronization, chunk streaming and unobservable provider context are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_governed_recall_integration.py",
+            "test_question_transport_v7.py",
+            "test_governed_models_v7.py"
+          ],
+          "matched_passing_test_cases": 71,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R04-01",
       "scenario": "模型读 P 公开与 S 私有，但只引用 P 或将 S 标可选",
       "owner": "AM61-T25",
       "inherited_status": "第十二阶段当前本地 facet 切片通过；完整扩展未验收",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R04-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Original processing manifests, source/query completeness, immutable private ancestry and B5/B6 cache/page erasure passed for bounded current paths. Arbitrary multi-turn provider histories, model patches and authorized declassification remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_derived_observations.py",
+            "test_question_erasure_v7.py",
+            "test_governed_models_v7.py",
+            "test_question_proof_reuse_v7.py",
+            "test_question_snapshot_security_v7.py"
+          ],
+          "matched_passing_test_cases": 183,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R04-02",
       "scenario": "多轮、旧摘要、few-shot、缓存、L1 解释携带私有输入",
       "owner": "AM61-T25",
       "inherited_status": "未执行",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R04-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Original processing manifests, source/query completeness, immutable private ancestry and B5/B6 cache/page erasure passed for bounded current paths. Arbitrary multi-turn provider histories, model patches and authorized declassification remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_derived_observations.py",
+            "test_question_erasure_v7.py",
+            "test_governed_models_v7.py",
+            "test_question_proof_reuse_v7.py",
+            "test_question_snapshot_security_v7.py"
+          ],
+          "matched_passing_test_cases": 183,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R04-03",
       "scenario": "delta 仅改一个块，提示词含私有资料",
       "owner": "AM61-T25",
       "inherited_status": "未执行",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "unsupported",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R04-03",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Free-form model delta/block patches are not enabled. B6 typed patches are deterministic host operations.",
+          "executed_selectors": [
+            "test_derived_observations.py",
+            "test_question_erasure_v7.py",
+            "test_governed_models_v7.py",
+            "test_question_proof_reuse_v7.py",
+            "test_question_snapshot_security_v7.py"
+          ],
+          "matched_passing_test_cases": 183,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R04-04",
       "scenario": "因省略引用而不再“必要”的来源撤权/擦除",
       "owner": "AM61-T25",
       "inherited_status": "第十二阶段当前本地 facet 切片通过；完整扩展未验收",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R04-04",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Original processing manifests, source/query completeness, immutable private ancestry and B5/B6 cache/page erasure passed for bounded current paths. Arbitrary multi-turn provider histories, model patches and authorized declassification remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_derived_observations.py",
+            "test_question_erasure_v7.py",
+            "test_governed_models_v7.py",
+            "test_question_proof_reuse_v7.py",
+            "test_question_snapshot_security_v7.py"
+          ],
+          "matched_passing_test_cases": 183,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R04-05",
       "scenario": "仅公开输入的全新上下文重新生成",
       "owner": "AM61-T25",
       "inherited_status": "未执行",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R04-05",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Original processing manifests, source/query completeness, immutable private ancestry and B5/B6 cache/page erasure passed for bounded current paths. Arbitrary multi-turn provider histories, model patches and authorized declassification remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_derived_observations.py",
+            "test_question_erasure_v7.py",
+            "test_governed_models_v7.py",
+            "test_question_proof_reuse_v7.py",
+            "test_question_snapshot_security_v7.py"
+          ],
+          "matched_passing_test_cases": 183,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R04-06",
       "scenario": "模型自称已脱敏与独立获准级别转换",
       "owner": "AM61-T25",
       "inherited_status": "未执行",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "unsupported",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R04-06",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Authorized declassification is not implemented; model self-assertion does not grant it.",
+          "executed_selectors": [
+            "test_derived_observations.py",
+            "test_question_erasure_v7.py",
+            "test_governed_models_v7.py",
+            "test_question_proof_reuse_v7.py",
+            "test_question_snapshot_security_v7.py"
+          ],
+          "matched_passing_test_cases": 183,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N01-01",
       "scenario": "纯工具响应、多块内容、流中断",
       "owner": "AM61-T06",
       "inherited_status": "部分：工具结果/省略，未覆盖多块",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N01-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Trusted capture-profile and SDK/MCP fixture regressions passed. No deployed host complete-event adapter or general multi-block/stream-interruption capture acceptance is asserted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_capture_profile.py",
+            "test_capture_composite_acceptance.py",
+            "test_durable_transport.py"
+          ],
+          "matched_passing_test_cases": 23,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N01-02",
       "scenario": "注入记忆再回流及已知改写",
       "owner": "AM61-T06",
       "inherited_status": "部分：宿主标记与三条接纳入口，未覆盖完整谱系",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N01-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Trusted capture-profile and SDK/MCP fixture regressions passed. No deployed host complete-event adapter or general multi-block/stream-interruption capture acceptance is asserted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_capture_profile.py",
+            "test_capture_composite_acceptance.py",
+            "test_durable_transport.py"
+          ],
+          "matched_passing_test_cases": 23,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N01-03",
       "scenario": "无宿主事件全集或伪造来源角色",
       "owner": "AM61-T06",
       "inherited_status": "部分：宿主 origin/actor/scope 绑定及 SDK/MCP 同合同已测；完整事件全集适配待补",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N01-03",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Trusted capture-profile and SDK/MCP fixture regressions passed. No deployed host complete-event adapter or general multi-block/stream-interruption capture acceptance is asserted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_capture_profile.py",
+            "test_capture_composite_acceptance.py",
+            "test_durable_transport.py"
+          ],
+          "matched_passing_test_cases": 23,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N02-01",
       "scenario": "确认丢失、重复投递、同ID异载荷",
       "owner": "AM61-T17",
       "inherited_status": "部分：SDK/MCP append/revise 丢确认与异载荷冲突、真实接收进程强杀恢复、purge 确认丢失重启已测；完整生命周期仍待补",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N02-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Controlled durable producer/outbox SDK/MCP contracts, identity conflicts, current-epoch replay rejection and real provider process recovery passed. Full external/legacy-device fleet lifecycle remains unaccepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_durable_retention.py",
+            "test_durable_producer.py",
+            "test_durable_transport.py",
+            "test_durable_process_recovery.py"
+          ],
+          "matched_passing_test_cases": 54,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N02-02",
       "scenario": "乱序ack、多个生产者并发追加",
       "owner": "AM61-T17",
       "inherited_status": "通过（受控 producer）：多 producer 乱序/重复与双后端竞争已测；新 opt-in received/settled 分开，取消不伪造接收",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N02-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Controlled durable producer/outbox SDK/MCP contracts, identity conflicts, current-epoch replay rejection and real provider process recovery passed. Full external/legacy-device fleet lifecycle remains unaccepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_durable_retention.py",
+            "test_durable_producer.py",
+            "test_durable_transport.py",
+            "test_durable_process_recovery.py"
+          ],
+          "matched_passing_test_cases": 54,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N02-03",
       "scenario": "离线outbox遇scope擦除",
       "owner": "AM61-T17",
       "inherited_status": "通过（双端 opt-in SDK/MCP）：旧 epoch 离线正文先清理再拒绝上传，未知对象删除同步、新 epoch 与旧会话分离已测；历史设备范围见 stage-04",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N02-03",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Controlled durable producer/outbox SDK/MCP contracts, identity conflicts, current-epoch replay rejection and real provider process recovery passed. Full external/legacy-device fleet lifecycle remains unaccepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_durable_retention.py",
+            "test_durable_producer.py",
+            "test_durable_transport.py",
+            "test_durable_process_recovery.py"
+          ],
+          "matched_passing_test_cases": 54,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N03-01",
       "scenario": "整理运行中收到新变更",
       "owner": "AM61-T18",
       "inherited_status": "通过（受控本地刷新集合）：固定领取、合并新责任、原子覆盖与后继调度、固定请求回执已测；具体 Observation/视图仍待专属验收",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N03-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Supported local resource/derived processors passed fixed target, successor, fencing, age/progress, quota and real process recovery contracts. Arbitrary external processing side effects are outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_resource_refresh.py",
+            "test_durable_execution.py",
+            "test_refresh_demand.py",
+            "test_refresh_scheduler_process.py"
+          ],
+          "matched_passing_test_cases": 122,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N03-02",
       "scenario": "同资源多worker及旧租约回报",
       "owner": "AM61-T18",
       "inherited_status": "通过（受控本地刷新）：跨连接资源排他、不同资源可前进、旧 fencing 与真实 SIGKILL 提交恢复已测；派生/外部处理仍待专属验收",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N03-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Supported local resource/derived processors passed fixed target, successor, fencing, age/progress, quota and real process recovery contracts. Arbitrary external processing side effects are outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_resource_refresh.py",
+            "test_durable_execution.py",
+            "test_refresh_demand.py",
+            "test_refresh_scheduler_process.py"
+          ],
+          "matched_passing_test_cases": 122,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N03-03",
       "scenario": "背压defer、心跳无提交、部分提交后取消",
       "owner": "AM61-T18",
       "inherited_status": "通过（受控本地刷新）：defer 不占故障次数且单独计数、心跳/checkpoint 不推进进度、独立年龄/无进度时限、已提交范围与剩余取消已测",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N03-03",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Supported local resource/derived processors passed fixed target, successor, fencing, age/progress, quota and real process recovery contracts. Arbitrary external processing side effects are outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_resource_refresh.py",
+            "test_durable_execution.py",
+            "test_refresh_demand.py",
+            "test_refresh_scheduler_process.py"
+          ],
+          "matched_passing_test_cases": 122,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N04-01",
       "scenario": "source query/模板语义变化",
       "owner": "AM61-T31",
       "inherited_status": "第十五阶段有界 full：定义/query 变化使旧页面失效，实际父与完整输入 CAS 已验证；一般模板/delta 未验收",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N04-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Registered current language/project full, whitelisted delta/noop and deterministic typed patch regressions passed. General scenario/model patch and cross-scope composition are not enabled. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_derived_pages.py",
+            "test_derived_lifecycle_audit.py",
+            "test_question_delta_v7.py"
+          ],
+          "matched_passing_test_cases": 182,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N04-02",
       "scenario": "零edits、补丁无效、待撤回内容",
       "owner": "AM61-T31",
       "inherited_status": "第十五阶段 full 空输出有完整证书，失效/失败不交付旧页；delta/补丁未启用",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N04-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Registered current language/project full, whitelisted delta/noop and deterministic typed patch regressions passed. General scenario/model patch and cross-scope composition are not enabled. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_derived_pages.py",
+            "test_derived_lifecycle_audit.py",
+            "test_question_delta_v7.py"
+          ],
+          "matched_passing_test_cases": 182,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N04-03",
       "scenario": "刷新期间新增相关成员",
       "owner": "AM61-T31",
       "inherited_status": "第十五阶段当前语言页：新增成员阻断固定旧发布并父优先刷新通过；一般场景/跨范围未验收",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N04-03",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Registered current language/project full, whitelisted delta/noop and deterministic typed patch regressions passed. General scenario/model patch and cross-scope composition are not enabled. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_derived_pages.py",
+            "test_derived_lifecycle_audit.py",
+            "test_question_delta_v7.py"
+          ],
+          "matched_passing_test_cases": 182,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N05-01",
       "scenario": "来源接收但提取未完成",
       "owner": "AM61-T22",
       "inherited_status": "通过（有限捕获请求）：source_persisted 可 reached 而 L1 清单未闭合，固定目标与原接收令牌已测",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N05-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Finite persisted-source versus closed admitted-publication readiness, unchanged targets and local continuous index coverage passed. General external indexes and dynamic remote ACL propagation are not accepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_durable_readiness.py",
+            "test_reprocessing_readiness.py",
+            "test_publication_batches.py",
+            "test_question_runtime_v7.py"
+          ],
+          "matched_passing_test_cases": 205,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N05-02",
       "scenario": "全部待决、多次发布、部分索引落后",
       "owner": "AM61-T22",
       "inherited_status": "部分：闭合零输出/全部待决、跨请求发布汇总、本地索引连续覆盖/部分落后及显式重处理目标已测；单请求整槽分批及闭合/逐令牌覆盖已测；派生/外部索引仍待补",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N05-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Finite persisted-source versus closed admitted-publication readiness, unchanged targets and local continuous index coverage passed. General external indexes and dynamic remote ACL propagation are not accepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_durable_readiness.py",
+            "test_reprocessing_readiness.py",
+            "test_publication_batches.py",
+            "test_question_runtime_v7.py"
+          ],
+          "matched_passing_test_cases": 205,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N05-03",
       "scenario": "持续新增、deadline、权限撤回",
       "owner": "AM61-T22",
       "inherited_status": "部分：新输入/新 generation 不扩大旧目标、deadline 不取消及 scope/source 删除阻断已测；通用动态 ACL/外部用途守卫待补",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N05-03",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Finite persisted-source versus closed admitted-publication readiness, unchanged targets and local continuous index coverage passed. General external indexes and dynamic remote ACL propagation are not accepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_durable_readiness.py",
+            "test_reprocessing_readiness.py",
+            "test_publication_batches.py",
+            "test_question_runtime_v7.py"
+          ],
+          "matched_passing_test_cases": 205,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N06-01",
       "scenario": "gold分别在候选/精排/装包阶段丢失",
       "owner": "AM61-T34",
       "inherited_status": "未执行",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N06-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Offline evidence/support scoring and controlled runtime trace regressions passed. Licensed real gold, model-stage attribution and end-to-end useful-answer quality are not measured. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_retrieval_trace.py",
+            "test_retrieval_evaluation.py",
+            "test_evidence_evaluation.py"
+          ],
+          "matched_passing_test_cases": 33,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N06-02",
       "scenario": "gold需要多个桥梁证据或有替代支持",
       "owner": "AM61-T34",
       "inherited_status": "部分：离线 AND/OR，运行 trace 待补",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N06-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Offline evidence/support scoring and controlled runtime trace regressions passed. Licensed real gold, model-stage attribution and end-to-end useful-answer quality are not measured. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_retrieval_trace.py",
+            "test_retrieval_evaluation.py",
+            "test_evidence_evaluation.py"
+          ],
+          "matched_passing_test_cases": 33,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N06-03",
       "scenario": "无权/过期来源被过滤",
       "owner": "AM61-T34",
       "inherited_status": "部分：gold 资格，实时读取资格待补",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N06-03",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Offline evidence/support scoring and controlled runtime trace regressions passed. Licensed real gold, model-stage attribution and end-to-end useful-answer quality are not measured. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_retrieval_trace.py",
+            "test_retrieval_evaluation.py",
+            "test_evidence_evaluation.py"
+          ],
+          "matched_passing_test_cases": 33,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N07-01",
       "scenario": "长中文/emoji/尾部否定及例外",
       "owner": "AM61-T36",
       "inherited_status": "未执行",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N07-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Bounded model payload/input/configuration contracts and ontology/embedding regressions passed. Real requested provider/tokenizer identity, failover quality and full embedding migration acceptance are not established. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_semantic_reranker.py",
+            "test_ontology_upgrade.py",
+            "test_governed_models_v7.py"
+          ],
+          "matched_passing_test_cases": 65,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N07-02",
       "scenario": "相对rerank分数、provider failover",
       "owner": "AM61-T36",
       "inherited_status": "未执行",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N07-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Bounded model payload/input/configuration contracts and ontology/embedding regressions passed. Real requested provider/tokenizer identity, failover quality and full embedding migration acceptance are not established. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_semantic_reranker.py",
+            "test_ontology_upgrade.py",
+            "test_governed_models_v7.py"
+          ],
+          "matched_passing_test_cases": 65,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N07-03",
       "scenario": "同维度embedding模型替换",
       "owner": "AM61-T36",
       "inherited_status": "未执行",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N07-03",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Bounded model payload/input/configuration contracts and ontology/embedding regressions passed. Real requested provider/tokenizer identity, failover quality and full embedding migration acceptance are not established. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_semantic_reranker.py",
+            "test_ontology_upgrade.py",
+            "test_governed_models_v7.py"
+          ],
+          "matched_passing_test_cases": 65,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N08-01",
       "scenario": "冻结L1检索与原事件端到端两组",
       "owner": "AM61-T38",
       "inherited_status": "未执行",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "insufficient_data",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N08-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Frozen synthetic study/scorer and comparison protocol regressions passed, including preserved 17-event/20-check fixture semantics. The fixture explicitly says end-to-end execution is false; real held-out quality/cost data are absent. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_memory_v61_fixtures.py",
+            "test_memory_evaluation_protocol_acceptance.py",
+            "test_question_cost_v7.py"
+          ],
+          "matched_passing_test_cases": 78,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N08-02",
       "scenario": "17事件/20检查适配",
       "owner": "AM61-T38",
       "inherited_status": "部分：17/20 已适配，端到端未执行",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "insufficient_data",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N08-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Frozen synthetic study/scorer and comparison protocol regressions passed, including preserved 17-event/20-check fixture semantics. The fixture explicitly says end-to-end execution is false; real held-out quality/cost data are absent. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_memory_v61_fixtures.py",
+            "test_memory_evaluation_protocol_acceptance.py",
+            "test_question_cost_v7.py"
+          ],
+          "matched_passing_test_cases": 78,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "N08-03",
       "scenario": "抽取达标但最终召回/任务退化",
       "owner": "AM61-T38",
       "inherited_status": "未执行",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "insufficient_data",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "N08-03",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Frozen synthetic study/scorer and comparison protocol regressions passed, including preserved 17-event/20-check fixture semantics. The fixture explicitly says end-to-end execution is false; real held-out quality/cost data are absent. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_memory_v61_fixtures.py",
+            "test_memory_evaluation_protocol_acceptance.py",
+            "test_question_cost_v7.py"
+          ],
+          "matched_passing_test_cases": 78,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R05-01",
       "scenario": "部分字段/时间核验",
       "owner": "AM61-T09",
       "inherited_status": "部分：必要字段/限定完整性、点证据不延长、跨来源时间 AND/OR 已测；部分字段独立持久发布未启用",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R05-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Explicit qualification, partial field support and compatible current parent/page regressions passed. A general asynchronous semantic verifier remains unavailable. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_fact_qualification.py",
+            "test_project_admission_v7.py",
+            "test_v7_qualified_pages.py"
+          ],
+          "matched_passing_test_cases": 214,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R05-02",
       "scenario": "联合证据不同业务版本、OR时段不重合、AND无共同区间、撤项",
       "owner": "AM61-T09",
       "inherited_status": "部分：辅助 OR 分支擦除幸存、AND 缺项失效、业务版本与来源族核验已测；完整异步核验待补",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R05-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Explicit qualification, partial field support and compatible current parent/page regressions passed. A general asynchronous semantic verifier remains unavailable. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_fact_qualification.py",
+            "test_project_admission_v7.py",
+            "test_v7_qualified_pages.py"
+          ],
+          "matched_passing_test_cases": 214,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R06-01",
       "scenario": "A被B替换，撤回B支持但结束A依据幸存",
       "owner": "AM61-T10",
       "inherited_status": "已测同 scope 单值：独立终止依据、B 撤证、终止证据丢失均不复活 A",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R06-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Independent valid/known history, contribution withdrawal and no-resurrection regressions passed. General correction of transition start times remains unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_contribution_lifecycle.py",
+            "test_atom_temporal.py",
+            "test_bitemporal_claims.py"
+          ],
+          "matched_passing_test_cases": 106,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R06-02",
       "scenario": "明确纠正错误transition及其起点",
       "owner": "AM61-T10",
       "inherited_status": "部分：新证据显式延长/取消错误终止、历史及撤证已测；移动起点未启用",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R06-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Independent valid/known history, contribution withdrawal and no-resurrection regressions passed. General correction of transition start times remains unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_contribution_lifecycle.py",
+            "test_atom_temporal.py",
+            "test_bitemporal_claims.py"
+          ],
+          "matched_passing_test_cases": 106,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R07-01",
       "scenario": "E1误提家庭地址，E2独立支持家庭地址；更正E1为工作地址",
       "owner": "AM61-T12",
       "inherited_status": "跨槽未启用且整项拒绝已测；同槽 E1 更正保留 E2 的对应切片通过",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R07-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Same-slot correction/CAS and explicit cross-slot rejection regressions passed. General cross-slot atomic semantic correction remains unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_source_revisions.py",
+            "test_reprocessing.py"
+          ],
+          "matched_passing_test_cases": 37,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R07-02",
       "scenario": "一个贡献或槽版本变化、目标越权、隔离域不支持",
       "owner": "AM61-T12",
       "inherited_status": "同槽 CAS/新增贡献/竞争/越权/失败回滚已测；跨槽明确拒绝",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R07-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Same-slot correction/CAS and explicit cross-slot rejection regressions passed. General cross-slot atomic semantic correction remains unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_source_revisions.py",
+            "test_reprocessing.py"
+          ],
+          "matched_passing_test_cases": 37,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R08-01",
       "scenario": "首次订阅前、查询中、发布检查后分别新增阻塞",
       "owner": "AM61-T26",
       "inherited_status": "第十二阶段当前本地 facet 切片通过；完整扩展未验收",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R08-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Finite registered current project first-query/publication races, empty/truncated census and invalidation regressions passed on both providers. No arbitrary query-program capability is claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_v7_subscriptions.py",
+            "test_v7_project_indexes.py",
+            "test_question_runtime_v7.py"
+          ],
+          "matched_passing_test_cases": 103,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R08-02",
       "scenario": "查询截断、删除成员、无写入时间边界",
       "owner": "AM61-T26",
       "inherited_status": "第十二阶段当前本地 facet 切片通过；完整扩展未验收",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R08-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Finite registered current project first-query/publication races, empty/truncated census and invalidation regressions passed on both providers. No arbitrary query-program capability is claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_v7_subscriptions.py",
+            "test_v7_project_indexes.py",
+            "test_question_runtime_v7.py"
+          ],
+          "matched_passing_test_cases": 103,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R09-01",
       "scenario": "K20更正A1后查询K15历史派生",
       "owner": "AM61-T28",
       "inherited_status": "部分：B.1–B.3 语言条件/非条件检查点与稳定区间、旧上下文/政策/资格、更正/撤回及缺口拒绝已测；一般谓词/跨范围历史待补",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R09-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Bounded legacy language historical point/interval and current authorization/erasure regressions passed. Generic historical project questions and pages remain explicitly unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_derived_history.py",
+            "test_derived_context_history.py",
+            "test_derived_coverage.py",
+            "test_question_transport_v7.py"
+          ],
+          "matched_passing_test_cases": 305,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R09-02",
       "scenario": "今天撤权/擦除后查询任意known_at",
       "owner": "AM61-T28",
       "inherited_status": "部分：B.1–B.3 条件/非条件点与区间的当前撤权/期限/floor、字段证据擦除与最终交付已测；通用父传播待补",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R09-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Bounded legacy language historical point/interval and current authorization/erasure regressions passed. Generic historical project questions and pages remain explicitly unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_derived_history.py",
+            "test_derived_context_history.py",
+            "test_derived_coverage.py",
+            "test_question_transport_v7.py"
+          ],
+          "matched_passing_test_cases": 305,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R10-01",
       "scenario": "入口ticket签发后、事务A前scope擦除",
       "owner": "AM61-T15",
       "inherited_status": "部分：ticket/scope epoch 屏障、事务 A 真正强杀前后原子恢复已测；外部远端在途交付守卫待补",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R10-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Current epoch/ticket/outbox erasure and real receive-process recovery passed. Recall of already-dispatched external bytes and a deployed remote in-flight delivery lifecycle are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_durable_process_recovery.py",
+            "test_durable_purge.py",
+            "test_durable_transport.py"
+          ],
+          "matched_passing_test_cases": 52,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R10-02",
       "scenario": "新授权输入与旧离线重传",
       "owner": "AM61-T15",
       "inherited_status": "通过（受控 SDK/MCP）：旧 producer/ticket 撤销；新授权 epoch 输入可接收，旧离线正文先清理、旧身份禁止搬入新会话；revise 沿用确认合同",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R10-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Current epoch/ticket/outbox erasure and real receive-process recovery passed. Recall of already-dispatched external bytes and a deployed remote in-flight delivery lifecycle are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_durable_process_recovery.py",
+            "test_durable_purge.py",
+            "test_durable_transport.py"
+          ],
+          "matched_passing_test_cases": 52,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R11-01",
       "scenario": "capture token到位、publication manifest未闭合且为空",
       "owner": "AM61-T22",
       "inherited_status": "通过（有限捕获请求）：空未闭合清单不达到 L1；闭合零发布明确 no_outputs；opt-in 本地候选索引需闭合和连续覆盖，未配置通道仍 unsupported",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R11-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Pinned finite publication-manifest closure and continuous local index coverage regressions passed. General external index implementations are not accepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_publication_batches.py",
+            "test_durable_readiness.py",
+            "test_question_runtime_v7.py"
+          ],
+          "matched_passing_test_cases": 147,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R11-02",
       "scenario": "多个发布token与不连续索引完成",
       "owner": "AM61-T22",
       "inherited_status": "通过（opt-in 本地候选索引）：多请求固定令牌集合全部闭合，逐令牌实际证明与连续前缀均到位才 reached；后续序号先完成不越缺口。显式实际修复/新流基线切换已测，旧目标不漂移；单请求多发布、部分提交续跑、闭合和逐批修复/切流已测；外部索引仍待补",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R11-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Pinned finite publication-manifest closure and continuous local index coverage regressions passed. General external index implementations are not accepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_publication_batches.py",
+            "test_durable_readiness.py",
+            "test_question_runtime_v7.py"
+          ],
+          "matched_passing_test_cases": 147,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R12-01",
       "scenario": "十个worker竞争多层账户最后一次调用额度",
       "owner": "AM61-T21",
       "inherited_status": "未执行",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R12-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "B5 real database atomic multi-account reservations and independent SIGKILL/recording-HTTP acceptance boundaries passed; unknown cost and synthetic invoice replay remain durable. No actual inference-provider bill or quality/cost experiment exists. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_model_budget_v7.py",
+            "test_governed_models_v7.py"
+          ],
+          "matched_passing_test_cases": 65,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R12-02",
       "scenario": "供应商接受后、本地dispatched前崩溃，费用未知、账单重放",
       "owner": "AM61-T21",
       "inherited_status": "未执行",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R12-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "B5 real database atomic multi-account reservations and independent SIGKILL/recording-HTTP acceptance boundaries passed; unknown cost and synthetic invoice replay remain durable. No actual inference-provider bill or quality/cost experiment exists. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_model_budget_v7.py",
+            "test_governed_models_v7.py",
+            "test_model_budget_recovery_v7.py"
+          ],
+          "matched_passing_test_cases": 79,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R13-01",
       "scenario": "全部拒答换取安全分、检索有效覆盖退化",
       "owner": "AM61-T39",
       "inherited_status": "部分：质量门回归，实际适配器待接入",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "insufficient_data",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R13-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Fail-closed frozen profile/sample/threshold and quality-gate protocol regressions passed. Real observations, calibrated thresholds, licensed gold and actual provider comparison remain unavailable. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_release_acceptance.py",
+            "test_question_cost_v7.py",
+            "test_retrieval_evaluation.py"
+          ],
+          "matched_passing_test_cases": 79,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "R13-02",
       "scenario": "缺门槛配置/数据量不足/事后改裁判",
       "owner": "AM61-T39",
       "inherited_status": "部分：冻结/样本/配置检查，真实校准待补",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "insufficient_data",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "R13-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Fail-closed frozen profile/sample/threshold and quality-gate protocol regressions passed. Real observations, calibrated thresholds, licensed gold and actual provider comparison remain unavailable. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "executed_selectors": [
+            "test_release_acceptance.py",
+            "test_question_cost_v7.py",
+            "test_retrieval_evaluation.py"
+          ],
+          "matched_passing_test_cases": 79,
+          "scenario_fully_accepted": false
+        }
+      ]
     },
     {
       "id": "Q7-01",
       "scenario": "首次订阅与新增成员并发",
       "owner": "AM70-T03",
-      "v7_status": "partial",
+      "v7_status": "passed",
       "evidence": [
         {
-          "path": "docs/design/v7.0.0/validation-b1.json",
-          "scope": "Admitted-L1 indexed invalidation and lifecycle foundation. Project membership and generic QuestionView/publication-manifest runtime remain unverified."
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-01",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Finite admitted project registration, empty census and first-query/publication races on both providers.",
+          "executed_selectors": [
+            "test_v7_subscriptions.py::test_registered_empty_subscription_precedes_census_and_cas",
+            "test_v7_project_indexes.py::test_first_query_lock_fences_later_writer_and_subscription_dirties_atomically",
+            "test_question_runtime_v7.py::test_compute_publish_cas_rejects_every_changed_authority_input"
+          ],
+          "matched_passing_test_cases": 14,
+          "scenario_fully_accepted": true
         }
       ]
     },
@@ -564,11 +1523,20 @@
       "id": "Q7-02",
       "scenario": "成员跨项目/字段移动及删除",
       "owner": "AM70-T03",
-      "v7_status": "partial",
+      "v7_status": "passed",
       "evidence": [
         {
-          "path": "docs/design/v7.0.0/validation-b1.json",
-          "scope": "Admitted-L1 indexed invalidation and lifecycle foundation. Project membership and generic QuestionView/publication-manifest runtime remain unverified."
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-02",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Old/new project and field membership, removals and erasure of persisted/unpublished routes.",
+          "executed_selectors": [
+            "test_v7_subscriptions.py::test_membership_delta_invalidates_both_old_and_new_slot_keys",
+            "test_v7_project_indexes.py::test_project_barriers_exist_before_first_subscription_and_track_moves",
+            "test_v7_project_indexes.py::test_project_routes_erased_in_all_affected_projections_and_real_backup"
+          ],
+          "matched_passing_test_cases": 8,
+          "scenario_fully_accepted": true
         }
       ]
     },
@@ -576,11 +1544,20 @@
       "id": "Q7-03",
       "scenario": "查询谓词无法精确反查",
       "owner": "AM70-T03",
-      "v7_status": "partial",
+      "v7_status": "passed",
       "evidence": [
         {
-          "path": "docs/design/v7.0.0/validation-b1.json",
-          "scope": "Admitted-L1 indexed invalidation and lifecycle foundation. Project membership and generic QuestionView/publication-manifest runtime remain unverified."
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-03",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Bounded conservative scope fallback and fail-closed incomplete/unknown indexes.",
+          "executed_selectors": [
+            "test_v7_subscriptions.py::test_scope_fallback_is_bounded_metered_and_invalidates_snapshot",
+            "test_v7_subscriptions.py::test_oversized_backfill_selects_scope_fallback_without_partial_index_claim",
+            "test_v7_project_indexes.py::test_unknown_or_incomplete_index_fails_closed_before_bodies"
+          ],
+          "matched_passing_test_cases": 10,
+          "scenario_fully_accepted": true
         }
       ]
     },
@@ -588,11 +1565,20 @@
       "id": "Q7-04",
       "scenario": "订阅索引重建/升级时发生写入",
       "owner": "AM70-T14",
-      "v7_status": "partial",
+      "v7_status": "passed",
       "evidence": [
         {
-          "path": "docs/design/v7.0.0/validation-b1.json",
-          "scope": "Admitted-L1 indexed invalidation and lifecycle foundation. Project membership and generic QuestionView/publication-manifest runtime remain unverified."
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-04",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Atomic current-provider index cutover, failed backfill rollback and concurrent writes; old writers must be stopped.",
+          "executed_selectors": [
+            "test_v7_subscriptions.py::test_backfill_is_atomic_and_old_targets_fail_closed",
+            "test_v7_project_indexes.py::test_backfill_failure_rolls_back_cutover_and_retry_rebuilds_from_persisted_json",
+            "test_v7_project_indexes.py::test_first_query_lock_fences_later_writer_and_subscription_dirties_atomically"
+          ],
+          "matched_passing_test_cases": 6,
+          "scenario_fully_accepted": true
         }
       ]
     },
@@ -600,11 +1586,20 @@
       "id": "Q7-05",
       "scenario": "多请求/worker 对同一兼容目标刷新",
       "owner": "AM70-T05",
-      "v7_status": "partial",
+      "v7_status": "passed",
       "evidence": [
         {
-          "path": "docs/design/v7.0.0/validation-b2.json",
-          "scope": "Dual-backend managed current Observation/parent/page scheduler: coalescing, fair deterministic resource quotas, clock/error-path guards, actual process kill and restore. QuestionView, monetary model governance and final combination continue in B3/B5/B6."
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-05",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Finite current question/scheduler singleflight, exact targets and separately guarded reads.",
+          "executed_selectors": [
+            "test_refresh_demand.py::test_fixed_coverage_receipt_coalesces_and_cannot_fake_publication",
+            "test_question_runtime_v7.py::test_actual_registration_review_publish_guarded_read_and_singleflight",
+            "test_question_transport_v7.py::test_transport_authority_injection_wrong_scope_and_history_fail_closed"
+          ],
+          "matched_passing_test_cases": 8,
+          "scenario_fully_accepted": true
         }
       ]
     },
@@ -612,11 +1607,20 @@
       "id": "Q7-06",
       "scenario": "旧目标运行中不断到达新变更",
       "owner": "AM70-T05",
-      "v7_status": "partial",
+      "v7_status": "passed",
       "evidence": [
         {
-          "path": "docs/design/v7.0.0/validation-b2.json",
-          "scope": "Dual-backend managed current Observation/parent/page scheduler: coalescing, fair deterministic resource quotas, clock/error-path guards, actual process kill and restore. QuestionView, monetary model governance and final combination continue in B3/B5/B6."
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-06",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Pinned claim, persistent successor, coverage versus unchanged legacy exact semantics under process recovery.",
+          "executed_selectors": [
+            "test_refresh_demand.py::test_new_dirty_keeps_fixed_receipt_and_successor_legacy_remains_exact",
+            "test_refresh_demand.py::test_compatible_full_successor_finishes_finite_coverage_but_not_exact",
+            "test_refresh_scheduler_process.py::test_sigkill_at_publish_commit_recovers_exact_responsibility"
+          ],
+          "matched_passing_test_cases": 12,
+          "scenario_fully_accepted": true
         }
       ]
     },
@@ -624,11 +1628,19 @@
       "id": "Q7-07",
       "scenario": "连续变更超过 debounce 等待窗",
       "owner": "AM70-T05",
-      "v7_status": "partial",
+      "v7_status": "passed",
       "evidence": [
         {
-          "path": "docs/design/v7.0.0/validation-b2.json",
-          "scope": "Dual-backend managed current Observation/parent/page scheduler: coalescing, fair deterministic resource quotas, clock/error-path guards, actual process kill and restore. QuestionView, monetary model governance and final combination continue in B3/B5/B6."
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-07",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Eligibility and explicit deferred/deadline results; no guarantee of completion beyond budget.",
+          "executed_selectors": [
+            "test_refresh_demand.py::test_cold_dirty_waits_for_request_and_hot_debounce_never_resets_first",
+            "test_refresh_scheduler_boundaries.py::test_completion_preserves_actual_deadline_result"
+          ],
+          "matched_passing_test_cases": 6,
+          "scenario_fully_accepted": true
         }
       ]
     },
@@ -636,11 +1648,21 @@
       "id": "Q7-08",
       "scenario": "时间边界、重启与系统时钟跳变",
       "owner": "AM70-T07",
-      "v7_status": "partial",
+      "v7_status": "passed",
       "evidence": [
         {
-          "path": "docs/design/v7.0.0/validation-b2.json",
-          "scope": "Dual-backend managed current Observation/parent/page scheduler: coalescing, fair deterministic resource quotas, clock/error-path guards, actual process kill and restore. QuestionView, monetary model governance and final combination continue in B3/B5/B6."
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-08",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Durable due/high-water clock, true restart and backwards/forwards delivery guards; slow-provider test awaits observed durable completion.",
+          "executed_selectors": [
+            "test_refresh_scheduler_process.py::test_future_due_survives_host_sigkill_and_runs_only_after_durable_deadline",
+            "test_refresh_scheduler_clock_storage.py::test_signed_current_checkpoint_raises_old_backup_clock_floor",
+            "test_question_runtime_v7.py::test_durable_clock_rollback_cannot_revive_expired_question_body",
+            "test_refresh_clock_delivery.py"
+          ],
+          "matched_passing_test_cases": 42,
+          "scenario_fully_accepted": true
         }
       ]
     },
@@ -648,11 +1670,19 @@
       "id": "Q7-09",
       "scenario": "冷视图长时间无人读取",
       "owner": "AM70-T06",
-      "v7_status": "partial",
+      "v7_status": "passed",
       "evidence": [
         {
-          "path": "docs/design/v7.0.0/validation-b2.json",
-          "scope": "Dual-backend managed current Observation/parent/page scheduler: coalescing, fair deterministic resource quotas, clock/error-path guards, actual process kill and restore. QuestionView, monetary model governance and final combination continue in B3/B5/B6."
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-09",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Cold invalidation and finite requested work without automatic unrequested computation.",
+          "executed_selectors": [
+            "test_refresh_demand.py::test_cold_dirty_waits_for_request_and_hot_debounce_never_resets_first",
+            "test_refresh_scheduler_boundaries.py::test_cold_finite_request_does_not_chase_unrequested_new_dirty"
+          ],
+          "matched_passing_test_cases": 4,
+          "scenario_fully_accepted": true
         }
       ]
     },
@@ -660,11 +1690,19 @@
       "id": "Q7-10",
       "scenario": "热门页面依赖冷父视图",
       "owner": "AM70-T06",
-      "v7_status": "partial",
+      "v7_status": "passed",
       "evidence": [
         {
-          "path": "docs/design/v7.0.0/validation-b2.json",
-          "scope": "Dual-backend managed current Observation/parent/page scheduler: coalescing, fair deterministic resource quotas, clock/error-path guards, actual process kill and restore. QuestionView, monetary model governance and final combination continue in B3/B5/B6."
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-10",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Temporary cold-parent demand sharing bounded scheduler resources.",
+          "executed_selectors": [
+            "test_refresh_demand.py::test_hot_child_temporarily_pulls_cold_parent_under_shared_budget",
+            "test_refresh_scheduler_boundaries.py::test_cold_parent_auto_adoption_cannot_bypass_legacy_lease_guard"
+          ],
+          "matched_passing_test_cases": 4,
+          "scenario_fully_accepted": true
         }
       ]
     },
@@ -672,11 +1710,20 @@
       "id": "Q7-11",
       "scenario": "大租户与小租户争抢预算",
       "owner": "AM70-T06",
-      "v7_status": "partial",
+      "v7_status": "passed",
       "evidence": [
         {
-          "path": "docs/design/v7.0.0/validation-b2.json",
-          "scope": "Dual-backend managed current Observation/parent/page scheduler: coalescing, fair deterministic resource quotas, clock/error-path guards, actual process kill and restore. QuestionView, monetary model governance and final combination continue in B3/B5/B6."
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-11",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Resource quota/fairness/aging and independent-process last-slot competition, not a production throughput SLA.",
+          "executed_selectors": [
+            "test_refresh_demand.py::test_aging_progresses_old_low_priority_ahead_of_new_high_priority_burst",
+            "test_refresh_scheduler_boundaries.py::test_pending_quota_cannot_starve_small_tenant_under_continuous_large_tenant_input",
+            "test_refresh_scheduler_process.py::test_two_independent_scheduler_processes_compete_for_last_shared_quota"
+          ],
+          "matched_passing_test_cases": 6,
+          "scenario_fully_accepted": true
         }
       ]
     },
@@ -684,11 +1731,19 @@
       "id": "Q7-12",
       "scenario": "不支持处理器的 worker 领取任务",
       "owner": "AM70-T07",
-      "v7_status": "partial",
+      "v7_status": "passed",
       "evidence": [
         {
-          "path": "docs/design/v7.0.0/validation-b2.json",
-          "scope": "Dual-backend managed current Observation/parent/page scheduler: coalescing, fair deterministic resource quotas, clock/error-path guards, actual process kill and restore. QuestionView, monetary model governance and final combination continue in B3/B5/B6."
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-12",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Unsupported worker cannot claim/consume its incompatible responsibilities.",
+          "executed_selectors": [
+            "test_refresh_demand.py::test_shared_quota_fair_rotation_and_unsupported_routes",
+            "test_derived_lifecycle_audit.py::test_unsupported_page_worker_preserves_refresh_responsibility"
+          ],
+          "matched_passing_test_cases": 6,
+          "scenario_fully_accepted": true
         }
       ]
     },
@@ -696,8 +1751,20 @@
       "id": "Q7-13",
       "scenario": "来源已接收但事实发布未闭合",
       "owner": "AM70-T04",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "passed",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-13",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Actual finite closed admitted-publication coverage distinguished from source-persisted receipts.",
+          "executed_selectors": [
+            "test_question_runtime_v7.py::test_finite_manifest_target_is_real_closed_and_lease_fenced"
+          ],
+          "matched_passing_test_cases": 2,
+          "scenario_fully_accepted": true
+        }
+      ]
     },
     {
       "id": "Q7-14",
@@ -705,9 +1772,18 @@
       "owner": "AM70-T08",
       "v7_status": "passed",
       "evidence": [
-        "tests/test_question_transport_v7.py",
-        "tests/test_question_runtime_v7.py",
-        "docs/design/v7.0.0/validation-b3.json"
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-14",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Four host-registered finite templates through embedded and MCP reads with zero model calls.",
+          "executed_selectors": [
+            "test_question_runtime_v7.py::test_actual_registration_review_publish_guarded_read_and_singleflight",
+            "test_question_transport_v7.py::test_questions_opt_in_and_zero_model_transport_closed_loop"
+          ],
+          "matched_passing_test_cases": 6,
+          "scenario_fully_accepted": true
+        }
       ]
     },
     {
@@ -716,9 +1792,18 @@
       "owner": "AM70-T08",
       "v7_status": "passed",
       "evidence": [
-        "tests/test_question_transport_v7.py",
-        "tests/test_question_runtime_v7.py",
-        "docs/design/v7.0.0/validation-b3.json"
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-15",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Exact aliases and parameter conflicts fail closed; unrestricted natural-language routing is not enabled.",
+          "executed_selectors": [
+            "test_question_transport_v7.py::test_transport_authority_injection_wrong_scope_and_history_fail_closed",
+            "test_question_transport_v7.py::test_questions_opt_in_and_zero_model_transport_closed_loop"
+          ],
+          "matched_passing_test_cases": 8,
+          "scenario_fully_accepted": true
+        }
       ]
     },
     {
@@ -727,10 +1812,19 @@
       "owner": "AM70-T02",
       "v7_status": "partial",
       "evidence": [
-        "tests/test_project_questions_v7.py",
-        "tests/test_project_admission_v7.py",
-        "tests/test_question_runtime_v7.py",
-        "Synthetic complete-census and missing-completion semantics pass; licensed real domain gold/quality gates remain open."
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-16",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Synthetic complete-census/unknown/conflict/qualification semantics passed; licensed real-domain gold and quality remain missing.",
+          "executed_selectors": [
+            "test_question_runtime_v7.py::test_all_four_templates_explicit_unknown_contested_and_incomplete",
+            "test_v7_project_indexes.py::test_real_overflow_sentinel_precedes_all_body_reads",
+            "test_question_runtime_v7.py::test_nonempty_full_status_commitments_risks_with_unknown_state_and_qualifiers"
+          ],
+          "matched_passing_test_cases": 6,
+          "scenario_fully_accepted": false
+        }
       ]
     },
     {
@@ -739,10 +1833,18 @@
       "owner": "AM70-T10",
       "v7_status": "passed",
       "evidence": [
-        "docs/design/v7.0.0/batch-b4.md",
-        "docs/design/v7.0.0/validation-b4.json",
-        "tests/test_question_delta_v7.py",
-        "tests/test_b4_adversarial_review.py"
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-17",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Whitelisted complete-group deterministic delta is equivalent to same-snapshot full across business values, members and proofs.",
+          "executed_selectors": [
+            "test_question_delta_v7.py::test_randomized_add_modify_remove_withdraw_qualification_and_time_replay",
+            "test_question_delta_v7.py::test_keyed_aggregate_extrema_distinct_unknown_missing_unit_and_retractions"
+          ],
+          "matched_passing_test_cases": 6,
+          "scenario_fully_accepted": true
+        }
       ]
     },
     {
@@ -751,10 +1853,18 @@
       "owner": "AM70-T10",
       "v7_status": "passed",
       "evidence": [
-        "docs/design/v7.0.0/batch-b4.md",
-        "docs/design/v7.0.0/validation-b4.json",
-        "tests/test_question_delta_v7.py",
-        "tests/test_b4_adversarial_review.py"
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-18",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Incompatible definition/schema/policy/operator and corrupt optimization state force full or reject.",
+          "executed_selectors": [
+            "test_question_delta_v7.py::test_unproved_delta_forces_real_full_without_false_frontier",
+            "test_b4_adversarial_review.py::test_integrated_unprovable_optimization_rebuilds_after_restart"
+          ],
+          "matched_passing_test_cases": 14,
+          "scenario_fully_accepted": true
+        }
       ]
     },
     {
@@ -763,18 +1873,38 @@
       "owner": "AM70-T10",
       "v7_status": "passed",
       "evidence": [
-        "docs/design/v7.0.0/batch-b4.md",
-        "docs/design/v7.0.0/validation-b4.json",
-        "tests/test_question_delta_v7.py",
-        "tests/test_b4_adversarial_review.py"
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-19",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Duplicate/out-of-order changes normalize; missing or corrupt sequence cannot be resealed as continuous.",
+          "executed_selectors": [
+            "test_question_delta_v7.py::test_log_duplicates_and_disorder_canonicalize_but_missing_sequence_does_not",
+            "test_question_delta_v7.py::test_append_never_reseals_corrupt_prior_log_as_continuous"
+          ],
+          "matched_passing_test_cases": 2,
+          "scenario_fully_accepted": true
+        }
       ]
     },
     {
       "id": "Q7-20",
       "scenario": "迟到有效期与新的系统认知",
       "owner": "AM70-T04",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "passed",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-20",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Current-only project interface explicitly rejects history. Existing bounded L1/language historical contracts are separately covered; no generic historical project capability.",
+          "executed_selectors": [
+            "test_question_transport_v7.py::test_transport_authority_injection_wrong_scope_and_history_fail_closed"
+          ],
+          "matched_passing_test_cases": 4,
+          "scenario_fully_accepted": true
+        }
+      ]
     },
     {
       "id": "Q7-21",
@@ -782,11 +1912,19 @@
       "owner": "AM70-T11",
       "v7_status": "passed",
       "evidence": [
-        "docs/design/v7.0.0/batch-b4.md",
-        "docs/design/v7.0.0/validation-b4.json",
-        "tests/test_question_proof_reuse_v7.py",
-        "tests/test_question_page_validation_v7.py",
-        "tests/test_b4_adversarial_review.py"
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-21",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Immutable content/generation with renewed certificate and bounded source-sensitive downstream validation.",
+          "executed_selectors": [
+            "test_question_proof_reuse_v7.py::test_safe_noop_advances_actual_coverage_and_certificate_but_not_generation",
+            "test_question_page_validation_v7.py::test_noop_parent_keeps_immutable_page_generation_but_requires_bounded_certificate_work",
+            "test_question_page_validation_v7.py::test_source_sensitive_page_rebuilds_same_business_value_new_evidence"
+          ],
+          "matched_passing_test_cases": 6,
+          "scenario_fully_accepted": true
+        }
       ]
     },
     {
@@ -795,33 +1933,63 @@
       "owner": "AM70-T11",
       "v7_status": "passed",
       "evidence": [
-        "docs/design/v7.0.0/batch-b4.md",
-        "docs/design/v7.0.0/validation-b4.json",
-        "tests/test_question_proof_reuse_v7.py",
-        "tests/test_question_page_validation_v7.py",
-        "tests/test_b4_adversarial_review.py"
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-22",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Original private processing ancestry remains guarded before body access; only independent approved full generation may discard it.",
+          "executed_selectors": [
+            "test_question_proof_reuse_v7.py::test_revoked_original_private_source_denied_prebody_then_independent_full_public_context",
+            "test_question_page_validation_v7.py::test_revoked_page_original_certificate_blocks_prebody_even_after_parent_new_full",
+            "test_b4_adversarial_review.py::test_answer_regenerates_independently_after_original_private_source_is_revoked"
+          ],
+          "matched_passing_test_cases": 6,
+          "scenario_fully_accepted": true
+        }
       ]
     },
     {
       "id": "Q7-23",
       "scenario": "部分块编辑和整页输出",
       "owner": "AM70-T09",
-      "v7_status": "partial",
+      "v7_status": "passed",
       "evidence": [
-        "tests/test_question_pages_v7.py",
-        "tests/test_v7_qualified_pages.py",
-        "Full rebuild: stable blocks, immutable generation lineage, real materialized budget and final guards. Partial block editing unsupported in B3."
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-23",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Host-only typed append/insert/replace/remove, stable block identities, atomic versions/lineage and real whole-page capacity; arbitrary model patches remain disabled.",
+          "executed_selectors": [
+            "test_question_pages_v7.py",
+            "test_v7_qualified_pages.py",
+            "test_derived_lifecycle_audit.py::test_page_output_limit_measures_delivered_materialized_body",
+            "test_question_page_patches_v7.py",
+            "test_question_page_patch_review_v7.py"
+          ],
+          "matched_passing_test_cases": 284,
+          "scenario_fully_accepted": true
+        }
       ]
     },
     {
       "id": "Q7-24",
       "scenario": "计算后来源/查询变化及调用者修改输入",
       "owner": "AM70-T04",
-      "v7_status": "partial",
+      "v7_status": "passed",
       "evidence": [
         {
-          "path": "docs/design/v7.0.0/validation-b1.json",
-          "scope": "Admitted-L1 indexed invalidation and lifecycle foundation. Project membership and generic QuestionView/publication-manifest runtime remain unverified."
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-24",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Owned snapshots plus authority/query/source/lease/version CAS; losing publishes do not replace current state.",
+          "executed_selectors": [
+            "test_question_runtime_v7.py::test_compute_publish_cas_rejects_every_changed_authority_input",
+            "test_question_runtime_v7.py::test_publish_owns_all_caller_inputs_before_waiting_for_transaction",
+            "test_question_proof_reuse_v7.py::test_forged_optimization_inputs_cannot_cross_atomic_publish",
+            "test_question_snapshot_security_v7.py"
+          ],
+          "matched_passing_test_cases": 42,
+          "scenario_fully_accepted": true
         }
       ]
     },
@@ -829,39 +1997,104 @@
       "id": "Q7-25",
       "scenario": "不同用户/项目/时间/用途的相似答案",
       "owner": "AM70-T12",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "passed",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-25",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Exact model configuration/context cache coordinates and separately guarded host-bound requests; no semantic similarity reuse.",
+          "executed_selectors": [
+            "test_governed_models_v7.py::test_exact_coordinates_never_use_semantic_similarity",
+            "test_governed_models_v7.py::test_exact_configuration_change_always_misses",
+            "test_question_models_v7.py::test_explicit_model_route_uses_registered_real_question_and_exact_cache"
+          ],
+          "matched_passing_test_cases": 27,
+          "scenario_fully_accepted": true
+        }
+      ]
     },
     {
       "id": "Q7-26",
       "scenario": "缓存命中后撤权或擦除",
       "owner": "AM70-T12",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "passed",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-26",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Before-body, dispatch and final delivery authorization, cache erasure and immutable serialized envelope binding; fake model output only.",
+          "executed_selectors": [
+            "test_governed_models_v7.py::test_erasure_prevents_all_new_delivery_and_scrubs_cached_bodies",
+            "test_governed_models_v7.py::test_old_backup_erasure_scrubs_model_outputs_but_keeps_minimal_cost_debt",
+            "test_b5_independent_security_v7.py",
+            "test_question_models_v7.py::test_erasing_question_content_scrubs_dependent_model_cache"
+          ],
+          "matched_passing_test_cases": 51,
+          "scenario_fully_accepted": true
+        }
+      ]
     },
     {
       "id": "Q7-27",
       "scenario": "模型 failover、prompt/参数/格式变化",
       "owner": "AM70-T12",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "passed",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-27",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Immutable provider/model/runtime/prompt/options/output identity and fail-closed unknown billing tested with recording local HTTP fixtures; no real inference execution.",
+          "executed_selectors": [
+            "test_governed_models_v7.py::test_exact_configuration_change_always_misses",
+            "test_ollama_port_v7.py"
+          ],
+          "matched_passing_test_cases": 18,
+          "scenario_fully_accepted": true
+        }
+      ]
     },
     {
       "id": "Q7-28",
       "scenario": "预算已派发但回执丢失、worker 崩溃",
       "owner": "AM70-T12",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "passed",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-28",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Atomic multi-account intent, real SIGKILL at SQL and recording HTTP receipt boundaries, idempotent synthetic invoice settlement and durable unknown debt. Actual inference-provider acceptance is not asserted.",
+          "executed_selectors": [
+            "test_model_budget_recovery_v7.py::test_sigkill_does_not_release_accepted_or_unknown_cost",
+            "test_model_budget_recovery_v7.py::test_sigkill_after_recording_provider_accepts_body_keeps_debt_and_fences_delivery",
+            "test_model_budget_v7.py::test_duplicate_provider_bill_cannot_charge_second_attempt"
+          ],
+          "matched_passing_test_cases": 12,
+          "scenario_fully_accepted": true
+        }
+      ]
     },
     {
       "id": "Q7-29",
       "scenario": "刷新提交前后强杀及通知丢失",
       "owner": "AM70-T07",
-      "v7_status": "partial",
+      "v7_status": "passed",
       "evidence": [
         {
-          "path": "docs/design/v7.0.0/validation-b2.json",
-          "scope": "Dual-backend managed current Observation/parent/page scheduler: coalescing, fair deterministic resource quotas, clock/error-path guards, actual process kill and restore. QuestionView, monetary model governance and final combination continue in B3/B5/B6."
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-29",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Independent SIGKILL/restart for full/delta/proof publications, scheduler due/dirty/responsibility recovery and polling without notification.",
+          "executed_selectors": [
+            "test_question_process_recovery_v7.py::test_question_commit_sigkill_recovers_all_state_without_duplicate_publication",
+            "test_refresh_scheduler_process.py::test_sigkill_at_publish_commit_recovers_exact_responsibility",
+            "test_refresh_scheduler_process.py::test_independent_running_host_polls_durable_work_without_notification"
+          ],
+          "matched_passing_test_cases": 22,
+          "scenario_fully_accepted": true
         }
       ]
     },
@@ -872,12 +2105,21 @@
       "v7_status": "partial",
       "evidence": [
         {
-          "path": "docs/design/v7.0.0/validation-b1.json",
-          "scope": "Admitted-L1 indexed invalidation and lifecycle foundation. Project membership and generic QuestionView/publication-manifest runtime remain unverified."
-        },
-        {
-          "path": "docs/design/v7.0.0/validation-b2.json",
-          "scope": "Dual-backend managed current Observation/parent/page scheduler: coalescing, fair deterministic resource quotas, clock/error-path guards, actual process kill and restore. QuestionView, monetary model governance and final combination continue in B3/B5/B6."
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-30",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Actual SQLite backup and PG dump/restore with independently pinned deletion/finance journals; question, patched-page and model-cache lineage. Real prior-source upgrade/quiescent incompatible rollback probe passes. Online mixed-version writing and generic old-binary safety remain unsupported.",
+          "executed_selectors": [
+            "test_question_runtime_v7.py::test_question_erasure_and_real_old_backup_replay_scrub_complete_generation",
+            "test_b4_adversarial_review.py::test_delta_state_and_pending_page_validation_are_scrubbed_from_real_backup",
+            "test_governed_models_v7.py::test_old_backup_erasure_scrubs_model_outputs_but_keeps_minimal_cost_debt",
+            "test_model_budget_recovery_v7.py::test_independently_pinned_money_replay_restores_postbackup_debt",
+            "operational/v7_upgrade_drill.py::test_old_source_upgrade_and_quiescent_rollback_preserve_contracts",
+            "test_question_page_patches_v7.py::test_patch_erasure_and_actual_backup_replay_include_all_original_revisions",
+            "test_question_page_patch_review_v7.py::test_removed_private_block_remains_guarded_and_erased_from_real_backup"
+          ],
+          "matched_passing_test_cases": 22,
+          "scenario_fully_accepted": false
         }
       ]
     },
@@ -888,8 +2130,16 @@
       "v7_status": "partial",
       "evidence": [
         {
-          "path": "tests/test_question_cost_v7.py",
-          "scope": "Evaluation-only accounting contracts. Production instrumentation, licensed real workload and provider billing remain unverified."
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-31",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Runtime accounting projection and all-phase/unknown/debt rejection contracts pass; complete repeated real workload, measured resources and billing reconciliation remain unmeasured.",
+          "executed_selectors": [
+            "test_model_cost_runtime_v7.py::test_actual_runtime_projection_counts_calls_once_and_never_prices_local_unknown_zero",
+            "test_model_cost_runtime_v7.py::test_partial_phase_inventory_stays_unaccounted_and_overlap_is_rejected"
+          ],
+          "matched_passing_test_cases": 3,
+          "scenario_fully_accepted": false
         }
       ]
     },
@@ -897,9 +2147,21 @@
       "id": "Q7-32",
       "scenario": "真实领域数据及模型质量/成本对照",
       "owner": "AM70-T15",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "insufficient_data",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b6.json",
+          "case_id": "Q7-32",
+          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "scope": "Blocked: actual installed Ollama Qwen3.5 9B endpoint/model identity, licensed held-out gold, frozen judge/thresholds/sample/group/statistical protocol and repeated quality/whole-cost observations are absent.",
+          "executed_selectors": [],
+          "matched_passing_test_cases": 0,
+          "scenario_fully_accepted": false
+        }
+      ]
     }
   ],
-  "base_commit": "2c9974bac1e052efe4284738a2d1c7e51ca81de1"
+  "base_commit": "2c9974bac1e052efe4284738a2d1c7e51ca81de1",
+  "full_v7_acceptance": false,
+  "production_benefit_claim": false
 }

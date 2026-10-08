@@ -214,7 +214,7 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 
 ## 能力状态与路线图
 
-当前文档交付基线为 **[V7-B4：确定性项目增量与不可变证明复用](docs/design/v7.0.0/batch-b4.md)**，建立在已有语言视图和 L1 生命周期之上。软件包仍为 **v0.1.0 / Alpha**；架构、协议和软件版本分别管理。
+当前文档交付基线为 **[V7-B6：集成工程验证](docs/design/v7.0.0/batch-b6.md)**，建立在已有语言视图和 L1 生命周期之上。软件包仍为 **v0.1.0 / Alpha**；架构、协议和软件版本分别管理。
 
 | 领域 | 已交付范围 | 实施证据 |
 | --- | --- | --- |
@@ -227,12 +227,13 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 | 查询与宿主权限 | 版本化当前查询、有期限本地授权、来源 grant 绑定和最终交付检查 | [第十四阶段 A](docs/design/v6.1.0/stage-14a.md) |
 | 当前语言 L2 页面 | 类型化 Scenario/Page/Block 版本、稳定块身份、原子完整重建、固定就绪目标、交付守卫及传递擦除 | [第十五阶段](docs/design/v6.1.0/stage-15.md) |
 | 可信项目问题 | 宿主审查的负责人、状态、承诺和风险；确定性 full/delta 答案与受守卫证明复用、共享持久刷新、精确路由及可选 SDK/MCP 读取 | [B3](docs/design/v7.0.0/batch-b3.md) · [B4](docs/design/v7.0.0/batch-b4.md) · [示例](examples/project_questions.py) |
-| 资格保持当前父与项目 L2 页面 | 兼容可信上下文、保留条件/例外、稳定块和不可变谱系、整页交付守卫 | [B3](docs/design/v7.0.0/batch-b3.md) |
+| 资格保持当前父与项目 L2 页面 | 兼容可信上下文、保留条件/例外、稳定块、宿主类型化补丁、不可变谱系与整页交付守卫 | [B3](docs/design/v7.0.0/batch-b3.md) · [类型化补丁](docs/design/v7.0.0/typed-page-patches.md) |
+| 受治理模型/缓存合同（可选） | 宿主绑定的不可变供应商/输入/输出身份、精确缓存、多账户预留及未知费用恢复；仅有合成协议证据 | [B5](docs/design/v7.0.0/batch-b5.md) · [B6](docs/design/v7.0.0/batch-b6.md) |
 | 检索与反馈基础 | 受范围和预算约束的检索、可选 lexical/hybrid 候选、关联结果的 Episode/Procedure 与受控 Evolution 组件 | [代码架构](docs/ARCHITECTURE.md) · [反馈契约](docs/FEEDBACK_CONTRACT.md) |
 
 Observation 只开放文档规定的语言模板。发布点和可证明稳定区间的历史保留冻结政策/上下文，并检查当前权限；覆盖缺口明确拒绝。当前 `locale-parents/1` 视图固定实际父版本及传递处理许可。当前 `language-scenario/1` 页面组合同一 exact scope 下 1–4 个非条件语言 Observation 父，要求主体、用途与 authority 兼容。
 
-显式启用 `qualified_current=True` 后，`locale-qualified-parents/1` 与 `language-qualified-scenario/1` 保留可信条件和例外。`QuestionService` 另支持有限当前项目问题与宿主触发的项目页面 full 发布；向 SDK/MCP 适配器传入 `questions=service` 才开放该可选接口。历史父/页面、页面作父、旧 facet/page 的 delta 与自由部分块编辑、通用场景、跨 scope 合成、远端 ACL 同步、模型和 L3 仍关闭或待实现。有界页面交付不代表完整 L2/L3 生命周期完成。L1 已有的双时态查询可独立使用；`l1_decided` 只说明处理完成，不代表事实正确。
+显式启用 `qualified_current=True` 后，`locale-qualified-parents/1` 与 `language-qualified-scenario/1` 保留可信条件和例外。`QuestionService` 另支持有限当前项目问题与宿主触发的项目页面 full 发布、证书复用及[有界确定性类型化块补丁](docs/design/v7.0.0/typed-page-patches.md)；向 SDK/MCP 适配器传入 `questions=service` 才开放该可选接口。历史父/页面、页面作父、旧 facet/page 的 delta 与自由部分块编辑、通用场景、跨 scope 合成、远端 ACL 同步和 L3 仍关闭或待实现。有界页面交付不代表完整 L2/L3 生命周期完成。L1 已有的双时态查询可独立使用；`l1_decided` 只说明处理完成，不代表事实正确。
 
 工程证据按被测版本和范围分别记录，不累计跨阶段测试成绩：
 
@@ -255,7 +256,7 @@ Observation 只开放文档规定的语言模板。发布点和可证明稳定�
 
 B2 的[独立生命周期证据](docs/design/v7.0.0/validation-b2.json)覆盖固定责任、公平共享限额、时钟守卫与实际进程强杀恢复。确定性资源限额不代表模型金额预算或已验证的生产收益。
 
-后续按 [v7 计划](docs/design/v7.0.0/plan.md)与[任务台账](docs/design/v7.0.0/task.md)实施受治理模型缓存，再完成恢复、兼容与真实成本验收。保留全部 44 项旧任务状态。合成确定性测试不代表许可真实数据质量、生产收益或完整 M0/M1/M2 验收；这些门仍开放。
+后续按 [v7 计划](docs/design/v7.0.0/plan.md)与[任务台账](docs/design/v7.0.0/task.md)完成真实 Ollama 配置、许可留出领域质量及全链路成本比较。受治理模型/缓存合同已实现，不代表这些外部效果已验收。保留全部 44 项旧任务状态。合成确定性测试不代表许可真实数据质量、生产收益或完整 M0/M1/M2 验收；这些门仍开放。
 
 高级检索和可选的只读 Reflect 继续按[任务台账](docs/design/v6.1.0/task.md)推进。远程部署见[安全策略](SECURITY.md)和[威胁模型](docs/THREAT_MODEL.md)；外部缓存、远端 ACL 和供应商副本需要各自完成集成合同。
 
@@ -294,3 +295,5 @@ python -m pytest -q
 ## 许可证
 
 [Apache License 2.0](LICENSE)。
+
+B6 固定源码完整仓库/全部扩展包验证：3783 通过、6 个明确保留的 PostgreSQL 专属 SQLite skip，对应真实 PG 断言通过。六包已构建并在全新环境安装，源码及 12 个归档扫描零发现。范围见[B6 报告](docs/design/v7.0.0/batch-b6.md)；真实 Ollama/领域质量与全成本验收仍受阻。
