@@ -23,7 +23,8 @@ import test_project_admission_v7 as project
 from test_question_runtime_v7 import ACTOR, fresh, register, runtime
 
 from agent_memory.derived import ObservationService
-from agent_memory.domain import MemoryScope
+from agent_memory.derived.model import DerivedError
+from agent_memory.domain import ForgetMode, ForgetRequest, MemoryScope
 from agent_memory.operations.facet_refresh import FacetRefreshQueue
 from agent_memory.serialization import to_jsonable
 
@@ -66,6 +67,17 @@ async def old_process(config, tmp_path):
 async def records(repository, scope):
     async with repository.unit_of_work() as uow:
         return {kind: await uow.derived_records(scope, kind) for kind in KINDS}
+
+
+async def assert_legacy_deletion_preserved(repository, scope, seeded):
+    async with repository.unit_of_work() as uow:
+        assert await uow.source_erased(scope, seeded["erased_source_id"])
+        assert await uow.get_source_event(scope, seeded["erased_source_id"]) is None
+        assert await uow.get_source_event(scope, seeded["retained_source_id"]) is not None
+        assert dict(purge_head=await uow.purge_head(scope),
+                    retention_epoch=await uow.retention_epoch(scope)) == (
+            seeded["deletion_checkpoint"]
+        )
 
 
 @pytest.mark.parametrize("backend", ["sqlite", "postgres"])
@@ -123,6 +135,7 @@ def test_old_source_upgrade_and_quiescent_rollback_preserve_contracts(
             )
             # This is the first current-version initialization of the old database.
             await kernel.initialize()
+            await assert_legacy_deletion_preserved(repository, scope, seeded)
             observation = ObservationService(repository, scope, base.POLICY,
                                              clock=lambda: clock[0])
             old_queue = FacetRefreshQueue(observation)
@@ -173,6 +186,7 @@ def test_old_source_upgrade_and_quiescent_rollback_preserve_contracts(
                 repository = base.SQLiteMemoryRepository(database)
             await repository.initialize()
             assert await records(repository, scope) == before
+            await assert_legacy_deletion_preserved(repository, scope, seeded)
             resumed = type(service)(
                 project.service(base.AdmissionEngine(repository), scope, clock), service.context
             )
@@ -182,6 +196,38 @@ def test_old_source_upgrade_and_quiescent_rollback_preserve_contracts(
             recovered = await resumed.answer("project-a:risks", actor=ACTOR, dedupe_key="resume")
             assert recovered["availability_status"] == "valid"
             assert (await resumed.queue.status(pending["target_id"], actor=ACTOR))["complete"]
+            # Roll forward under the compatible binary, including erasure. An old
+            # binary is never used as a writer/eraser for newly introduced records.
+            await repository.forget(ForgetRequest(scope, (item[0].id,), mode=ForgetMode.ERASE))
+            with pytest.raises(DerivedError, match="question_erased"):
+                await resumed.read("project-a:owner", actor=ACTOR)
+            erased_records = await records(repository, scope)
+            assert "private-project-marker" not in json.dumps(erased_records)
+            async with repository.unit_of_work() as uow:
+                assert await uow.source_erased(scope, item[0].id)
+                assert await uow.get_source_event(scope, item[0].id) is None
+                deletion_checkpoint = dict(purge_head=await uow.purge_head(scope),
+                                           retention_epoch=await uow.retention_epoch(scope))
+            if hasattr(repository, "close"):
+                await repository.close()
+            if backend == "postgres":
+                repository = PostgresMemoryRepository.from_dsn(database, max_size=3)
+            else:
+                repository = base.SQLiteMemoryRepository(database)
+            await repository.initialize()
+            assert await records(repository, scope) == erased_records
+            async with repository.unit_of_work() as uow:
+                for identity in (seeded["erased_source_id"], item[0].id):
+                    assert await uow.source_erased(scope, identity)
+                    assert await uow.get_source_event(scope, identity) is None
+                assert await uow.get_source_event(scope, seeded["retained_source_id"]) is not None
+                assert dict(purge_head=await uow.purge_head(scope),
+                            retention_epoch=await uow.retention_epoch(scope)) == deletion_checkpoint
+            resumed = type(service)(
+                project.service(base.AdmissionEngine(repository), scope, clock), service.context
+            )
+            with pytest.raises(DerivedError, match="question_erased"):
+                await resumed.read("project-a:owner", actor=ACTOR)
         finally:
             if kernel is not None:
                 await kernel.close()

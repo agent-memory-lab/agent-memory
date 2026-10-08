@@ -335,3 +335,69 @@ def changed_admission_scopes(connection, scope, checkpoint):
         target = MemoryScope(**json.loads(row["scope_json"]))
         groups.setdefault(target, []).append(row["record_id"])
     return tuple((target, tuple(ids)) for target, ids in groups.items())
+
+
+def gc_snapshot(connection, scope, *, max_records, max_edges, max_bytes):
+    """Complete exact-scope census, refusing overflow before loading any bodies."""
+    from ..derived.question_gc import census_limits
+
+    census_limits(max_records, max_edges, max_bytes)
+    args = (scope.partition_key(),)
+    sizes = connection.execute(
+        "SELECT length(CAST(payload_json AS BLOB)) + length(CAST(kind AS BLOB)) "
+        "+ length(CAST(identity AS BLOB)) FROM derived_entries "
+        "WHERE partition_key=? ORDER BY kind,identity LIMIT ?", (*args, max_records + 1)
+    ).fetchall()
+    edge_sizes = connection.execute(
+        "SELECT length(CAST(revision_id AS BLOB)) + length(CAST(parent_id AS BLOB)) "
+        "+ length(CAST(edge_kind AS BLOB)) FROM derived_dependencies "
+        "WHERE partition_key=? ORDER BY revision_id,parent_id,edge_kind LIMIT ?",
+        (*args, max_edges + 1),
+    ).fetchall()
+    reservation_sizes = connection.execute(
+        "SELECT length(CAST(execution_id AS BLOB)) FROM refresh_schedule_reservations "
+        "WHERE partition_key=? ORDER BY execution_id LIMIT ?", (*args, max_records + 1)
+    ).fetchall()
+    if (len(sizes) > max_records or len(edge_sizes) > max_edges
+            or len(reservation_sizes) > max_records
+            or sum(r[0] for r in (*sizes, *edge_sizes, *reservation_sizes)) > max_bytes):
+        return None
+    try:
+        rows = connection.execute(
+            "SELECT kind,identity,payload_json FROM derived_entries "
+            "WHERE partition_key=? ORDER BY kind,identity LIMIT ?", (*args, max_records + 1)
+        ).fetchall()
+        edges = connection.execute(
+            "SELECT revision_id,parent_id,edge_kind FROM derived_dependencies "
+            "WHERE partition_key=? ORDER BY revision_id,parent_id,edge_kind LIMIT ?",
+            (*args, max_edges + 1),
+        ).fetchall()
+        reservations = connection.execute(
+            "SELECT execution_id FROM refresh_schedule_reservations "
+            "WHERE partition_key=? ORDER BY execution_id LIMIT ?", (*args, max_records + 1)
+        ).fetchall()
+        return dict(
+            rows=tuple(dict(kind=r[0], identity=r[1], payload=json.loads(r[2])) for r in rows),
+            edges=tuple(dict(revision_id=r[0], parent_id=r[1], edge_kind=r[2]) for r in edges),
+            reservations=tuple(r[0] for r in reservations),
+        )
+    except (ValueError, RecursionError):
+        return None
+
+
+def gc_delete(connection, scope, kind, identity):
+    from ..derived.question_gc import COLLECTIBLE_KINDS
+
+    if kind not in COLLECTIBLE_KINDS:
+        raise ValueError("unsupported question GC kind")
+    connection.execute(
+        "DELETE FROM derived_entries WHERE partition_key=? AND kind=? AND identity=?",
+        (scope.partition_key(), kind, identity),
+    )
+    # Edges are keyed only by identity. Another kind sharing that identity still
+    # owns them; never remove its reverse-erasure or qualification dependencies.
+    connection.execute(
+        "DELETE FROM derived_dependencies WHERE partition_key=? AND revision_id=? "
+        "AND NOT EXISTS (SELECT 1 FROM derived_entries WHERE partition_key=? AND identity=?)",
+        (scope.partition_key(), identity, scope.partition_key(), identity),
+    )

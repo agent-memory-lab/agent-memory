@@ -1,7 +1,7 @@
 {
   "schema_version": "question-cost-profile-document/1",
   "task": "AM70-T13",
-  "stage": "V7-B6 runtime contracts verified; real quality/cost calibration remains blocked",
+  "stage": "V7-B6 zero-skip engineering and offline A9 tooling verified; real quality/cost calibration remains blocked",
   "design_reference": "../AGENT_MEMORY_DESIGN_V7.0.0.md#2511-全链路成本与效用实验算法-a9",
   "default_enablement": false,
   "production_benefit_claim": false,
@@ -46,8 +46,8 @@
     "models": "No real semantic or generation provider configuration, request payload evidence, usage receipt, price contract or repeated-run output has been supplied. A frozen not_used declaration is allowed only for a genuinely deterministic experiment arm; stubs do not establish real-model effects.",
     "judge": "No frozen versioned semantic judge, deterministic checks, human review protocol or annotation evidence has been supplied.",
     "thresholds": "Domain floors, allowed non-regression, error limits, latency/cost SLOs and calibration rationale remain unresolved. Design suggestions are not accepted measurements or automatically selected thresholds.",
-    "statistics": "No precommitted grouped paired-resampling protocol, confidence level, sample sufficiency rule or comparison artifact exists yet. The B0 gate verifies artifact binding and interval conditions, not the resampling calculation itself.",
-    "execution": "Bounded runtime scheduling, atomic budget/settlement, cache governance and accounting projection are implemented and dual-provider tested in B5/B6. No real event/request workload, baseline/candidate measurements, resource pricing or provider experiment has been frozen and run."
+    "statistics": "The reusable grouped paired cluster-bootstrap calculation, frozen protocol binding and reproducible seeded synthetic comparisons are implemented and tested by A9. No independently approved real-experiment confidence level, sample sufficiency/calibration choice or real repeated comparison artifact has been supplied.",
+    "execution": "The frozen multi-arm A9 runner now executes actual SQLite question/refresh/model-cache integration with full-phase measurement contracts, unknown debt and isolated ablations. Real Ollama port plus host observer/tariff binding are implemented but not invoked against a real endpoint. The actual licensed workload, installed model identity, frozen independent judge/threshold/statistical choices, host telemetry/tariffs/invoices and repeated real baseline/candidate measurements remain absent."
   },
   "accounting_contract": {
     "currency_unit": "Integer microunits, one millionth of the declared currency; currencies cannot be combined without a separately frozen conversion experiment.",

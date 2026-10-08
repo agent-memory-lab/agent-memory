@@ -7,6 +7,17 @@ the first stable release.
 
 ### Added
 
+- Host-only bounded QuestionView garbage collection with atomic SQLite/PostgreSQL
+  reference checks, explicit retention holds, immutable lineage and finite-receipt pins.
+  Background proof-only and independent full generations can reclaim unused objects;
+  receipts, delta ancestry and model audit can still exhaust capacity.
+  Scope and rollback: [T14 retention](docs/design/v7.0.0/retention-gc.md).
+
+- Offline A9 multi-arm workload tooling with frozen gold-free execution inputs,
+  actual SQLite question/refresh/model-cache integration, isolated control ablations,
+  full-phase unknown-cost/debt accounting and reproducible paired cluster bootstrap.
+  Synthetic-only evidence, limitations and CLI: [A9 runner](docs/design/v7.0.0/a9-experiment-runner.md).
+
 - Host-only deterministic QuestionView page append/insert/replace/remove with page/certificate
   and affected-block CAS, exact retained revisions, multi-generation processing lineage,
   bounded whole-page delivery, and live/backup erasure. SDK/MCP retain read-only page access.

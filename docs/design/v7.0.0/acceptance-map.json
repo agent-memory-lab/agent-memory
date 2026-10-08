@@ -1,7 +1,7 @@
 {
   "schema": "v7-acceptance-map/1",
-  "baseline": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
-  "batch": "B6 final engineering verification",
+  "baseline": "dc39baf9a0a751a101232f72526c39486d430240",
+  "batch": "B6 closeout: zero-skip engineering verification",
   "runtime_capabilities": [
     "finite_current_project_full_questions_opt_in",
     "exact_registered_question_routing",
@@ -12,7 +12,10 @@
     "bounded_fair_source_sensitive_page_validation",
     "bounded_host_only_typed_page_patches",
     "host_bound_governed_model_exact_cache",
-    "durable_multi_account_model_budget_and_unknown_debt"
+    "durable_multi_account_model_budget_and_unknown_debt",
+    "bounded_reference_aware_question_garbage_collection",
+    "frozen_offline_a9_runtime_experiments",
+    "host_observer_tariff_and_real_ollama_experiment_binding"
   ],
   "notes": [
     "Protocol unit tests do not establish full runtime acceptance.",
@@ -23,7 +26,10 @@
     "B4 cached-body correction2ed0037 passed184 affected dual-provider cases. Every cached body has before/after expiry/context/registration guards; earlier counts remain separate.",
     "B6 final-source suite and explicit reviewed scenario scopes are in validation-b6.json. Related-suite execution never promotes an inherited scenario by itself.",
     "All 44 AM61 task states remain unchanged; real Ollama/domain quality and whole-cost gates remain unresolved.",
-    "Historical evidence-plan-b6.json remains a preparation inventory, not the final verification report."
+    "Historical evidence-plan-b6.json remains a preparation inventory, not the final verification report.",
+    "Closeout keeps every prior passing node and adds only GC/A9 tests; the complete unfiltered final run has zero skips. Historical six skips remain preserved in validation-b6-zero-skip.json.",
+    "T14 is DONE only for current registered contracts, explicit host GC retention and coordinated stop/drain/forward-resume. Indefinite exact-receipt/model-audit/delta ancestry pins can still exhaust capacity; online old binaries remain unsupported.",
+    "T02/T12/T13/T15 and real quality/whole-cost release acceptance remain open despite completed runner/observer/tariff implementation."
   ],
   "cases": [
     {
@@ -36,7 +42,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R01-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Bounded same-slot language/context precedence, three-valued conditions and frozen language-history regressions passed. General cross-scope composition, sets and constraint semantics remain unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_contextual_memory.py",
@@ -58,7 +64,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R01-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Bounded same-slot language/context precedence, three-valued conditions and frozen language-history regressions passed. General cross-scope composition, sets and constraint semantics remain unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_contextual_memory.py",
@@ -80,7 +86,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R01-03",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Bounded same-slot language/context precedence, three-valued conditions and frozen language-history regressions passed. General cross-scope composition, sets and constraint semantics remain unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_contextual_memory.py",
@@ -102,7 +108,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R01-04",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Bounded same-slot language/context precedence, three-valued conditions and frozen language-history regressions passed. General cross-scope composition, sets and constraint semantics remain unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_contextual_memory.py",
@@ -124,7 +130,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R01-05",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Set membership/constraint semantics remain unsupported; related language-policy regression passes do not implement this scenario.",
           "executed_selectors": [
             "test_contextual_memory.py",
@@ -146,7 +152,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R01-06",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Bounded same-slot language/context precedence, three-valued conditions and frozen language-history regressions passed. General cross-scope composition, sets and constraint semantics remain unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_contextual_memory.py",
@@ -168,7 +174,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R02-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Whole-source reprocessing, same-slot ordinary contribution replacement, independent support, CAS and erasure regressions passed. General partial coverage/cross-slot replacement and remote authorization histories remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_reprocessing.py",
@@ -190,7 +196,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R02-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Whole-source reprocessing, same-slot ordinary contribution replacement, independent support, CAS and erasure regressions passed. General partial coverage/cross-slot replacement and remote authorization histories remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_reprocessing.py",
@@ -212,7 +218,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R02-03",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Whole-source reprocessing, same-slot ordinary contribution replacement, independent support, CAS and erasure regressions passed. General partial coverage/cross-slot replacement and remote authorization histories remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_reprocessing.py",
@@ -234,7 +240,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R02-04",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Whole-source reprocessing, same-slot ordinary contribution replacement, independent support, CAS and erasure regressions passed. General partial coverage/cross-slot replacement and remote authorization histories remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_reprocessing.py",
@@ -256,7 +262,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R02-05",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Whole-source reprocessing, same-slot ordinary contribution replacement, independent support, CAS and erasure regressions passed. General partial coverage/cross-slot replacement and remote authorization histories remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_reprocessing.py",
@@ -278,7 +284,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R02-06",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Whole-source reprocessing, same-slot ordinary contribution replacement, independent support, CAS and erasure regressions passed. General partial coverage/cross-slot replacement and remote authorization histories remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_reprocessing.py",
@@ -300,7 +306,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R03-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "B5 non-streaming source/QuestionView input, immutable provider dispatch and final/cache delivery guards passed using controlled recording transports. Remote ACL synchronization, chunk streaming and unobservable provider context are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_governed_recall_integration.py",
@@ -322,7 +328,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R03-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "B5 non-streaming source/QuestionView input, immutable provider dispatch and final/cache delivery guards passed using controlled recording transports. Remote ACL synchronization, chunk streaming and unobservable provider context are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_governed_recall_integration.py",
@@ -344,7 +350,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R03-03",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "B5 non-streaming source/QuestionView input, immutable provider dispatch and final/cache delivery guards passed using controlled recording transports. Remote ACL synchronization, chunk streaming and unobservable provider context are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_governed_recall_integration.py",
@@ -366,7 +372,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R03-04",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "B5 non-streaming source/QuestionView input, immutable provider dispatch and final/cache delivery guards passed using controlled recording transports. Remote ACL synchronization, chunk streaming and unobservable provider context are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_governed_recall_integration.py",
@@ -388,7 +394,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R03-05",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Streaming/chunk-level model delivery is not enabled; non-streaming final delivery guards do not satisfy this scenario.",
           "executed_selectors": [
             "test_governed_recall_integration.py",
@@ -410,7 +416,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R03-06",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "B5 non-streaming source/QuestionView input, immutable provider dispatch and final/cache delivery guards passed using controlled recording transports. Remote ACL synchronization, chunk streaming and unobservable provider context are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_governed_recall_integration.py",
@@ -432,7 +438,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R04-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Original processing manifests, source/query completeness, immutable private ancestry and B5/B6 cache/page erasure passed for bounded current paths. Arbitrary multi-turn provider histories, model patches and authorized declassification remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_derived_observations.py",
@@ -456,7 +462,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R04-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Original processing manifests, source/query completeness, immutable private ancestry and B5/B6 cache/page erasure passed for bounded current paths. Arbitrary multi-turn provider histories, model patches and authorized declassification remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_derived_observations.py",
@@ -480,7 +486,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R04-03",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Free-form model delta/block patches are not enabled. B6 typed patches are deterministic host operations.",
           "executed_selectors": [
             "test_derived_observations.py",
@@ -504,7 +510,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R04-04",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Original processing manifests, source/query completeness, immutable private ancestry and B5/B6 cache/page erasure passed for bounded current paths. Arbitrary multi-turn provider histories, model patches and authorized declassification remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_derived_observations.py",
@@ -528,7 +534,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R04-05",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Original processing manifests, source/query completeness, immutable private ancestry and B5/B6 cache/page erasure passed for bounded current paths. Arbitrary multi-turn provider histories, model patches and authorized declassification remain outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_derived_observations.py",
@@ -552,7 +558,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R04-06",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Authorized declassification is not implemented; model self-assertion does not grant it.",
           "executed_selectors": [
             "test_derived_observations.py",
@@ -576,7 +582,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N01-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Trusted capture-profile and SDK/MCP fixture regressions passed. No deployed host complete-event adapter or general multi-block/stream-interruption capture acceptance is asserted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_capture_profile.py",
@@ -598,7 +604,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N01-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Trusted capture-profile and SDK/MCP fixture regressions passed. No deployed host complete-event adapter or general multi-block/stream-interruption capture acceptance is asserted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_capture_profile.py",
@@ -620,7 +626,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N01-03",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Trusted capture-profile and SDK/MCP fixture regressions passed. No deployed host complete-event adapter or general multi-block/stream-interruption capture acceptance is asserted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_capture_profile.py",
@@ -642,7 +648,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N02-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Controlled durable producer/outbox SDK/MCP contracts, identity conflicts, current-epoch replay rejection and real provider process recovery passed. Full external/legacy-device fleet lifecycle remains unaccepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_durable_retention.py",
@@ -665,7 +671,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N02-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Controlled durable producer/outbox SDK/MCP contracts, identity conflicts, current-epoch replay rejection and real provider process recovery passed. Full external/legacy-device fleet lifecycle remains unaccepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_durable_retention.py",
@@ -688,7 +694,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N02-03",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Controlled durable producer/outbox SDK/MCP contracts, identity conflicts, current-epoch replay rejection and real provider process recovery passed. Full external/legacy-device fleet lifecycle remains unaccepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_durable_retention.py",
@@ -711,7 +717,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N03-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Supported local resource/derived processors passed fixed target, successor, fencing, age/progress, quota and real process recovery contracts. Arbitrary external processing side effects are outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_resource_refresh.py",
@@ -734,7 +740,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N03-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Supported local resource/derived processors passed fixed target, successor, fencing, age/progress, quota and real process recovery contracts. Arbitrary external processing side effects are outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_resource_refresh.py",
@@ -757,7 +763,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N03-03",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Supported local resource/derived processors passed fixed target, successor, fencing, age/progress, quota and real process recovery contracts. Arbitrary external processing side effects are outside scope. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_resource_refresh.py",
@@ -780,7 +786,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N04-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Registered current language/project full, whitelisted delta/noop and deterministic typed patch regressions passed. General scenario/model patch and cross-scope composition are not enabled. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_derived_pages.py",
@@ -802,7 +808,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N04-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Registered current language/project full, whitelisted delta/noop and deterministic typed patch regressions passed. General scenario/model patch and cross-scope composition are not enabled. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_derived_pages.py",
@@ -824,7 +830,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N04-03",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Registered current language/project full, whitelisted delta/noop and deterministic typed patch regressions passed. General scenario/model patch and cross-scope composition are not enabled. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_derived_pages.py",
@@ -846,7 +852,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N05-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Finite persisted-source versus closed admitted-publication readiness, unchanged targets and local continuous index coverage passed. General external indexes and dynamic remote ACL propagation are not accepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_durable_readiness.py",
@@ -869,7 +875,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N05-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Finite persisted-source versus closed admitted-publication readiness, unchanged targets and local continuous index coverage passed. General external indexes and dynamic remote ACL propagation are not accepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_durable_readiness.py",
@@ -892,7 +898,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N05-03",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Finite persisted-source versus closed admitted-publication readiness, unchanged targets and local continuous index coverage passed. General external indexes and dynamic remote ACL propagation are not accepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_durable_readiness.py",
@@ -915,7 +921,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N06-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Offline evidence/support scoring and controlled runtime trace regressions passed. Licensed real gold, model-stage attribution and end-to-end useful-answer quality are not measured. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_retrieval_trace.py",
@@ -937,7 +943,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N06-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Offline evidence/support scoring and controlled runtime trace regressions passed. Licensed real gold, model-stage attribution and end-to-end useful-answer quality are not measured. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_retrieval_trace.py",
@@ -959,7 +965,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N06-03",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Offline evidence/support scoring and controlled runtime trace regressions passed. Licensed real gold, model-stage attribution and end-to-end useful-answer quality are not measured. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_retrieval_trace.py",
@@ -981,7 +987,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N07-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Bounded model payload/input/configuration contracts and ontology/embedding regressions passed. Real requested provider/tokenizer identity, failover quality and full embedding migration acceptance are not established. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_semantic_reranker.py",
@@ -1003,7 +1009,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N07-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Bounded model payload/input/configuration contracts and ontology/embedding regressions passed. Real requested provider/tokenizer identity, failover quality and full embedding migration acceptance are not established. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_semantic_reranker.py",
@@ -1025,7 +1031,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N07-03",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Bounded model payload/input/configuration contracts and ontology/embedding regressions passed. Real requested provider/tokenizer identity, failover quality and full embedding migration acceptance are not established. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_semantic_reranker.py",
@@ -1047,14 +1053,16 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N08-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
-          "scope": "Frozen synthetic study/scorer and comparison protocol regressions passed, including preserved 17-event/20-check fixture semantics. The fixture explicitly says end-to-end execution is false; real held-out quality/cost data are absent. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
+          "scope": "Frozen synthetic A9 runtime study now executes actual SQLite question/refresh/model-cache paths with four primary arms, isolated ablations and paired cluster bootstrap. Original 17-event/20-check fixture evidence remains historical. No licensed held-out real-model/whole-cost acceptance; inherited scenario is not promoted.",
           "executed_selectors": [
             "test_memory_v61_fixtures.py",
             "test_memory_evaluation_protocol_acceptance.py",
-            "test_question_cost_v7.py"
+            "test_question_cost_v7.py",
+            "test_question_experiment_v7.py",
+            "test_question_resources_v7.py"
           ],
-          "matched_passing_test_cases": 78,
+          "matched_passing_test_cases": 164,
           "scenario_fully_accepted": false
         }
       ]
@@ -1069,14 +1077,16 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N08-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
-          "scope": "Frozen synthetic study/scorer and comparison protocol regressions passed, including preserved 17-event/20-check fixture semantics. The fixture explicitly says end-to-end execution is false; real held-out quality/cost data are absent. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
+          "scope": "Frozen synthetic A9 runtime study now executes actual SQLite question/refresh/model-cache paths with four primary arms, isolated ablations and paired cluster bootstrap. Original 17-event/20-check fixture evidence remains historical. No licensed held-out real-model/whole-cost acceptance; inherited scenario is not promoted.",
           "executed_selectors": [
             "test_memory_v61_fixtures.py",
             "test_memory_evaluation_protocol_acceptance.py",
-            "test_question_cost_v7.py"
+            "test_question_cost_v7.py",
+            "test_question_experiment_v7.py",
+            "test_question_resources_v7.py"
           ],
-          "matched_passing_test_cases": 78,
+          "matched_passing_test_cases": 164,
           "scenario_fully_accepted": false
         }
       ]
@@ -1091,14 +1101,16 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "N08-03",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
-          "scope": "Frozen synthetic study/scorer and comparison protocol regressions passed, including preserved 17-event/20-check fixture semantics. The fixture explicitly says end-to-end execution is false; real held-out quality/cost data are absent. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
+          "scope": "Frozen synthetic A9 runtime study now executes actual SQLite question/refresh/model-cache paths with four primary arms, isolated ablations and paired cluster bootstrap. Original 17-event/20-check fixture evidence remains historical. No licensed held-out real-model/whole-cost acceptance; inherited scenario is not promoted.",
           "executed_selectors": [
             "test_memory_v61_fixtures.py",
             "test_memory_evaluation_protocol_acceptance.py",
-            "test_question_cost_v7.py"
+            "test_question_cost_v7.py",
+            "test_question_experiment_v7.py",
+            "test_question_resources_v7.py"
           ],
-          "matched_passing_test_cases": 78,
+          "matched_passing_test_cases": 164,
           "scenario_fully_accepted": false
         }
       ]
@@ -1113,7 +1125,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R05-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Explicit qualification, partial field support and compatible current parent/page regressions passed. A general asynchronous semantic verifier remains unavailable. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_fact_qualification.py",
@@ -1135,7 +1147,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R05-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Explicit qualification, partial field support and compatible current parent/page regressions passed. A general asynchronous semantic verifier remains unavailable. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_fact_qualification.py",
@@ -1157,7 +1169,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R06-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Independent valid/known history, contribution withdrawal and no-resurrection regressions passed. General correction of transition start times remains unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_contribution_lifecycle.py",
@@ -1179,7 +1191,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R06-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Independent valid/known history, contribution withdrawal and no-resurrection regressions passed. General correction of transition start times remains unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_contribution_lifecycle.py",
@@ -1201,7 +1213,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R07-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Same-slot correction/CAS and explicit cross-slot rejection regressions passed. General cross-slot atomic semantic correction remains unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_source_revisions.py",
@@ -1222,7 +1234,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R07-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Same-slot correction/CAS and explicit cross-slot rejection regressions passed. General cross-slot atomic semantic correction remains unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_source_revisions.py",
@@ -1243,7 +1255,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R08-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Finite registered current project first-query/publication races, empty/truncated census and invalidation regressions passed on both providers. No arbitrary query-program capability is claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_v7_subscriptions.py",
@@ -1265,7 +1277,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R08-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Finite registered current project first-query/publication races, empty/truncated census and invalidation regressions passed on both providers. No arbitrary query-program capability is claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_v7_subscriptions.py",
@@ -1287,7 +1299,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R09-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Bounded legacy language historical point/interval and current authorization/erasure regressions passed. Generic historical project questions and pages remain explicitly unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_derived_history.py",
@@ -1310,7 +1322,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R09-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Bounded legacy language historical point/interval and current authorization/erasure regressions passed. Generic historical project questions and pages remain explicitly unsupported. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_derived_history.py",
@@ -1333,7 +1345,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R10-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Current epoch/ticket/outbox erasure and real receive-process recovery passed. Recall of already-dispatched external bytes and a deployed remote in-flight delivery lifecycle are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_durable_process_recovery.py",
@@ -1355,7 +1367,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R10-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Current epoch/ticket/outbox erasure and real receive-process recovery passed. Recall of already-dispatched external bytes and a deployed remote in-flight delivery lifecycle are not claimed. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_durable_process_recovery.py",
@@ -1377,7 +1389,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R11-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Pinned finite publication-manifest closure and continuous local index coverage regressions passed. General external index implementations are not accepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_publication_batches.py",
@@ -1399,7 +1411,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R11-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Pinned finite publication-manifest closure and continuous local index coverage regressions passed. General external index implementations are not accepted. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_publication_batches.py",
@@ -1421,7 +1433,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R12-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "B5 real database atomic multi-account reservations and independent SIGKILL/recording-HTTP acceptance boundaries passed; unknown cost and synthetic invoice replay remain durable. No actual inference-provider bill or quality/cost experiment exists. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_model_budget_v7.py",
@@ -1442,7 +1454,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R12-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "B5 real database atomic multi-account reservations and independent SIGKILL/recording-HTTP acceptance boundaries passed; unknown cost and synthetic invoice replay remain durable. No actual inference-provider bill or quality/cost experiment exists. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_model_budget_v7.py",
@@ -1464,7 +1476,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R13-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Fail-closed frozen profile/sample/threshold and quality-gate protocol regressions passed. Real observations, calibrated thresholds, licensed gold and actual provider comparison remain unavailable. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_release_acceptance.py",
@@ -1486,7 +1498,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "R13-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Fail-closed frozen profile/sample/threshold and quality-gate protocol regressions passed. Real observations, calibrated thresholds, licensed gold and actual provider comparison remain unavailable. Related-suite execution is regression evidence only; the entire inherited scenario is not promoted.",
           "executed_selectors": [
             "test_release_acceptance.py",
@@ -1507,7 +1519,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-01",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Finite admitted project registration, empty census and first-query/publication races on both providers.",
           "executed_selectors": [
             "test_v7_subscriptions.py::test_registered_empty_subscription_precedes_census_and_cas",
@@ -1528,7 +1540,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-02",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Old/new project and field membership, removals and erasure of persisted/unpublished routes.",
           "executed_selectors": [
             "test_v7_subscriptions.py::test_membership_delta_invalidates_both_old_and_new_slot_keys",
@@ -1549,7 +1561,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-03",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Bounded conservative scope fallback and fail-closed incomplete/unknown indexes.",
           "executed_selectors": [
             "test_v7_subscriptions.py::test_scope_fallback_is_bounded_metered_and_invalidates_snapshot",
@@ -1570,7 +1582,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-04",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Atomic current-provider index cutover, failed backfill rollback and concurrent writes; old writers must be stopped.",
           "executed_selectors": [
             "test_v7_subscriptions.py::test_backfill_is_atomic_and_old_targets_fail_closed",
@@ -1591,7 +1603,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-05",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Finite current question/scheduler singleflight, exact targets and separately guarded reads.",
           "executed_selectors": [
             "test_refresh_demand.py::test_fixed_coverage_receipt_coalesces_and_cannot_fake_publication",
@@ -1612,7 +1624,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-06",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Pinned claim, persistent successor, coverage versus unchanged legacy exact semantics under process recovery.",
           "executed_selectors": [
             "test_refresh_demand.py::test_new_dirty_keeps_fixed_receipt_and_successor_legacy_remains_exact",
@@ -1633,7 +1645,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-07",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Eligibility and explicit deferred/deadline results; no guarantee of completion beyond budget.",
           "executed_selectors": [
             "test_refresh_demand.py::test_cold_dirty_waits_for_request_and_hot_debounce_never_resets_first",
@@ -1653,7 +1665,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-08",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Durable due/high-water clock, true restart and backwards/forwards delivery guards; slow-provider test awaits observed durable completion.",
           "executed_selectors": [
             "test_refresh_scheduler_process.py::test_future_due_survives_host_sigkill_and_runs_only_after_durable_deadline",
@@ -1675,7 +1687,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-09",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Cold invalidation and finite requested work without automatic unrequested computation.",
           "executed_selectors": [
             "test_refresh_demand.py::test_cold_dirty_waits_for_request_and_hot_debounce_never_resets_first",
@@ -1695,7 +1707,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-10",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Temporary cold-parent demand sharing bounded scheduler resources.",
           "executed_selectors": [
             "test_refresh_demand.py::test_hot_child_temporarily_pulls_cold_parent_under_shared_budget",
@@ -1715,7 +1727,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-11",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Resource quota/fairness/aging and independent-process last-slot competition, not a production throughput SLA.",
           "executed_selectors": [
             "test_refresh_demand.py::test_aging_progresses_old_low_priority_ahead_of_new_high_priority_burst",
@@ -1736,7 +1748,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-12",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Unsupported worker cannot claim/consume its incompatible responsibilities.",
           "executed_selectors": [
             "test_refresh_demand.py::test_shared_quota_fair_rotation_and_unsupported_routes",
@@ -1756,7 +1768,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-13",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Actual finite closed admitted-publication coverage distinguished from source-persisted receipts.",
           "executed_selectors": [
             "test_question_runtime_v7.py::test_finite_manifest_target_is_real_closed_and_lease_fenced"
@@ -1775,7 +1787,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-14",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Four host-registered finite templates through embedded and MCP reads with zero model calls.",
           "executed_selectors": [
             "test_question_runtime_v7.py::test_actual_registration_review_publish_guarded_read_and_singleflight",
@@ -1795,7 +1807,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-15",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Exact aliases and parameter conflicts fail closed; unrestricted natural-language routing is not enabled.",
           "executed_selectors": [
             "test_question_transport_v7.py::test_transport_authority_injection_wrong_scope_and_history_fail_closed",
@@ -1815,7 +1827,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-16",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Synthetic complete-census/unknown/conflict/qualification semantics passed; licensed real-domain gold and quality remain missing.",
           "executed_selectors": [
             "test_question_runtime_v7.py::test_all_four_templates_explicit_unknown_contested_and_incomplete",
@@ -1836,7 +1848,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-17",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Whitelisted complete-group deterministic delta is equivalent to same-snapshot full across business values, members and proofs.",
           "executed_selectors": [
             "test_question_delta_v7.py::test_randomized_add_modify_remove_withdraw_qualification_and_time_replay",
@@ -1856,7 +1868,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-18",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Incompatible definition/schema/policy/operator and corrupt optimization state force full or reject.",
           "executed_selectors": [
             "test_question_delta_v7.py::test_unproved_delta_forces_real_full_without_false_frontier",
@@ -1876,7 +1888,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-19",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Duplicate/out-of-order changes normalize; missing or corrupt sequence cannot be resealed as continuous.",
           "executed_selectors": [
             "test_question_delta_v7.py::test_log_duplicates_and_disorder_canonicalize_but_missing_sequence_does_not",
@@ -1896,7 +1908,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-20",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Current-only project interface explicitly rejects history. Existing bounded L1/language historical contracts are separately covered; no generic historical project capability.",
           "executed_selectors": [
             "test_question_transport_v7.py::test_transport_authority_injection_wrong_scope_and_history_fail_closed"
@@ -1915,7 +1927,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-21",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Immutable content/generation with renewed certificate and bounded source-sensitive downstream validation.",
           "executed_selectors": [
             "test_question_proof_reuse_v7.py::test_safe_noop_advances_actual_coverage_and_certificate_but_not_generation",
@@ -1936,14 +1948,16 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-22",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
-          "scope": "Original private processing ancestry remains guarded before body access; only independent approved full generation may discard it.",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
+          "scope": "Original private processing ancestry remains guarded before body access; only independent approved full generation may discard it. Reference-aware GC retains removed-block/private ancestry and does not rewrite manifests.",
           "executed_selectors": [
             "test_question_proof_reuse_v7.py::test_revoked_original_private_source_denied_prebody_then_independent_full_public_context",
             "test_question_page_validation_v7.py::test_revoked_page_original_certificate_blocks_prebody_even_after_parent_new_full",
-            "test_b4_adversarial_review.py::test_answer_regenerates_independently_after_original_private_source_is_revoked"
+            "test_b4_adversarial_review.py::test_answer_regenerates_independently_after_original_private_source_is_revoked",
+            "test_question_gc_v7.py",
+            "test_question_gc_review_v7.py"
           ],
-          "matched_passing_test_cases": 6,
+          "matched_passing_test_cases": 68,
           "scenario_fully_accepted": true
         }
       ]
@@ -1957,16 +1971,18 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-23",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Host-only typed append/insert/replace/remove, stable block identities, atomic versions/lineage and real whole-page capacity; arbitrary model patches remain disabled.",
           "executed_selectors": [
             "test_question_pages_v7.py",
             "test_v7_qualified_pages.py",
             "test_derived_lifecycle_audit.py::test_page_output_limit_measures_delivered_materialized_body",
             "test_question_page_patches_v7.py",
-            "test_question_page_patch_review_v7.py"
+            "test_question_page_patch_review_v7.py",
+            "test_question_gc_v7.py",
+            "test_question_gc_review_v7.py"
           ],
-          "matched_passing_test_cases": 284,
+          "matched_passing_test_cases": 346,
           "scenario_fully_accepted": true
         }
       ]
@@ -1980,7 +1996,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-24",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Owned snapshots plus authority/query/source/lease/version CAS; losing publishes do not replace current state.",
           "executed_selectors": [
             "test_question_runtime_v7.py::test_compute_publish_cas_rejects_every_changed_authority_input",
@@ -2002,7 +2018,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-25",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Exact model configuration/context cache coordinates and separately guarded host-bound requests; no semantic similarity reuse.",
           "executed_selectors": [
             "test_governed_models_v7.py::test_exact_coordinates_never_use_semantic_similarity",
@@ -2023,7 +2039,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-26",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Before-body, dispatch and final delivery authorization, cache erasure and immutable serialized envelope binding; fake model output only.",
           "executed_selectors": [
             "test_governed_models_v7.py::test_erasure_prevents_all_new_delivery_and_scrubs_cached_bodies",
@@ -2045,7 +2061,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-27",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Immutable provider/model/runtime/prompt/options/output identity and fail-closed unknown billing tested with recording local HTTP fixtures; no real inference execution.",
           "executed_selectors": [
             "test_governed_models_v7.py::test_exact_configuration_change_always_misses",
@@ -2065,7 +2081,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-28",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Atomic multi-account intent, real SIGKILL at SQL and recording HTTP receipt boundaries, idempotent synthetic invoice settlement and durable unknown debt. Actual inference-provider acceptance is not asserted.",
           "executed_selectors": [
             "test_model_budget_recovery_v7.py::test_sigkill_does_not_release_accepted_or_unknown_cost",
@@ -2086,7 +2102,7 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-29",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
           "scope": "Independent SIGKILL/restart for full/delta/proof publications, scheduler due/dirty/responsibility recovery and polling without notification.",
           "executed_selectors": [
             "test_question_process_recovery_v7.py::test_question_commit_sigkill_recovers_all_state_without_duplicate_publication",
@@ -2107,8 +2123,8 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-30",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
-          "scope": "Actual SQLite backup and PG dump/restore with independently pinned deletion/finance journals; question, patched-page and model-cache lineage. Real prior-source upgrade/quiescent incompatible rollback probe passes. Online mixed-version writing and generic old-binary safety remain unsupported.",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
+          "scope": "Actual SQLite backup and PostgreSQL dump/restore, authoritative deletion/finance replay and retained question/page/model lineage pass. Bounded host-only GC atomically reclaims only unreachable objects and preserves retention holds, exact receipts, delta ancestry and model audits; valid pinned workloads can still exhaust capacity. Actual old-source capture/admission/erase/drain, coordinated upgrade, isolated incompatible old-reader probe, compatible forward resume and V7 erasure/reopen pass. No online mixed-version writes, global old-binary fence or operational downgrade.",
           "executed_selectors": [
             "test_question_runtime_v7.py::test_question_erasure_and_real_old_backup_replay_scrub_complete_generation",
             "test_b4_adversarial_review.py::test_delta_state_and_pending_page_validation_are_scrubbed_from_real_backup",
@@ -2116,9 +2132,12 @@
             "test_model_budget_recovery_v7.py::test_independently_pinned_money_replay_restores_postbackup_debt",
             "operational/v7_upgrade_drill.py::test_old_source_upgrade_and_quiescent_rollback_preserve_contracts",
             "test_question_page_patches_v7.py::test_patch_erasure_and_actual_backup_replay_include_all_original_revisions",
-            "test_question_page_patch_review_v7.py::test_removed_private_block_remains_guarded_and_erased_from_real_backup"
+            "test_question_page_patch_review_v7.py::test_removed_private_block_remains_guarded_and_erased_from_real_backup",
+            "test_question_gc_v7.py",
+            "test_question_gc_review_v7.py",
+            "operational/v7_upgrade_drill.py"
           ],
-          "matched_passing_test_cases": 22,
+          "matched_passing_test_cases": 84,
           "scenario_fully_accepted": false
         }
       ]
@@ -2132,13 +2151,15 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-31",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
-          "scope": "Runtime accounting projection and all-phase/unknown/debt rejection contracts pass; complete repeated real workload, measured resources and billing reconciliation remain unmeasured.",
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
+          "scope": "Frozen gold-free reusable A9 runner, actual SQLite question/refresh/model-cache integration, isolated ablations, lifecycle/qualifier scoring, all-phase unknown debt, observer/tariff contracts and paired cluster bootstrap pass with synthetic inputs. Existing real Ollama port is wired but not called. Licensed gold, actual host telemetry and accepted tariffs/invoices, frozen real judge/threshold/statistical choices and repeated quality/whole-cost observations remain absent.",
           "executed_selectors": [
             "test_model_cost_runtime_v7.py::test_actual_runtime_projection_counts_calls_once_and_never_prices_local_unknown_zero",
-            "test_model_cost_runtime_v7.py::test_partial_phase_inventory_stays_unaccounted_and_overlap_is_rejected"
+            "test_model_cost_runtime_v7.py::test_partial_phase_inventory_stays_unaccounted_and_overlap_is_rejected",
+            "test_question_experiment_v7.py",
+            "test_question_resources_v7.py"
           ],
-          "matched_passing_test_cases": 3,
+          "matched_passing_test_cases": 89,
           "scenario_fully_accepted": false
         }
       ]
@@ -2152,10 +2173,13 @@
         {
           "path": "docs/design/v7.0.0/validation-b6.json",
           "case_id": "Q7-32",
-          "source_commit": "4f3e2da77450e5250bbf1ca9551d81cefc1d1a6c",
-          "scope": "Blocked: actual installed Ollama Qwen3.5 9B endpoint/model identity, licensed held-out gold, frozen judge/thresholds/sample/group/statistical protocol and repeated quality/whole-cost observations are absent.",
-          "executed_selectors": [],
-          "matched_passing_test_cases": 0,
+          "source_commit": "dc39baf9a0a751a101232f72526c39486d430240",
+          "scope": "Blocked: actual installed Ollama Qwen3.5 9B endpoint/runtime identity, licensed held-out gold, frozen real judge/thresholds/sample/group/statistical protocol and repeated quality/whole-cost observations are absent. Reusable runner and real-port/observer/tariff integration are ready; synthetic runtime results do not accept the real experiment.",
+          "executed_selectors": [
+            "test_question_experiment_v7.py",
+            "test_question_resources_v7.py"
+          ],
+          "matched_passing_test_cases": 86,
           "scenario_fully_accepted": false
         }
       ]

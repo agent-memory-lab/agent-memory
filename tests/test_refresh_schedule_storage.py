@@ -324,11 +324,13 @@ def test_scheduler_erasure_and_reservation_roll_back_with_authoritative_transact
     asyncio.run(run())
 
 
+# PostgreSQL EXPLAIN is a provider-specific contract; SQLite has its own
+# query-plan assertion above rather than an inapplicable copy of this test.
+@pytest.mark.parametrize("store", ["postgres"], indirect=True)
 def test_postgres_due_and_expired_indexes_are_available(store):
     async def run():
         async with store() as (engine, _, _, clock):
-            if not hasattr(engine.repository, "pool"):
-                pytest.skip("PostgreSQL query-plan contract")
+            assert hasattr(engine.repository, "pool")
             from agent_memory_postgres import refresh_schedule as schedule
 
             async with engine.repository.unit_of_work() as uow:
