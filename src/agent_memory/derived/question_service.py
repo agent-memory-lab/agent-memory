@@ -469,6 +469,17 @@ class QuestionService:
             _fail("question_registration_changed")
         return min(boundaries).isoformat() if boundaries else None
 
+    async def _cached_body(self, uow, kind, key, *, guard):
+        """Every cached body crosses its own current-control boundary.
+
+        A prior successful guard cannot authorize another body after an awaited
+        read advances the clock or changes host context/registration.
+        """
+        await guard()
+        body = await uow.derived_get(self.scope, kind, key)
+        await guard()
+        return body
+
     async def _baseline(self, uow, definition, proof, *, expected_head=None):
         header = (
             await uow.derived_get(self.scope, "question_head", definition["facet_id"])
@@ -494,10 +505,16 @@ class QuestionService:
             # Independent full generation may still use the current authorized
             # census. Do not load old body/state to discover that it is unsafe.
             return empty
-        content = await uow.derived_get(
-            self.scope, "question_content", header["head"]["content_revision_id"]
+
+        async def guard():
+            return await self._generation_guard(uow, definition, header["generation_proof"])
+
+        content = await self._cached_body(
+            uow, "question_content", header["head"]["content_revision_id"], guard=guard
         )
-        state = await uow.derived_get(self.scope, "question_delta_state", definition["facet_id"])
+        state = await self._cached_body(
+            uow, "question_delta_state", definition["facet_id"], guard=guard
+        )
         if digest(content) != header["content_sha256"]:
             _fail("question_content_changed")
         if state is not None and digest(state) != header.get("delta_state_sha256"):
@@ -508,6 +525,7 @@ class QuestionService:
             key: await uow.derived_get(self.scope, "question_change_log", key)
             for key in proof["query_generations"]
         }
+        await guard()
         return dict(
             expected_head=header,
             generation_safe=True,
@@ -554,8 +572,10 @@ class QuestionService:
     def _input_guard(self, spec, minimum):
         if instant(self.clock()) < minimum:
             _fail("refresh_clock_discontinuity")
-        if (self._context() != spec["context"]
-                or self.admission.registration_fingerprint != spec["registration_fingerprint"]):
+        if (
+            self._context() != spec["context"]
+            or self.admission.registration_fingerprint != spec["registration_fingerprint"]
+        ):
             _fail("question_registration_changed")
 
     async def snapshot(self, task):
@@ -918,11 +938,17 @@ class QuestionService:
         if header is None:
             _fail("question_view_unavailable")
         head = await self._guard(uow, definition, header, actor=actor)
+
         # No answer body is loaded until complete original-generation and
         # current-census metadata, source ACL, context and time checks pass.
-        body = await uow.derived_get(self.scope, "question_content", head.content_revision_id)
-        cert = await uow.derived_get(
-            self.scope, "question_certificate", head.certificate_revision_id
+        async def guard():
+            return await self._guard(uow, definition, header, actor=actor)
+
+        body = await self._cached_body(
+            uow, "question_content", head.content_revision_id, guard=guard
+        )
+        cert = await self._cached_body(
+            uow, "question_certificate", head.certificate_revision_id, guard=guard
         )
         if digest(body) != header["content_sha256"] or digest(cert) != header["certificate_sha256"]:
             _fail("question_content_changed")

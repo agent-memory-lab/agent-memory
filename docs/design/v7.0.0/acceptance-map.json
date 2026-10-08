@@ -1,6 +1,6 @@
 {
   "schema": "v7-acceptance-map/1",
-  "baseline": "8e2011dba7a6ea778f9c48bc2a5cfdfec3dbd118",
+  "baseline": "2ed003771e4c0fc7307a600736bc8dfbe6af3638",
   "batch": "B4",
   "runtime_capabilities": [
     "finite_current_project_full_questions_opt_in",
@@ -16,7 +16,8 @@
     "Inherited status is a verbatim snapshot, not a new V7 test result.",
     "Unsupported, deferred, not_run and insufficient_data are never passes.",
     "B3 passes are bounded to explicitly host-enabled current full templates; no delta, model, historical page or production quality acceptance is inferred.",
-    "B4 passes cover registered deterministic project operators and the finite QuestionView-to-page layer; no model patch, arbitrary query program or production savings claim."
+    "B4 passes cover registered deterministic project operators and the finite QuestionView-to-page layer; no model patch, arbitrary query program or production savings claim.",
+    "B4 cached-body correction2ed0037 passed184 affected dual-provider cases. Every cached body has before/after expiry/context/registration guards; earlier counts remain separate."
   ],
   "cases": [
     {

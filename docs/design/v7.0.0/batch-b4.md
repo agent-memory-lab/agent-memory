@@ -96,3 +96,21 @@ The real Ollama/provider evaluation is a separate B5/B6 gate and was not run by 
 `52313c2` → `8b9d421` → `51230e2` → `cf16ba0` → `8e2011d`, followed by this evidence/ledger commit.
 Do not cherry-pick `4c29dde`; it only preserves the copied B3 baseline. B2/B3 prerequisite commits
 are integrated separately and are not B4 implementation credit.
+
+## Cached-body boundary correction (2026-10-08)
+
+Additional testing while draft PR CI ran found that expiry/context/host changes during an
+awaited cached-content read could allow the next cached body to load before another guard.
+Final delivery already failed closed, but the later processing read was outside its valid input
+boundary. `2ed0037` applies before-and-after guards to each cached question content/certificate/
+delta-state and page content/certificate/block read, and guards the baseline after metadata awaits.
+Twelve new scenarios cover snapshot, question read, page read and page publication, each with
+grant expiry, context changes and host-registration changes during the first cached body await.
+
+The corrected source passed 184 affected tests: 92 SQLite and 92 PostgreSQL 17, with zero failures,
+errors or skips. This is a new independent run, not a sum with earlier counts. Ruff and diff checks
+also passed. Exact source fingerprints and the JUnit hash are in `validation-b4.json`.
+
+CI-only commit `e83d39c` explicitly adds all four B4 suites to the live PostgreSQL job; its YAML
+and exact test collection were checked. These follow-ons extend the canonical B4 sequence after
+`9cff5ee`; no production/model result or deployment is implied.

@@ -2,7 +2,7 @@
   "schema": "v7-batch-validation/1",
   "batch": "V7-B4",
   "date": "2026-10-08",
-  "code_commit": "8e2011dba7a6ea778f9c48bc2a5cfdfec3dbd118",
+  "code_commit": "2ed003771e4c0fc7307a600736bc8dfbe6af3638",
   "core_test_commit": "cf16ba0bd717bd4bfa4e0081fa369faadaeec4f5",
   "source_manifest": {
     "packages/postgres/src/agent_memory_postgres/repository.py": "310a754dea321aa66f789a40a427a32ba5c4c5053cca822b99d81e03293c6050",
@@ -14,26 +14,30 @@
     "src/agent_memory/derived/question_erasure.py": "789298e08f4b35187e810dd90e320482ef7aac6d9a2e6279fb2dd6ede548b431",
     "src/agent_memory/derived/question_materialize.py": "dfb3395865bee4c2bb7016c83d12445d9fc230d3533cd367beb35b08458630e1",
     "src/agent_memory/derived/question_model.py": "4dc4eddba73d967df57a6485c166e4a23b723a1167ac0355c4505afe41256e9c",
-    "src/agent_memory/derived/question_pages.py": "7fda0faf1d92530e036bd92dfd9405c7fa5710adb623fb68ba05fd76802d1279",
+    "src/agent_memory/derived/question_pages.py": "fda64ff8cfcd26a99ae86ccb071e0d90b786d360cf9acd2f3d8dbd2bff9df813",
     "src/agent_memory/derived/question_refresh.py": "cd65cba1ed1e571992617f549c947939789ddae58e5849d56f74ea67016e9a62",
-    "src/agent_memory/derived/question_service.py": "ee72af26b74144ef4b2e3dd440ad69fd301314c7a0f248d86a49d0c74489676d",
+    "src/agent_memory/derived/question_service.py": "a8eebe74ba78550b48ce1442f691acb0e8ca4f647b0fe6f67cde334b1a1c211f",
     "src/agent_memory/derived/question_transport.py": "eb6605067cf3a8d70b89bf6deefedebab97ed629984d4b505f766a2b5cd5e0ca",
     "src/agent_memory/derived/subscriptions.py": "9a41f1ca1ac2620e26516c2e7e8308af85b6dd74bd44bc4828d21568343e0270",
     "src/agent_memory/sqlite.py": "a8fd4bcc71a97ca22a18dc0f073ef37106d43055be779fd682bdcc686ef1764a",
-    "tests/test_b4_adversarial_review.py": "0c2f73f299ac100c7905116fb3dd676fd93ce22ae5814c450e6b1579519216d8",
+    "tests/test_b4_adversarial_review.py": "411bf435cb1a291d5dba1e25062773557ceb602488f5c0e62790688e3c4b3f1e",
     "tests/test_project_questions_v7.py": "9b4a3477f8b37f8be7c109a5ad2dc1ef26432ea3e285d00235087d43c91e41ad",
     "tests/test_question_delta_v7.py": "b7de79b0e4ff0df2f74e38affee0027c845c9ac8fe0410b55a2714b1a7d9153c",
     "tests/test_question_model_v7.py": "df240d21f41e9ad11e47f92e8d5e4812050890e6b8758b6e5a3b512f15638685",
     "tests/test_question_page_validation_v7.py": "36c5cf673ed4bcd39349d5abbca06da3e076c0bb7d17385ce86af8cd7207d497",
     "tests/test_question_proof_reuse_v7.py": "0a4a81d13c2bef84f94de22f9755af529471121e97e89c8017cbb9163eaeb43b",
-    "tests/test_question_transport_v7.py": "f1f167195380f5c4a486fbc3619502875334b1df55e1c63c8ce919c98a8c3024"
+    "tests/test_question_transport_v7.py": "f1f167195380f5c4a486fbc3619502875334b1df55e1c63c8ce919c98a8c3024",
+    ".github/workflows/ci.yml": "e169ab1178080ba9d82f9960e5788a109743eb10884d840a43ba2d262506be6b"
   },
   "canonical_b4_commits": [
     "52313c2",
     "8b9d421",
     "51230e2",
     "cf16ba0",
-    "8e2011d"
+    "8e2011d",
+    "9cff5ee",
+    "e83d39c",
+    "2ed0037"
   ],
   "scope": "Registered bounded project templates and QuestionView-to-page validation. Synthetic correctness/security tests; no model or production savings claim.",
   "runs": [
@@ -83,6 +87,23 @@
       "command": "ruff check B4 changed Python sources and tests; git diff --check",
       "status": "passed",
       "notes": "Selected B4 changed Python sources/tests plus transport source/test passed lint; git diff --check passed. Source manifest additionally pins the unchanged oracle/protocol dependencies. Counts from different runs are reported separately."
+    },
+    {
+      "command": "PYTHONPATH=src:tests:packages/postgres/src:packages/python-sdk/src:packages/mcp-server/src bash /tmp/agent-memory-pg.42vxoI/run-with-postgres.sh /workspace/shared/agent-memory-v7-b3/.venv/bin/pytest tests/test_question_proof_reuse_v7.py tests/test_question_page_validation_v7.py tests/test_b4_adversarial_review.py tests/test_question_runtime_v7.py tests/test_question_pages_v7.py tests/test_question_snapshot_security_v7.py tests/test_question_erasure_v7.py tests/test_question_transport_v7.py --junitxml=/tmp/agent-memory-b4-cached-body.xml -x",
+      "source_commit": "2ed003771e4c0fc7307a600736bc8dfbe6af3638",
+      "status": "passed",
+      "tests": 184,
+      "passed": 184,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 96.889,
+      "backends": {
+        "sqlite": 92,
+        "postgresql_17": 92
+      },
+      "junit_sha256": "6b2372b4370afb39cc8e86919c28547c59acfc94f958d23434a435fa6cfc5da9",
+      "scope": "Post-publication cached-body boundary correction. Includes12 new timing scenarios across snapshot, question read, page read and page publication for grant expiry, context changes and host registration changes. Earlier run counts remain separate and are not summed."
     }
   ],
   "not_run": [
@@ -101,5 +122,9 @@
       "question_page_validation"
     ],
     "requires": "Drain old writers/workers and re-register version-1 questions. Missing/unproved history full rebuilds. Preserve authoritative erase replay on restore."
+  },
+  "ci_follow_on": {
+    "commit": "e83d39c12148a47865959c3ab0d60cec8540d557",
+    "change": "Add all four new B4 suites to postgres-live; YAML parse, exact suite collection and diff check passed. No runtime source changed in that CI-only commit."
   }
 }

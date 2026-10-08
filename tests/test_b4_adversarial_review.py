@@ -438,3 +438,94 @@ def test_answer_cannot_recover_by_processing_a_current_revoked_source(store):
                 assert contents[0]["identity"] == first["content_revision_id"]
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("operation", ["snapshot", "read", "page_read", "page_publish"])
+@pytest.mark.parametrize("change", ["grant_expiry", "context", "host"])
+def test_every_cached_body_has_its_own_before_and_after_guard(store, operation, change):
+    from datetime import timedelta
+
+    from test_question_runtime_v7 import fresh
+
+    from agent_memory.derived.model import ProcessingGrant
+
+    async def run():
+        async with store() as (engine, kernel, scope, clock):
+            svc = runtime(engine, scope, clock)
+            item = await project.stage(svc.admission, scope)
+            await project.qualify(svc.admission, *item)
+            expiry = clock[0] + timedelta(seconds=10)
+            await svc.grant(
+                ProcessingGrant("source", (ACTOR,), ("project_questions",), expires_at=expiry),
+                expected_version=1,
+            )
+            await register(svc)
+            await fresh(svc, clock)
+            if operation.startswith("page_"):
+                await svc.pages.register("page", ("project-a:owner",), readers=(ACTOR,))
+                await svc.pages.publish("page", actor=ACTOR)
+            if operation == "snapshot":
+                await svc.grant(
+                    ProcessingGrant("source", (ACTOR,), ("project_questions",), expires_at=expiry),
+                    expected_version=2,
+                )
+                await svc.request("project-a:owner", actor=ACTOR, dedupe_key="cached-boundary")
+                lease = await svc.queue.claim("worker", lease_seconds=30)
+            original = engine.repository.unit_of_work
+            first = "question_page_content" if operation.startswith("page_") else "question_content"
+            bodies, fired = [], [False]
+
+            class ChangingBody:
+                def __init__(self):
+                    self.inner = original()
+
+                async def __aenter__(self):
+                    self.uow = await self.inner.__aenter__()
+                    return self
+
+                async def __aexit__(self, *args):
+                    return await self.inner.__aexit__(*args)
+
+                def __getattr__(self, name):
+                    return getattr(self.uow, name)
+
+                async def derived_get(self, scope, kind, key):
+                    if fired[0] and kind in {
+                        "question_content",
+                        "question_certificate",
+                        "question_delta_state",
+                        "question_page_content",
+                        "question_page_certificate",
+                        "question_page_block",
+                    }:
+                        bodies.append(kind)
+                    value = await self.uow.derived_get(scope, kind, key)
+                    if kind == first and not fired[0]:
+                        fired[0] = True
+                        if change == "grant_expiry":
+                            clock[0] = expiry
+                        elif change == "context":
+                            svc.context = replace(svc.context, revision="changed-during-body")
+                        else:
+                            svc.admission.memberships["a"] = replace(
+                                project.MEMBERSHIPS[0], registry_revision="changed-during-body"
+                            )
+                    return value
+
+            engine.repository.unit_of_work = ChangingBody
+            try:
+                with pytest.raises(DerivedError):
+                    if operation == "snapshot":
+                        await svc.snapshot(lease.task)
+                    elif operation == "read":
+                        await svc.read("project-a:owner", actor=ACTOR)
+                    elif operation == "page_read":
+                        await svc.pages.read("page", actor=ACTOR)
+                    else:
+                        await svc.pages.publish("page", actor=ACTOR)
+                assert fired[0]
+                assert not bodies, "A later cached body loaded after controls changed"
+            finally:
+                engine.repository.unit_of_work = original
+
+    asyncio.run(run())

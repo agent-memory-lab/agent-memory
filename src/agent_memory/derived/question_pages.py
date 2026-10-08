@@ -324,17 +324,27 @@ class ProjectQuestionPages:
                     pass  # New independent full generation; do not load old bodies.
                 else:
                     if old_head["registration_sha256"] == registration["sha256"]:
+
+                        async def old_guard():
+                            await self._original_guard(
+                                uow, registration, old_head["generation_parents"], actor
+                            )
+
                         old_content = checked(
-                            await uow.derived_get(
-                                self.scope, "question_page_content", old_head["content_revision_id"]
+                            await self.service._cached_body(
+                                uow,
+                                "question_page_content",
+                                old_head["content_revision_id"],
+                                guard=old_guard,
                             ),
                             "question-page-content/1",
                         )
                         old_certificate = checked(
-                            await uow.derived_get(
-                                self.scope,
+                            await self.service._cached_body(
+                                uow,
                                 "question_page_certificate",
                                 old_head["certificate_revision_id"],
+                                guard=old_guard,
                             ),
                             "question-page-certificate/1",
                         )
@@ -345,8 +355,8 @@ class ProjectQuestionPages:
                             raise DerivedError("question_page_integrity_failed")
                         for ref in old_content["blocks"]:
                             block = checked(
-                                await uow.derived_get(
-                                    self.scope, "question_page_block", ref["revision_id"]
+                                await self.service._cached_body(
+                                    uow, "question_page_block", ref["revision_id"], guard=old_guard
                                 ),
                                 "question-page-block/1",
                             )
@@ -570,15 +580,19 @@ class ProjectQuestionPages:
                 "question-page-head/1",
             )
             await self._guard(uow, page_id, actor, registration, head)
+
+            async def guard():
+                await self._guard(uow, page_id, actor, registration, head)
+
             content = checked(
-                await uow.derived_get(
-                    self.scope, "question_page_content", head["content_revision_id"]
+                await self.service._cached_body(
+                    uow, "question_page_content", head["content_revision_id"], guard=guard
                 ),
                 "question-page-content/1",
             )
             certificate = checked(
-                await uow.derived_get(
-                    self.scope, "question_page_certificate", head["certificate_revision_id"]
+                await self.service._cached_body(
+                    uow, "question_page_certificate", head["certificate_revision_id"], guard=guard
                 ),
                 "question-page-certificate/1",
             )
@@ -594,7 +608,9 @@ class ProjectQuestionPages:
             blocks = []
             for ref in content["blocks"]:
                 block = checked(
-                    await uow.derived_get(self.scope, "question_page_block", ref["revision_id"]),
+                    await self.service._cached_body(
+                        uow, "question_page_block", ref["revision_id"], guard=guard
+                    ),
                     "question-page-block/1",
                 )
                 if (
