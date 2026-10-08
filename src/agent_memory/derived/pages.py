@@ -108,9 +108,14 @@ class KnowledgePages:
     async def read(self, page_id, *, actor, purpose="agent_context"):
         from .service import open_derived
 
-        async with self.service.repository.unit_of_work() as uow:
-            await open_derived(uow, self.scope, self.service.history_mode)
-            return await self._read(uow, page_id, actor, purpose)
+        await self.service._read_preflight(page_id)
+        try:
+            async with self.service.repository.unit_of_work() as uow:
+                await open_derived(uow, self.scope, self.service.history_mode)
+                return await self._read(uow, page_id, actor, purpose)
+        except DerivedError:
+            await self.service._read_preflight(page_id)
+            raise
 
     async def _read(self, uow, page_id, actor, purpose):
         definition = await self.service._definition(uow, identity(page_id))
@@ -133,7 +138,7 @@ class KnowledgePages:
             if view["state"] == "empty":
                 head = await uow.derived_get(self.scope, "head", page_id)
                 result.update(revision_id=head["audit_revision_id"], processed_unit=head["unit"])
-            return result
+            return await self.service._clock_delivery(uow, page_id, result)
         # Shared read already passed the entire current processing chain. Only
         # then load page blocks; references alone never prove a complete page.
         revision = await uow.derived_get(self.scope, "revision", view["revision_id"])
@@ -159,12 +164,13 @@ class KnowledgePages:
             body=materialized_body(view["body"], materialized),
             processed_unit=deepcopy(revision["unit"]),
         )
-        return result
+        return await self.service._clock_delivery(uow, page_id, result)
 
     async def status(self, target_id, *, actor, purpose="agent_context"):
         from ..operations.facet_refresh import FacetRefreshQueue
         from .service import open_derived
 
+        await self.service._read_preflight(target_id=target_id)
         fixed = await FacetRefreshQueue(self.service).status(target_id, actor=actor)
         async with self.service.repository.unit_of_work() as uow:
             await open_derived(uow, self.scope, self.service.history_mode)
@@ -173,6 +179,7 @@ class KnowledgePages:
                 raise DerivedError("derived_target_unavailable")
             view = await self._read(uow, receipt["facet_id"], actor, purpose)
             head = await uow.derived_get(self.scope, "head", receipt["facet_id"])
+            view = await self.service._clock_delivery(uow, receipt["facet_id"], view)
             current = bool(fixed["complete"] and head and head.get("unit") == receipt["unit"])
             return dict(
                 **fixed, page_id=receipt["facet_id"], page_state=view["state"],

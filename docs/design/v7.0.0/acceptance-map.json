@@ -1,7 +1,7 @@
 {
   "schema": "v7-acceptance-map/1",
   "baseline": "7f824dd49b18935c6b47f5eb32aa32efdbd8cf01",
-  "batch": "B1",
+  "batch": "B2",
   "runtime_capabilities": [],
   "notes": [
     "Protocol unit tests do not establish full runtime acceptance.",
@@ -589,57 +589,97 @@
       "id": "Q7-05",
       "scenario": "多请求/worker 对同一兼容目标刷新",
       "owner": "AM70-T05",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b2.json",
+          "scope": "Dual-backend managed current Observation/parent/page scheduler: coalescing, fair deterministic resource quotas, clock/error-path guards, actual process kill and restore. QuestionView, monetary model governance and final combination continue in B3/B5/B6."
+        }
+      ]
     },
     {
       "id": "Q7-06",
       "scenario": "旧目标运行中不断到达新变更",
       "owner": "AM70-T05",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b2.json",
+          "scope": "Dual-backend managed current Observation/parent/page scheduler: coalescing, fair deterministic resource quotas, clock/error-path guards, actual process kill and restore. QuestionView, monetary model governance and final combination continue in B3/B5/B6."
+        }
+      ]
     },
     {
       "id": "Q7-07",
       "scenario": "连续变更超过 debounce 等待窗",
       "owner": "AM70-T05",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b2.json",
+          "scope": "Dual-backend managed current Observation/parent/page scheduler: coalescing, fair deterministic resource quotas, clock/error-path guards, actual process kill and restore. QuestionView, monetary model governance and final combination continue in B3/B5/B6."
+        }
+      ]
     },
     {
       "id": "Q7-08",
       "scenario": "时间边界、重启与系统时钟跳变",
       "owner": "AM70-T07",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b2.json",
+          "scope": "Dual-backend managed current Observation/parent/page scheduler: coalescing, fair deterministic resource quotas, clock/error-path guards, actual process kill and restore. QuestionView, monetary model governance and final combination continue in B3/B5/B6."
+        }
+      ]
     },
     {
       "id": "Q7-09",
       "scenario": "冷视图长时间无人读取",
       "owner": "AM70-T06",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b2.json",
+          "scope": "Dual-backend managed current Observation/parent/page scheduler: coalescing, fair deterministic resource quotas, clock/error-path guards, actual process kill and restore. QuestionView, monetary model governance and final combination continue in B3/B5/B6."
+        }
+      ]
     },
     {
       "id": "Q7-10",
       "scenario": "热门页面依赖冷父视图",
       "owner": "AM70-T06",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b2.json",
+          "scope": "Dual-backend managed current Observation/parent/page scheduler: coalescing, fair deterministic resource quotas, clock/error-path guards, actual process kill and restore. QuestionView, monetary model governance and final combination continue in B3/B5/B6."
+        }
+      ]
     },
     {
       "id": "Q7-11",
       "scenario": "大租户与小租户争抢预算",
       "owner": "AM70-T06",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b2.json",
+          "scope": "Dual-backend managed current Observation/parent/page scheduler: coalescing, fair deterministic resource quotas, clock/error-path guards, actual process kill and restore. QuestionView, monetary model governance and final combination continue in B3/B5/B6."
+        }
+      ]
     },
     {
       "id": "Q7-12",
       "scenario": "不支持处理器的 worker 领取任务",
       "owner": "AM70-T07",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b2.json",
+          "scope": "Dual-backend managed current Observation/parent/page scheduler: coalescing, fair deterministic resource quotas, clock/error-path guards, actual process kill and restore. QuestionView, monetary model governance and final combination continue in B3/B5/B6."
+        }
+      ]
     },
     {
       "id": "Q7-13",
@@ -767,8 +807,13 @@
       "id": "Q7-29",
       "scenario": "刷新提交前后强杀及通知丢失",
       "owner": "AM70-T07",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        {
+          "path": "docs/design/v7.0.0/validation-b2.json",
+          "scope": "Dual-backend managed current Observation/parent/page scheduler: coalescing, fair deterministic resource quotas, clock/error-path guards, actual process kill and restore. QuestionView, monetary model governance and final combination continue in B3/B5/B6."
+        }
+      ]
     },
     {
       "id": "Q7-30",
@@ -779,6 +824,10 @@
         {
           "path": "docs/design/v7.0.0/validation-b1.json",
           "scope": "Admitted-L1 indexed invalidation and lifecycle foundation. Project membership and generic QuestionView/publication-manifest runtime remain unverified."
+        },
+        {
+          "path": "docs/design/v7.0.0/validation-b2.json",
+          "scope": "Dual-backend managed current Observation/parent/page scheduler: coalescing, fair deterministic resource quotas, clock/error-path guards, actual process kill and restore. QuestionView, monetary model governance and final combination continue in B3/B5/B6."
         }
       ]
     },

@@ -4,6 +4,8 @@ import hmac
 from hashlib import sha256
 
 from ..domain import ForgetMode, ForgetRequest, MemoryScope, canonical_json, utc_now
+from .refresh_schedule_contract import CONTRACT as SCHEDULER_CONTRACT
+from .refresh_schedule_contract import stamp
 from .retention import DurableReceiver, RetentionError, _identity, _time
 
 MAX_ENTRIES = 4096
@@ -59,11 +61,40 @@ async def read_journal(uow, scope):
     return checked_entries(entries, head, epoch), epoch
 
 
+async def scheduler_clock_floor(uow, scope):
+    contract = getattr(uow, "refresh_scheduler_contract", None)
+    if contract is None:
+        return None
+    if contract != SCHEDULER_CONTRACT or any(not callable(getattr(uow, name, None)) for name in (
+        "refresh_scheduler_clock", "refresh_scheduler_observe_clock",
+    )):
+        raise RetentionError("purge_restore_scheduler_unsupported")
+    return await uow.refresh_scheduler_clock(scope)
+
+
+async def restore_clock_floor(uow, scope, checkpoint):
+    current = await scheduler_clock_floor(uow, scope)
+    floor = checkpoint.get("scheduler_clock_floor")
+    if floor is None:
+        if current is not None:
+            raise RetentionError("purge_restore_scheduler_clock_missing")
+        return
+    if getattr(uow, "refresh_scheduler_contract", None) != SCHEDULER_CONTRACT:
+        raise RetentionError("purge_restore_scheduler_unsupported")
+    # The independently pinned, signed checkpoint is the authority. A newer
+    # local floor is retained; a content backup can never lower it through replay.
+    await uow.refresh_scheduler_observe_clock(scope, now=floor)
+
+
 class PurgeRestore:
     """Caller keeps the restored database offline until replay commits and is verified.
 
     The latest checkpoint must come from trusted storage outside the content backup.
     HMAC proves provenance/integrity, while that independent pin proves freshness.
+    A configured scheduler adds a content-free UTC clock floor to the signed /2
+    checkpoint. Restore must pin the latest checkpoint independently, including
+    when upgrading an old backup without scheduler tables. Legacy /1 journals
+    remain usable only when no scheduler clock has yet been observed locally.
     No MCP tool, background task or automatic serving gate is installed here.
     """
 
@@ -99,7 +130,13 @@ class PurgeRestore:
                 "head": len(entries), "scope_epoch": epoch,
                 "entries_sha256": digest(entries),
             }
-            body = {"schema": "purge-restore-journal/1", "checkpoint": checkpoint,
+            floor = await scheduler_clock_floor(uow, self.scope)
+            version = 2 if floor is not None else 1
+            if floor is not None:
+                checkpoint.update(
+                    schema="purge-restore-checkpoint/2", scheduler_clock_floor=floor
+                )
+            body = {"schema": f"purge-restore-journal/{version}", "checkpoint": checkpoint,
                     "entries": entries}
             snapshot = {**body, "signature": self._sign(body)}
             if len(canonical_json(snapshot).encode()) > MAX_BYTES:
@@ -119,13 +156,24 @@ class PurgeRestore:
             raise RetentionError("purge_restore_snapshot_invalid") from error
         if not isinstance(snapshot, dict) or set(snapshot) != {
             "schema", "checkpoint", "entries", "signature"
-        } or snapshot["schema"] != "purge-restore-journal/1":
+        } or snapshot["schema"] not in {"purge-restore-journal/1", "purge-restore-journal/2"}:
             raise RetentionError("purge_restore_snapshot_invalid")
         checkpoint = snapshot["checkpoint"]
-        if not isinstance(checkpoint, dict) or set(checkpoint) != {
-            "schema", "authority_id", "scope_key", "head", "scope_epoch", "entries_sha256"
-        } or checkpoint["schema"] != "purge-restore-checkpoint/1":
+        version = 2 if snapshot["schema"] == "purge-restore-journal/2" else 1
+        fields = {"schema", "authority_id", "scope_key", "head", "scope_epoch", "entries_sha256"}
+        if version == 2:
+            fields.add("scheduler_clock_floor")
+        if not isinstance(checkpoint, dict) or set(checkpoint) != fields or (
+            checkpoint["schema"] != f"purge-restore-checkpoint/{version}"
+        ):
             raise RetentionError("purge_restore_snapshot_invalid")
+        if version == 2:
+            try:
+                floor = checkpoint["scheduler_clock_floor"]
+                if not isinstance(floor, str) or stamp(floor) != floor:
+                    raise ValueError("invalid scheduler clock floor")
+            except (TypeError, ValueError) as error:
+                raise RetentionError("purge_restore_snapshot_invalid") from error
         if (checkpoint["authority_id"] != self.authority_id
                 or checkpoint["scope_key"] != self.scope.partition_key()):
             raise RetentionError("purge_restore_authority_mismatch")
@@ -158,6 +206,7 @@ class PurgeRestore:
             if (len(local) > len(entries) or epoch > checkpoint["scope_epoch"]
                     or local != entries[:len(local)]):
                 raise RetentionError("purge_restore_history_conflict")
+            await restore_clock_floor(uow, self.scope, checkpoint)
             existing = await uow.purge_restore_get(self.scope, operation)
             if existing is not None:
                 if existing["contract_sha256"] != contract:

@@ -233,13 +233,18 @@ class ObservationService:
                 dirty=True,
                 disabled=False,
             )
+            if old and old.get("refresh_managed"):
+                row["refresh_managed"] = True
             if old is not None:
                 await close_coverage(
                     uow, self.scope, spec["id"], at=self.clock(), reason="definition"
                 )
             await uow.derived_put(self.scope, "definition", spec["id"], row)
             await subscriptions.install(uow, self.scope, row)
-            await invalidate_descendants(uow, self.scope, (spec["id"],))
+            from ..operations.refresh_demand import record_dirty
+
+            await record_dirty(uow, self.scope, row, at=self.clock(), reason="definition")
+            await invalidate_descendants(uow, self.scope, (spec["id"],), at=self.clock())
             return deepcopy(row)
 
     async def grant(self, grant, *, expected_version=0):
@@ -361,15 +366,29 @@ class ObservationService:
 
     async def snapshot(self, task):
         task = deepcopy(task)
+        await self._read_preflight(task.payload["unit"]["facet_id"])
+        try:
+            return await self._snapshot(task)
+        except Exception:
+            # The failed body transaction cannot preserve an observed expiry.
+            await self._read_preflight(task.payload["unit"]["facet_id"])
+            raise
+
+    async def _snapshot(self, task):
         timestamp(self.clock())
         async with self.repository.unit_of_work() as uow:
             await open_derived(uow, self.scope, self.history_mode)
             from ..operations.facet_refresh import checked_job
 
-            await checked_job(self, uow, task)
+            job = await checked_job(self, uow, task)
+            guarded_at = None
+            if job.get("refresh_execution"):
+                from ..operations.refresh_demand import observed_clock
+
+                guarded_at = await observed_clock(uow, self.scope, self.clock)
             unit = task.payload["unit"]
             definition = await self._check_unit(uow, unit)
-            at = self.clock()
+            at = self._checked_clock(guarded_at)
             _, authority = await self.registry.bindings(uow, definition["spec"])
             binding = self._context_binding(definition["spec"])
             if binding is not None:
@@ -396,7 +415,17 @@ class ObservationService:
                 )
                 grants[key] = grant
             primary_ids = {header["event_id"] for header in headers}
+            security_at = at
             for key in ids:
+                security_at = self._checked_clock(security_at)
+                if binding is not None:
+                    binding.current(security_at)
+                if authority is not None and (
+                    datetime.fromisoformat(authority["spec"]["expires_at"]) <= security_at
+                ):
+                    raise DerivedError("derived_authority_expired")
+                self._permission(grants[key], definition["spec"]["readers"],
+                                 definition["spec"]["purpose"], security_at, authority)
                 source = await uow.get_source_event(self.scope, key)
                 if source is None or source.scope != self.scope:
                     raise DerivedError("derived_source_unavailable")
@@ -536,9 +565,16 @@ class ObservationService:
         return result
 
     async def publish(self, task, snapshot, prepared):
-        # Own the entire checked contract before any await: callers may retain
-        # references while this coroutine waits for the transaction/scope lock.
+        # Own all caller data before preflight can yield to another coroutine.
         task, snapshot, prepared = deepcopy((task, snapshot, prepared))
+        await self._read_preflight(task.payload["unit"]["facet_id"])
+        try:
+            return await self._publish(task, snapshot, prepared)
+        except Exception:
+            await self._read_preflight(task.payload["unit"]["facet_id"])
+            raise
+
+    async def _publish(self, task, snapshot, prepared):
         # Deterministic recomputation is an output-validation boundary, not a confidence threshold.
         if prepared != self.prepare(snapshot):
             raise DerivedError("derived_output_invalid")
@@ -547,11 +583,16 @@ class ObservationService:
             from ..operations.facet_refresh import checked_job
 
             job = await checked_job(self, uow, task)
+            guarded_at = None
+            if job.get("refresh_execution"):
+                from ..operations.refresh_demand import observed_clock
+
+                guarded_at = await observed_clock(uow, self.scope, self.clock)
             definition = await self._check_unit(uow, task.payload["unit"])
             _, authority = await self.registry.bindings(uow, definition["spec"])
             if snapshot.get("authority") != authority:
                 raise DerivedError("derived_safety_changed")
-            now = self.clock()
+            now = self._checked_clock(guarded_at)
             parents, parent_headers = await self.parents.inputs(
                 uow, definition["spec"], task.payload["unit"].get("parents"), now
             )
@@ -782,7 +823,7 @@ class ObservationService:
             )
             definition.update(next_transition_at=prepared["next_transition_at"])
             await uow.derived_put(self.scope, "definition", facet_id, definition)
-            await invalidate_descendants(uow, self.scope, (facet_id,))
+            await invalidate_descendants(uow, self.scope, (facet_id,), at=now)
             token = "derived-commit:" + digest(
                 [self.scope.partition_key(), job["unit"], revision_id, outcome]
             )
@@ -795,6 +836,11 @@ class ObservationService:
                 completed_at=now.isoformat(),
             )
             await uow.derived_put(self.scope, "job", task.id, job)
+            from ..operations.refresh_demand import publish_coverage
+
+            await publish_coverage(
+                uow, self, job, definition, manifest=manifest, now=now
+            )
             return dict(
                 outcome=outcome,
                 no_outputs=prepared["no_outputs"],
@@ -806,15 +852,80 @@ class ObservationService:
         snapshot = await self.snapshot(task)
         return await self.publish(task, snapshot, self.prepare(snapshot))
 
+    def _checked_clock(self, minimum=None):
+        at = timestamp(self.clock())
+        if minimum is not None and at < minimum:
+            raise DerivedError("refresh_clock_discontinuity")
+        return at
+
+    async def _managed_lineage(self, uow, facet_id):
+        pending, seen = [facet_id], set()
+        while pending:
+            key = pending.pop()
+            if key in seen:
+                continue
+            seen.add(key)
+            if len(seen) > 32:
+                raise DerivedError("derived_parent_capacity")
+            definition = await uow.derived_get(self.scope, "definition", key)
+            if definition and definition.get("refresh_managed"):
+                return True
+            if definition:
+                pending.extend(definition.get("spec", {}).get("parent_facets", ()))
+        return False
+
+    async def _read_preflight(self, facet_id=None, *, target_id=None):
+        # Persist observed time separately: authority/context/grant rejection in
+        # the body transaction must not roll back an already observed expiry.
+        async with self.repository.unit_of_work() as uow:
+            await open_derived(uow, self.scope, self.history_mode)
+            if target_id is not None:
+                receipt = await uow.derived_get(self.scope, "request", identity(target_id))
+                facet_id = (receipt or {}).get("facet_id")
+            if facet_id is not None and await self._managed_lineage(uow, facet_id):
+                from ..operations.refresh_demand import observed_clock
+
+                await observed_clock(uow, self.scope, self.clock)
+
+    async def _clock_delivery(self, uow, facet_id, result):
+        if not await self._managed_lineage(uow, facet_id):
+            return result
+        from ..operations.refresh_demand import observed_clock
+
+        head = await uow.derived_get(self.scope, "head", facet_id)
+        try:
+            now = await observed_clock(uow, self.scope, self.clock)
+        except DerivedError as error:
+            if error.code != "refresh_clock_discontinuity":
+                raise
+            return {**result, "state": "invalid", "body": None, "reason": error.code}
+        if result["state"] in {"ready", "empty"} and head and head.get("next_transition_at") and (
+            datetime.fromisoformat(head["next_transition_at"]) <= now
+        ):
+            return {**result, "state": "stale", "body": None, "reason": "time_coverage_expired"}
+        return result
+
     async def _read(self, uow, facet_id, actor, purpose, *, lineage_checked=False):
         definition = await self._definition(uow, facet_id)
         _, authority = await self.registry.bindings(uow, definition["spec"])
         if actor not in definition["spec"]["readers"] or purpose != definition["spec"]["purpose"]:
             raise DerivedError("derived_read_denied")
+        guarded_at = None
+        if await self._managed_lineage(uow, facet_id):
+            from ..operations.refresh_demand import observed_clock
+
+            try:
+                guarded_at = await observed_clock(uow, self.scope, self.clock)
+            except DerivedError as error:
+                if error.code != "refresh_clock_discontinuity":
+                    raise
+                # This shared current-read path also guards parent and page reads.
+                # A lower wall clock cannot revive an already observed expiry.
+                return dict(facet_id=facet_id, state="invalid", body=None, reason=error.code)
         binding = self._context_binding(definition["spec"])
         if binding is not None:
             try:
-                binding.current(self.clock())
+                binding.current(self._checked_clock(guarded_at))
             except DerivedError as error:
                 return dict(facet_id=facet_id, state="invalid", body=None, reason=error.code)
         head = await uow.derived_get(self.scope, "head", facet_id)
@@ -826,15 +937,22 @@ class ObservationService:
             return dict(facet_id=facet_id, state="invalid", body=None, reason="safety_changed")
         try:
             unit = (await self._unit(uow, definition)).payload()
+            now = self._checked_clock(guarded_at)
+            if head.get("next_transition_at") and (
+                datetime.fromisoformat(head["next_transition_at"]) <= now
+            ):
+                return dict(facet_id=facet_id, state="stale", body=None,
+                            reason="time_coverage_expired")
             if not lineage_checked:
                 await self.parents.inputs(
-                    uow, definition["spec"], unit.get("parents"), self.clock(), readers=(actor,)
+                    uow, definition["spec"], unit.get("parents"), now, readers=(actor,)
                 )
+            now = (await observed_clock(uow, self.scope, self.clock)
+                   if guarded_at is not None else self._checked_clock(now))
         except DerivedError as error:
             return dict(facet_id=facet_id, state="invalid", body=None, reason=error.code)
         if head.get("unit") != unit:
             return dict(facet_id=facet_id, state="stale", body=None, reason="generation_changed")
-        now = self.clock()
         if (
             head.get("next_transition_at")
             and datetime.fromisoformat(head["next_transition_at"]) <= now
@@ -883,8 +1001,10 @@ class ObservationService:
             if row is None or row["version"] != version or row["payload"].get("deleted"):
                 return dict(facet_id=facet_id, state="invalid", body=None, reason="atom_changed")
         if revision["state"] == "empty":
-            return dict(facet_id=facet_id, state="empty", body=None)
-        return dict(
+            return await self._clock_delivery(
+                uow, facet_id, dict(facet_id=facet_id, state="empty", body=None)
+            )
+        result = dict(
             facet_id=facet_id,
             state="ready",
             revision_id=revision["id"],
@@ -895,6 +1015,7 @@ class ObservationService:
                 else {}
             ),
         )
+        return await self._clock_delivery(uow, facet_id, result)
 
     async def read(self, facet_id, *, actor, purpose="agent_context", known_at=None, valid_at=None):
         if known_at is not None or valid_at is not None:
@@ -904,12 +1025,21 @@ class ObservationService:
             async with self.repository.unit_of_work() as uow:
                 await open_derived(uow, self.scope, self.history_mode)
                 return await self.history.read(uow, facet_id, actor, purpose, query)
-        async with self.repository.unit_of_work() as uow:
-            await open_derived(uow, self.scope, self.history_mode)
-            definition = await self._definition(uow, facet_id)
-            if is_page(definition["spec"]):
-                raise DerivedError("derived_resource_kind_mismatch")
-            return await self._read(uow, facet_id, actor, purpose)
+        await self._read_preflight(facet_id)
+        try:
+            async with self.repository.unit_of_work() as uow:
+                await open_derived(uow, self.scope, self.history_mode)
+                definition = await self._definition(uow, facet_id)
+                if is_page(definition["spec"]):
+                    raise DerivedError("derived_resource_kind_mismatch")
+                result = await self._read(uow, facet_id, actor, purpose)
+                from ..operations.refresh_demand import record_guarded_read
+
+                await record_guarded_read(uow, self.scope, definition, result, at=self.clock())
+                return await self._clock_delivery(uow, facet_id, result)
+        except DerivedError:
+            await self._read_preflight(facet_id)
+            raise
 
     async def history_points(self, facet_id, *, actor, purpose="agent_context"):
         async with self.repository.unit_of_work() as uow:

@@ -29,6 +29,9 @@ class PgVectorIndex:
     async def initialize(self, *, install_extension: bool = False) -> None:
         async with self._pool.connection() as connection:
             async with connection.transaction():
+                from .migration import SCHEMA_LOCK_PARAMS, SCHEMA_LOCK_SQL
+
+                await connection.execute(SCHEMA_LOCK_SQL, SCHEMA_LOCK_PARAMS)
                 if install_extension:
                     await connection.execute("CREATE EXTENSION IF NOT EXISTS vector")
                 await connection.execute(

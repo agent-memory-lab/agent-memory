@@ -1,0 +1,158 @@
+{
+  "schema": "v7-batch-validation/1",
+  "batch": "V7-B2",
+  "date": "2026-10-08",
+  "base_commit": "9a0bf2cb2e6d60b6bafcd1135f1148748c5fe5b2",
+  "local_runtime_commit": "eef725b0bfec52119c96cc932a6c4fa7e95f3981",
+  "source_manifest": {
+    ".github/workflows/ci.yml": "9ed3958bad381d6ca2a5c519eba3d1d46b3fc78a16cf80400498c5c4c20ab901",
+    "packages/postgres/migrations/017_refresh_schedule.sql": "65fdb9070f5941de68e02b426e12b2def30043caec035393c65711b2ffa74f91",
+    "packages/postgres/src/agent_memory_postgres/derived.py": "eeff0024c000ef23bfe53034f9f555c6e0e6c5a1e27afb7fec1d69f2a5aa0ea0",
+    "packages/postgres/src/agent_memory_postgres/migration.py": "493abc7c6b89b1d02ddd2b4dcec1bd46b92cca53c6bfb6bf6e8a0444301e74b4",
+    "packages/postgres/src/agent_memory_postgres/ontology_source.py": "fbe7fdfaebddccfa0e119b7ad01175b4b24afa0aecb2bccca5fe660b9d5671ec",
+    "packages/postgres/src/agent_memory_postgres/refresh_schedule.py": "f1eed923cf2ec09304909966bc57da2d82c8da8b485e0a837ac2fd40790d6621",
+    "packages/postgres/src/agent_memory_postgres/repository.py": "f56cff8da5e51e915f4bceec77519525237288e9ace3386ac0f53aa10f42ac58",
+    "packages/postgres/src/agent_memory_postgres/vector.py": "d915ecf34890b90666daa3ba31edb6b4353e9c78ed445128eea210f4b281c4af",
+    "packages/postgres/tests/test_migration_concurrency.py": "4c4e46d55ee9da1f65e4b726fe03c3544ceedaf566bae18dd8c5fadc044907a5",
+    "src/agent_memory/derived/pages.py": "a438e187c6cf22485509898367985f1d895d7a43055b834e4bedfd0d730b3871",
+    "src/agent_memory/derived/parents.py": "12515ba45cc66561548914db10f7a4b18467af08a2f2f6769f42fb2719e342cd",
+    "src/agent_memory/derived/service.py": "b44bda19c3a1e6d5e2d2b67897b6a897e85ffa7e76251324e6b8613ae4e9d34c",
+    "src/agent_memory/derived/subscriptions.py": "1cdc634da5144c49e84ce6f27f58d1666d21f981ac8d0ad581fb3c28db6ca402",
+    "src/agent_memory/operations/facet_refresh.py": "888ae0ebe491d5d72741338e34ffc29139a6242365107445a917714339f519d8",
+    "src/agent_memory/operations/purge_restore.py": "90b9ac086dd4cf123f82abebea9148bd6cc29e04e7296bdb6624b697a150603d",
+    "src/agent_memory/operations/refresh_demand.py": "478d634f624001960a25d613be5becc16ad5a322a6f50ee13b0a0e6f967da323",
+    "src/agent_memory/operations/refresh_host.py": "618d126bf49226e89bb4fd37cf11466ef9b7a0bfd756835bec1004f9e82b54d5",
+    "src/agent_memory/operations/refresh_policy.py": "767ebb979592a7202237637ccd8ef982b91b013ecd623baa123f670f623bb85b",
+    "src/agent_memory/operations/refresh_processor.py": "c676ca291775dba0ce1509578c1cd36d1a5180c4eec553b69659f66995814c18",
+    "src/agent_memory/operations/refresh_schedule_contract.py": "b0dea4d95b1e6c7b7bfdf260ac86e63eb7ab2c795e205a0d6590c2f0b7620551",
+    "src/agent_memory/operations/sqlite_derived.py": "7f20710edceca0075b6ce2b52d003479928bb07ea1570bfe81edc2493bf8d054",
+    "src/agent_memory/operations/sqlite_refresh_schedule.py": "25c172113f82d0dd29f47efeafded6176ee61390ada48054867475bc7b52bdea",
+    "src/agent_memory/ports.py": "0d0dad5cd9a75460426c50b6418b4be30e5e960dce2d712321ebf78c15093bac",
+    "src/agent_memory/sqlite.py": "e6a3930660fcc03caf16c867c3fde87df8610ce73a6b875edb307013aac65612",
+    "tests/fixtures/refresh_crash_child.py": "204e1b64ee6169d6c07f7fdab292b82fb1d076e396e4461aa45dc4734862878d",
+    "tests/test_refresh_clock_delivery.py": "9242861385b1ffcb76228a8b876fb9d6344f5fe7194ae493a5ab1516eddbd90a",
+    "tests/test_refresh_demand.py": "4b856c6261e89675e9cbfe664ae966d4818c2a7c79ebed6a8bd7db505efd8b2a",
+    "tests/test_refresh_host_policy.py": "99efc926d570cff96768c9843b4ece32cd2d6bc782af65c697ac1037c47cbe62",
+    "tests/test_refresh_restore_validation.py": "97183f37f8bca0736740379ffb7d7af94d17eeadcbe2f3c3c09de7dc760934b5",
+    "tests/test_refresh_schedule_storage.py": "720fd711bb4ab33796f1d81481800aaeb9d315feb1682a473dbe98cc8230aef4",
+    "tests/test_refresh_scheduler_boundaries.py": "c1c9a7b2bdbb9a367e686fe8ae39744e2623447099666f81d70c0b5a3b2ec8c2",
+    "tests/test_refresh_scheduler_clock_storage.py": "a2fa0f5d54e19efcae0aaae7d83f1bcf83c857d2fbfe45cf1f8e9298f8262db0",
+    "tests/test_refresh_scheduler_process.py": "ce64e5250cfd35b936df12786ce8afdb6452760a5534444f9558e27beeecf67b"
+  },
+  "source_manifest_sha256": "f7062fefa3304927fccc69ccff5b30f0e2cdb97e4b89cf81e2b43d049d435b2a",
+  "environment": {
+    "python": "3.13.5",
+    "postgresql": "17.11",
+    "pgvector": "0.8.0",
+    "scope": "Disposable isolated test database; synthetic deterministic fixtures only"
+  },
+  "commands": [
+    {
+      "command": ".venv/bin/python -m pytest -o addopts='' -q tests/test_refresh*.py",
+      "source_commit": "30ecfe225b16de660a91bbeb7fe3ffcaa3729489",
+      "passed": 183,
+      "skipped": 1,
+      "failed": 0,
+      "duration_seconds": 46.615,
+      "junit_sha256": "9f253d4cd39a20f8c57d41e291fc9d6d39b0a2b674677714ff08cddef945165c",
+      "backend_counts": {
+        "sqlite": 91,
+        "postgres": 89
+      },
+      "skips": [
+        {
+          "test": "test_postgres_due_and_expired_indexes_are_available[sqlite]",
+          "reason": "PostgreSQL query-plan contract"
+        }
+      ]
+    },
+    {
+      "command": ".venv/bin/python -m pytest -o addopts='' -q tests/test_derived_*.py tests/test_v7_backend_lifecycle.py tests/test_v7_subscriptions.py tests/test_durable_purge.py tests/test_purge_restore.py tests/test_worker_runtime.py tests/test_architecture.py packages/postgres/tests",
+      "source_commit": "30ecfe225b16de660a91bbeb7fe3ffcaa3729489",
+      "passed": 1102,
+      "skipped": 5,
+      "failed": 0,
+      "duration_seconds": 174.666,
+      "junit_sha256": "73918a19396181090159ae7e1e4a1b34e454e697943dcb6edf0e5bb417970776",
+      "backend_counts": {
+        "sqlite": 465,
+        "postgres": 471
+      },
+      "skips": [
+        {
+          "test": "test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[sqlite-append_event]",
+          "reason": "real asynchronous namespace-lock race is PostgreSQL-specific"
+        },
+        {
+          "test": "test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[sqlite-retention_head_put]",
+          "reason": "real asynchronous namespace-lock race is PostgreSQL-specific"
+        },
+        {
+          "test": "test_postgres_write_owns_input_before_waiting_on_real_namespace_lock[sqlite-save_admission_record]",
+          "reason": "real asynchronous namespace-lock race is PostgreSQL-specific"
+        },
+        {
+          "test": "test_postgres_derived_writes_own_mutable_values_before_first_await[sqlite-derived_put]",
+          "reason": "asynchronous SQL helper ownership is PostgreSQL-specific"
+        },
+        {
+          "test": "test_postgres_derived_writes_own_mutable_values_before_first_await[sqlite-derived_edges]",
+          "reason": "asynchronous SQL helper ownership is PostgreSQL-specific"
+        }
+      ]
+    },
+    {
+      "command": ".venv/bin/python -m pytest -o addopts='' -W error::pytest.PytestUnraisableExceptionWarning -W error::ResourceWarning -q packages/postgres/tests tests/test_ontology_postgres_source.py tests/test_refresh_host_policy.py tests/test_refresh_scheduler_process.py",
+      "source_commit": "eef725b0bfec52119c96cc932a6c4fa7e95f3981",
+      "passed": 88,
+      "skipped": 0,
+      "failed": 0,
+      "duration_seconds": 30.786,
+      "junit_sha256": "dba50ad48355ed6abc453ad7f041d5f621f7ef233ffb8a2a48b54d0b4957a7d5",
+      "backend_counts": {
+        "sqlite": 15,
+        "postgres": 26
+      },
+      "skips": []
+    },
+    {
+      "command": ".venv/bin/python -m build --no-isolation . && .venv/bin/python -m build --no-isolation packages/postgres",
+      "result": "passed; core and PostgreSQL sdists/wheels built",
+      "note": "Declared hatchling backend installed in disposable environment before successful build."
+    },
+    {
+      "command": "uv pip install --target <isolated-directory> --no-deps <core-wheel> <postgres-wheel>; python -I import smoke",
+      "result": "passed; imports of scheduler modules and installed PostgreSQL migration017 verified"
+    },
+    {
+      "command": ".venv/bin/ruff check src/agent_memory/operations/refresh_*.py tests/test_refresh*.py",
+      "result": "passed"
+    }
+  ],
+  "review": {
+    "independent": true,
+    "remaining_blockers": [],
+    "fixed": [
+      "clock high-water rollback in denied read/snapshot/publication and lease error paths",
+      "late-completion deadline reporting",
+      "explicit request recovery after exhausted dirty work",
+      "pending-cap tenant starvation",
+      "signed restored clock-floor validation",
+      "late heartbeat versus already committed successful publication",
+      "concurrent PostgreSQL initializer DDL lock-upgrade deadlock"
+    ]
+  },
+  "migration": {
+    "postgres": "017_refresh_schedule.sql",
+    "sqlite": "Additive scheduler contract/due/turn/reservation schema and clock-floor column",
+    "restore": "Signed deletion checkpoint v2 retains durable clock floor; legacy v1 accepted only without required v2 floor",
+    "rollback": "Coordinated stopped writers/workers; preserve current deletion/clock checkpoints; no online downgrade API"
+  },
+  "limitations": [
+    "QuestionView adapter integration follows in B3.",
+    "Monetary/model dispatch reservations and actual model cost are B5.",
+    "Measured production temperature tuning and throughput/latency are not claimed.",
+    "Full release combination and 98-scenario reconciliation remain B6."
+  ],
+  "runtime_question_capabilities_enabled": []
+}

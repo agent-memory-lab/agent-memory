@@ -51,7 +51,11 @@ class PostgresOntologySource:
         await asyncio.to_thread(self._initialize)
 
     def _initialize(self):
+        from .migration import SCHEMA_LOCK_PARAMS, SCHEMA_LOCK_SQL
+
         with self._connection() as connection:
+            # Trigger DDL touches the same core tables as repository startup.
+            connection.execute(SCHEMA_LOCK_SQL, SCHEMA_LOCK_PARAMS)
             connection.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (self.storage_key,))
             connection.execute("""CREATE TABLE IF NOT EXISTS agent_memory_ontology_source (
                 id integer PRIMARY KEY CHECK(id=1), source_id text NOT NULL,

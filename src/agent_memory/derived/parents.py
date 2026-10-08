@@ -60,13 +60,13 @@ def validate_graph(definitions, spec, *, check_readers=True):
     visit(spec["id"], ())
 
 
-async def invalidate_descendants(uow, scope, facets, *, safety=False):
+async def invalidate_descendants(uow, scope, facets, *, safety=False, at=None):
     """Same original writer UoW; definitions are the existing durable outbox."""
     from . import subscriptions
 
     await subscriptions.invalidate(
         uow, scope, tuple(subscriptions.parent_key(key) for key in facets),
-        reason="parent", safety=safety,
+        reason="parent", safety=safety, at=at,
     )
 
 
