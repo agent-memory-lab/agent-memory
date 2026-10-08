@@ -243,7 +243,7 @@ Next steps follow the [v7 plan](docs/design/v7.0.0/plan.md) and [task ledger](do
 3. Deliver bounded project views and deterministic reads, carrying forward the [stage 16 qualified-parent/page plan](docs/design/v6.1.0/stage-16-plan.md).
 4. Add proven deltas and proof reuse, then governed model caching; finish with full capability, recovery and real-cost validation.
 
-The v7 ledger preserves all 44 previous tasks and adds 15 TODOs; it does not declare the remaining v6.1 capabilities complete.
+The v7 ledger preserves all 44 previous task statuses and tracks 15 new tasks. [B0 implementation](docs/design/v7.0.0/batch-b0.md) adds strict question/domain contracts, full-oracle fixtures, and explicit whole-cost acceptance accounting. These are additive protocol and evaluation foundations: no V7 runtime capability is enabled, no schema migration runs, and real-data/model benefits remain unverified.
 
 Advanced retrieval and optional read-only Reflect remain on the [task ledger](docs/design/v6.1.0/task.md). Remote deployments use the [security policy](SECURITY.md) and [threat model](docs/THREAT_MODEL.md); external caches, remote ACL systems, and provider-held copies need their own integration contracts.
 
