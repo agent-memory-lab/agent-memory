@@ -114,3 +114,20 @@ also passed. Exact source fingerprints and the JUnit hash are in `validation-b4.
 CI-only commit `e83d39c` explicitly adds all four B4 suites to the live PostgreSQL job; its YAML
 and exact test collection were checked. These follow-ons extend the canonical B4 sequence after
 `9cff5ee`; no production/model result or deployment is implied.
+
+## Restart-clock CI timing correction (2026-10-08)
+
+The restart/initial-rollback test assumed that the host's complete durable refresh path finished
+within 100 ms. A host can correctly report `running` after clock validation while its provider
+transactions are still in flight. Injecting a 150 ms delay in the real provider's due-index read
+reproduced the same incomplete-receipt assertion on both SQLite and PostgreSQL without changing
+runtime behavior.
+
+`3e0a43b` replaces fixed sleeps with bounded, monotonic-time waits for observed rollback rejection
+and actual durable receipt completion. The test explicitly requires degraded clock health, a
+still-stopped queue, no due-index claim, and no completed receipt before clock recovery. It then
+keeps the mock wall clock at its existing high-water mark and requires exact target coverage,
+healthy running state, and bounded clean shutdown. Normal and deliberately slow provider variants
+exercise the same real claim, publication, and coverage verification paths. No runtime algorithm,
+clock guard, provider contract, or source-body guard was changed. The related run results and
+repeat evidence are recorded separately in `validation-b4.json`.
