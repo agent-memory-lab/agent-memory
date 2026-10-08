@@ -87,6 +87,13 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
+      - name: Use PostgreSQL 17 backup clients
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --yes postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version
+          /usr/lib/postgresql/17/bin/psql --version
       - run: |
           python -m pip install -e '.[dev]'
           python -m pip install -e packages/postgres
