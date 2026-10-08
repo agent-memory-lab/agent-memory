@@ -125,7 +125,7 @@ source event: <event-id>
   <img src="docs/assets/agent-memory-overview.svg" alt="从 L0 来源证据到 L1 原子记忆和语言 Observation；支持有界历史与同 scope 当前语言 L2 页面，L3 仍为后续目标" width="100%">
 </p>
 
-[v6.1 设计](docs/design/AGENT_MEMORY_DESIGN_V6.1.0.md) 分别组织原始来源、被接纳的解释和基于它们构建的视图：
+[v7 设计](docs/design/AGENT_MEMORY_DESIGN_V7.0.0.md) 分别组织原始来源、被接纳的解释和基于它们构建的视图：
 
 | 内容 | 回答的问题 | 当前实现 / 设计目标 |
 | --- | --- | --- |
@@ -214,7 +214,7 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 
 ## 能力状态与路线图
 
-**v0.1.0 是软件版本，v6.1.0 是目标架构版本。** 以下以已提交的[第十五阶段：有界当前语言 L2 页面](docs/design/v6.1.0/stage-15.md)为能力基线。Alpha 表示仍在补齐合同与验收；M0/M1/M2 尚未整体验收，单个阶段完成也不代表完整设计已交付。
+**v0.1.0 是软件版本，v7.0.0 是最新目标架构版本。** 以下以已提交的[第十五阶段：有界当前语言 L2 页面](docs/design/v6.1.0/stage-15.md)为能力基线。Alpha 表示仍在补齐合同与验收；M0/M1/M2 尚未整体验收，单个阶段完成也不代表完整设计已交付。
 
 | 领域 | 已交付范围 | 实施证据 |
 | --- | --- | --- |
@@ -243,12 +243,16 @@ Observation 只开放文档规定的语言模板。发布点和可证明稳定�
 
 这些记录验证协议、事务和恢复行为；合成输入不能代替真实对话 gold、抽取质量评测或生产验收。
 
-后续按依赖推进，详细任务见[实施计划](docs/design/v6.1.0/plan.md)、[任务台账](docs/design/v6.1.0/task.md)与[后续步骤](docs/design/v6.1.0/next-steps.md)：
+**最新目标方案是 [v7.0.0](docs/design/AGENT_MEMORY_DESIGN_V7.0.0.md)。** 它包含完整算法架构与数据流，设计受治理问题视图、合并刷新、确定性增量和精确答案复用。这些新增能力仍待实现，上述运行基线不变。[第十五阶段审计](docs/design/v6.1.0/stage-15-audit.md)及[独立验证](docs/design/v6.1.0/validation-stage-15-audit.json)记录后续修复与代码 `583e20d` 的全量测试。发布时另承接远端 `2b7c4f7` 的[擦除与集成修复](CHANGELOG.md#fixed)；本轮文档更新未重跑其运行测试，前序通过数不覆盖该新提交。
 
-1. **资格保持的当前父与页面。** [第十六阶段计划](docs/design/v6.1.0/stage-16-plan.md) 定义兼容的宿主路由与资格合同，保留条件和例外；尚未实现或验收。
-2. **进一步合成。** 历史父/页面与更广模板需要各自的冻结输入合同和验收；跨 scope 合成仍关闭。
-3. **增量视图与 L3。** delta 暂缓，先证明收益并定义版本化补丁合同；画像推断需独立通过稳定性、反例与质量验收。
-4. **持续质量与模型治理。** 补充可用真实 gold、复杂事实领域、规模恢复，以及外部模型的用途许可、派发与费用约束。
+后续见 [v7 实施计划](docs/design/v7.0.0/plan.md)与[任务台账](docs/design/v7.0.0/task.md)：
+
+1. 冻结问题语义、成本和质量基线，实施精确失效与覆盖证明。
+2. 补齐合并刷新、冷热策略、公平预算和持久宿主 worker。
+3. 实现有界项目问题视图与确定性读取，承接[第十六阶段资格父与页面计划](docs/design/v6.1.0/stage-16-plan.md)。
+4. 实施可证明的增量/证明复用，再接入受治理的模型缓存，最后完整验证能力、恢复与真实成本。
+
+v7 台账保留原有 44 项任务，新增 15 项 TODO，不将 v6.1 的剩余能力视为完成。
 
 高级检索和可选的只读 Reflect 继续按[任务台账](docs/design/v6.1.0/task.md)推进。远程部署见[安全策略](SECURITY.md)和[威胁模型](docs/THREAT_MODEL.md)；外部缓存、远端 ACL 和供应商副本需要各自完成集成合同。
 
@@ -256,7 +260,7 @@ Observation 只开放文档规定的语言模板。发布点和可证明稳定�
 
 | 想了解什么 | 阅读入口 |
 | --- | --- |
-| 设计与模块边界 | [v6.1 架构](docs/design/AGENT_MEMORY_DESIGN_V6.1.0.md) · [代码架构](docs/ARCHITECTURE.md) |
+| 设计与模块边界 | [v7 架构](docs/design/AGENT_MEMORY_DESIGN_V7.0.0.md) · [代码架构](docs/ARCHITECTURE.md) |
 | 事实接纳与自动抽取 | [Atom 接纳](docs/ATOM_ADMISSION.md) · [自动抽取](docs/ATOM_EXTRACTION.md) |
 | 历史事实查询 | [双时态记忆](docs/BITEMPORAL_MEMORY.md) |
 | 当前派生记忆 | [Observation](docs/design/v6.1.0/stage-12.md) · [条件 facet](docs/design/v6.1.0/stage-13.md) · [查询与权限](docs/design/v6.1.0/stage-14a.md) |
@@ -264,11 +268,11 @@ Observation 只开放文档规定的语言模板。发布点和可证明稳定�
 | 任务结果反馈与演化 | [反馈契约](docs/FEEDBACK_CONTRACT.md) · [Evolution 包](packages/evolution/README.md) |
 | 部署配置与故障恢复 | [单机部署](docs/single-host-deployment.md) · [恢复操作](docs/recovery-operations.md) |
 | 评测与资源测量 | [评测方法](docs/LOCAL_MEMORY_COMPARISON_EVAL.md) · [资源基线](docs/RESOURCE_BASELINE.md) |
-| 目标架构与当前进度 | [设计版本](docs/design/README.md) · [实施计划](docs/design/v6.1.0/plan.md) · [任务台账](docs/design/v6.1.0/task.md) |
+| 目标架构与当前进度 | [设计版本](docs/design/README.md) · [v7 实施计划](docs/design/v7.0.0/plan.md) · [v7 任务台账](docs/design/v7.0.0/task.md) |
 
 ## 参与贡献
 
-欢迎贡献适配器、可运行示例、故障恢复用例和评测数据。先查看[任务台账](docs/design/v6.1.0/task.md)中的依赖和待办，再阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
+欢迎贡献适配器、可运行示例、故障恢复用例和评测数据。先查看[任务台账](docs/design/v7.0.0/task.md)中的依赖和待办，再阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 macOS 或 Linux 开发环境：
 

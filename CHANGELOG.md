@@ -7,6 +7,9 @@ the first stable release.
 
 ### Added
 
+- Versioned v7 architecture design with algorithm/data-flow diagrams, implementation plan,
+  inherited-task mapping and explicit planned-versus-implemented boundaries; no v7 runtime capability is enabled by this documentation update.
+
 - Host-bound query context, bounded three-valued conditions and explicit applicability precedence.
 - Versioned complete-field temporal AND/OR support with source-family and business-revision checks.
 - Contextual projections without unconditional Claim leakage; atomic auxiliary-evidence erasure

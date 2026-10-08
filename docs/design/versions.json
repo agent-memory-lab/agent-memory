@@ -1,9 +1,91 @@
 {
   "manifest_schema_version": 1,
   "document_id": "AM-DESIGN",
-  "current_design_version": "6.1.0",
+  "current_design_version": "7.0.0",
   "versioning_scope": "architecture_design_only",
   "versions": [
+    {
+      "version": "7.0.0",
+      "date": "2026-10-08",
+      "status": "PROPOSED_BASELINE",
+      "file": "AGENT_MEMORY_DESIGN_V7.0.0.md",
+      "sha256": "309104c81b2e89ce74137903312ecbeaa036ba192d47fcfbdd555cdd4dc907b9",
+      "predecessor_design": "6.1.0",
+      "implementation_baseline_commit": "583e20d55ea85023f751084f5b86b29e1e92e5bf",
+      "hindsight_reference_commit": "b89ce287464fe10790d67ba86bfabe29d8926253",
+      "research_sources": [
+        {
+          "name": "学习报告.md",
+          "sha256": "b01ba7e732494af91788ac8f3ab4bc0dd553837f8a747af341f549498af5029d"
+        },
+        {
+          "name": "学习案例.jsonl",
+          "sha256": "c84a001ad6db4f9487f1c8a6fc43fa9863a69b77ed4531304a3d9d7ad84e7f50"
+        },
+        {
+          "name": "实验说明.md",
+          "sha256": "c5f1646c54d41b1eb625bbe74657d39e84f9dffbdae4f867afdd24d9ea1ea5e3"
+        },
+        {
+          "name": "提取与接入专题.md",
+          "sha256": "282f5911a154fc20e382fe6bfb6439de8cbe6f28d8136f3e5793b533fc439f09"
+        },
+        {
+          "name": "整理与生命周期专题.md",
+          "sha256": "00b9780128aa79b4a082ecb0b15088d1930432c5ab17f4e0897e5f74a73e8e3a"
+        },
+        {
+          "name": "检索与评测专题.md",
+          "sha256": "4f4129955fb72a2a23a2844d5d4a1cca93ba045604c75229b8dc5a4bc62e0b1b"
+        },
+        {
+          "name": "源码核验清单.json",
+          "sha256": "c958067b20a0afdaf49f93e4514fdd5338833af06e613c8a12768f9382336855"
+        },
+        {
+          "name": "验收问题.json",
+          "sha256": "9d50120ab72ca9ddef486aa8c7a5b6cb267285555c6ab6250ba3b1c9c63eae3e"
+        }
+      ],
+      "research_source_directory": "Hindsight_全面调研_2026-10-06",
+      "change_level": "major",
+      "change_reason": "Versioned question instances, separated immutable content and validation certificates, and explicit coverage targets. Existing L0/L1, bitemporal, safety and published APIs retain their semantics; new contracts are opt-in.",
+      "implementation_status": "v7_new_capabilities_planned_on_stage15_audit_baseline",
+      "implementation_record": "v6.1.0/stage-15-audit.md",
+      "implementation_validation": "v6.1.0/validation-stage-15-audit.json",
+      "execution_plan": "v7.0.0/plan.md",
+      "execution_tasks": "v7.0.0/task.md",
+      "document_validation": "v7.0.0/design-validation.json",
+      "required_acceptance_cases": 98,
+      "inherited_acceptance_cases": 66,
+      "new_acceptance_cases": 32,
+      "invariants": 40,
+      "architecture_decisions": 32,
+      "algorithms": 10,
+      "mermaid_diagrams": 5,
+      "execution_revision": 1,
+      "new_tasks": 15,
+      "new_task_status_counts": {
+        "TODO": 15
+      },
+      "inherited_task_status_counts": {
+        "DONE": 1,
+        "IN_PROGRESS": 33,
+        "TODO": 10
+      },
+      "deployment_calibration_pending": [
+        "predicate_and_source_authority_policies",
+        "models_tokenizers_and_score_calibration",
+        "retention_cost_and_latency_limits",
+        "quality_thresholds_and_dataset_sufficiency",
+        "question_domain_contracts",
+        "refresh_heat_debounce_and_fairness_policy",
+        "real_model_total_cost_and_utility_baseline"
+      ],
+      "external_benchmarks_executed": false,
+      "v7_runtime_tests_executed": false,
+      "publication_integration_commit": "2b7c4f7c49fae9207e1f1faee761cd7262cc383a"
+    },
     {
       "version": "6.1.0",
       "date": "2026-10-06",

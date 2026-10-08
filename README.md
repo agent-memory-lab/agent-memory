@@ -125,7 +125,7 @@ This example supplies the structured claim from host code. It demonstrates persi
   <img src="docs/assets/agent-memory-overview.svg" alt="Agent Memory: host events flow through L0 source evidence, typed admission, and L1 versioned facts to a bounded MemoryBundle. Optional language Observations support bounded history and current same-scope L2 language pages. L3 remains planned. Evidence, time, scope, and erasure govern the flow." width="100%">
 </p>
 
-The [v6.1 design](docs/design/AGENT_MEMORY_DESIGN_V6.1.0.md) separates the source, the accepted interpretation, and the views built from it:
+The [v7 design](docs/design/AGENT_MEMORY_DESIGN_V7.0.0.md) separates the source, the accepted interpretation, and the views built from it:
 
 | Component | Responsibility | Available scope |
 | --- | --- | --- |
@@ -234,12 +234,16 @@ Conditional/historical parents, pages as parents, historical pages, delta update
 
 Validation records include SQLite and real PostgreSQL contracts, cross-connection races, process-kill recovery, and backup replay. The [stage 12 full-suite report](docs/design/v6.1.0/stage-12-full-test.md) is an older baseline; [stage 13](docs/design/v6.1.0/stage-13.md) and stage 14 [A](docs/design/v6.1.0/stage-14a.md)/[B.3](docs/design/v6.1.0/stage-14b3.md)/[C](docs/design/v6.1.0/stage-14c.md) record targeted and affected regression runs. [Stage 15](docs/design/v6.1.0/stage-15.md) records a full repository/package run and build/install verification, with [independent evidence](docs/design/v6.1.0/validation-stage-15.json). Each report applies to its recorded code baseline; counts are not cumulative. Production acceptance, real-domain extraction quality, and full M0/M1/M2 milestone acceptance remain open.
 
-**Next in the [implementation plan](docs/design/v6.1.0/next-steps.md):**
+**The latest target is [v7.0.0](docs/design/AGENT_MEMORY_DESIGN_V7.0.0.md).** It adds a complete algorithm architecture and data flows for governed question views, coalesced refreshes, deterministic deltas and exact answer reuse. These additions remain planned; the current runtime baseline above is unchanged. The latest [stage 15 audit](docs/design/v6.1.0/stage-15-audit.md) and [independent validation](docs/design/v6.1.0/validation-stage-15-audit.json) record subsequent fixes and a full run for code `583e20d`. Publication also incorporates upstream `2b7c4f7` [erasure and integration fixes](CHANGELOG.md#fixed); this documentation change did not rerun those runtime tests, and the earlier counts do not cover that commit.
 
-1. **Qualified current parents and pages:** the [stage 16 plan](docs/design/v6.1.0/stage-16-plan.md) defines compatible host routing and qualification contracts that preserve conditions and exceptions; it is not yet implemented or accepted.
-2. **Further composition:** historical parents/pages and broader templates need their own frozen-input contracts and acceptance; cross-scope composition remains disabled.
-3. **Incremental views and L3:** delta is deferred pending evidence of benefit and a versioned patch contract; inferred profiles require independent stability, counterexample, and quality acceptance.
-4. **Real-world validation:** domain gold, model input and delivery controls, dispatch budgets, and reproducible quality/cost comparisons.
+Next steps follow the [v7 plan](docs/design/v7.0.0/plan.md) and [task ledger](docs/design/v7.0.0/task.md):
+
+1. Freeze question semantics and cost/quality baselines; implement precise invalidation and coverage proofs.
+2. Add coalescing, hot/cold policies, fair budgets and a durable host worker.
+3. Deliver bounded project views and deterministic reads, carrying forward the [stage 16 qualified-parent/page plan](docs/design/v6.1.0/stage-16-plan.md).
+4. Add proven deltas and proof reuse, then governed model caching; finish with full capability, recovery and real-cost validation.
+
+The v7 ledger preserves all 44 previous tasks and adds 15 TODOs; it does not declare the remaining v6.1 capabilities complete.
 
 Advanced retrieval and optional read-only Reflect remain on the [task ledger](docs/design/v6.1.0/task.md). Remote deployments use the [security policy](SECURITY.md) and [threat model](docs/THREAT_MODEL.md); external caches, remote ACL systems, and provider-held copies need their own integration contracts.
 
@@ -247,7 +251,7 @@ Advanced retrieval and optional read-only Reflect remain on the [task ledger](do
 
 | You want to… | Start here |
 | --- | --- |
-| Understand the design | [v6.1 architecture](docs/design/AGENT_MEMORY_DESIGN_V6.1.0.md) · [Module boundaries](docs/ARCHITECTURE.md) |
+| Understand the design | [v7 architecture](docs/design/AGENT_MEMORY_DESIGN_V7.0.0.md) · [Module boundaries](docs/ARCHITECTURE.md) |
 | Admit or extract facts | [Atom admission](docs/ATOM_ADMISSION.md) · [Automatic extraction](docs/ATOM_EXTRACTION.md) |
 | Read facts across time | [Bitemporal memory](docs/BITEMPORAL_MEMORY.md) |
 | Build a controlled language view | [Observation lifecycle](docs/design/v6.1.0/stage-12.md) · [Conditional view](docs/design/v6.1.0/stage-13.md) · [Query and permissions](docs/design/v6.1.0/stage-14a.md) |
@@ -255,11 +259,11 @@ Advanced retrieval and optional read-only Reflect remain on the [task ledger](do
 | Connect feedback and evolution | [Feedback contract](docs/FEEDBACK_CONTRACT.md) · [Evolution package](packages/evolution/README.md) |
 | Deploy and recover | [Single-host deployment](docs/single-host-deployment.md) · [Recovery operations](docs/recovery-operations.md) |
 | Inspect evaluation evidence | [Evaluation methodology](docs/LOCAL_MEMORY_COMPARISON_EVAL.md) · [Resource baseline](docs/RESOURCE_BASELINE.md) |
-| Follow or contribute to development | [Plan](docs/design/v6.1.0/plan.md) · [Tasks](docs/design/v6.1.0/task.md) · [Next steps](docs/design/v6.1.0/next-steps.md) |
+| Follow or contribute to development | [v7 plan](docs/design/v7.0.0/plan.md) · [v7 tasks](docs/design/v7.0.0/task.md) · [Design versions](docs/design/README.md) |
 
 ## Contributing
 
-Useful contributions include **a reproducible edge case, an integration adapter, or a well-annotated evaluation scenario**. Start with the [task ledger](docs/design/v6.1.0/task.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
+Useful contributions include **a reproducible edge case, an integration adapter, or a well-annotated evaluation scenario**. Start with the [task ledger](docs/design/v7.0.0/task.md) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
 ./setup.sh --all

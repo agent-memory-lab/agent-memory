@@ -1,0 +1,340 @@
+{
+  "schema": "agent-memory-design-validation/1",
+  "date": "2026-10-08",
+  "design_version": "7.0.0",
+  "design_sha256": "309104c81b2e89ce74137903312ecbeaa036ba192d47fcfbdd555cdd4dc907b9",
+  "implementation_baseline_commit": "583e20d55ea85023f751084f5b86b29e1e92e5bf",
+  "publication_integration_commit": "2b7c4f7c49fae9207e1f1faee761cd7262cc383a",
+  "scope": "documentation_only",
+  "status": "passed",
+  "checks": [
+    {
+      "check": "INV- count and uniqueness",
+      "passed": true,
+      "detail": {
+        "count": 40,
+        "expected": 40
+      }
+    },
+    {
+      "check": "ADR- count and uniqueness",
+      "passed": true,
+      "detail": {
+        "count": 32,
+        "expected": 32
+      }
+    },
+    {
+      "check": "32 numbered chapters",
+      "passed": true,
+      "detail": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "11",
+        "12",
+        "13",
+        "14",
+        "15",
+        "16",
+        "17",
+        "18",
+        "19",
+        "20",
+        "21",
+        "22",
+        "23",
+        "24",
+        "25",
+        "26",
+        "27",
+        "28",
+        "29",
+        "30",
+        "31",
+        "32"
+      ]
+    },
+    {
+      "check": "algorithms A0-A9",
+      "passed": true,
+      "detail": [
+        "A0",
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+        "A8",
+        "A9"
+      ]
+    },
+    {
+      "check": "inherited_invariants",
+      "passed": true,
+      "detail": {
+        "count": 32,
+        "missing": []
+      }
+    },
+    {
+      "check": "inherited_acceptance",
+      "passed": true,
+      "detail": {
+        "count": 66,
+        "missing": []
+      }
+    },
+    {
+      "check": "98 unique acceptance specifications",
+      "passed": true,
+      "detail": {
+        "count": 98
+      }
+    },
+    {
+      "check": "frozen AGENT_MEMORY_DESIGN_V6.1.0.md",
+      "passed": true,
+      "detail": "ece08b05d076d2741aa70bb45293b46d5008aaa312dffdb0bd18f01b8a7bf61b"
+    },
+    {
+      "check": "frozen AGENT_MEMORY_DESIGN_V6.0.0.md",
+      "passed": true,
+      "detail": "f16f0a3fb1da497b6ef73c96851de04b0cc42ac9353fa9f4278b26122dfe39d0"
+    },
+    {
+      "check": "frozen AGENT_MEMORY_DESIGN_V5.0.0.md",
+      "passed": true,
+      "detail": "83330a5c8e7921aa56ea76afbb9e8a9b255a5a22732ae4f7c20816deaf25517f"
+    },
+    {
+      "check": "preserved user draft docs/AGENT_MEMORY_ARCHITECTURE_PLAN.md",
+      "passed": true,
+      "detail": "81095de8aa02db4f59a643d0d6708b4fa9ee415bfb3f230bab4a7abf962fe849"
+    },
+    {
+      "check": "historical manifest records preserved",
+      "passed": true,
+      "detail": {
+        "historical_versions": 3
+      }
+    },
+    {
+      "check": "current version and design hash",
+      "passed": true,
+      "detail": "309104c81b2e89ce74137903312ecbeaa036ba192d47fcfbdd555cdd4dc907b9"
+    },
+    {
+      "check": "plan.md design binding",
+      "passed": true,
+      "detail": "309104c81b2e89ce74137903312ecbeaa036ba192d47fcfbdd555cdd4dc907b9"
+    },
+    {
+      "check": "task.md design binding",
+      "passed": true,
+      "detail": "309104c81b2e89ce74137903312ecbeaa036ba192d47fcfbdd555cdd4dc907b9"
+    },
+    {
+      "check": "15 unique AM70 tasks",
+      "passed": true,
+      "detail": [
+        "AM70-T01",
+        "AM70-T02",
+        "AM70-T03",
+        "AM70-T04",
+        "AM70-T05",
+        "AM70-T06",
+        "AM70-T07",
+        "AM70-T08",
+        "AM70-T09",
+        "AM70-T10",
+        "AM70-T11",
+        "AM70-T12",
+        "AM70-T13",
+        "AM70-T14",
+        "AM70-T15"
+      ]
+    },
+    {
+      "check": "all new runtime tasks TODO",
+      "passed": true,
+      "detail": {
+        "new_runtime_tasks_completed": 0
+      }
+    },
+    {
+      "check": "44 previous task identities/states retained",
+      "passed": true,
+      "detail": {
+        "DONE": 1,
+        "IN_PROGRESS": 33,
+        "TODO": 10
+      }
+    },
+    {
+      "check": "32 acceptance cases mapped to primary owners",
+      "passed": true,
+      "detail": {
+        "case_count": 32,
+        "unknown_tasks": []
+      }
+    },
+    {
+      "check": "5 Mermaid diagrams render from final source",
+      "passed": true,
+      "detail": {
+        "diagram_count": 5,
+        "renderer": "@mermaid-js/mermaid-cli",
+        "results": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "check": "local Markdown links and anchors",
+      "passed": true,
+      "detail": {
+        "checked": 273,
+        "broken": []
+      }
+    },
+    {
+      "check": "README.md latest target with prior runtime evidence",
+      "passed": true,
+      "detail": {
+        "software_version_unchanged": true
+      }
+    },
+    {
+      "check": "README.zh-CN.md latest target with prior runtime evidence",
+      "passed": true,
+      "detail": {
+        "software_version_unchanged": true
+      }
+    },
+    {
+      "check": "numbered section references",
+      "passed": true,
+      "detail": {
+        "missing": [],
+        "checked": 28
+      }
+    },
+    {
+      "check": "balanced fenced blocks",
+      "passed": true,
+      "detail": {
+        "fences": 30
+      }
+    },
+    {
+      "check": "documentation-only change scope",
+      "passed": true,
+      "detail": {
+        "unexpected": []
+      }
+    },
+    {
+      "check": "git diff whitespace",
+      "passed": true,
+      "detail": ""
+    }
+  ],
+  "runtime_tests_run_this_change": false,
+  "prior_runtime_evidence": {
+    "path": "../v6.1.0/validation-stage-15-audit.json",
+    "unique_passed": 2374,
+    "not_v7_runtime_acceptance": true
+  },
+  "diagram_rendering": {
+    "package_version": "12.0.0",
+    "browser": "local Google Chrome via Puppeteer",
+    "command": "mmdc -i <extracted-source.mmd> -o <diagram.svg> -p <local-Chrome-config.json> -b white --size 2200",
+    "diagrams": [
+      {
+        "index": 1,
+        "source_sha256": "ffaa9e3ae23b9a18d93a04cb6c0ba86065d213a715e0002c030a2730376b845b",
+        "svg_render_exit": 0
+      },
+      {
+        "index": 2,
+        "source_sha256": "740cadcacc7bbcd66159b160f70aea2c90eed36771a11a258745e7e29d4a9759",
+        "svg_render_exit": 0
+      },
+      {
+        "index": 3,
+        "source_sha256": "0341184f04803724e2bfa36a90669dcdacbd9aca5821397347af1b29a9fcd5a0",
+        "svg_render_exit": 0
+      },
+      {
+        "index": 4,
+        "source_sha256": "c005500a21be7c19f4a342b5b69b61495ffe641ee79f040c2ee7adca125ed8bf",
+        "svg_render_exit": 0
+      },
+      {
+        "index": 5,
+        "source_sha256": "6f6fcbef467d2324e2e9cf2edd073baa46bffbfe352ae8620df0c04cd0120ca3",
+        "svg_render_exit": 0
+      }
+    ],
+    "visual_inspection": "Overall architecture, write/refresh flow, and read flow inspected from PNG previews; no clipped labels or missing paths observed."
+  },
+  "document_paths_relative_to": "repository_root",
+  "documents": [
+    {
+      "path": "README.md",
+      "sha256": "3f149367e6c0f7a4dcdadb8eef2f33e55c7fe3dd54688e2b1ef3219fb5bfe1e9"
+    },
+    {
+      "path": "README.zh-CN.md",
+      "sha256": "5ad93fc55a61f2f4569dcf40776a662d58d3fbd0497bb20ed34ac9ac7cb4bd10"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "sha256": "d8312995249679097c900e8965a4d6e80e6a10d7d7a870634603d45a7292e16a"
+    },
+    {
+      "path": "docs/ARCHITECTURE.md",
+      "sha256": "10227b8964e3cdd44f1102e9647800dbf9b668373573071e0d4c1de515b88a49"
+    },
+    {
+      "path": "docs/design/README.md",
+      "sha256": "c9097dbdbbbd26eecf4057974643726dca20fbc6487350994b963596acb7f240"
+    },
+    {
+      "path": "docs/design/CHANGELOG.md",
+      "sha256": "a4d933e0f521f3adee9ef02418d58e3a6f5bcf0112762e4f99133b02b4651aec"
+    },
+    {
+      "path": "docs/design/AGENT_MEMORY_DESIGN_V7.0.0.md",
+      "sha256": "309104c81b2e89ce74137903312ecbeaa036ba192d47fcfbdd555cdd4dc907b9"
+    },
+    {
+      "path": "docs/design/v7.0.0/plan.md",
+      "sha256": "6fdf34efc598781380af80ae9e966ed9a2adeb0139b04d914f082b7848adca14"
+    },
+    {
+      "path": "docs/design/v7.0.0/task.md",
+      "sha256": "e7d042a633c9b9b8684fda564c98a22bbf11907be311d5dbaaa8046bb5546680"
+    }
+  ],
+  "limitations": [
+    "No v7 runtime code is implemented or enabled by this change.",
+    "Prior test counts are not validation of new v7 capabilities or the subsequently integrated remote runtime fixes.",
+    "No new Hindsight benchmark or real-model cost experiment was executed.",
+    "Rendered previews were temporary validation artifacts; Mermaid sources are versioned in the design."
+  ]
+}
