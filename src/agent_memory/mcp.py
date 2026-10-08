@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -394,6 +395,72 @@ class MCPMemoryTools:
             ]
         return tuple(enabled)
 
+    def validate_tool_arguments(self, name: str, arguments: Mapping[str, Any]) -> None:
+        """Validate block/feedback JSON values before a transport can coerce them.
+
+        Keep this in the dependency-free contract so embedded and MCP clients
+        reject the same malformed requests before any provider operation.
+        """
+        if not (
+            name.startswith("memory_block_")
+            or name.startswith("memory_record_")
+            or name == "memory_feedback_status"
+        ):
+            return
+        spec = next((tool for tool in self.list_tools() if tool["name"] == name), None)
+        if spec is None:
+            # Preserve capability-disabled and unknown-tool errors in dispatch.
+            return
+        if not isinstance(arguments, Mapping):
+            raise MCPToolError("arguments must be an object")
+        if not all(isinstance(field, str) for field in arguments):
+            raise MCPToolError("argument names must be strings")
+        schema = spec["inputSchema"]
+        properties = schema["properties"]
+        required = set(schema["required"])
+        for field in sorted(set(arguments) - set(properties)):
+            raise MCPToolError("unknown tool argument", field=field)
+        for field in sorted(required - set(arguments)):
+            raise MCPToolError("missing required tool argument", field=field)
+        # These existing optional fields use None as absence in SDK/host calls.
+        # Required success explicitly permits null in the published schema.
+        nullable_optional = {
+            "block_id", "record_id", "run_id", "bundle_id", "idempotency_key",
+            "corrects_id", "evaluation_id", "termination_reason", "score",
+            "outcome_status", "channels",
+        }
+        for field, value in arguments.items():
+            if value is None and field not in required and field in nullable_optional:
+                continue
+            self._validate_json_value(value, properties[field], field)
+
+    @classmethod
+    def _validate_json_value(cls, value: Any, rule: Mapping[str, Any], field: str) -> None:
+        kind = rule.get("type")
+        kinds = kind if isinstance(kind, list) else [kind]
+        valid_types = {
+            "string": isinstance(value, str),
+            "integer": type(value) is int,
+            "number": type(value) in (int, float),
+            "boolean": type(value) is bool,
+            "null": value is None,
+            "array": isinstance(value, list),
+            "object": isinstance(value, Mapping),
+        }
+        if kind is not None and not any(valid_types.get(item, False) for item in kinds):
+            raise MCPToolError(f"{field} has an invalid JSON type", field=field)
+        if "enum" in rule and value not in rule["enum"]:
+            raise MCPToolError(f"{field} must be one of the supported values", field=field)
+        if type(value) is float and not math.isfinite(value):
+            raise MCPToolError(f"{field} must be finite", field=field)
+        if "minimum" in rule and value < rule["minimum"]:
+            raise MCPToolError(f"{field} is below its minimum", field=field)
+        if "maximum" in rule and value > rule["maximum"]:
+            raise MCPToolError(f"{field} exceeds its maximum", field=field)
+        if kind == "array" and "items" in rule:
+            for index, item in enumerate(value):
+                cls._validate_json_value(item, rule["items"], f"{field}[{index}]")
+
     async def call_tool(
         self,
         name: str,
@@ -401,6 +468,7 @@ class MCPMemoryTools:
         context: MCPRequestContext,
     ) -> dict[str, Any]:
         try:
+            self.validate_tool_arguments(name, arguments)
             if name == "memory_derived":
                 from .derived.model import DerivedError
 

@@ -20,7 +20,7 @@ jobs:
       - run: |
           python -m pip install -e '.[dev]'
           python -m pip install -e packages/python-sdk
-          python -m pip install -e packages/mcp-server
+          python -m pip install -e 'packages/mcp-server[dev]'
           python -m pip install -e packages/postgres
       - run: python -m pytest -q tests
 
@@ -37,7 +37,7 @@ jobs:
           python -m pip install -e packages/evolution
           python -m pip install -e packages/langgraph
           python -m pip install -e packages/python-sdk
-          python -m pip install -e packages/mcp-server
+          python -m pip install -e 'packages/mcp-server[dev]'
           python -m pip install -e packages/postgres
       - run: >-
           python -m pytest -q
@@ -66,7 +66,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17
+        image: pgvector/pgvector:pg17
         env:
           POSTGRES_USER: memory
           POSTGRES_PASSWORD: memory-test-password
@@ -91,7 +91,7 @@ jobs:
           python -m pip install -e '.[dev]'
           python -m pip install -e packages/postgres
           python -m pip install -e packages/python-sdk
-          python -m pip install -e packages/mcp-server
+          python -m pip install -e 'packages/mcp-server[dev]'
       - run: >-
           python -m pytest -q packages/postgres/tests
           tests/test_bitemporal_claims.py tests/test_atom_admission.py tests/test_atom_temporal.py
@@ -99,4 +99,4 @@ jobs:
           tests/test_durable_retention.py tests/test_durable_execution.py
           tests/test_durable_producer.py tests/test_durable_transport.py
           tests/test_reprocessing.py tests/test_source_revisions.py
-          tests/test_contextual_memory.py
+          tests/test_contextual_memory.py tests/test_artifact_erasure.py

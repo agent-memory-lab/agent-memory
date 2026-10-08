@@ -42,6 +42,26 @@ the first stable release.
 - LangGraph lifecycle adapter.
 - Controlled Procedure candidate evaluation, promotion, activation, and rollback.
 
+### Fixed
+
+- Erasing evidence now conservatively invalidates dependent free-text blocks, episodes,
+  and procedures, including archived artifacts and child scopes, instead of retaining
+  text after stripping provenance. Direct reads and search apply matching validity guards.
+- pgvector deletion requires the authorized scope and follows authoritative primary-store
+  deletion, including retry cleanup of absent blocks after a sidecar failure. Conflicting
+  vector identities cannot be reassigned across scopes.
+- MCP transports preserve historical query timestamps and register all nine supported block
+  and feedback operations with canonical capability-filtered tool schemas. Unknown arguments
+  now fail validation instead of being silently ignored.
+- LangGraph capture processes complete multi-message updates, deduplicates replayed
+  histories, and retains stable event identities when capture must be retried.
+
+Compatibility: initialization applies an additive typed local-memory identity tombstone table for
+erasure fencing; the public protocol and core schema versions are unchanged. Direct
+`PgVectorIndex.delete` callers must pass `scope=...`; the high-level block API is unchanged.
+Erasing one source of a free-text derived artifact removes the complete artifact because
+arbitrary prose cannot be safely redacted by removing a provenance reference.
+
 ### Security
 
 - Governed Atom sources and derived audit events cannot bypass admission through recall.

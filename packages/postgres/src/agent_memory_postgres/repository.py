@@ -41,6 +41,11 @@ from agent_memory.domain import (
     StateDelta,
     utc_now,
 )
+from agent_memory.operations.artifact_dependencies import (
+    ArtifactValidity,
+    affected_memory_keys,
+    dependency_ids,
+)
 from agent_memory.retrieval.temporal_history import temporal_candidates
 from agent_memory.serialization import to_jsonable
 
@@ -190,6 +195,15 @@ class PostgresMemoryUnitOfWork:
         return tuple(row["id"] for row in await cursor.fetchall())
 
     async def supersede_feedback(self, scope: MemoryScope, record_id: str) -> None:
+        await admission.lock_scope(self.connection, scope)
+        cursor = await self.connection.execute(
+            "SELECT feedback_status, invalidated_at FROM agent_memory_evolution_records "
+            "WHERE partition_key=%s AND id=%s FOR UPDATE", (scope.partition_key(), record_id),
+        )
+        previous = await cursor.fetchone()
+        if previous and (previous["feedback_status"] == FeedbackStatus.INVALIDATED
+                         or previous["invalidated_at"] is not None):
+            raise ValueError("corrected feedback is no longer valid")
         await self.connection.execute(
             """
             UPDATE agent_memory_evolution_records SET feedback_status = %s
@@ -253,6 +267,8 @@ class PostgresMemoryUnitOfWork:
     async def events_exist(self, scope: MemoryScope, event_ids: Sequence[str]) -> bool:
         if not event_ids:
             return False
+        # Hold the same namespace fence as forget until the artifact commit.
+        await admission.lock_scope(self.connection, scope)
         where, params = self._repository._visible_scope_clause(scope)
         cursor = await self.connection.execute(
             f"""
@@ -582,7 +598,9 @@ class PostgresMemoryUnitOfWork:
         return self._repository._claim_from_row(row) if row else None
 
     async def claim_is_effective(self, claim: Claim, valid_at: datetime) -> bool:
-        claims = await PostgresClaimHistory(self._repository).read(self.connection, claim.scope, valid_at, utc_now())
+        claims = await PostgresClaimHistory(self._repository).read(
+            self.connection, claim.scope, valid_at, utc_now()
+        )
         return any(current.id == claim.id for current in claims)
 
     async def save_claim(self, claim: Claim) -> None:
@@ -595,7 +613,11 @@ class PostgresMemoryUnitOfWork:
             SET status = 'superseded', valid_to = %s, superseded_by = %s
             WHERE id = %s AND status = 'active' AND version = %s
             """,
-            (current.valid_from if current.valid_from > previous.valid_from else previous.valid_to, current.id, previous.id, previous.version),
+            (
+                current.valid_from
+                if current.valid_from > previous.valid_from else previous.valid_to,
+                current.id, previous.id, previous.version,
+            ),
         )
         if cursor.rowcount != 1:
             raise RuntimeError("claim update conflict")
@@ -649,6 +671,7 @@ class PostgresMemoryUnitOfWork:
         )
 
     async def save_episode(self, episode: Episode) -> None:
+        await self._repository._validate_artifact_write(self.connection, episode)
         text = "\n".join(
             (
                 f"Observation: {episode.observation}",
@@ -672,6 +695,7 @@ class PostgresMemoryUnitOfWork:
         )
 
     async def save_procedure(self, procedure: Procedure) -> None:
+        await self._repository._validate_artifact_write(self.connection, procedure)
         text = "\n".join((procedure.name, procedure.trigger, *procedure.steps))
         quality = 1.0 if procedure.status == ArtifactStatus.ACTIVE else 0.5
         await self._repository._insert_artifact(
@@ -689,6 +713,7 @@ class PostgresMemoryUnitOfWork:
         )
 
     async def save_block(self, block: MemoryBlock, expected_version: int) -> MemoryBlock:
+        await self._repository._validate_artifact_write(self.connection, block)
         cursor = await self.connection.execute(
             "SELECT * FROM agent_memory_artifacts WHERE id = %s FOR UPDATE",
             (block.id,),
@@ -868,8 +893,10 @@ class PostgresMemoryRepository:
                 from . import derived
 
                 cursor = await connection.execute(
-                    "SELECT r.* FROM agent_memory_admission_records r LEFT JOIN agent_memory_derived_atom_headers h "
-                    "ON r.partition_key=h.partition_key AND r.record_id=h.identity WHERE h.identity IS NULL"
+                    "SELECT r.* FROM agent_memory_admission_records r "
+                    "LEFT JOIN agent_memory_derived_atom_headers h "
+                    "ON r.partition_key=h.partition_key AND r.record_id=h.identity "
+                    "WHERE h.identity IS NULL"
                 )
                 for row in await cursor.fetchall():
                     await derived.header(
@@ -895,7 +922,9 @@ class PostgresMemoryRepository:
     async def admission_snapshot(self, scope: MemoryScope) -> tuple[dict[str, Any], ...]:
         async with self.pool.connection() as connection:
             async with connection.transaction():
-                await connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+                await connection.execute(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+                )
                 return await admission.read_snapshot(connection, scope)
 
     async def admission_record(self, scope: MemoryScope, record_id: str):
@@ -912,13 +941,17 @@ class PostgresMemoryRepository:
     async def admission_protected_sources(self, scope: MemoryScope) -> tuple[str, ...]:
         async with self.pool.connection() as connection:
             async with connection.transaction():
-                await connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+                await connection.execute(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+                )
                 return await admission.protected_sources(connection, scope)
 
     async def claims_at(self, scope, *, valid_at, known_at):
         async with self.pool.connection() as connection:
             async with connection.transaction():
-                await connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+                await connection.execute(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+                )
                 return await PostgresClaimHistory(self).read(connection, scope, valid_at, known_at)
 
     async def current_claims(self, scope: MemoryScope) -> Sequence[Claim]:
@@ -969,8 +1002,13 @@ class PostgresMemoryRepository:
     async def search(self, query: MemoryQuery, limit: int) -> Sequence[MemoryItem]:
         if query.valid_at is not None or query.known_at is not None:
             now = utc_now()
-            claims = await self.claims_at(query.scope, valid_at=query.valid_at or now, known_at=query.known_at or now)
-            return temporal_candidates(claims, query.text, limit) if MemoryChannel.SEMANTIC in query.channels else ()
+            claims = await self.claims_at(
+                query.scope, valid_at=query.valid_at or now, known_at=query.known_at or now
+            )
+            return (
+                temporal_candidates(claims, query.text, limit)
+                if MemoryChannel.SEMANTIC in query.channels else ()
+            )
         where, params = self._visible_scope_clause(query.scope)
         text = query.text.strip()
         candidates: list[MemoryItem] = []
@@ -1034,10 +1072,10 @@ class PostgresMemoryRepository:
             if query.channels:
                 artifact_kinds.append(str(MemoryKind.BLOCK))
             if artifact_kinds:
-                artifacts = await self._search_rows(
+                artifacts = await self._search_live_artifacts(
                     connection,
-                    "agent_memory_artifacts",
-                    where + " AND archived_at IS NULL AND kind = ANY(%s)",
+                    query.scope,
+                    where + f" AND {self._artifact_validity_sql()} AND kind = ANY(%s)",
                     (*params, artifact_kinds),
                     text,
                     limit,
@@ -1076,15 +1114,47 @@ class PostgresMemoryRepository:
                     )
         return tuple(sorted(candidates, key=lambda item: item.score, reverse=True)[:limit])
 
+    @staticmethod
+    def _artifact_validity_sql() -> str:
+        """Fail closed on stale evidence before all direct and ranked reads."""
+        table = "agent_memory_artifacts"
+        visibility = " AND ".join(
+            f"(source.{field} IS NULL OR source.{field} = {table}.{field})"
+            for field in ("user_id", "agent_id", "workspace_id", "session_id")
+        )
+
+        def sources_valid(document, field):
+            value = f"{table}.{document} -> '{field}'"
+            array = f"CASE WHEN jsonb_typeof({value})='array' THEN {value} ELSE '[]'::jsonb END"
+            return (
+                f"jsonb_array_length({array}) > 0 "
+                f"AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements({array}) AS evidence(value) "
+                "WHERE jsonb_typeof(evidence.value) != 'string' OR NOT EXISTS "
+                "(SELECT 1 FROM agent_memory_events source "
+                "WHERE source.id = evidence.value #>> '{}' AND source.archived_at IS NULL "
+                f"AND source.tenant_id = {table}.tenant_id "
+                f"AND source.namespace = {table}.namespace AND {visibility}))"
+            )
+
+        provenance = sources_valid("provenance_json", "source_event_ids")
+        block_sources = sources_valid("payload_json", "event_ids")
+        return (
+            f"{table}.archived_at IS NULL AND {table}.status IN ('active', 'candidate') "
+            f"AND ({provenance}) AND ({table}.kind != 'block' OR "
+            f"({table}.status = 'active' AND {block_sources}))"
+        )
+
     async def read_block(self, scope: MemoryScope, block_id: str) -> MemoryBlock | None:
         where, params = self._visible_scope_clause(scope)
         async with self.pool.connection() as connection:
             cursor = await connection.execute(
                 f"SELECT * FROM agent_memory_artifacts WHERE {where} AND id = %s "
-                "AND kind = %s AND archived_at IS NULL",
+                f"AND kind = %s AND {self._artifact_validity_sql()}",
                 (*params, block_id, str(MemoryKind.BLOCK)),
             )
             row = await cursor.fetchone()
+            if row and not await self._live_artifact_rows(connection, scope, [row]):
+                row = None
         return self._block_from_row(row) if row else None
 
     async def search_blocks(
@@ -1096,13 +1166,14 @@ class PostgresMemoryRepository:
     ) -> Sequence[MemoryBlock]:
         where, params = self._visible_scope_clause(scope)
         async with self.pool.connection() as connection:
-            rows = await self._search_rows(
+            rows = await self._search_live_artifacts(
                 connection,
-                "agent_memory_artifacts",
-                where + " AND kind = %s AND status = 'active' AND archived_at IS NULL",
-                (*params, str(MemoryKind.BLOCK)),
+                scope,
+                where + f" AND kind = %s AND {self._artifact_validity_sql()} "
+                "AND COALESCE(payload_json ->> 'channel', 'semantic')=ANY(%s)",
+                (*params, str(MemoryKind.BLOCK), list(map(str, channels))),
                 text.strip(),
-                min(limit * 4, 500),
+                limit,
             )
         allowed = set(channels)
         return tuple(
@@ -1116,6 +1187,154 @@ class PostgresMemoryRepository:
             async with connection.transaction():
                 return await self._forget_on_connection(connection, request)
 
+    async def _artifact_dependency_rows(
+        self, connection, scope, identities=None, *, tombstones=False, lock=False
+    ):
+        rows = []
+        tables = [
+            ("events", ", archived_at"), ("claims", ", provenance_json, archived_at, status"),
+            ("artifacts", ", payload_json, provenance_json, archived_at, status, kind"),
+            ("evolution_records", ", payload_json, parent_id, feedback_status, invalidated_at"),
+        ]
+        if tombstones:
+            tables.append(("memory_tombstones", ", memory_table"))
+        for table, columns in tables:
+            filter_sql = " AND id=ANY(%s)" if identities is not None else ""
+            params = (scope.tenant_id, scope.namespace)
+            if identities is not None:
+                params += (list(identities),)
+            cursor = await connection.execute(
+                "SELECT id, partition_key, tenant_id, namespace, user_id, agent_id, "
+                f"workspace_id, session_id{columns} FROM agent_memory_{table} "
+                "WHERE tenant_id=%s AND namespace=%s" + filter_sql
+                + (" FOR UPDATE" if lock else ""),
+                params,
+            )
+            for original in await cursor.fetchall():
+                row = dict(original, table="feedback" if table == "evolution_records" else table)
+                for field in ("payload", "provenance"):
+                    row[field] = row.pop(field + "_json", {})
+                rows.append(row)
+        return rows
+
+    async def _search_live_artifacts(self, connection, scope, where, params, text, limit):
+        """Hydrate bounded matching pages; revoked entries never consume the limit."""
+        accepted, seen = [], set()
+        batch_size = min(max(limit, 32), 256)
+        while len(accepted) < limit:
+            rows = await self._search_rows(
+                connection, "agent_memory_artifacts", where + " AND NOT (id=ANY(%s))",
+                (*params, list(seen)), text, batch_size,
+            )
+            if not rows:
+                break
+            seen.update(row["id"] for row in rows)
+            accepted.extend(await self._live_artifact_rows(connection, scope, rows))
+            if len(rows) < batch_size:
+                break
+        return accepted[:limit]
+
+    async def _live_artifact_rows(self, connection, scope, rows):
+        candidates = [dict(
+            row, table="artifacts", payload=_object(row["payload_json"]),
+            provenance=_object(row["provenance_json"]),
+        ) for row in rows]
+        validity = await self._artifact_validity(connection, scope, candidates)
+        return [row for row, candidate in zip(rows, candidates, strict=True)
+                if validity.accepts(candidate)]
+
+    async def _artifact_validity(self, connection, scope, candidates):
+        graph = []
+        pending = {row["id"] for row in candidates}
+        for row in candidates:
+            pending.update(dependency_ids(row))
+        seen = set()
+        while pending:
+            batch = set(sorted(pending)[:256])
+            pending.difference_update(batch)
+            seen.update(batch)
+            rows = await self._artifact_dependency_rows(
+                connection, scope, batch, tombstones=True
+            )
+            graph.extend(rows)
+            for row in rows:
+                pending.update(dependency_ids(row) - seen)
+        graph.extend(candidates)
+        return ArtifactValidity(graph)
+
+    async def _validate_artifact_write(self, connection, item):
+        await admission.lock_scope(connection, item.scope)
+        payload = to_jsonable(item)
+        row = dict(
+            **to_jsonable(item.scope), partition_key=item.scope.partition_key(),
+            id=item.id, table="artifacts", kind=("block" if isinstance(item, MemoryBlock)
+                else "episode" if isinstance(item, Episode) else "procedure"),
+            payload=payload, provenance=payload["provenance"], status=str(item.status),
+        )
+        validity = await self._artifact_validity(connection, item.scope, [row])
+        if not validity.accepts(row, writing=True):
+            raise ValueError(
+                "artifact dependencies are missing, inactive, or outside authorized scope"
+            )
+
+    async def _forget_artifact_dependencies(self, connection, request, claim_ids, rows):
+        direct = {(row["table"], row["id"]) for row in rows if (
+            row["partition_key"] == request.scope.partition_key()
+            and (request.all_in_scope or row["id"] in request.memory_ids)
+        )}
+        impacted = direct | {("claims", identity) for identity in claim_ids}
+        event_ids = {identity for table, identity in direct if table == "events"}
+        impacted.update(("claims", row["id"]) for row in rows if (
+            row["table"] == "claims"
+            and event_ids.intersection(row["provenance"].get("source_event_ids", ()))
+        ))
+        affected = affected_memory_keys(rows, impacted)
+        dependent = {identity for table, identity in affected - direct if table == "artifacts"}
+        erased = set(direct)
+        erased.update(("artifacts", identity) for identity in dependent)
+        erased.update(("claims", identity) for identity in claim_ids)
+        erased.update(("claims", row["id"]) for row in rows if (
+            row["table"] == "claims"
+            and event_ids.intersection(row["provenance"].get("source_event_ids", ()))
+            and not set(row["provenance"].get("source_event_ids", ())) - event_ids
+        ))
+        if request.mode == ForgetMode.ERASE:
+            for row in rows:
+                if row["table"] in {"events", "claims", "artifacts"} and (
+                    row["table"], row["id"]
+                ) in erased:
+                    await connection.execute(
+                        "INSERT INTO agent_memory_memory_tombstones VALUES "
+                        "(%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+                        (row["partition_key"], row["id"], row["table"], *(
+                            row[field] for field in (
+                                "tenant_id", "namespace", "user_id", "agent_id",
+                                "workspace_id", "session_id",
+                            )
+                        )),
+                    )
+        if dependent:
+            if request.mode == ForgetMode.ERASE:
+                await connection.execute(
+                    "DELETE FROM agent_memory_artifacts WHERE id=ANY(%s)", (list(dependent),)
+                )
+            else:
+                await connection.execute(
+                    "UPDATE agent_memory_artifacts SET archived_at=now(), status='archived' "
+                    "WHERE id=ANY(%s)", (list(dependent),),
+                )
+        for partition in {row["partition_key"] for row in rows if row["table"] == "feedback"}:
+            identities = {row["id"] for row in rows if (
+                row["table"] == "feedback" and row["partition_key"] == partition
+                and ("feedback", row["id"]) in affected
+            )}
+            if identities:
+                await self._invalidate_feedback(
+                    connection, partition, identities, erase=request.mode == ForgetMode.ERASE,
+                    all_in_scope=False, exact=True,
+                )
+        return len(dependent)
+
     async def _forget_on_connection(self, connection, request, *, replay=False):
         table_names = (
             "agent_memory_events", "agent_memory_claims", "agent_memory_artifacts",
@@ -1125,10 +1344,16 @@ class PostgresMemoryRepository:
 
         await derived.forget(connection, request)
         await retention.forget(connection, request, journal=not replay)
+        dependency_rows = await self._artifact_dependency_rows(
+            connection, request.scope, lock=True
+        )
         admission_claim_ids, extra_admission_claims = await admission.forget_records(
             connection, request
         )
         await derived.reconcile_headers(connection, request.scope)
+        dependent_artifacts = await self._forget_artifact_dependencies(
+            connection, request, admission_claim_ids, dependency_rows
+        )
         if request.all_in_scope:
             where = "partition_key = %s"
             params: tuple[Any, ...] = (request.scope.partition_key(),)
@@ -1142,106 +1367,10 @@ class PostgresMemoryRepository:
             )
             counts[table] = (await cursor.fetchone())["count"]
 
-        impacted_memory_ids = set(request.memory_ids) | admission_claim_ids
-        if request.all_in_scope:
-            target_event_ids: set[str] = set()
-        else:
-            cursor = await connection.execute(
-                """
-                SELECT id FROM agent_memory_events
-                WHERE partition_key = %s AND id = ANY(%s)
-                """,
-                (request.scope.partition_key(), list(request.memory_ids)),
-            )
-            target_event_ids = {row["id"] for row in await cursor.fetchall()}
-            if target_event_ids:
-                for table in ("agent_memory_claims", "agent_memory_artifacts"):
-                    cursor = await connection.execute(
-                        f"""
-                        SELECT id FROM {table}
-                        WHERE partition_key = %s
-                          AND provenance_json -> 'source_event_ids' ?| %s
-                        """,
-                        (request.scope.partition_key(), list(target_event_ids)),
-                    )
-                    impacted_memory_ids.update(
-                        row["id"] for row in await cursor.fetchall()
-                    )
-        impacted_memory_ids.update(target_event_ids)
-
-        changed_block_ids: set[str] = set()
-        blocks_to_drop: set[str] = set()
-        if not request.all_in_scope:
-            cursor = await connection.execute(
-                f"SELECT id FROM agent_memory_events WHERE {where}", params
-            )
-            target_event_ids = {row["id"] for row in await cursor.fetchall()}
-            if target_event_ids:
-                cursor = await connection.execute(
-                    """
-                    SELECT * FROM agent_memory_artifacts
-                    WHERE partition_key = %s AND kind = %s AND archived_at IS NULL
-                    FOR UPDATE
-                    """,
-                    (request.scope.partition_key(), str(MemoryKind.BLOCK)),
-                )
-                for row in await cursor.fetchall():
-                    block = self._block_from_row(row)
-                    remaining_event_ids = tuple(
-                        event_id
-                        for event_id in block.event_ids
-                        if event_id not in target_event_ids
-                    )
-                    if len(remaining_event_ids) == len(block.event_ids):
-                        continue
-                    changed_block_ids.add(block.id)
-                    if not remaining_event_ids:
-                        blocks_to_drop.add(block.id)
-                        continue
-                    updated_at = utc_now()
-                    provenance = replace(
-                        block.provenance,
-                        source_event_ids=remaining_event_ids,
-                    )
-                    updated_block = replace(
-                        block,
-                        event_ids=remaining_event_ids,
-                        provenance=provenance,
-                        version=block.version + 1,
-                        updated_at=updated_at,
-                    )
-                    await connection.execute(
-                        """
-                        UPDATE agent_memory_artifacts
-                        SET payload_json = %s::jsonb, provenance_json = %s::jsonb,
-                            version = %s, occurred_at = %s
-                        WHERE id = %s AND version = %s AND archived_at IS NULL
-                        """,
-                        (
-                            _json(updated_block),
-                            _json(provenance),
-                            updated_block.version,
-                            updated_at,
-                            block.id,
-                            block.version,
-                        ),
-                    )
-
-        if blocks_to_drop:
-            if request.mode == ForgetMode.ARCHIVE:
-                await connection.execute(
-                    """
-                    UPDATE agent_memory_artifacts
-                    SET archived_at = now(), status = 'archived'
-                    WHERE id = ANY(%s)
-                    """,
-                    (list(blocks_to_drop),),
-                )
-            else:
-                await connection.execute(
-                    "DELETE FROM agent_memory_artifacts WHERE id = ANY(%s)",
-                    (list(blocks_to_drop),),
-                )
+        cursor = await connection.execute(
+            f"SELECT id FROM agent_memory_events WHERE {where}", params
+        )
+        target_event_ids = {row["id"] for row in await cursor.fetchall()}
 
         if request.mode == ForgetMode.ARCHIVE:
             await connection.execute(
@@ -1274,24 +1403,29 @@ class PostgresMemoryRepository:
         # Events are gone or archived, but JSON provenance has no FK.
         # Scrub dependent claims in the same transaction, in bounded
         # pages. Directly targeted claims are already counted above.
-        if target_event_ids and not request.all_in_scope:
+        if target_event_ids:
             after_id = None
             while True:
                 cursor = await connection.execute(
                     """SELECT id, provenance_json FROM agent_memory_claims
-                    WHERE partition_key = %s
+                    WHERE tenant_id = %s AND namespace = %s
                       AND provenance_json -> 'source_event_ids' ?| %s
-                      AND NOT (id = ANY(%s))
+                      AND (%s OR archived_at IS NULL)
+                      AND NOT (partition_key = %s AND (%s OR id = ANY(%s)))
                       AND (%s::text IS NULL OR id > %s)
                     ORDER BY id LIMIT 128 FOR UPDATE""",
-                    (request.scope.partition_key(), list(target_event_ids),
+                    (request.scope.tenant_id, request.scope.namespace, list(target_event_ids),
+                     request.mode == ForgetMode.ERASE,
+                     request.scope.partition_key(), request.all_in_scope,
                      list(request.memory_ids), after_id, after_id),
                 )
                 rows = await cursor.fetchall()
                 if not rows:
                     break
                 for row in rows:
-                    await PostgresClaimHistory(self).scrub_sources(connection, row["id"], target_event_ids)
+                    await PostgresClaimHistory(self).scrub_sources(
+                        connection, row["id"], target_event_ids
+                    )
                     provenance = _provenance(row["provenance_json"])
                     remaining = tuple(event_id for event_id in provenance.source_event_ids
                                       if event_id not in target_event_ids)
@@ -1307,25 +1441,20 @@ class PostgresMemoryRepository:
                                 archived_at = CASE WHEN %s THEN now() ELSE archived_at END,
                                 status = CASE WHEN %s THEN 'archived' ELSE status END
                             WHERE id = %s""",
-                            (_json(replace(provenance, source_event_ids=remaining)),
-                             not remaining, not remaining, row["id"]),
+                            (
+                                _json(
+                                    replace(provenance, source_event_ids=remaining)
+                                    if remaining else provenance
+                                ),
+                                not remaining, not remaining, row["id"],
+                            ),
                         )
                     counts["agent_memory_claims"] += 1
                 after_id = rows[-1]["id"]
-        await self._invalidate_feedback(
-            connection,
-            request.scope.partition_key(),
-            impacted_memory_ids,
-            erase=request.mode == ForgetMode.ERASE,
-            all_in_scope=request.all_in_scope,
-        )
         return ForgetResult(
             affected_events=counts["agent_memory_events"],
             affected_claims=counts["agent_memory_claims"] + extra_admission_claims,
-            affected_artifacts=(
-                counts["agent_memory_artifacts"]
-                + len(changed_block_ids - set(request.memory_ids))
-            ),
+            affected_artifacts=counts["agent_memory_artifacts"] + dependent_artifacts,
             mode=request.mode,
         )
 
@@ -1337,15 +1466,16 @@ class PostgresMemoryRepository:
         *,
         erase: bool,
         all_in_scope: bool,
+        exact: bool = False,
     ) -> None:
         cursor = await connection.execute(
             """
             SELECT * FROM agent_memory_evolution_records
-            WHERE partition_key = %s AND invalidated_at IS NULL
+            WHERE partition_key = %s AND (%s OR invalidated_at IS NULL)
             ORDER BY occurred_at, id
             FOR UPDATE
             """,
-            (partition_key,),
+            (partition_key, erase),
         )
         rows = await cursor.fetchall()
         invalidated = (
@@ -1353,7 +1483,7 @@ class PostgresMemoryRepository:
             if all_in_scope
             else {row["id"] for row in rows if row["id"] in impacted_ids}
         )
-        changed = True
+        changed = not exact
         while changed:
             changed = False
             known_impacts = impacted_ids | invalidated
@@ -1561,22 +1691,24 @@ class PostgresMemoryRepository:
         where: str,
         where_params: Sequence[Any],
         text: str,
-        limit: int,
+        limit: int | None,
     ) -> list[dict[str, Any]]:
+        limit_sql = " LIMIT %s" if limit is not None else ""
+        limit_params = (limit,) if limit is not None else ()
         if text:
             cursor = await connection.execute(
                 f"""
                 SELECT *, ts_rank(search_document, plainto_tsquery('simple', %s)) AS rank
                 FROM {table}
                 WHERE {where} AND search_document @@ plainto_tsquery('simple', %s)
-                ORDER BY rank DESC LIMIT %s
-                """,
-                (text, *where_params, text, limit),
+                ORDER BY rank DESC
+                """ + limit_sql,
+                (text, *where_params, text, *limit_params),
             )
         else:
             cursor = await connection.execute(
-                f"SELECT *, 0.0 AS rank FROM {table} WHERE {where} LIMIT %s",
-                (*where_params, limit),
+                f"SELECT *, 0.0 AS rank FROM {table} WHERE {where}" + limit_sql,
+                (*where_params, *limit_params),
             )
         return list(await cursor.fetchall())
 

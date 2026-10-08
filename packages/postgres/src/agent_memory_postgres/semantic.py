@@ -81,7 +81,11 @@ class PgVectorBlockMemory:
         mode: ForgetMode = ForgetMode.ARCHIVE,
     ) -> ForgetResult:
         result = await self._provider.forget_block(scope, block_id, mode=mode)
-        await self._index.delete(block_id)
+        # Primary storage may already be deleted after an interrupted cleanup.
+        # Recheck zero-effect results so retries (including after restart) can
+        # remove stale vectors without removing a still-visible primary block.
+        if result.affected_artifacts or await self._provider.read_block(scope, block_id) is None:
+            await self._index.delete(block_id, scope=scope)
         return result
 
     async def _embed_one(self, text: str) -> tuple[float, ...]:

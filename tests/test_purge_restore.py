@@ -3,6 +3,7 @@
 import asyncio
 import json
 import re
+import shutil
 import sqlite3
 import subprocess
 from contextlib import asynccontextmanager, closing
@@ -56,9 +57,12 @@ async def backup_copy(repository, tmp_path):
         assert re.fullmatch(r"atom_behavior_[a-f0-9]+", original)
         schema = "purge_backup_" + uuid4().hex
         path = tmp_path / (schema + ".sql")
+        pg_dump = shutil.which("pg_dump")
+        if pg_dump is None:
+            pytest.fail("Live PostgreSQL backup tests require pg_dump on PATH")
         await asyncio.to_thread(
             subprocess.run,
-            ["/opt/homebrew/opt/postgresql@17/bin/pg_dump", "--dbname",
+            [pg_dump, "--dbname",
              repository.pool.conninfo, "--schema", original, "--inserts",
              "--no-owner", "--no-privileges", "--file", str(path)],
             check=True, capture_output=True,

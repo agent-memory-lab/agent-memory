@@ -12,7 +12,7 @@ license = { text = "Apache-2.0" }
 dependencies = ["agent-memory>=0.1,<0.2", "mcp>=2,<3"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<9"]
+dev = ["pytest>=8,<9", "httpx>=0.28,<1"]
 
 [project.scripts]
 agent-memory-mcp = "agent_memory_mcp.cli:main"
