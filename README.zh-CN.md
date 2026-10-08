@@ -254,6 +254,8 @@ Observation 只开放文档规定的语言模板。发布点和可证明稳定�
 
 v7 台账保留原有 44 项任务状态，跟踪 15 项新增任务。[B0 实施记录](docs/design/v7.0.0/batch-b0.md)新增严格问题/领域合同、full 规范夹具及显式全成本验收口径。这些是加性协议与评测基础：不启用 V7 运行能力、不执行 schema 迁移，真实数据/模型收益仍未验证。
 
+[B1](docs/design/v7.0.0/batch-b1.md)为既有 admitted-L1 派生运行时新增索引失效、订阅证明及跨受影响投影范围的事务擦除。升级必须协调停止旧写进程；项目 QuestionView 和 publication-manifest 问题读取仍关闭。
+
 高级检索和可选的只读 Reflect 继续按[任务台账](docs/design/v6.1.0/task.md)推进。远程部署见[安全策略](SECURITY.md)和[威胁模型](docs/THREAT_MODEL.md)；外部缓存、远端 ACL 和供应商副本需要各自完成集成合同。
 
 ## 文档导航

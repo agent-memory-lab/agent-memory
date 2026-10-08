@@ -245,6 +245,8 @@ Next steps follow the [v7 plan](docs/design/v7.0.0/plan.md) and [task ledger](do
 
 The v7 ledger preserves all 44 previous task statuses and tracks 15 new tasks. [B0 implementation](docs/design/v7.0.0/batch-b0.md) adds strict question/domain contracts, full-oracle fixtures, and explicit whole-cost acceptance accounting. These are additive protocol and evaluation foundations: no V7 runtime capability is enabled, no schema migration runs, and real-data/model benefits remain unverified.
 
+[B1](docs/design/v7.0.0/batch-b1.md) adds indexed invalidation and subscription proofs to the existing admitted-L1 derived runtime, with transactional erasure across affected projected scopes. A coordinated old-writer shutdown is required for upgrade. Project QuestionViews and publication-manifest question reads remain disabled.
+
 Advanced retrieval and optional read-only Reflect remain on the [task ledger](docs/design/v6.1.0/task.md). Remote deployments use the [security policy](SECURITY.md) and [threat model](docs/THREAT_MODEL.md); external caches, remote ACL systems, and provider-held copies need their own integration contracts.
 
 ## Documentation

@@ -363,7 +363,7 @@ def test_untracked_change_never_becomes_sealed_coverage_after_next_publication(
                             head["generation"],
                         )
             else:
-                import agent_memory.derived.service as writer
+                import agent_memory.derived.subscriptions as writer
 
                 original = writer.close_coverage
 

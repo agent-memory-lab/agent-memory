@@ -299,7 +299,10 @@ class FacetRefreshUnit:
         ):
             if type(value) is not int or value < 0:
                 raise DerivedError("invalid_facet_refresh_unit")
-        if not (0 if self.parents is not None else 1) <= len(self.query_generation) <= 16:
+        if not (0 if self.parents is not None else 1) <= len(self.query_generation) <= 18:
+            raise DerivedError("invalid_facet_refresh_unit")
+        reserved = {"route:fallback", "route:subscription-generation"}
+        if len(set(self.query_generation) - reserved) > 16:
             raise DerivedError("invalid_facet_refresh_unit")
         for key, value in self.query_generation.items():
             identity(key)

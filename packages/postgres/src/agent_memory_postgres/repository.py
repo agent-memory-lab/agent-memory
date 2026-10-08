@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime
 from hashlib import sha256
@@ -297,6 +298,7 @@ class PostgresMemoryUnitOfWork:
         )
 
     async def append_event(self, event: MemoryEvent) -> None:
+        event = deepcopy(event)
         await self.lock_admission_scope(event.scope)
         await admission.check_event_identity(
             self.connection, event.scope, event.id, event.idempotency_key
@@ -337,6 +339,7 @@ class PostgresMemoryUnitOfWork:
         return await derived.get(self.connection, scope, kind, identity)
 
     async def derived_put(self, scope, kind, identity, payload):
+        payload = deepcopy(payload)
         from . import derived
 
         return await derived.put(self.connection, scope, kind, identity, payload)
@@ -346,12 +349,24 @@ class PostgresMemoryUnitOfWork:
 
         return await derived.records(self.connection, scope, kind)
 
+    async def derived_header(self, scope, record_id):
+        from . import derived
+
+        return await derived.get_header(self.connection, scope, record_id)
+
+    async def derived_headers(self, scope):
+        await self.lock_admission_scope(scope)
+        from . import derived
+
+        return await derived.headers(self.connection, scope)
+
     async def derived_candidates(self, scope, slots):
         from . import derived
 
         return await derived.candidates(self.connection, scope, slots)
 
     async def derived_edges(self, scope, revision_id, values):
+        values = deepcopy(tuple(values))
         from . import derived
 
         return await derived.edges(self.connection, scope, revision_id, values)
@@ -365,6 +380,7 @@ class PostgresMemoryUnitOfWork:
         return await retention.head_get(self.connection, scope, kind, identity)
 
     async def retention_head_put(self, scope, kind, identity, payload, expected_generation):
+        payload = deepcopy(payload)
         await self.lock_admission_scope(scope)
         result = await retention.head_put(
             self.connection, scope, kind, identity, payload, expected_generation
@@ -561,12 +577,14 @@ class PostgresMemoryUnitOfWork:
         self, scope: MemoryScope, record_id: str, event_id: str, slot_key: str,
         payload: dict[str, Any], expected_version: int,
     ) -> int:
+        payload = deepcopy(payload)
         await self.lock_admission_scope(scope)
         namespace = (scope.tenant_id, scope.namespace)
         if namespace not in self._admission_batch_times:
             self._admission_batch_times[namespace] = await admission.publication_time(
                 self.connection, scope
             )
+        old_header = await self.derived_header(scope, record_id)
         result = await admission.save_record(
             self.connection, scope, record_id, event_id, slot_key, payload, expected_version,
             recorded_at=self._admission_batch_times[namespace],
@@ -575,8 +593,23 @@ class PostgresMemoryUnitOfWork:
 
         from . import derived
 
-        await derived.header(self.connection, scope, record_id, event_id, slot_key, payload, result)
-        await mark_slot_changed(self, scope, slot_key, at=self._admission_batch_times[namespace])
+        # Read only the row just written. Public snapshot readers have their own
+        # consistency/observation hooks and must not be re-entered by this write.
+        cursor = await self.connection.execute(
+            "SELECT payload_json,version FROM agent_memory_admission_records "
+            "WHERE partition_key=%s AND record_id=%s",
+            (scope.partition_key(), record_id),
+        )
+        persisted = await cursor.fetchone()
+        if persisted is None or persisted["version"] != result:
+            raise ValueError("admission publication disappeared before routing")
+        await derived.header(
+            self.connection, scope, record_id, event_id, slot_key, persisted["payload_json"], result
+        )
+        await mark_slot_changed(
+            self, scope, slot_key, at=self._admission_batch_times[namespace],
+            old_header=old_header, new_header=await self.derived_header(scope, record_id),
+        )
         return result
 
     async def find_current_claim(self, scope: MemoryScope, key: str) -> Claim | None:
@@ -907,6 +940,7 @@ class PostgresMemoryRepository:
                         row["slot_key"],
                         row["payload_json"],
                         row["version"],
+                        routes=False,
                     )
 
     async def close(self) -> None:
@@ -1342,6 +1376,7 @@ class PostgresMemoryRepository:
         await admission.lock_scope(connection, request.scope)
         from . import derived
 
+        checkpoint = await derived.admission_checkpoint(connection, request.scope)
         await derived.forget(connection, request)
         await retention.forget(connection, request, journal=not replay)
         dependency_rows = await self._artifact_dependency_rows(
@@ -1350,7 +1385,23 @@ class PostgresMemoryRepository:
         admission_claim_ids, extra_admission_claims = await admission.forget_records(
             connection, request
         )
-        await derived.reconcile_headers(connection, request.scope)
+        # Primary deletion also changes admitted projections in broader scopes.
+        # Translate only actually changed candidates, never the all-in-scope flag.
+        affected_scopes = {request.scope}
+        for target, identities in await derived.changed_admission_scopes(
+            connection, request.scope, checkpoint
+        ):
+            if target == request.scope:
+                continue
+            projected = replace(
+                request, scope=target, all_in_scope=False,
+                memory_ids=tuple(sorted(set(request.memory_ids).union(identities))),
+            )
+            await derived.forget(connection, projected)
+            affected_scopes.add(target)
+        for target in sorted(affected_scopes, key=lambda value: value.partition_key()):
+            await derived.reconcile_headers(connection, target)
+            await derived.scrub_routes(connection, target)
         dependent_artifacts = await self._forget_artifact_dependencies(
             connection, request, admission_claim_ids, dependency_rows
         )
