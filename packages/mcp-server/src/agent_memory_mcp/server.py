@@ -32,12 +32,14 @@ def create_server(
     recovery_tools=None,
     durable_capture=None,
     derived=None,
+    questions=None,
 ) -> MCPServer:
     """Create an MCP v2 server while retaining one core business contract."""
     if recovery_tools is not None and (
         capture_sink is not None
         or durable_capture is not None
         or derived is not None
+        or questions is not None
         or recovery_tools.memory.provider is not provider
     ):
         raise ValueError("recovery requires its own provider and capture gate")
@@ -47,6 +49,7 @@ def create_server(
         deletion_auditor=deletion_auditor,
         ontology=ontology,
         derived=derived,
+        questions=questions,
     )
 
     contract = {spec["name"]: spec for spec in tools.list_tools()}
@@ -402,6 +405,15 @@ def create_server(
         ) -> dict[str, Any]:
             """Read current guarded Observations; registration and grants belong to the host."""
             return await call(ctx, "memory_derived", {"operation": operation, "payload": payload})
+
+    if questions is not None:
+
+        @register_tool()
+        async def memory_question(
+            ctx: Context, operation: str, payload: dict[str, Any]
+        ) -> dict[str, Any]:
+            """Read host-registered project answers or request bounded shared full refresh."""
+            return await call(ctx, "memory_question", {"operation": operation, "payload": payload})
 
     if durable_capture is not None:
         @register_tool()

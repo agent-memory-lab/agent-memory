@@ -4,6 +4,7 @@ This is not a model-callable authority grant. Sources, spans, target binding and
 ordinary admission policy are checked within the version-fenced transaction.
 """
 
+from contextlib import nullcontext
 from dataclasses import replace
 from hashlib import sha256
 
@@ -45,6 +46,7 @@ class ContextualMemory:
         exceptions=(),
         links=(),
         field_support=(),
+        _unit_of_work=None,
     ):
         identifier(applicability_id)
         if type(expected_version) is not int or expected_version < 1:
@@ -70,7 +72,9 @@ class ContextualMemory:
             raise ValueError("invalid field support expressions")
         if len({f.field for f in field_support}) != len(field_support):
             raise ValueError("duplicate field support expression")
-        async with self.engine.repository.unit_of_work() as uow:
+        transaction = (nullcontext(_unit_of_work) if _unit_of_work is not None
+                       else self.engine.repository.unit_of_work())
+        async with transaction as uow:
             await uow.lock_admission_scope(self.scope)
             row = await uow.get_admission_record(self.scope, candidate_id)
             if (

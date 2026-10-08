@@ -9,6 +9,13 @@ from datetime import datetime
 
 from ..domain import canonical_json
 from .model import DerivedError, digest
+from .qualified import (
+    compose_qualified_parents,
+    is_qualified_graph,
+    qualified_supported,
+    validate_header_route,
+    validate_route_edge,
+)
 
 MAX_DEPTH = 4
 MAX_NODES = 32
@@ -26,6 +33,8 @@ def revision_header(revision):
     )
     header = deepcopy({key: revision[key] for key in fields if key in revision})
     header["body_bytes"] = len(canonical_json(revision.get("body")).encode())
+    if revision.get("manifest", {}).get("qualification") is not None:
+        header["qualification"] = deepcopy(revision["manifest"]["qualification"])
     return header
 
 
@@ -46,7 +55,7 @@ def validate_graph(definitions, spec, *, check_readers=True):
         row = definitions[key]
         if key != spec["id"] and row.get("resource_kind") == "page":
             raise DerivedError("derived_parent_page_unsupported")
-        if row.get("history_mode") or row.get("context"):
+        if row.get("history_mode") or (row.get("context") and not is_qualified_graph(spec)):
             raise DerivedError("derived_parent_template_unsupported")
         if any(row.get(field) != spec.get(field) for field in (
             "subject_id", "purpose", "authority_id"
@@ -55,6 +64,8 @@ def validate_graph(definitions, spec, *, check_readers=True):
         if check_readers and not set(spec["readers"]).issubset(row["readers"]):
             raise DerivedError("derived_parent_denied")
         for parent in row.get("parent_facets", ()):
+            if parent in definitions:
+                validate_route_edge(row, definitions[parent])
             visit(parent, (*path, key))
 
     visit(spec["id"], ())
@@ -77,6 +88,7 @@ class ParentGraph:
     async def validate_registration(self, uow, spec):
         if spec.get("parent_facets") and not supported(uow):
             raise DerivedError("derived_parent_backend_unsupported")
+        self.check_qualified(uow, spec)
         definitions = {
             item["identity"]: item["payload"]["spec"]
             for item in await uow.derived_records(self.scope, "definition")
@@ -89,6 +101,13 @@ class ParentGraph:
                 validate_graph(
                     definitions, candidate, check_readers=candidate["id"] == spec["id"]
                 )
+
+    def check_qualified(self, uow, spec):
+        if is_qualified_graph(spec):
+            if not qualified_supported(uow):
+                raise DerivedError("derived_qualified_backend_unsupported")
+            if not self.service.qualified_current:
+                raise DerivedError("derived_qualified_context_unsupported")
 
     async def bindings(self, uow, spec):
         result = {}
@@ -112,6 +131,10 @@ class ParentGraph:
             return {}, {}
         if not supported(uow):
             raise DerivedError("derived_parent_backend_unsupported")
+        self.check_qualified(uow, spec)
+        binding = self.service._context_binding(spec)
+        if binding is not None:
+            binding.current(at)
         readers = tuple(readers or spec["readers"])
         definitions = {
             item["identity"]: item["payload"]["spec"]
@@ -130,6 +153,9 @@ class ParentGraph:
             if len(seen) >= MAX_NODES:
                 raise DerivedError("derived_parent_capacity")
             definition = await self.service._definition(uow, key)
+            binding = self.service._context_binding(definition["spec"])
+            if binding is not None:
+                binding.current(at)
             if not set(readers).issubset(definition["spec"]["readers"]):
                 raise DerivedError("derived_parent_denied")
             head = await uow.derived_get(self.scope, "head", key)
@@ -158,6 +184,8 @@ class ParentGraph:
                 header["unit"].get("parents") or None
             ):
                 raise DerivedError("derived_parent_integrity_failed")
+            if is_qualified_graph(spec):
+                validate_header_route(definition["spec"], header, at)
             _, authority = await self.service.registry.bindings(uow, definition["spec"])
             for source_id, data in header["manifest"]["sources"].items():
                 grant = await uow.derived_get(self.scope, "grant", source_id)
@@ -206,6 +234,8 @@ def waiting_for_parent(error):
 
 def compose_parents(definition, parents):
     """A derived view preserves complete blocks, including disputes and provenance."""
+    if is_qualified_graph(definition):
+        return compose_qualified_parents(definition, parents)
     if set(parents) != set(definition["parent_facets"]):
         raise DerivedError("derived_input_dependency_unknown")
     blocks, support, transitions = [], [], []

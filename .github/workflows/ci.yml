@@ -117,3 +117,8 @@ jobs:
           tests/test_derived_*.py tests/test_purge_restore.py tests/test_durable_purge.py
           tests/test_v7_subscriptions.py tests/test_v7_backend_lifecycle.py
           tests/test_refresh*.py
+          tests/test_project_admission_v7.py tests/test_project_questions_v7.py
+          tests/test_question_runtime_v7.py tests/test_question_transport_v7.py
+          tests/test_question_pages_v7.py tests/test_question_erasure_v7.py
+          tests/test_question_snapshot_security_v7.py
+          tests/test_v7_project_indexes.py tests/test_v7_qualified_pages.py

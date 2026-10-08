@@ -361,6 +361,42 @@ class _Operations(RecoveryClientOperations):
     async def derived_capabilities(self) -> dict[str, Any]:
         return await self._call("memory_derived", {"operation": "capabilities", "payload": {}})
 
+    async def question_capabilities(self) -> dict[str, Any]:
+        return await self._call("memory_question", {"operation": "capabilities", "payload": {}})
+
+    async def question_read(self, question_id: str, *, valid_at=None, known_at=None):
+        payload = {"question_id": question_id}
+        if valid_at is not None or known_at is not None:
+            payload.update(valid_at=valid_at, known_at=known_at)
+        return await self._call("memory_question", {"operation": "read", "payload": payload})
+
+    async def question_route(self, query: str, *, parameters=None):
+        payload = {"query": query}
+        if parameters is not None:
+            payload["parameters"] = parameters
+        return await self._call("memory_question", {"operation": "route", "payload": payload})
+
+    async def question_answer(self, query: str, *, dedupe_key: str, parameters=None, max_steps=1):
+        payload = {"query": query, "dedupe_key": dedupe_key, "max_steps": max_steps}
+        if parameters is not None:
+            payload["parameters"] = parameters
+        return await self._call("memory_question", {"operation": "answer", "payload": payload})
+
+    async def question_request(self, question_id: str, *, dedupe_key: str):
+        return await self._call("memory_question", {"operation": "request", "payload": {
+            "question_id": question_id, "dedupe_key": dedupe_key,
+        }})
+
+    async def question_status(self, target_id: str):
+        return await self._call("memory_question", {"operation": "status", "payload": {
+            "target_id": target_id,
+        }})
+
+    async def question_page_read(self, page_id: str):
+        return await self._call("memory_question", {"operation": "page_read", "payload": {
+            "page_id": page_id,
+        }})
+
     async def page_capabilities(self) -> dict[str, Any]:
         return await self._call("memory_derived", {"operation": "page_capabilities", "payload": {}})
 
@@ -443,18 +479,23 @@ class EmbeddedMemoryClient(_Operations):
         recovery_tools=None,
         durable_capture=None,
         derived=None,
+        questions=None,
     ) -> None:
         if recovery_tools is not None and (
             capture_sink is not None
             or durable_capture is not None
             or derived is not None
+            or questions is not None
             or recovery_tools.memory.provider is not provider
         ):
             raise ValueError("recovery requires its own provider and capture gate")
         self._durable_capture = durable_capture
         self._recovery_tools = recovery_tools
         self._provider = provider
-        self._tools = MCPMemoryTools(provider, deletion_auditor=deletion_auditor, ontology=ontology, derived=derived)
+        self._tools = MCPMemoryTools(
+            provider, deletion_auditor=deletion_auditor, ontology=ontology,
+            derived=derived, questions=questions,
+        )
         self._context = context
         self._capture_sink = capture_sink
         self._capture_timeout_seconds = _capture_deadline(capture_timeout_seconds)

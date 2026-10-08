@@ -1,0 +1,219 @@
+{
+  "schema": "v7-batch-validation/1",
+  "batch": "V7-B3",
+  "date": "2026-10-08",
+  "base_commit": "b1509a9",
+  "code_commit": "a6472feb25ee2b7ef4a3188488a34806fcf7e4a7",
+  "source_manifest": {
+    ".github/workflows/ci.yml": "3538ce7084c98b42e592d81586af498ced9369f8e959dff5f89bf4cdcbf7e505",
+    "examples/project_questions.py": "5d61b90dce16e0b0921dcbf45ec0d9a037280680c17b31a441f3c230581f80be",
+    "packages/mcp-server/src/agent_memory_mcp/server.py": "442212a33a9e295e56174e693ea1348c5a5f72f443dd1e712ec7072f15827d75",
+    "packages/postgres/migrations/018_project_candidate_index.sql": "ff9cbb40c4d6c8e180ebbeba82dbf14257ae4fe051c2d8952a52769a84ca7dcd",
+    "packages/postgres/src/agent_memory_postgres/derived.py": "f7fb86810e7fcd956465fac59b9bb978d0b6d60e160360e23cb45b02f851d0cc",
+    "packages/postgres/src/agent_memory_postgres/migration.py": "493abc7c6b89b1d02ddd2b4dcec1bd46b92cca53c6bfb6bf6e8a0444301e74b4",
+    "packages/postgres/src/agent_memory_postgres/ontology_source.py": "fbe7fdfaebddccfa0e119b7ad01175b4b24afa0aecb2bccca5fe660b9d5671ec",
+    "packages/postgres/src/agent_memory_postgres/project_index.py": "43032881b3ac05f5cbcdbeada8f15f33123f8b719242be7d239fb62a4c7bb309",
+    "packages/postgres/src/agent_memory_postgres/repository.py": "13a030224cdf3a54d046a9fa9321261e8d2b0b2ee12991365d5e4408e5690025",
+    "packages/postgres/src/agent_memory_postgres/vector.py": "d915ecf34890b90666daa3ba31edb6b4353e9c78ed445128eea210f4b281c4af",
+    "packages/postgres/tests/test_migration_concurrency.py": "4c4e46d55ee9da1f65e4b726fe03c3544ceedaf566bae18dd8c5fadc044907a5",
+    "packages/python-sdk/src/agent_memory_sdk/client.py": "4caaec11b8c57c8b05dd4c3d43257457ba5dc2bfc908729788b6eacfb52ff3a0",
+    "src/agent_memory/consolidation/admission_runtime.py": "2f976571f6f3c9f7a9cfde86904b430117b8f13a7a0984dbcd9acba80d9ea00d",
+    "src/agent_memory/consolidation/project_admission.py": "41ce774423498945da3bf587a69196f1aebd3be0f513ccd68ca740a19353193f",
+    "src/agent_memory/consolidation/qualification.py": "d35f4f706a5c11ad1d5d721a8f77926c835a07cde89a733233a2e718f2925e07",
+    "src/agent_memory/derived/model.py": "e04d20f4f2371275474504fb7c47b96622a9e9b8c71ba4486572151f441d650e",
+    "src/agent_memory/derived/page_model.py": "880d05fd0d0af3dd68e9289d78f4e54e020f3f58ee8908ca344edab92d4e30d4",
+    "src/agent_memory/derived/pages.py": "2b1a8fda92b79280844d96c615398de20889af33087cc44296a7578e3aa09591",
+    "src/agent_memory/derived/parents.py": "43d057f98b1fb2a5e48d40c38702e1b5326195f53c14c7e049af98b1ecbffef0",
+    "src/agent_memory/derived/project_index.py": "be331da1417f081e091f168668ac05582a21ce6fd12254f7e9395908030c440c",
+    "src/agent_memory/derived/qualified.py": "efc09ee9ae07b618b9946cb2ece11ae85108907f011af8f102762a52aaec7a5e",
+    "src/agent_memory/derived/question_contracts.py": "9bc737e6e80202f9fabcb09765152fbc7c587d88e266223f577d52d0f09c276a",
+    "src/agent_memory/derived/question_erasure.py": "2ef7c6dcfe5037e71a4f65e99bca67d141da4ddd21d1ea5e7e2ae7201036a3c3",
+    "src/agent_memory/derived/question_materialize.py": "3441f52e2b3261aa209a25ed1dc50006989c8ee73793b31e693ed03d8abdb469",
+    "src/agent_memory/derived/question_pages.py": "cafe177e3f21b87f6e25228261e4201292194cb44ead8fcbc9e57e28485e4c6a",
+    "src/agent_memory/derived/question_refresh.py": "66e144c357590eafc4e59eae240527f54417da5957b234caf9e06597e625b8d1",
+    "src/agent_memory/derived/question_service.py": "1a2eb08ca6abecc38921c884362b866b8bcb3df401cac2a32211d5d46f21a9e9",
+    "src/agent_memory/derived/question_transport.py": "1cca8a9514985f5055122a3f56ec8972b4023f2ea2024346ad8c47a9ca2cdfa5",
+    "src/agent_memory/derived/service.py": "0f0ab81ba3861e619ff7fbd59e69c0710d2d5533ef700d0ccb482c0684f07853",
+    "src/agent_memory/derived/subscriptions.py": "8806f7d7aa18ae14f7606a1c5945561999410de250fc86a511f3300a84e868bd",
+    "src/agent_memory/mcp.py": "c63c260d3051b9054a4d0d9ed6f2351533e077c05cea50f1c0b1a9f0a193b45f",
+    "src/agent_memory/operations/refresh_demand.py": "478d634f624001960a25d613be5becc16ad5a322a6f50ee13b0a0e6f967da323",
+    "src/agent_memory/operations/refresh_host.py": "618d126bf49226e89bb4fd37cf11466ef9b7a0bfd756835bec1004f9e82b54d5",
+    "src/agent_memory/operations/refresh_processor.py": "956dbeff3898b77e5fc21499818570bb4613634804b088e3c799a1a362a236ce",
+    "src/agent_memory/operations/sqlite_derived.py": "724acd5066ed6ff73344daf54e22dc97d544cbf4c95ed6e6aae54d94e7d46786",
+    "src/agent_memory/operations/sqlite_project_index.py": "38af533092cf489a86e5f802e8b57b7d5f58c28a8b85d93a88ba71e125a40d43",
+    "src/agent_memory/ports.py": "9a1a0325ad2bc0f899e1d89839804007cf5a333f7a7c6f640fce8cb4f122df62",
+    "src/agent_memory/retrieval/question_router.py": "6228b6590d3455943f32e8b6d1242df3bf0176b9a80e61641ba918a59ad4b507",
+    "src/agent_memory/sqlite.py": "83fbd9d2cbe841e3b203b705d2f74b6af5b60935f8cb83c81f178ae7c8990375",
+    "tests/fixtures/durable_crash_child.py": "7155ffca2f632df947077136a2a3f7f29fd35968ef4bf5de2eac87fb4ce3e827",
+    "tests/test_project_admission_v7.py": "bee6ad790510976eae87e1495092cf660468e89cc5d161cc7d3a33eb02288a07",
+    "tests/test_question_erasure_v7.py": "0754e28430ff98274ca6c948c766b7b8b8623d2f745a6338a4a6b9d4dc5af04b",
+    "tests/test_question_pages_v7.py": "2d4c239c61355a6cf6ff25a527090c982458eb5e0f6fb1ebfb2304b613c99da3",
+    "tests/test_question_runtime_v7.py": "781bc96427a2812975f01f9759aa2a249b8b6d97db445e886d0a12937b3955d1",
+    "tests/test_question_snapshot_security_v7.py": "fd70ebc3fde42e83efa5b0368b7f4bfe4ee495deedfb402370d723ac4e8ffe14",
+    "tests/test_question_transport_v7.py": "0a8d9227f2824fb10fb6f7da9ee371f19a30fe7b8f3f080fbdc43c30d0b4c268",
+    "tests/test_refresh_clock_delivery.py": "9242861385b1ffcb76228a8b876fb9d6344f5fe7194ae493a5ab1516eddbd90a",
+    "tests/test_refresh_demand.py": "4b856c6261e89675e9cbfe664ae966d4818c2a7c79ebed6a8bd7db505efd8b2a",
+    "tests/test_refresh_host_policy.py": "99efc926d570cff96768c9843b4ece32cd2d6bc782af65c697ac1037c47cbe62",
+    "tests/test_refresh_restore_validation.py": "97183f37f8bca0736740379ffb7d7af94d17eeadcbe2f3c3c09de7dc760934b5",
+    "tests/test_refresh_scheduler_boundaries.py": "c1c9a7b2bdbb9a367e686fe8ae39744e2623447099666f81d70c0b5a3b2ec8c2",
+    "tests/test_v7_project_indexes.py": "2cc7ea7ba6838cb07a158c8108947b1196aee52156998ee2c968fda7331f0792",
+    "tests/test_v7_qualified_pages.py": "47088be656c617bfa1befa280106eb4fe8f95f23a03d73414d5f581ce83f203e"
+  },
+  "source_manifest_sha256": "c26b2880ae73e3191df04ba49b379c84bb10fff3eabea3e3521c5e0a47f683e0",
+  "environment": {
+    "python": "3.13.5",
+    "postgresql": "17.11",
+    "pgvector": "0.8.0",
+    "scope": "isolated disposable local test database; serialized PG17 server wrapper; no production data"
+  },
+  "commands": [
+    {
+      "command": ".venv/bin/python -m pytest -o addopts='' -q -W error::pytest.PytestUnraisableExceptionWarning -W error::ResourceWarning tests packages/evolution/tests packages/langgraph/tests packages/python-sdk/tests packages/mcp-server/tests packages/postgres/tests --junitxml=b3-final-source-sqlite.xml",
+      "source_commit": "a6472feb25ee2b7ef4a3188488a34806fcf7e4a7",
+      "scope": "Final exact source, core and all optional packages. PostgreSQL DSN absent; provider-specific skips are not passes.",
+      "passed": 2233,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 1217,
+      "duration_seconds": 131.188,
+      "junit_sha256": "fbc2b14e16ed357ae4daf0985d93a5f479fe85fb901274f9f68095010f07bb2e"
+    },
+    {
+      "command": ".venv/bin/python -m pytest -o addopts='' -q -W error::pytest.PytestUnraisableExceptionWarning -W error::ResourceWarning tests/test_project_admission_v7.py tests/test_project_questions_v7.py tests/test_question_runtime_v7.py tests/test_question_transport_v7.py tests/test_question_pages_v7.py tests/test_question_erasure_v7.py tests/test_v7_project_indexes.py tests/test_v7_qualified_pages.py tests/test_refresh*.py tests/test_derived_*.py tests/test_v7_backend_lifecycle.py tests/test_v7_subscriptions.py tests/test_purge_restore.py tests/test_durable_purge.py tests/test_ontology_postgres_source.py packages/postgres/tests --junitxml=b3-accepted-pg.xml",
+      "source_commit": "a754ede",
+      "scope": "Affected complete dual-provider regression including real process crashes, quota races, backup replay, optional PostgreSQL/ontology packages. Before the final snapshot/qualified-delivery hardening below.",
+      "passed": 1579,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 6,
+      "duration_seconds": 346.663,
+      "junit_sha256": "22d5c4d90b75a424095b01168a317fb9e447b9f15a8d6a112b0aac38460626c3"
+    },
+    {
+      "command": ".venv/bin/python -m pytest -o addopts='' -q -W error::pytest.PytestUnraisableExceptionWarning -W error::ResourceWarning tests/test_project_admission_v7.py tests/test_project_questions_v7.py tests/test_question_runtime_v7.py tests/test_question_transport_v7.py tests/test_question_pages_v7.py tests/test_question_erasure_v7.py tests/test_question_snapshot_security_v7.py tests/test_v7_project_indexes.py tests/test_v7_qualified_pages.py tests/test_refresh_clock_delivery.py packages/postgres/tests/test_migration_concurrency.py --junitxml=b3-security-pg.xml",
+      "source_commit": "aa0f5fe",
+      "scope": "Post-hardening dual-provider B3, qualified current pages, frozen snapshot binding and per-source current input guards. Last candidate-body boundary is additionally rechecked below.",
+      "passed": 436,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 112.182,
+      "junit_sha256": "d84ba8b7e74fcc1cdfac66944a5d1cf70d6d156131ee77ac6d3d3e9cdbd48d1c"
+    },
+    {
+      "command": ".venv/bin/python -m pytest -o addopts='' -q -W error::pytest.PytestUnraisableExceptionWarning -W error::ResourceWarning tests/test_question_snapshot_security_v7.py tests/test_project_admission_v7.py --junitxml=b3-final-input-pg.xml",
+      "source_commit": "a6472feb25ee2b7ef4a3188488a34806fcf7e4a7",
+      "scope": "Final exact source, dual-provider snapshot/input guards including context/grant/host changes before source and candidate bodies.",
+      "passed": 64,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "duration_seconds": 9.494,
+      "junit_sha256": "707357cd8a0d1ddc3d8afbfb229ae8a93ea502adb6e6b81fa50cde8b0abc6dd1"
+    },
+    {
+      "command": ".venv/bin/python -m pytest -o addopts='' -q tests/test_v7_acceptance_inventory.py tests/test_architecture.py",
+      "passed": 96,
+      "failed": 0,
+      "skipped": 0,
+      "scope": "Frozen design hash, all 44 inherited status entries, all 98 acceptance responsibilities and architecture rules."
+    },
+    {
+      "command": "for package in . packages/evolution packages/langgraph packages/python-sdk packages/mcp-server packages/postgres; do .venv/bin/python -m build --no-isolation --outdir /tmp/b3-dist \"$package\"; done",
+      "result": "passed",
+      "sdists": 6,
+      "wheels": 6,
+      "note": "Initial environment lacked the declared hatchling build backend; installed it from the existing offline package cache, then rebuilt all six final-source packages."
+    },
+    {
+      "command": "uv pip install --offline --cache-dir /tmp/uv-v7-cache --python /tmp/b3-wheel-installed/bin/python /tmp/b3-dist/*.whl; then final-source wheels reinstalled with --no-deps --reinstall; cd /tmp; /tmp/b3-wheel-installed/bin/python /workspace/shared/agent-memory-v7-b3/examples/project_questions.py",
+      "result": "passed",
+      "scope": "Fresh isolated wheel installation; all six distributions resolve outside checkout. Full four-template page example returns zero model calls and denies after source permission change. PostgreSQL wheel includes new migration/helper."
+    },
+    {
+      "command": "ruff check on 48 changed Python files excluding three existing legacy-lint files",
+      "result": "passed",
+      "retained_legacy_findings": [
+        {
+          "path": "packages/python-sdk/src/agent_memory_sdk/client.py",
+          "baseline": 6,
+          "current": 5,
+          "new": 0
+        },
+        {
+          "path": "src/agent_memory/ports.py",
+          "baseline": 2,
+          "current": 2,
+          "new": 0
+        },
+        {
+          "path": "packages/postgres/src/agent_memory_postgres/ontology_source.py",
+          "baseline": 16,
+          "current": 16,
+          "new": 0
+        }
+      ],
+      "note": "No new findings in excluded files. Whole-repository lint is not claimed clean; unrelated inherited formatting debt remains."
+    }
+  ],
+  "initial_regressions": [
+    {
+      "run": "initial full SQLite repository/package run",
+      "passed": 2207,
+      "failed": 1,
+      "skipped": 1192,
+      "failure": "Late heartbeat after atomic publication turned successful work into cancelled.",
+      "fix": "2fb241b",
+      "recheck": "Deterministic successful-work/renewal and genuine early-failure cases; all later full runs passed."
+    },
+    {
+      "run": "initial affected dual-provider run",
+      "passed": 1557,
+      "failed": 1,
+      "skipped": 6,
+      "failure": "Independent PostgreSQL worker initializers deadlocked upgrading DDL relation locks.",
+      "fix": "a754ede",
+      "recheck": "Shared schema transaction startup lock before DDL; deterministic two-connection test, actual two-process quota race and final broad dual-provider regression passed."
+    },
+    {
+      "failure": "Late page host-membership changes, rolled-back expiry observations, and public raw parent proofs.",
+      "fix": "0a9bd12",
+      "recheck": "Final await, publication rollback/restart and moved-out revoked-source privacy regressions on both providers."
+    },
+    {
+      "failure": "Disabling qualified opt-in during last clock-metadata await could return body.",
+      "fix": "883051b",
+      "initial_counterexamples_failed": 2,
+      "recheck": "Both language and qualified page now deny; dual-provider security suite passed."
+    },
+    {
+      "failure": "Caller changed top-level question or forged context and recomputed deterministic snapshot ID.",
+      "fix": "85976f3",
+      "initial_counterexamples_failed": 2,
+      "recheck": "Durable fenced full snapshot digest rejects both. Final input suite also covers before-body current authority and failed-snapshot high-water."
+    }
+  ],
+  "review": {
+    "independent": true,
+    "remaining_known_blockers": [],
+    "source": "Independent B3 requirement/security review plus cross-batch B4 adversarial review; every confirmed B3 finding has a committed regression."
+  },
+  "runtime_capabilities": [
+    "trusted_current_project_full_questions",
+    "exact_registered_id_and_alias_routing",
+    "optional_readonly_sdk_mcp_questions",
+    "shared_budget_bounded_direct_refresh",
+    "qualified_current_language_parent_graphs_and_pages",
+    "host_published_full_project_question_pages",
+    "dual_provider_original_lineage_erasure_and_real_backup_replay"
+  ],
+  "skip_reason": "Six broad dual-provider skips are PostgreSQL-only query-plan/async lock cases in the SQLite parametrization; real PostgreSQL variants passed. Full SQLite run skips unavailable PostgreSQL DSN/optional backend-only cases; none are counted as passes.",
+  "limitations": [
+    "Synthetic fixtures only; licensed real gold/extraction-quality and real model/provider cost acceptance remain open (T02/T13/T15).",
+    "Generic historical project questions/pages, cross-scope composition, inferred persona and open model routing are unsupported.",
+    "B3 supports full rebuilds only; delta, generated explanation caches and partial block editing remain later opt-ins.",
+    "Project question pages are bounded trusted-host full projections of ready parents, without an advertised automatic page maintenance scheduler.",
+    "Upgrade requires coordinated old-writer drain; no arbitrary old binary fencing or weakened legacy proof conversion is claimed.",
+    "Counts are per-run, never cumulative; supported finite B3 runtime does not mark all inherited AM61 tasks complete."
+  ]
+}

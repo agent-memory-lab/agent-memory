@@ -266,6 +266,7 @@ async def main(config):
         service = ObservationService(
             repository, scope, base.POLICY, clock=lambda: now,
             context_token=config.get("context_token"),
+            qualified_current=config.get("qualified_current", False),
             **(dict(authority_id="local-host", authority_min_version=1,
                     history_mode=("published-interval/1" if phase.startswith("interval_")
                                   else "published-point/1"))

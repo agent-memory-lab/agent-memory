@@ -7,6 +7,7 @@ The scheduler receives an immutable normal job and exact responsibility proof.
 from datetime import datetime
 
 from ..derived.model import DerivedError, digest
+from ..derived.qualified import ROUTE_CONTRACT, validate_header_route
 from .facet_refresh import FacetRefreshQueue, checked_job, valid_completion
 
 
@@ -22,15 +23,16 @@ class ObservationRefreshProcessor:
     def __init__(self, service):
         self.service, self.repository, self.scope = service, service.repository, service.scope
         self.queue = FacetRefreshQueue(service)
-        self.key = "observation-refresh/1:" + digest(
-            [
+        configuration = [
                 self.scope.partition_key(),
                 service.policy,
                 service.context_token,
                 service.authority_id,
                 service.history_mode,
             ]
-        )
+        if service.qualified_current:
+            configuration.append({"qualified_current": ROUTE_CONTRACT})
+        self.key = "observation-refresh/1:" + digest(configuration)
 
     def instance_id(self, definition):
         return "question-instance:" + digest(
@@ -147,6 +149,11 @@ class ObservationRefreshProcessor:
                 or digest(header.get("manifest")) != header.get("manifest_sha256")
             )
             if header and not invalid:
+                if self.service.qualified_current and parent["spec"].get("context"):
+                    try:
+                        validate_header_route(parent["spec"], header, self.service.clock())
+                    except DerivedError:
+                        invalid = True
                 for source_id, data in header["manifest"]["sources"].items():
                     grant = await uow.derived_get(self.scope, "grant", source_id)
                     if not grant or grant.get("version") != data["grant_version"]:

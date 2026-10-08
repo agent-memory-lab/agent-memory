@@ -115,7 +115,11 @@ def headers(connection, scope):
 
 
 def header(connection, scope, record_id, event_id, slot_key, payload, version, *, routes=True):
+    from . import sqlite_project_index
+
     if payload.get("deleted"):
+        if routes:
+            sqlite_project_index.replace(connection, scope, record_id, None)
         connection.execute(
             "DELETE FROM derived_atom_headers WHERE partition_key=? AND identity=?",
             (scope.partition_key(), record_id),
@@ -124,6 +128,8 @@ def header(connection, scope, record_id, event_id, slot_key, payload, version, *
             edges(connection, scope, candidate_owner(record_id), ())
         return
     data = header_data(record_id, event_id, slot_key, payload, version)
+    if routes:
+        sqlite_project_index.replace(connection, scope, record_id, data)
     connection.execute(
         "INSERT INTO derived_atom_headers VALUES (?,?,?,?) ON CONFLICT "
         "(partition_key,identity) DO UPDATE SET slot_key=excluded.slot_key, "
@@ -172,6 +178,9 @@ def reverse(connection, scope, parent):
 
 
 def forget(connection, request):
+    from agent_memory.derived.project_index import erasure_header_keys
+    from agent_memory.derived.question_erasure import QUESTION_KINDS, erase_question_rows
+
     rows = []
     for kind in (
         "authority",
@@ -186,7 +195,10 @@ def forget(connection, request):
         "request",
         "history_point",
         "history_interval",
+        *QUESTION_KINDS,
     ):
+        # Scheduler records are scrubbed by the outer B2 scope hook. Do not
+        # deserialize their unsupported future schemas on the deletion path.
         rows.extend(dict(kind=kind, **r) for r in records(connection, request.scope, kind))
     ids = set(request.memory_ids)
     headers = connection.execute(
@@ -198,7 +210,7 @@ def forget(connection, request):
         | {"atom:" + key for key in ids}
         | {"derived:" + key for key in ids}
     )
-    slots = set()
+    slots, project_routes = set(), set()
     for key, slot, data in headers:
         if (
             request.all_in_scope
@@ -208,13 +220,24 @@ def forget(connection, request):
         ):
             parents.add("atom:" + key)
             slots.add(slot)
+            project_routes.update(erasure_header_keys(json.loads(data)))
             connection.execute(
                 "DELETE FROM derived_atom_headers WHERE partition_key=? AND identity=?",
                 (request.scope.partition_key(), key),
             )
+    question_changes, question_affected, question_owners = erase_question_rows(
+        rows, parents, request.all_in_scope, project_routes=project_routes
+    )
     changes, affected = erase_rows(rows, parents, request.all_in_scope, slots)
+    affected.update(question_affected)
+    # Scheduler metadata is physically scrubbed by the outer B2 scope hook.
+    # Bypass neither immutable execution guards nor indexed-demand validation.
+    changes.extend((kind, key, value) for kind, key, value in question_changes
+                   if kind not in KINDS)
     for kind, key, payload in changes:
         put(connection, request.scope, kind, key, payload)
+    for owner in question_owners:
+        edges(connection, request.scope, owner, [])
     for slot in slots:
         barrier = get(connection, request.scope, "barrier", slot) or {"generation": 0}
         put(connection, request.scope, "barrier", slot, {"generation": barrier["generation"] + 1})
@@ -244,6 +267,9 @@ def reconcile_headers(connection, scope):
 
 def scrub_routes(connection, scope):
     """Erase derived routing selectors and fence their exact-scope rebuild."""
+    from . import sqlite_project_index
+
+    sqlite_project_index.scrub(connection, scope)
     connection.execute(
         "DELETE FROM derived_dependencies WHERE partition_key=? AND revision_id LIKE 'route:%'",
         (scope.partition_key(),),

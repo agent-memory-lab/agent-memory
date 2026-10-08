@@ -214,7 +214,7 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 
 ## 能力状态与路线图
 
-**v0.1.0 是软件版本，v7.0.0 是最新目标架构版本。** 以下以已提交的[第十五阶段：有界当前语言 L2 页面](docs/design/v6.1.0/stage-15.md)为能力基线。Alpha 表示仍在补齐合同与验收；M0/M1/M2 尚未整体验收，单个阶段完成也不代表完整设计已交付。
+当前文档交付基线为 **[V7-B3：可信当前项目问题与资格保持页面](docs/design/v7.0.0/batch-b3.md)**，建立在已有语言视图和 L1 生命周期之上。软件包仍为 **v0.1.0 / Alpha**；架构、协议和软件版本分别管理。
 
 | 领域 | 已交付范围 | 实施证据 |
 | --- | --- | --- |
@@ -226,11 +226,13 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 | 派生父输入 | 固定当前语言修订、完整处理谱系、交付守卫及传递物理擦除 | [第十四阶段 C](docs/design/v6.1.0/stage-14c.md) |
 | 查询与宿主权限 | 版本化当前查询、有期限本地授权、来源 grant 绑定和最终交付检查 | [第十四阶段 A](docs/design/v6.1.0/stage-14a.md) |
 | 当前语言 L2 页面 | 类型化 Scenario/Page/Block 版本、稳定块身份、原子完整重建、固定就绪目标、交付守卫及传递擦除 | [第十五阶段](docs/design/v6.1.0/stage-15.md) |
+| 可信项目问题 | 宿主审查的负责人、状态、承诺和风险；确定性 full 答案、共享持久刷新、精确路由及可选 SDK/MCP 读取 | [B3](docs/design/v7.0.0/batch-b3.md) · [示例](examples/project_questions.py) |
+| 资格保持当前父与项目 L2 页面 | 兼容可信上下文、保留条件/例外、稳定块和不可变谱系、整页交付守卫 | [B3](docs/design/v7.0.0/batch-b3.md) |
 | 检索与反馈基础 | 受范围和预算约束的检索、可选 lexical/hybrid 候选、关联结果的 Episode/Procedure 与受控 Evolution 组件 | [代码架构](docs/ARCHITECTURE.md) · [反馈契约](docs/FEEDBACK_CONTRACT.md) |
 
 Observation 只开放文档规定的语言模板。发布点和可证明稳定区间的历史保留冻结政策/上下文，并检查当前权限；覆盖缺口明确拒绝。当前 `locale-parents/1` 视图固定实际父版本及传递处理许可。当前 `language-scenario/1` 页面组合同一 exact scope 下 1–4 个非条件语言 Observation 父，要求主体、用途与 authority 兼容。
 
-条件/历史父、页面作父、历史页面、delta 更新、一般场景模板、跨 scope 合成、远端 ACL 同步和 L3 仍未启用或处于规划中。有界页面交付不代表完整 L2/L3 生命周期完成。L1 已有的双时态查询可独立使用；`l1_decided` 只说明处理完成，不代表事实正确。
+显式启用 `qualified_current=True` 后，`locale-qualified-parents/1` 与 `language-qualified-scenario/1` 保留可信条件和例外。`QuestionService` 另支持有限当前项目问题与宿主触发的项目页面 full 发布；向 SDK/MCP 适配器传入 `questions=service` 才开放该可选接口。历史父/页面、页面作父、delta/部分块编辑、通用场景、跨 scope 合成、远端 ACL 同步、模型和 L3 仍关闭或待实现。有界页面交付不代表完整 L2/L3 生命周期完成。L1 已有的双时态查询可独立使用；`l1_decided` 只说明处理完成，不代表事实正确。
 
 工程证据按被测版本和范围分别记录，不累计跨阶段测试成绩：
 
@@ -243,22 +245,17 @@ Observation 只开放文档规定的语言模板。发布点和可证明稳定�
 
 这些记录验证协议、事务和恢复行为；合成输入不能代替真实对话 gold、抽取质量评测或生产验收。
 
-**最新目标方案是 [v7.0.0](docs/design/AGENT_MEMORY_DESIGN_V7.0.0.md)。** 它包含完整算法架构与数据流，设计受治理问题视图、合并刷新、确定性增量和精确答案复用。B0/B1 基础与按需启用的 B2 调度已按有限切片交付；项目 QuestionView、增量与模型复用继续分批实施。[第十五阶段审计](docs/design/v6.1.0/stage-15-audit.md)及[独立验证](docs/design/v6.1.0/validation-stage-15-audit.json)记录后续修复与代码 `583e20d` 的全量测试。发布时另承接远端 `2b7c4f7` 的[擦除与集成修复](CHANGELOG.md#fixed)；本轮文档更新未重跑其运行测试，前序通过数不覆盖该新提交。
+**最新目标方案是 [v7.0.0](docs/design/AGENT_MEMORY_DESIGN_V7.0.0.md)。** B0 提供严格协议/领域及全成本合同；[B1](docs/design/v7.0.0/batch-b1.md)提供索引失效；[B2 调度器](docs/design/v7.0.0/batch-b2.md)提供持久合并、固定覆盖目标、共享预算和宿主执行。[B3](docs/design/v7.0.0/batch-b3.md)在这些基础上闭合有限当前项目问题读取/页面生命周期。[本批验证记录](docs/design/v7.0.0/validation-b3.json)列出实际来源指纹与逐次运行结果；旧阶段成绩单独记录，不能累计为本轮通过数。
 
-后续见 [v7 实施计划](docs/design/v7.0.0/plan.md)与[任务台账](docs/design/v7.0.0/task.md)：
+[ProjectAdmission](src/agent_memory/consolidation/project_admission.py)要求可信来源 authority、已审查成员关系及字段/时间支持。缺少完成证据仍为未知，互斥负责人保留争议，无风险命中仅代表已知获准范围内的完整空集。支持 admitted-L1 与明确闭合的有限 publication manifest；正文前和交付前均检查当前权限、上下文和时间。擦除与旧备份回放也覆盖未发布注册和页面路由。
 
-1. 冻结问题语义、成本和质量基线，实施精确失效与覆盖证明。
-2. 补齐合并刷新、冷热策略、公平预算和持久宿主 worker。
-3. 实现有界项目问题视图与确定性读取，承接[第十六阶段资格父与页面计划](docs/design/v6.1.0/stage-16-plan.md)。
-4. 实施可证明的增量/证明复用，再接入受治理的模型缓存，最后完整验证能力、恢复与真实成本。
+升级必须停止旧写进程。项目候选索引为加性迁移；新能力默认关闭，回滚时关闭新读者/worker 并保留权威删除日志。项目页面只提供由宿主触发、消费已就绪父结果的有界 full 投影，不宣告自动项目页调度器或部分编辑器。
 
-v7 台账保留原有 44 项任务状态，跟踪 15 项新增任务。[B0 实施记录](docs/design/v7.0.0/batch-b0.md)新增严格问题/领域合同、full 规范夹具及显式全成本验收口径。这些是加性协议与评测基础：不启用 V7 运行能力、不执行 schema 迁移，真实数据/模型收益仍未验证。
+B2 的[独立生命周期证据](docs/design/v7.0.0/validation-b2.json)覆盖固定责任、公平共享限额、时钟守卫与实际进程强杀恢复。确定性资源限额不代表模型金额预算或已验证的生产收益。
 
-[B1](docs/design/v7.0.0/batch-b1.md)为既有 admitted-L1 派生运行时新增索引失效、订阅证明及跨受影响投影范围的事务擦除。升级必须协调停止旧写进程；项目 QuestionView 和 publication-manifest 问题读取仍关闭。
+后续按 [v7 计划](docs/design/v7.0.0/plan.md)与[任务台账](docs/design/v7.0.0/task.md)实施可证明增量/证明复用、受治理模型缓存，再完成恢复、兼容与真实成本验收。保留全部 44 项旧任务状态。合成确定性测试不代表许可真实数据质量、生产收益或完整 M0/M1/M2 验收；这些门仍开放。
 
 高级检索和可选的只读 Reflect 继续按[任务台账](docs/design/v6.1.0/task.md)推进。远程部署见[安全策略](SECURITY.md)和[威胁模型](docs/THREAT_MODEL.md)；外部缓存、远端 ACL 和供应商副本需要各自完成集成合同。
-
-[B2](docs/design/v7.0.0/batch-b2.md) 为当前 Observation/父图/页面提供显式启用的持久合并刷新、有限 coverage 回执、统一确定性资源限额、租户公平/aging、持久 due 与可重启宿主。双后端验证实际强杀、时钟和擦除恢复。冷热策略由宿主控制；本切片不代表模型金额预算或已验证的生产节省。
 
 ## 文档导航
 

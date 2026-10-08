@@ -7,6 +7,15 @@ from ..domain import canonical_json
 from .model import DerivedError, digest, identity
 from .page_model import PAGE_CONTRACT, PAGE_TEMPLATE, PageBlockRevision, PageDefinition
 from .parents import supported
+from .qualified import (
+    QUALIFIED_PAGE_TEMPLATE,
+    ROUTE_CONTRACT,
+    is_qualified_graph,
+    preserved_observation,
+    qualified_supported,
+    route_proof,
+    validate_manifest_route,
+)
 
 
 def is_page(spec):
@@ -31,6 +40,9 @@ def compose_page(snapshot, scope):
     )
     if set(parents) != set(spec["parent_facets"]):
         raise DerivedError("derived_input_dependency_unknown")
+    qualified = is_qualified_graph(spec)
+    if qualified:
+        validate_manifest_route(spec, manifest, snapshot["at"])
     manifest_hash = digest(manifest)
     blocks, references, support, transitions = [], [], [], []
     for key in spec["parent_facets"]:
@@ -41,6 +53,13 @@ def compose_page(snapshot, scope):
                 kind="language_observation", parent_facet_id=key,
                 parent_revision_id=parent["id"], content=deepcopy(parent["body"]["blocks"]),
             )
+            if qualified:
+                # Preserve projection status, route, policy, time and every nested
+                # qualifier/conflict/evidence field alongside the selected blocks.
+                content = dict(
+                    kind="qualified_language_observation", parent_facet_id=key,
+                    parent_revision_id=parent["id"], observation=preserved_observation(parent),
+                )
             body_hash = digest(content)
             revision_id = "page-block-version:" + digest([stable_id, body_hash, manifest_hash])
             block = PageBlockRevision(
@@ -53,9 +72,12 @@ def compose_page(snapshot, scope):
             transitions.append(parent["next_transition_at"])
     body = dict(
         schema="memory-page/1", page_id=spec["id"], subject_id=spec["subject_id"],
-        scenario=deepcopy(spec["scenario"]), template=PAGE_TEMPLATE,
+        scenario=deepcopy(spec["scenario"]), template=spec["template_version"],
         rebuild="full", blocks=references,
     )
+    if qualified:
+        body["qualification"] = route_proof(spec)
+        transitions.append(spec["context"]["expires_at"])
     # Include the materialized blocks in the output budget, not just tiny references.
     delivered = materialized_body(body, [block["body"] for block in blocks])
     if len(canonical_json(delivered).encode()) > 32768:
@@ -77,6 +99,12 @@ class KnowledgePages:
     async def check(self, uow, spec):
         if is_page(spec) and not page_supported(uow):
             raise DerivedError("page_backend_unsupported")
+        if is_page(spec) and is_qualified_graph(spec) and not qualified_supported(uow):
+            raise DerivedError("derived_qualified_backend_unsupported")
+        if is_page(spec) and is_qualified_graph(spec) and not getattr(
+            self.service, "qualified_current", False
+        ):
+            raise DerivedError("derived_qualified_context_unsupported")
 
     async def register(self, definition, *, expected_generation=0):
         if not isinstance(definition, PageDefinition):
@@ -85,8 +113,10 @@ class KnowledgePages:
             raise DerivedError("page_scenario_scope_mismatch")
         if self.service.history_mode is not None:
             raise DerivedError("page_history_unsupported")
-        if self.service.context_token is not None:
+        if self.service.context_token is not None and definition.context is None:
             raise DerivedError("page_context_unsupported")
+        if definition.context is not None:
+            definition.context.current(self.service.clock())
         return await self.service._register_spec(
             definition.payload(), expected_generation=expected_generation, definition_slots=[]
         )
@@ -106,12 +136,9 @@ class KnowledgePages:
             await uow.derived_put(self.scope, "page_block", row["id"], row)
 
     async def read(self, page_id, *, actor, purpose="agent_context"):
-        from .service import open_derived
-
         await self.service._read_preflight(page_id)
         try:
-            async with self.service.repository.unit_of_work() as uow:
-                await open_derived(uow, self.scope, self.service.history_mode)
+            async with self.service._current_read_scope() as uow:
                 return await self._read(uow, page_id, actor, purpose)
         except DerivedError:
             await self.service._read_preflight(page_id)
@@ -159,6 +186,10 @@ class KnowledgePages:
                 return dict(page_id=page_id, state="invalid", body=None,
                             reason="page_block_integrity_failed")
             materialized.append(block["body"])
+        try:
+            await self.service._qualified_delivery_guard(uow, definition)
+        except DerivedError as error:
+            return dict(page_id=page_id, state="invalid", body=None, reason=error.code)
         result.update(
             revision_id=revision["id"], refresh_state="completed",
             body=materialized_body(view["body"], materialized),
@@ -195,13 +226,20 @@ class KnowledgePages:
 
             async with self.service.repository.unit_of_work() as uow:
                 await open_derived(uow, self.scope, self.service.history_mode)
-                enabled = (page_supported(uow) and self.service.history_mode is None
-                           and self.service.context_token is None)
+                current = self.service.history_mode is None
+                qualified = (current and self.service.context_token is not None
+                             and getattr(self.service, "qualified_current", False)
+                             and qualified_supported(uow) and page_supported(uow))
+                enabled = (page_supported(uow) and current
+                           and (self.service.context_token is None or qualified))
             return dict(
                 schema="page-capabilities/1", readonly=True, enabled=enabled,
-                templates=[PAGE_TEMPLATE] if enabled else [],
+                templates=([QUALIFIED_PAGE_TEMPLATE] if qualified else [PAGE_TEMPLATE])
+                if enabled else [],
                 rebuild_modes=["full"] if enabled else [],
                 historical=False, page_parents=False, inferred_persona=False,
+                qualified_current=qualified,
+                qualified_route_contract=ROUTE_CONTRACT if qualified else None,
                 contract=PAGE_CONTRACT if enabled else None,
                 limits=dict(parents=4, graph_nodes=32, path_nodes=4, output_bytes=32768,
                             scope_block_revisions=4096),

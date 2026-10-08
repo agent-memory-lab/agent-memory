@@ -596,6 +596,8 @@ class AdmissionEngine:
                 raise ValueError("only pending or contested candidates can be resolved")
             if payload.get("contribution"):
                 raise ValueError("managed slot requires versioned contribution operations")
+            if payload.get("project_candidate"):
+                raise ValueError("project candidates require registered project review")
             if payload.get("qualification"):
                 raise ValueError("contextual candidates require versioned field qualification")
             original = draft_from_payload(payload["draft"])

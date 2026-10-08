@@ -4,10 +4,11 @@ from dataclasses import dataclass
 
 from ..domain import MemoryScope
 from ..serialization import to_jsonable
-from .model import DerivedError, digest, identity
+from .model import DerivedError, FacetContext, digest, identity
 
 PAGE_CONTRACT = "page-full-rebuild/1"
 PAGE_TEMPLATE = "language-scenario/1"
+QUALIFIED_PAGE_TEMPLATE = "language-qualified-scenario/1"
 
 
 @dataclass(frozen=True)
@@ -43,14 +44,26 @@ class PageDefinition:
     readers: tuple[str, ...] = ("alice",)
     template_version: str = PAGE_TEMPLATE
     authority_id: str | None = None
+    context: FacetContext | None = None
 
     def __post_init__(self):
         for value in (self.id, self.version, self.purpose):
             identity(value)
         if not isinstance(self.scenario, ScenarioDefinition):
             raise DerivedError("trusted_scenario_definition_required")
-        if self.template_version != PAGE_TEMPLATE:
+        if self.template_version not in {PAGE_TEMPLATE, QUALIFIED_PAGE_TEMPLATE}:
             raise DerivedError("page_template_unsupported")
+        if (self.context is not None and not isinstance(self.context, FacetContext)) or (
+            (self.template_version == QUALIFIED_PAGE_TEMPLATE)
+            != isinstance(self.context, FacetContext)
+        ):
+            raise DerivedError("trusted_facet_context_required")
+        if self.context is not None and (
+            self.context.query.scope != self.scenario.scope
+            or self.context.query.subject_id != self.scenario.subject_id
+            or self.context.query.purpose != self.purpose
+        ):
+            raise DerivedError("derived_context_mismatch")
         if not isinstance(self.parent_facets, tuple) or not 1 <= len(self.parent_facets) <= 4:
             raise DerivedError("invalid_page_parents")
         for value in self.parent_facets:
@@ -71,6 +84,8 @@ class PageDefinition:
         spec.update(resource_kind="page", subject_id=self.scenario.subject_id)
         if self.authority_id is None:
             spec.pop("authority_id")
+        if self.context is None:
+            spec.pop("context")  # Keep the deployed unconditional fingerprint unchanged.
         return spec
 
 

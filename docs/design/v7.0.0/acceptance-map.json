@@ -1,12 +1,18 @@
 {
   "schema": "v7-acceptance-map/1",
-  "baseline": "7f824dd49b18935c6b47f5eb32aa32efdbd8cf01",
-  "batch": "B2",
-  "runtime_capabilities": [],
+  "baseline": "a6472feb25ee2b7ef4a3188488a34806fcf7e4a7",
+  "batch": "B3",
+  "runtime_capabilities": [
+    "finite_current_project_full_questions_opt_in",
+    "exact_registered_question_routing",
+    "qualified_current_language_parent_page_opt_in",
+    "host_published_full_project_pages"
+  ],
   "notes": [
     "Protocol unit tests do not establish full runtime acceptance.",
     "Inherited status is a verbatim snapshot, not a new V7 test result.",
-    "Unsupported, deferred, not_run and insufficient_data are never passes."
+    "Unsupported, deferred, not_run and insufficient_data are never passes.",
+    "B3 passes are bounded to explicitly host-enabled current full templates; no delta, model, historical page or production quality acceptance is inferred."
   ],
   "cases": [
     {
@@ -692,15 +698,23 @@
       "id": "Q7-14",
       "scenario": "注册字段查询及模板说明",
       "owner": "AM70-T08",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "passed",
+      "evidence": [
+        "tests/test_question_transport_v7.py",
+        "tests/test_question_runtime_v7.py",
+        "docs/design/v7.0.0/validation-b3.json"
+      ]
     },
     {
       "id": "Q7-15",
       "scenario": "自然语言指向不明或参数冲突",
       "owner": "AM70-T08",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "passed",
+      "evidence": [
+        "tests/test_question_transport_v7.py",
+        "tests/test_question_runtime_v7.py",
+        "docs/design/v7.0.0/validation-b3.json"
+      ]
     },
     {
       "id": "Q7-16",
@@ -708,10 +722,10 @@
       "owner": "AM70-T02",
       "v7_status": "partial",
       "evidence": [
-        {
-          "path": "tests/test_project_questions_v7.py",
-          "scope": "Protocol-only deterministic oracle. Integrated trusted admission and live query census remain B3 work."
-        }
+        "tests/test_project_questions_v7.py",
+        "tests/test_project_admission_v7.py",
+        "tests/test_question_runtime_v7.py",
+        "Synthetic complete-census and missing-completion semantics pass; licensed real domain gold/quality gates remain open."
       ]
     },
     {
@@ -760,8 +774,12 @@
       "id": "Q7-23",
       "scenario": "部分块编辑和整页输出",
       "owner": "AM70-T09",
-      "v7_status": "not_run",
-      "evidence": []
+      "v7_status": "partial",
+      "evidence": [
+        "tests/test_question_pages_v7.py",
+        "tests/test_v7_qualified_pages.py",
+        "Full rebuild: stable blocks, immutable generation lineage, real materialized budget and final guards. Partial block editing unsupported in B3."
+      ]
     },
     {
       "id": "Q7-24",

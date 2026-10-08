@@ -94,6 +94,9 @@ class PostgresMemoryUnitOfWork:
     refresh_scheduler_contract = "durable-coalescing/1"
     derived_parent_contract = "processing-graph/1"
     derived_page_contract = "page-full-rebuild/1"
+    question_runtime_contract = "question-runtime/1"
+    question_page_contract = "project-question-scenario/1"
+    derived_qualified_contract = "qualified-current-route/1"
 
     def __init__(self, repository: PostgresMemoryRepository) -> None:
         self._repository = repository
@@ -366,6 +369,36 @@ class PostgresMemoryUnitOfWork:
         from . import derived
 
         return await derived.headers(self.connection, scope)
+
+    async def derived_project_index(self, scope):
+        await self.lock_admission_scope(scope)
+        from . import project_index
+
+        old = await self.derived_get(scope, "project_index", "scope")
+        row = await project_index.ensure(self.connection, scope)
+        if old is None or old.get("generation") != row["generation"]:
+            from agent_memory.derived import subscriptions
+
+            gate = await self.derived_get(scope, "subscription_index", "scope")
+            if gate is not None:
+                gate["state"] = "needs_backfill"
+                await self.derived_put(scope, "subscription_index", "scope", gate)
+            await subscriptions.ensure_index(self, scope)
+        return row
+
+    async def derived_project_candidates(self, scope, contract_fingerprint, project_id):
+        await self.derived_project_index(scope)
+        from . import project_index
+
+        return await project_index.candidates(
+            self.connection, scope, contract_fingerprint, project_id
+        )
+
+    async def derived_project_source_proof(self, scope, source_id):
+        await self.lock_admission_scope(scope)
+        from . import project_index
+
+        return await project_index.source_metadata(self.connection, scope, source_id)
 
     async def derived_candidates(self, scope, slots):
         from . import derived
@@ -663,6 +696,7 @@ class PostgresMemoryUnitOfWork:
     ) -> int:
         payload = deepcopy(payload)
         await self.lock_admission_scope(scope)
+        await self.derived_project_index(scope)
         namespace = (scope.tenant_id, scope.namespace)
         if namespace not in self._admission_batch_times:
             self._admission_batch_times[namespace] = await admission.publication_time(

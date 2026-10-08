@@ -14,7 +14,7 @@ from .model import DerivedError, digest, source_ids
 
 SCHEMA = "derived-subscription-index/1"
 SUBSCRIPTION_SCHEMA = "derived-query-subscription/1"
-HEADER_SCHEMA = "derived-candidate-header/2"
+HEADER_SCHEMA = "derived-candidate-header/3"
 SCOPE_KEY = "route:scope"
 SCOPE_BARRIER = "route:scope-generation"
 FALLBACK_BARRIER = "route:fallback"
@@ -50,7 +50,10 @@ def parent_key(key):
 
 
 def header_data(record_id, event_id, slot, payload, version):
+    from .project_index import routing
+
     return dict(
+        project=routing(payload),
         schema=HEADER_SCHEMA,
         generation=version,
         id=record_id,
@@ -74,6 +77,10 @@ def keys_for(definition):
         raise DerivedError("derived_subscription_slot_unsupported")
     keys = {SCOPE_KEY, *(slot_key(key) for key in definition["slots"])}
     spec = definition["spec"]
+    if spec.get("schema") == "question-instance-registration/1":
+        from .project_index import query_keys
+
+        keys.update(query_keys(spec["contract_fingerprint"], spec["project_id"]))
     for field in ("query_id", "authority_id"):
         if spec.get(field) is not None:
             keys.add(control_key(field, spec[field]))
@@ -115,6 +122,9 @@ async def ensure_index(uow, scope):
     of deploying these hooks, not something this metadata gate can enforce for them.
     """
     await uow.lock_admission_scope(scope)
+    project_index = getattr(uow, "derived_project_index", None)
+    if callable(project_index):
+        await project_index(scope)
     row = await uow.derived_get(scope, "subscription_index", "scope")
     if row is not None and row.get("schema") != SCHEMA:
         raise DerivedError("derived_subscription_schema_unsupported")
