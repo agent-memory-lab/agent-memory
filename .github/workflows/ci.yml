@@ -121,6 +121,10 @@ jobs:
           tests/test_question_runtime_v7.py tests/test_question_transport_v7.py
           tests/test_question_pages_v7.py tests/test_question_erasure_v7.py
           tests/test_question_snapshot_security_v7.py
+          tests/test_governed_models_v7.py tests/test_model_budget_v7.py
+          tests/test_ollama_port_v7.py tests/test_model_budget_recovery_v7.py
+          tests/test_model_cost_runtime_v7.py tests/test_question_models_v7.py
+          tests/test_b5_independent_security_v7.py
           tests/test_question_delta_v7.py tests/test_question_proof_reuse_v7.py
           tests/test_question_page_validation_v7.py tests/test_b4_adversarial_review.py
           tests/test_v7_project_indexes.py tests/test_v7_qualified_pages.py

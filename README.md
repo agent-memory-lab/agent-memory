@@ -250,6 +250,8 @@ Next steps follow the [v7 plan](docs/design/v7.0.0/plan.md) and [task ledger](do
 
 Advanced retrieval and optional read-only Reflect remain on the [task ledger](docs/design/v6.1.0/task.md). Remote deployments use the [security policy](SECURITY.md) and [threat model](docs/THREAT_MODEL.md); external caches, remote ACL systems, and provider-held copies need their own integration contracts.
 
+Explicit model explanations are available through the host-bound [B5 runtime](docs/design/v7.0.0/batch-b5.md) and SDK `question_model_answer`. Ordinary structured answers remain model-free. Ollama setup and real quality/cost acceptance are pending; local compute is never assumed free.
+
 ## Documentation
 
 | You want to… | Start here |

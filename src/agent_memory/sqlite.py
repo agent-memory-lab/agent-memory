@@ -336,6 +336,24 @@ class SQLiteMemoryUnitOfWork:
             ),
         )
 
+    model_budget_contract = "model-budget/1"
+
+    async def model_budget_lock(self):
+        # BEGIN IMMEDIATE already serializes this repository's monetary authority.
+        return None
+
+    async def model_budget_get(self, kind, key):
+        from .operations import sqlite_model_budget as store
+        return store.get(self.connection, kind, key)
+
+    async def model_budget_put(self, kind, key, payload):
+        from .operations import sqlite_model_budget as store
+        return store.put(self.connection, kind, key, payload)
+
+    async def model_budget_records(self, kind):
+        from .operations import sqlite_model_budget as store
+        return store.records(self.connection, kind)
+
     async def derived_get(self, scope, kind, identity):
         from .operations import sqlite_derived
 
@@ -1100,6 +1118,9 @@ class SQLiteMemoryRepository:
         self._enable_wal()
         with self._connection() as connection:
             connection.executescript(sqlite_retention.SCHEMA)
+            from .operations import sqlite_model_budget
+
+            connection.executescript(sqlite_model_budget.SCHEMA)
             from .operations import sqlite_derived
 
             connection.executescript(sqlite_derived.SCHEMA)

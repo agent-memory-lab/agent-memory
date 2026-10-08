@@ -195,6 +195,8 @@ def forget(connection, request):
         "request",
         "history_point",
         "history_interval",
+        "model_cache_header", "model_cache_body", "model_flight",
+        "model_authorization", "model_processing_grant",
         *QUESTION_KINDS,
     ):
         # Scheduler records are scrubbed by the outer B2 scope hook. Do not
@@ -228,6 +230,9 @@ def forget(connection, request):
     question_changes, question_affected, question_owners = erase_question_rows(
         rows, parents, request.all_in_scope, project_routes=project_routes
     )
+    # A certificate/content erase retires its whole question instance. Carry
+    # that derived ancestry into model-cache erasure, including older revisions.
+    parents.update("derived:" + key for key in question_affected)
     changes, affected = erase_rows(rows, parents, request.all_in_scope, slots)
     affected.update(question_affected)
     # Scheduler metadata is physically scrubbed by the outer B2 scope hook.
@@ -236,6 +241,9 @@ def forget(connection, request):
                    if kind not in KINDS)
     for kind, key, payload in changes:
         put(connection, request.scope, kind, key, payload)
+    for kind, key, payload in changes:
+        if kind == "model_cache_header":
+            edges(connection, request.scope, "model-cache:" + key, [])
     for owner in question_owners:
         edges(connection, request.scope, owner, [])
     for slot in slots:

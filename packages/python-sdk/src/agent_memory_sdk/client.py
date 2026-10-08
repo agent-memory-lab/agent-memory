@@ -376,6 +376,12 @@ class _Operations(RecoveryClientOperations):
             payload["parameters"] = parameters
         return await self._call("memory_question", {"operation": "route", "payload": payload})
 
+    async def question_model_answer(self, question_id: str):
+        """Explicit opt-in buffered explanation; never enabled by ordinary answer()."""
+        return await self._call("memory_question", {
+            "operation": "model_answer", "payload": {"question_id": question_id},
+        })
+
     async def question_answer(self, query: str, *, dedupe_key: str, parameters=None, max_steps=1):
         payload = {"query": query, "dedupe_key": dedupe_key, "max_steps": max_steps}
         if parameters is not None:
