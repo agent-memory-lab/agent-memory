@@ -114,12 +114,14 @@ class MCPMemoryTools:
         deletion_auditor: DeletionAuditService | None = None,
         ontology=None,
         derived=None,
+        questions=None,
     ) -> None:
         self._provider = provider
         self._doctor = doctor
         self._deletion_auditor = deletion_auditor
         self._ontology = ontology
         self._derived = derived
+        self._questions = questions
 
     def list_tools(self) -> tuple[dict[str, Any], ...]:
         scope_note = "Scope is derived from the authenticated request and is not an argument."
@@ -375,6 +377,21 @@ class MCPMemoryTools:
                     ("operation", "payload"),
                 ),
             )
+        if self._questions is not None:
+            from .derived.question_transport import OPERATIONS
+
+            tools += (
+                self._tool(
+                    "memory_question",
+                    "Read or request finite registered project questions under host budgets. "
+                    + scope_note,
+                    {
+                        "operation": {"type": "string", "enum": list(OPERATIONS)},
+                        "payload": {"type": "object"},
+                    },
+                    ("operation", "payload"),
+                ),
+            )
         capabilities = self._provider.manifest().capabilities
         enabled = list(tools)
         if not capabilities.bitemporal_claims:
@@ -469,6 +486,17 @@ class MCPMemoryTools:
     ) -> dict[str, Any]:
         try:
             self.validate_tool_arguments(name, arguments)
+            if name == "memory_question":
+                from .derived.model import DerivedError
+
+                if self._questions is None:
+                    raise MCPToolError("project questions are disabled", code="question_disabled")
+                try:
+                    return await self._questions.call(
+                        arguments["operation"], arguments["payload"], context
+                    )
+                except DerivedError as error:
+                    raise MCPToolError(error.code, code=error.code) from None
             if name == "memory_derived":
                 from .derived.model import DerivedError
 

@@ -113,8 +113,12 @@ async def headers(connection, scope):
 async def header(
     connection, scope, record_id, event_id, slot_key, payload, version, *, routes=True
 ):
+    from . import project_index
+
     payload = deepcopy(payload)
     if payload.get("deleted"):
+        if routes:
+            await project_index.replace(connection, scope, record_id, None)
         await connection.execute(
             "DELETE FROM agent_memory_derived_atom_headers WHERE partition_key=%s AND identity=%s",
             (scope.partition_key(), record_id),
@@ -123,6 +127,8 @@ async def header(
             await edges(connection, scope, candidate_owner(record_id), ())
         return
     data = header_data(record_id, event_id, slot_key, payload, version)
+    if routes:
+        await project_index.replace(connection, scope, record_id, data)
     await connection.execute(
         "INSERT INTO agent_memory_derived_atom_headers VALUES (%s,%s,%s,%s::jsonb) "
         "ON CONFLICT (partition_key,identity) DO UPDATE SET slot_key=excluded.slot_key, "
@@ -173,6 +179,9 @@ async def reverse(connection, scope, parent):
 
 
 async def forget(connection, request):
+    from agent_memory.derived.project_index import erasure_header_keys
+    from agent_memory.derived.question_erasure import QUESTION_KINDS, erase_question_rows
+
     rows = []
     for kind in (
         "authority",
@@ -187,7 +196,10 @@ async def forget(connection, request):
         "request",
         "history_point",
         "history_interval",
+        *QUESTION_KINDS,
     ):
+        # The outer scheduler erase hook handles these records without parsing
+        # unknown future schemas; deletion must remain possible after downgrade.
         rows.extend(dict(kind=kind, **r) for r in await records(connection, request.scope, kind))
     ids = set(request.memory_ids)
     cursor = await connection.execute(
@@ -200,7 +212,7 @@ async def forget(connection, request):
         | {"atom:" + key for key in ids}
         | {"derived:" + key for key in ids}
     )
-    slots = set()
+    slots, project_routes = set(), set()
     for row in await cursor.fetchall():
         if (
             request.all_in_scope
@@ -210,14 +222,25 @@ async def forget(connection, request):
         ):
             parents.add("atom:" + row["identity"])
             slots.add(row["slot_key"])
+            project_routes.update(erasure_header_keys(row["payload_json"]))
             await connection.execute(
                 "DELETE FROM agent_memory_derived_atom_headers "
                 "WHERE partition_key=%s AND identity=%s",
                 (request.scope.partition_key(), row["identity"]),
             )
+    question_changes, question_affected, question_owners = erase_question_rows(
+        rows, parents, request.all_in_scope, project_routes=project_routes
+    )
     changes, affected = erase_rows(rows, parents, request.all_in_scope, slots)
+    affected.update(question_affected)
+    # Scheduler metadata is physically scrubbed by the outer B2 scope hook.
+    # Bypass neither immutable execution guards nor indexed-demand validation.
+    changes.extend((kind, key, value) for kind, key, value in question_changes
+                   if kind not in KINDS)
     for kind, key, payload in changes:
         await put(connection, request.scope, kind, key, payload)
+    for owner in question_owners:
+        await edges(connection, request.scope, owner, [])
     for slot in slots:
         barrier = await get(connection, request.scope, "barrier", slot) or {"generation": 0}
         await put(
@@ -250,6 +273,9 @@ async def reconcile_headers(connection, scope):
 
 async def scrub_routes(connection, scope):
     """Erase derived routing selectors and fence their exact-scope rebuild."""
+    from . import project_index
+
+    await project_index.scrub(connection, scope)
     await connection.execute(
         "DELETE FROM agent_memory_derived_dependencies "
         "WHERE partition_key=%s AND revision_id LIKE 'route:%%'",

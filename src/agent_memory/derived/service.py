@@ -1,5 +1,6 @@
 """Host-owned derived lifecycle: authorize snapshot, prepare, CAS publish, guarded read."""
 
+from contextlib import asynccontextmanager
 from copy import deepcopy
 from datetime import datetime
 
@@ -32,6 +33,15 @@ from .parents import (
     invalidate_descendants,
     revision_header,
     supported,
+)
+from .qualified import (
+    QUALIFIED_PARENT_TEMPLATE,
+    ROUTE_CONTRACT,
+    manifest_fields,
+    manifest_schema,
+    qualified_supported,
+    validate_header_route,
+    validate_manifest_route,
 )
 from .registry import DerivedRegistry, expected, slots
 
@@ -78,6 +88,10 @@ async def mark_slot_changed(
         at=at, reason=reason,
     )
 
+    from . import project_index
+
+    await project_index.changed(uow, scope, old_header, new_header, at=at, reason=reason)
+
 
 async def interpretation_changed(uow, scope, source_id, *, at=None):
     # Source routes include pending/rejected candidates, not merely cited inputs.
@@ -90,6 +104,9 @@ async def interpretation_changed(uow, scope, source_id, *, at=None):
         await mark_slot_changed(uow, scope, key, at=at, reason="interpretation")
     if not keys:
         await subscriptions.bump(uow, scope, subscriptions.SCOPE_BARRIER)
+    from . import project_index
+
+    await project_index.source_changed(uow, scope, source_id, at=at, reason="interpretation")
 
 
 async def document_changed(uow, scope, *, at):
@@ -145,9 +162,15 @@ class ObservationService:
         authority_id=None,
         authority_min_version=None,
         history_mode=None,
+        qualified_current=False,
     ):
         self.repository, self.scope, self.clock = repository, scope, clock
         self.policy = policy.config_payload()
+        if type(qualified_current) is not bool or (
+            qualified_current and (context_token is None or history_mode is not None)
+        ):
+            raise DerivedError("derived_qualified_context_unsupported")
+        self.qualified_current = qualified_current
         self.context_token = identity(context_token) if context_token is not None else None
         self.authority_id = identity(authority_id) if authority_id is not None else None
         if self.authority_id is not None and (
@@ -205,13 +228,25 @@ class ObservationService:
         if spec.get("history_mode") != self.history_mode:
             raise DerivedError("derived_history_configuration_mismatch")
         self._context_binding(spec)
-        fingerprint = digest(dict(definition=spec, policy=self.policy))
+        fingerprint = self._definition_fingerprint(spec)
         async with self.repository.unit_of_work() as uow:
             epoch = await open_derived(uow, self.scope, self.history_mode)
+            if self.qualified_current and not qualified_supported(uow):
+                raise DerivedError("derived_qualified_backend_unsupported")
             await self.pages.check(uow, spec)
             await self.registry.bindings(uow, spec)
             await self.parents.validate_registration(uow, spec)
             old = await uow.derived_get(self.scope, "definition", spec["id"])
+            if old and not old.get("disabled") and old.get("refresh_managed") and (
+                old.get("qualified_current", False) != self.qualified_current
+            ):
+                # B2 binds a managed facet to one immutable processor identity.
+                # A new proof mode needs a new host facet, not a stranded policy.
+                raise DerivedError("derived_definition_configuration_changed")
+            if old and not old.get("disabled") and old.get("qualified_current") and (
+                not self.qualified_current
+            ):
+                raise DerivedError("derived_definition_configuration_changed")
             if old and is_page(old["spec"]) != is_page(spec):
                 raise DerivedError("derived_resource_kind_conflict")
             if old and old["spec"].get("authority_id") not in {None, self.authority_id}:
@@ -233,6 +268,8 @@ class ObservationService:
                 dirty=True,
                 disabled=False,
             )
+            if self.qualified_current:
+                row["qualified_current"] = True
             if old and old.get("refresh_managed"):
                 row["refresh_managed"] = True
             if old is not None:
@@ -279,6 +316,11 @@ class ObservationService:
                     uow, self.scope, tuple(subscriptions.slot_key(key) for key in keys),
                     at=self.clock(), reason="grant", safety=True,
                 )
+                from . import project_index
+
+                await project_index.source_changed(
+                    uow, self.scope, grant.source_id, at=self.clock(), reason="grant", safety=True
+                )
             return deepcopy(row)
 
     async def _unit(self, uow, row):
@@ -319,9 +361,13 @@ class ObservationService:
             or row["epoch"] != await uow.retention_epoch(self.scope)
         ):
             raise DerivedError("derived_definition_unavailable")
-        if digest(dict(definition=row["spec"], policy=self.policy)) != row["fingerprint"]:
+        if (self._definition_fingerprint(row["spec"]) != row["fingerprint"] or
+            row.get("qualified_current", False) != self.qualified_current):
             raise DerivedError("derived_definition_configuration_changed")
+        if self.qualified_current and not qualified_supported(uow):
+            raise DerivedError("derived_qualified_backend_unsupported")
         await self.pages.check(uow, row["spec"])
+        self.parents.check_qualified(uow, row["spec"])
         self._context_binding(row["spec"])
         if row["spec"].get("history_mode") != self.history_mode:
             raise DerivedError("derived_history_configuration_mismatch")
@@ -334,7 +380,14 @@ class ObservationService:
             row["spec"].get("authority_id") == self.authority_id
             and (binding is None or binding["query"]["snapshot_token"] == self.context_token)
             and row["spec"].get("history_mode") == self.history_mode
+            and row.get("qualified_current", False) == self.qualified_current
         )
+
+    def _definition_fingerprint(self, spec):
+        configuration = dict(definition=spec, policy=self.policy)
+        if self.qualified_current:
+            configuration["qualified_current"] = ROUTE_CONTRACT
+        return digest(configuration)
 
     def _context_binding(self, spec):
         if spec.get("context") is None:
@@ -499,6 +552,9 @@ class ObservationService:
                 manifest["authorization"] = self._parent_authorization(
                     definition["spec"], parent_headers
                 )
+            if self.qualified_current:
+                manifest.update(manifest_fields(definition["spec"]))
+                manifest["schema"] = manifest_schema(definition["spec"], bool(parents))
             if len(canonical_json(manifest).encode()) > 262144:
                 raise DerivedError("derived_manifest_capacity")
             await self._check_unit(uow, unit)  # Legacy head adoption can advance a barrier.
@@ -540,6 +596,8 @@ class ObservationService:
         expiries = [g["expires_at"] for g in snapshot["grants"].values() if g.get("expires_at")]
         if snapshot.get("authority") is not None:
             expiries.append(snapshot["authority"]["spec"]["expires_at"])
+        if self.qualified_current and spec.get("context"):
+            expiries.append(spec["context"]["expires_at"])
         transitions = [v for v in [result["next_transition_at"], *expiries] if v]
         result["next_transition_at"] = (
             min(transitions, key=datetime.fromisoformat) if transitions else None
@@ -593,6 +651,9 @@ class ObservationService:
             if snapshot.get("authority") != authority:
                 raise DerivedError("derived_safety_changed")
             now = self._checked_clock(guarded_at)
+            route_fields = manifest_fields(definition["spec"]) if self.qualified_current else {}
+            if route_fields:
+                validate_manifest_route(definition["spec"], snapshot["manifest"], now)
             parents, parent_headers = await self.parents.inputs(
                 uow, definition["spec"], task.payload["unit"].get("parents"), now
             )
@@ -667,9 +728,10 @@ class ObservationService:
                     "sources",
                     "query_complete",
                     "authorization",
-                } | ({"parents", "lineage"} if parents else set()))
+                } | ({"parents", "lineage"} if parents else set()) | set(route_fields))
                 or manifest["schema"] != (
-                    "derived-input-manifest/2" if parents else "derived-input-manifest/1"
+                    manifest_schema(definition["spec"], bool(parents)) if self.qualified_current
+                    else "derived-input-manifest/2" if parents else "derived-input-manifest/1"
                 )
             ):
                 raise DerivedError("derived_manifest_invalid")
@@ -841,6 +903,19 @@ class ObservationService:
             await publish_coverage(
                 uow, self, job, definition, manifest=manifest, now=now
             )
+            if definition.get("qualified_current"):
+                # A lease, route or authority can expire during storage awaits.
+                # Check before leaving the UoW so blocks/head/receipts roll back
+                # together instead of certifying an already unusable result.
+                await self._qualified_delivery_guard(uow, definition)
+                finished_at = self.clock()
+                if any(
+                    finished_at >= datetime.fromisoformat(job[key])
+                    for key in ("lease_until", "expires_at") if job.get(key)
+                ):
+                    from ..operations.facet_refresh import stale
+
+                    raise stale()
             return dict(
                 outcome=outcome,
                 no_outputs=prepared["no_outputs"],
@@ -851,6 +926,77 @@ class ObservationService:
     async def apply(self, task, checkpoint=None):
         snapshot = await self.snapshot(task)
         return await self.publish(task, snapshot, self.prepare(snapshot))
+
+    async def _qualified_clock_barrier(self, *, observed_at=None):
+        from ..operations.refresh_demand import observed_clock
+
+        async with self.repository.unit_of_work() as uow:
+            await open_derived(uow, self.scope, self.history_mode)
+            return await observed_clock(
+                uow, self.scope, self.clock if observed_at is None else lambda: observed_at
+            )
+
+    @asynccontextmanager
+    async def _current_read_scope(self):
+        # Persist the observed wall floor independently of a denied body read.
+        # Otherwise a rollback would forget an expiry seen before a restart.
+        observed = await self._qualified_clock_barrier() if self.qualified_current else None
+        try:
+            async with self.repository.unit_of_work() as uow:
+                await open_derived(uow, self.scope, self.history_mode)
+                yield uow
+        except BaseException:
+            if observed is not None:
+                observed = max(observed, timestamp(self.clock()))
+                try:
+                    await self._qualified_clock_barrier(observed_at=observed)
+                except DerivedError as error:
+                    if error.code != "refresh_clock_discontinuity":
+                        raise
+            raise
+
+    async def _qualified_delivery_guard(self, uow, definition):
+        """Recheck dynamic host controls and time after the last body await.
+
+        The scope lock keeps persisted ACLs/inputs fixed for this read, but does
+        not freeze the clock or authenticated host configuration. Full rebuilds
+        propagate every parent, grant and authority expiry into the head's next
+        transition, so this final metadata-only check covers the whole graph.
+        """
+        if not definition.get("qualified_current"):
+            return
+        from ..operations.refresh_demand import observed_clock
+
+        guarded_at = await observed_clock(uow, self.scope, self.clock)
+        current = await self._definition(uow, definition["facet_id"])
+        if current != definition:
+            raise DerivedError("derived_snapshot_changed")
+        head = await uow.derived_get(self.scope, "head", definition["facet_id"])
+        header = await uow.derived_get(
+            self.scope, "revision_header", head.get("audit_revision_id") if head else None
+        )
+        if not header or digest(header) != head.get("input_header_sha256"):
+            raise DerivedError("derived_parent_integrity_failed")
+        at = self._checked_clock(guarded_at)
+        # These checks are deliberately synchronous after the final metadata
+        # await. Do not reopen a route that changed while the body was loading.
+        if not self.qualified_current or (
+            self._definition_fingerprint(definition["spec"]) != definition["fingerprint"]
+        ):
+            raise DerivedError("derived_definition_configuration_changed")
+        binding = self._context_binding(definition["spec"])
+        if binding is not None:
+            binding.current(at)
+        if definition["spec"].get("authority_id") != self.authority_id:
+            raise DerivedError("derived_authority_mismatch")
+        if self.authority_id is not None:
+            self.registry._authority_floor(head["unit"]["bindings"]["authority"])
+        if datetime.fromisoformat(header["built_at"]) > at:
+            raise DerivedError("derived_future_knowledge")
+        if header.get("next_transition_at") and (
+            datetime.fromisoformat(header["next_transition_at"]) <= at
+        ):
+            raise DerivedError("derived_time_coverage_expired")
 
     def _checked_clock(self, minimum=None):
         at = timestamp(self.clock())
@@ -888,21 +1034,33 @@ class ObservationService:
                 await observed_clock(uow, self.scope, self.clock)
 
     async def _clock_delivery(self, uow, facet_id, result):
-        if not await self._managed_lineage(uow, facet_id):
-            return result
-        from ..operations.refresh_demand import observed_clock
+        definition = None
+        if result["state"] in {"ready", "empty"}:
+            try:
+                definition = await self._definition(uow, facet_id)
+            except DerivedError as error:
+                return {**result, "state": "invalid", "body": None, "reason": error.code}
+        if await self._managed_lineage(uow, facet_id):
+            from ..operations.refresh_demand import observed_clock
 
-        head = await uow.derived_get(self.scope, "head", facet_id)
-        try:
-            now = await observed_clock(uow, self.scope, self.clock)
-        except DerivedError as error:
-            if error.code != "refresh_clock_discontinuity":
-                raise
-            return {**result, "state": "invalid", "body": None, "reason": error.code}
-        if result["state"] in {"ready", "empty"} and head and head.get("next_transition_at") and (
-            datetime.fromisoformat(head["next_transition_at"]) <= now
-        ):
-            return {**result, "state": "stale", "body": None, "reason": "time_coverage_expired"}
+            head = await uow.derived_get(self.scope, "head", facet_id)
+            try:
+                now = await observed_clock(uow, self.scope, self.clock)
+            except DerivedError as error:
+                if error.code != "refresh_clock_discontinuity":
+                    raise
+                return {**result, "state": "invalid", "body": None, "reason": error.code}
+            if (result["state"] in {"ready", "empty"} and head
+                    and head.get("next_transition_at")
+                    and datetime.fromisoformat(head["next_transition_at"]) <= now):
+                return {**result, "state": "stale", "body": None, "reason": "time_coverage_expired"}
+        # The clock check itself awaits storage. Recheck qualified host routes
+        # after it, including on legacy queues without refresh-managed ancestry.
+        if definition is not None and definition.get("qualified_current"):
+            try:
+                await self._qualified_delivery_guard(uow, definition)
+            except DerivedError as error:
+                return {**result, "state": "invalid", "body": None, "reason": error.code}
         return result
 
     async def _read(self, uow, facet_id, actor, purpose, *, lineage_checked=False):
@@ -935,6 +1093,7 @@ class ObservationService:
             return dict(facet_id=facet_id, state="erased", body=None)
         if head.get("unit", {}).get("safety_generation") != definition["safety_generation"]:
             return dict(facet_id=facet_id, state="invalid", body=None, reason="safety_changed")
+        input_header = None
         try:
             unit = (await self._unit(uow, definition)).payload()
             now = self._checked_clock(guarded_at)
@@ -943,6 +1102,25 @@ class ObservationService:
             ):
                 return dict(facet_id=facet_id, state="stale", body=None,
                             reason="time_coverage_expired")
+            if self.qualified_current and binding is not None:
+                header = await uow.derived_get(
+                    self.scope, "revision_header", head.get("audit_revision_id")
+                )
+                if not header or digest(header) != head.get("input_header_sha256") or (
+                    header.get("unit") != head.get("unit")
+                    or header.get("id") != head.get("audit_revision_id")
+                    or header.get("facet_id") != facet_id
+                    or digest(header.get("manifest")) != header.get("manifest_sha256")
+                    or datetime.fromisoformat(header["built_at"]) > self.clock()
+                ):
+                    raise DerivedError("derived_parent_integrity_failed")
+                validate_header_route(definition["spec"], header, self.clock())
+                input_header = header
+                for key, data in header["manifest"]["sources"].items():
+                    grant = await uow.derived_get(self.scope, "grant", key)
+                    self._permission(grant, (actor,), purpose, self.clock(), authority)
+                    if grant["version"] != data["grant_version"]:
+                        raise DerivedError("derived_safety_changed")
             if not lineage_checked:
                 await self.parents.inputs(
                     uow, definition["spec"], unit.get("parents"), now, readers=(actor,)
@@ -969,6 +1147,7 @@ class ObservationService:
             (revision["state"] == "ready" and digest(revision["body"]) != revision["body_sha256"])
             or digest(revision["manifest"]) != revision["manifest_sha256"]
             or revision["unit"] != head["unit"]
+            or (input_header is not None and revision_header(revision) != input_header)
         ):
             return dict(
                 facet_id=facet_id, state="invalid", body=None, reason="revision_integrity_failed"
@@ -1000,6 +1179,10 @@ class ObservationService:
             row = await uow.get_admission_record(self.scope, key)
             if row is None or row["version"] != version or row["payload"].get("deleted"):
                 return dict(facet_id=facet_id, state="invalid", body=None, reason="atom_changed")
+        try:
+            await self._qualified_delivery_guard(uow, definition)
+        except DerivedError as error:
+            return dict(facet_id=facet_id, state="invalid", body=None, reason=error.code)
         if revision["state"] == "empty":
             return await self._clock_delivery(
                 uow, facet_id, dict(facet_id=facet_id, state="empty", body=None)
@@ -1027,8 +1210,7 @@ class ObservationService:
                 return await self.history.read(uow, facet_id, actor, purpose, query)
         await self._read_preflight(facet_id)
         try:
-            async with self.repository.unit_of_work() as uow:
-                await open_derived(uow, self.scope, self.history_mode)
+            async with self._current_read_scope() as uow:
                 definition = await self._definition(uow, facet_id)
                 if is_page(definition["spec"]):
                     raise DerivedError("derived_resource_kind_mismatch")
@@ -1067,8 +1249,10 @@ class ObservationService:
                 parent_supported = supported(uow) and self.history_mode is None
                 from .pages import page_supported
 
+                qualified = (parent_supported and qualified_supported(uow)
+                             and self.qualified_current)
                 pages_enabled = (page_supported(uow) and self.history_mode is None
-                                 and self.context_token is None)
+                                 and (self.context_token is None or qualified))
             return dict(
                 schema="derived-capabilities/1",
                 readonly=True,
@@ -1103,7 +1287,10 @@ class ObservationService:
                 qualified_templates=["locale-context/1"] if self.context_token is not None else [],
                 context_attributes=["project", "holiday"] if self.context_token is not None else [],
                 derived_parents=parent_supported,
-                derived_parent_templates=["locale-parents/1"] if parent_supported else [],
+                derived_parent_templates=(["locale-parents/1"] if parent_supported else [])
+                + ([QUALIFIED_PARENT_TEMPLATE] if qualified else []),
+                qualified_current=qualified,
+                qualified_route_contract=ROUTE_CONTRACT if qualified else None,
                 derived_parent_history=False,
                 derived_parent_contract="processing-graph/1" if parent_supported else None,
                 derived_parent_limits=dict(parents=4, depth=4, nodes=32, input_bytes=262144),

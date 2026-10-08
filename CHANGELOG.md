@@ -7,6 +7,15 @@ the first stable release.
 
 ### Added
 
+- Explicitly host-enabled V7-B3 current project QuestionViews for owner, status,
+  commitments and risks, reviewed field/time evidence, complete indexed census,
+  immutable full provenance, closed publication manifests and shared bounded refresh.
+- Optional question SDK/MCP routing and guarded reads; qualified current language
+  parents/pages and finite host-published project pages with stable full-rebuild blocks.
+- Project candidate indexes on SQLite/PostgreSQL and physical erasure/old-backup
+  replay covering unpublished registrations, original processing inputs and routes.
+  Migration, opt-ins and rollback: [B3](docs/design/v7.0.0/batch-b3.md).
+
 - Versioned v7 architecture design with algorithm/data-flow diagrams, implementation plan,
   inherited-task mapping and explicit planned-versus-implemented boundaries; no v7 runtime capability is enabled by this documentation update.
 

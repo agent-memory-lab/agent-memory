@@ -101,6 +101,9 @@ class SQLiteMemoryUnitOfWork:
     refresh_scheduler_contract = "durable-coalescing/1"
     derived_parent_contract = "processing-graph/1"
     derived_page_contract = "page-full-rebuild/1"
+    question_runtime_contract = "question-runtime/1"
+    question_page_contract = "project-question-scenario/1"
+    derived_qualified_contract = "qualified-current-route/1"
 
     def __init__(self, repository: SQLiteMemoryRepository) -> None:
         self._repository = repository
@@ -364,6 +367,36 @@ class SQLiteMemoryUnitOfWork:
         from .operations import sqlite_derived
 
         return sqlite_derived.headers(self.connection, scope)
+
+    async def derived_project_index(self, scope):
+        await self.lock_admission_scope(scope)
+        from .operations import sqlite_project_index as project_index
+
+        old = await self.derived_get(scope, "project_index", "scope")
+        row = project_index.ensure(self.connection, scope)
+        if old is None or old.get("generation") != row["generation"]:
+            from agent_memory.derived import subscriptions
+
+            gate = await self.derived_get(scope, "subscription_index", "scope")
+            if gate is not None:
+                gate["state"] = "needs_backfill"
+                await self.derived_put(scope, "subscription_index", "scope", gate)
+            await subscriptions.ensure_index(self, scope)
+        return row
+
+    async def derived_project_candidates(self, scope, contract_fingerprint, project_id):
+        await self.derived_project_index(scope)
+        from .operations import sqlite_project_index as project_index
+
+        return project_index.candidates(
+            self.connection, scope, contract_fingerprint, project_id
+        )
+
+    async def derived_project_source_proof(self, scope, source_id):
+        await self.lock_admission_scope(scope)
+        from .operations import sqlite_project_index as project_index
+
+        return project_index.source_metadata(self.connection, scope, source_id)
 
     async def derived_candidates(self, scope, slots):
         from .operations import sqlite_derived
@@ -667,6 +700,7 @@ class SQLiteMemoryUnitOfWork:
         expected_version: int,
     ) -> int:
         payload = deepcopy(payload)
+        await self.derived_project_index(scope)
         if type(expected_version) is not int or expected_version < 0:
             raise ValueError("expected_version must be a non-negative integer")
         if not record_id or not event_id or not slot_key or not isinstance(payload, dict):
@@ -1069,6 +1103,9 @@ class SQLiteMemoryRepository:
             from .operations import sqlite_derived
 
             connection.executescript(sqlite_derived.SCHEMA)
+            from .operations import sqlite_project_index
+
+            connection.executescript(sqlite_project_index.SCHEMA)
             from .operations import sqlite_refresh_schedule
 
             sqlite_refresh_schedule.initialize(connection)

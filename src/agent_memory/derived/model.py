@@ -133,12 +133,14 @@ class FacetDefinition:
             self.facet != "communication.language"
             or self.predicates != ("locale",)
             or self.template_version not in {
-                "locale-snapshot/1", "locale-context/1", "locale-parents/1"
+                "locale-snapshot/1", "locale-context/1", "locale-parents/1",
+                "locale-qualified-parents/1",
             }
         ):
             raise DerivedError("unsupported_derived_facet")
         if (self.context is not None and not isinstance(self.context, FacetContext)) or (
-            (self.template_version == "locale-context/1") != isinstance(self.context, FacetContext)
+            (self.template_version in {"locale-context/1", "locale-qualified-parents/1"})
+            != isinstance(self.context, FacetContext)
         ):
             raise DerivedError("trusted_facet_context_required")
         if self.context is not None and (
@@ -160,10 +162,12 @@ class FacetDefinition:
         if (
             not isinstance(self.parent_facets, tuple)
             or any(not isinstance(v, str) for v in self.parent_facets)
-            or (self.template_version == "locale-parents/1") != bool(self.parent_facets)
+            or (self.template_version in {"locale-parents/1", "locale-qualified-parents/1"})
+            != bool(self.parent_facets)
             or len(self.parent_facets) > 4
             or len(set(self.parent_facets)) != len(self.parent_facets)
-            or (self.parent_facets and (self.query_id or self.history_mode or self.context))
+            or (self.parent_facets and (self.query_id or self.history_mode))
+            or (self.template_version == "locale-parents/1" and self.context is not None)
         ):
             raise DerivedError("invalid_derived_parents")
         for value in self.parent_facets:
@@ -344,6 +348,12 @@ def source_ids(payload):
 
 def erase_rows(rows, parents, all_in_scope, slots=()):
     """Physical erasure plan, shared by live deletion and backup purge replay."""
+    qualified_graphs = {
+        r["identity"] for r in rows if r["kind"] == "definition"
+        and r["payload"]["spec"].get("template_version") in {
+            "locale-qualified-parents/1", "language-qualified-scenario/1"
+        }
+    }
     affected = {
         r["payload"].get("facet_id", r["identity"])
         for r in rows
@@ -364,7 +374,8 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
     )
     affected.update(
         r["identity"] for r in rows if r["kind"] == "definition"
-        and r["payload"]["spec"].get("resource_kind") == "page"
+        and (r["payload"]["spec"].get("resource_kind") == "page"
+             or r["identity"] in qualified_graphs)
         and "derived:" + r["identity"] in parents
     )
     affected.update(
@@ -372,6 +383,13 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
         and ({"derived:" + r["identity"], "derived:" + r["payload"].get("block_id", "")}
              .intersection(parents))
     )
+    # Even a never-published qualified graph holds host routing metadata. A
+    # removed member of its leaf query retires that route without relying on a
+    # revision edge that could not exist yet. Legacy leaf rebuilds stay valid.
+    route_inputs = {
+        r["identity"] for r in rows if r["kind"] == "definition"
+        and set(r["payload"].get("slots", ())).intersection(slots)
+    }
     # Clear every version of an affected facet, then follow fixed processing
     # revision edges and configured subscriptions (including empty/unbuilt views).
     while True:
@@ -379,6 +397,11 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
             r["identity"] for r in rows if r["kind"] == "definition"
             and set(r["payload"]["spec"].get("parent_facets", ())).intersection(affected)
         }
+        descendants.update(
+            r["identity"] for r in rows if r["kind"] == "definition"
+            and r["identity"] in qualified_graphs
+            and set(r["payload"]["spec"].get("parent_facets", ())).intersection(route_inputs)
+        )
         erased_parents = {
             "derived:" + r["identity"] for r in rows if r["kind"] == "revision"
             and r["payload"].get("facet_id") in affected
@@ -464,22 +487,31 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
             row["safety_generation"] += 1
             explicit_page = (row["spec"].get("resource_kind") == "page"
                              and "derived:" + key in parents)
-            if all_in_scope or explicit_page:
+            retired_route = key in qualified_graphs and (all_in_scope or key in affected)
+            if all_in_scope or explicit_page or retired_route:
                 row["disabled"] = True
                 row["spec"].pop("context", None)  # Erase retired host routing values too.
-                if row["spec"].get("resource_kind") == "page":
+                if retired_route or row["spec"].get("resource_kind") == "page":
+                    retained = ("id", "resource_kind", "authority_id")
+                    if retired_route:
+                        retained += ("template_version",)
                     row["spec"] = {key: row["spec"][key] for key in
-                                   ("id", "resource_kind", "authority_id") if key in row["spec"]}
+                                   retained if key in row["spec"]}
             result.append((kind, key, row))
-        elif kind == "job" and all_in_scope:
+        elif kind == "job" and (
+            all_in_scope or row.get("unit", {}).get("facet_id") in affected & qualified_graphs
+        ):
             result.append(
                 (
                     kind,
                     key,
-                    {"id": key, "status": "cancelled", "unit": {}, "reason": "scope_erased"},
+                    {"id": key, "status": "cancelled", "unit": {}, "reason": "scope_erased"
+                     if all_in_scope else "qualified_route_erased"},
                 )
             )
-        elif kind == "request" and all_in_scope:
+        elif kind == "request" and (
+            all_in_scope or row.get("facet_id") in affected & qualified_graphs
+        ):
             result.append((kind, key, {"id": key, "invalidated": True}))
     return result, affected
 
