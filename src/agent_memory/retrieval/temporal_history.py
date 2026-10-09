@@ -23,6 +23,7 @@ from ..domain import (
     utc_now,
 )
 from ..serialization import to_jsonable
+from .analyzer import lexical_terms
 
 MAX_OBSERVATIONS_PER_KEY = 512
 
@@ -95,16 +96,13 @@ def materialize(claims: list[Claim]) -> tuple[Claim, ...]:
 
 
 def temporal_candidates(claims, text: str, limit: int) -> tuple[MemoryItem, ...]:
-    terms = set(text.casefold().split())
+    terms = set(lexical_terms(text))
     items = []
     for claim in claims:
-        match = sum(
-            term
-            in (
-                claim.key + " " + claim.text + " " + json.dumps(to_jsonable(claim.value))
-            ).casefold()
-            for term in terms
-        )
+        document_terms = set(lexical_terms(" ".join((
+            claim.key, claim.text, json.dumps(to_jsonable(claim.value), ensure_ascii=False),
+        ))))
+        match = len(terms & document_terms)
         items.append(
             MemoryItem(
                 claim.id,

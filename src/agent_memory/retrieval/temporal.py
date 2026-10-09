@@ -69,11 +69,14 @@ class TemporalIndex(Protocol):
 
 
 class CurrentTemporalWindow:
-    """Default resolver for facts valid and known now."""
+    """Preserve explicit query axes; omitted axes share one current instant."""
 
     def resolve(self, query: MemoryQuery, context: PluginContext) -> TemporalWindow:
         now = context.clock.now()
-        return TemporalWindow(valid_at=now, recorded_before=now)
+        return TemporalWindow(
+            valid_at=query.valid_at if query.valid_at is not None else now,
+            recorded_before=query.known_at if query.known_at is not None else now,
+        )
 
 
 class TemporalRetrieverPlugin:
@@ -142,6 +145,16 @@ class TemporalRetrieverPlugin:
                 "temporal resolver returned an invalid window",
                 code=PluginErrorCode.INVALID_IMPLEMENTATION,
             )
+        for field, requested, resolved in (
+            ("valid_at", query.valid_at, window.valid_at),
+            ("known_at", query.known_at, window.recorded_before),
+        ):
+            if requested is not None and requested != resolved:
+                raise PluginError(
+                    "temporal resolver changed an explicit query constraint",
+                    code=PluginErrorCode.INVALID_IMPLEMENTATION,
+                    field=field,
+                )
         limit = min(query.limit, context.resource_limits.max_candidates)
         matches = await self._index.search(query.text, query.scope, window, limit=limit)
         if not isinstance(matches, Sequence) or isinstance(matches, (str, bytes)):
@@ -160,7 +173,10 @@ class TemporalRetrieverPlugin:
             previous = accepted.get(match.item.id)
             if previous is None or match.score > previous.score:
                 accepted[match.item.id] = match
-        ranked = sorted(accepted.values(), key=lambda value: (-value.score, value.item.id))
+        ranked = sorted(
+            (value for value in accepted.values() if value.channel in query.channels),
+            key=lambda value: (-value.score, value.item.id),
+        )
         return tuple(
             RetrievalCandidate(
                 item=match.item,

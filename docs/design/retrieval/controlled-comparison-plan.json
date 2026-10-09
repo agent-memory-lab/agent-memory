@@ -1,0 +1,50 @@
+{
+  "batch_gates": {
+    "B1": [
+      "Unchanged default retrieval positive source/text presence and zero scope/archive forbidden hits.",
+      "Contiguous Han terms do not form cross-punctuation or cross-Latin bigrams; preserve Latin identifier/number behavior intentionally.",
+      "Every query field survives orchestration or the capability boundary rejects before invoking an unsupported retriever.",
+      "Four governed survivors beyond the initial rejected prefix are returned; a fitting candidate replaces an oversized rejected packing candidate.",
+      "PostgreSQL native GIN preservation can be statically inspected but requires live disposable PostgreSQL tests before claiming runtime parity."
+    ],
+    "B2": [
+      "Run old-evidence and long-tail fixtures through the newly indexed source as a separately labelled arm, preserving legacy arms.",
+      "Verify indexed IDs/chunk source IDs match authoritative evidence and actual returned text carries tail fact.",
+      "Measure index/setup writes separately from query read counts; verify updates, archival, erase, restoration, and partial-index fallback in dedicated correctness tests.",
+      "Record actual embedding calls only if a configured endpoint is available; reuse must not cross scope/model/version/content boundaries."
+    ],
+    "B3": [
+      "Compare adaptive output and evidence coverage with full fixed-policy output on identical cases; preserve explicit completeness proof metadata.",
+      "Include no-hit, scarce evidence, saturated candidate budget, conflicting evidence, temporal scope, and packing-pressure cases.",
+      "Record route choices, fallback reasons, calls and materialized rows. Faster synthetic samples alone cannot justify promotion."
+    ],
+    "B4": [
+      "Keep learned reranking and cache opt-in/default-off until all correctness/admission gates pass.",
+      "Test logit adapter input/output shape, non-finite/invalid scores, bounded timeout/fallback, authorization, and model/version fingerprint. Scripted score tests prove contracts only.",
+      "Test exact cache-key scope/query/time/model/policy/source-version boundaries; verify archive/erase/update invalidation and cold/warm output parity.",
+      "Real quality gates require held-out representative data, clean gold separation, fixed model/prompt/config, no-memory/lexical/true-hybrid/learned arms, repeated runs with rotated order, and explicitly measured model/token/latency costs. Endpoint unavailable means no real efficacy gate can pass."
+    ]
+  },
+  "classification": "Controlled synthetic comparison and admission plan; prospective, not completed checks",
+  "compare_command": "python compare_frozen_reports.py --baseline BASELINE/results.json --candidate CANDIDATE/results.json --out COMPARISON.json",
+  "evaluation_api_findings": [
+    "Current evaluation/retrieval.py requires exactly no-memory, lexical-only and hybrid arm names; it cannot natively compare frozen/default/indexed/adaptive/cache paths.",
+    "Current report lacks per-case ranked output, source hash, settings fingerprint, read/model call counts, per-stage timing and failure latency samples. Its token estimate is not measured billing.",
+    "A backwards-compatible flexible arm manifest and observation metadata can add those metrics without inventing real-model values. Keep deterministic contract fixtures separate from held-out efficacy data.",
+    "Existing local comparison examples use single-run synthetic substring grading and native adapters; their documentation already disclaims statistical significance, exact tokens and identical internals. Preserve those limitations."
+  ],
+  "invariants": [
+    "Baseline source tree 20d73af25bbfa207e52ef5fbe458f6b07ed434fa remains frozen in its own worktree.",
+    "Run each candidate only after workers finish; use separate processes and PYTHONHASHSEED=0. Record final tree and every tracked source SHA-256.",
+    "Re-use identical synthetic fixture SHA-256 and observed path labels. Candidate source hashes and fixture hashes must match reports before publication.",
+    "Do not relabel fusion-only or scripted adapters as a genuine semantic hybrid. No generation, embedding, or reranking efficacy claim without a reachable explicitly configured endpoint and measured requests.",
+    "No downloads/installations/model pulls in this comparison. PostgreSQL runtime and real-model checks remain blocked until an authorized existing service or explicitly approved setup is available."
+  ],
+  "measurements": {
+    "costs": "Measured wall-clock samples, provider method invocations, SQL SELECT/WITH invocations, rows and text bytes actually materialized to Python, returned token estimate when a real bundle provides it.",
+    "not_measured": "Physical reads, database rows scanned, planner cost, token billing, actual model/provider quality, actual learned reranking benefit. Never substitute zeros for unavailable measurements.",
+    "quality": "Gold memory/source hits, first relevant rank, forbidden hits, required long-tail/old-source text presence. Synthetic regressions only.",
+    "stability": "Repeat outcomes excluding timings should match; report both within-run and fresh-process parity."
+  },
+  "run_command": "PYTHONHASHSEED=0 python run_frozen_comparison.py --source-root SOURCE_CHECKOUT --out EVIDENCE_DIRECTORY --label BATCH_FINAL_TREE --repeats 9"
+}

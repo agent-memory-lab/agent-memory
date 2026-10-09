@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 import sqlite3
 import time
 from collections import deque
@@ -54,6 +53,7 @@ from .operations.artifact_dependencies import (
     affected_memory_keys,
     dependency_ids,
 )
+from .retrieval.analyzer import lexical_terms
 from .retrieval.temporal_history import SQLiteClaimHistory, temporal_candidates
 
 
@@ -66,9 +66,7 @@ def _datetime(value: str | None) -> datetime | None:
 
 
 def _tokens(text: str) -> set[str]:
-    latin = {token.lower() for token in re.findall(r"[A-Za-z0-9_-]+", text) if len(token) > 1}
-    cjk = re.findall(r"[\u3400-\u9fff]", text)
-    return latin | set(cjk) | {"".join(cjk[index : index + 2]) for index in range(len(cjk) - 1)}
+    return set(lexical_terms(text))
 
 
 def _scope_values(scope: MemoryScope) -> tuple[str | None, ...]:

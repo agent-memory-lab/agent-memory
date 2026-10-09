@@ -9,7 +9,7 @@ scope access requires a separate, explicit authorization policy.
 from dataclasses import dataclass
 from typing import Protocol, Sequence
 
-from ..domain import MemoryScope
+from ..domain import MemoryChannel, MemoryScope
 from .lexical import EvidenceItem, LexicalSearchResult, lexical_candidates
 
 
@@ -38,11 +38,13 @@ def scoped_lexical_candidates(
     limit: int = 8,
     max_items: int = 128,
     max_item_chars: int = 2048,
+    channels: tuple[MemoryChannel, ...] | None = None,
 ) -> LexicalSearchResult:
     """Retrieve lexical candidates, rejecting the entire batch on scope drift.
 
     An adapter must derive item scopes from authoritative storage, not copy the
     requested scope onto unverified records. No cross-scope fallback is applied.
+    Every record is scope-checked before optional channel filtering or ranking.
     """
     if not isinstance(scope, MemoryScope):
         raise TypeError("scope must be a MemoryScope")
@@ -62,6 +64,14 @@ def scoped_lexical_candidates(
         if not isinstance(record.scope, MemoryScope) or record.scope != scope:
             raise ScopeIsolationError("evidence source returned an item from another scope")
         evidence.append(record.evidence)
+
+    if channels is not None:
+        # Preserve malformed entries for the lexical validator, while excluding
+        # other channels before they can consume the requested result budget.
+        evidence = [
+            entry for entry in evidence
+            if not isinstance(entry, EvidenceItem) or entry.channel in channels
+        ]
 
     return lexical_candidates(
         query_text,

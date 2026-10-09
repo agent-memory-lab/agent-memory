@@ -88,6 +88,14 @@ class ScopedLexicalRetrieverPlugin:
                 code=PluginErrorCode.INVALID_IMPLEMENTATION,
                 field="scope",
             )
+        if query.valid_at is not None or query.known_at is not None:
+            # This index contract exposes current evidence only; neither axis
+            # can be reconstructed safely from an item's occurrence time.
+            raise PluginError(
+                "scoped lexical retriever does not support historical query constraints",
+                code=PluginErrorCode.INVALID_IMPLEMENTATION,
+                field="valid_at" if query.valid_at is not None else "known_at",
+            )
         limits = context.resource_limits
         result = await asyncio.to_thread(
             scoped_lexical_candidates,
@@ -96,6 +104,7 @@ class ScopedLexicalRetrieverPlugin:
             self._source,
             limit=min(query.limit, limits.max_candidates, 128),
             max_items=min(limits.max_batch_size, 512),
+            channels=query.channels,
         )
         if context is not self._context or context.cancelled or context.expired:
             raise PluginError(
