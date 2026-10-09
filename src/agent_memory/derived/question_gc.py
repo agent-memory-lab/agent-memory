@@ -37,6 +37,8 @@ KNOWN_KINDS = frozenset(
         "history_interval",
         "history_point",
         "model_authorization",
+        "model_authorization_archive",
+        "model_authorization_archive_pending",
         "model_cache_body",
         "model_cache_header",
         "model_flight",

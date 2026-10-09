@@ -104,8 +104,13 @@ Restore is an **offline host procedure**, matching PurgeRestore's deployment con
 
 The ledger and scope audit collections are bounded (4096 records per kind; at most
 16 accounts per call, 256 source dependencies and 128 live cache entries by default).
-Capacity errors fail closed. Expired rows are scrubbed to minimal tombstones; no
-claim of unlimited financial retention/rotation or automatic invoice lookup is made.
+Capacity errors fail closed. Expired cache rows are scrubbed to minimal tombstones.
+Long-lived authorization audit can now use the explicit host-owned
+[full-evidence archive lifecycle](model-authorization-archive.md): bounded export
+of authorization and reachable derived proof, durable external storage and pinned
+receipt acknowledgment before local capacity reuse. It never archives raw source
+bodies or changes money/receipt accounting. Without host archival, audit remains
+local and bounded; no unlimited financial rotation or automatic invoice lookup is claimed.
 
 ## Full cost accounting
 

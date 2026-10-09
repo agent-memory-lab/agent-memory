@@ -5,6 +5,16 @@ the first stable release.
 
 ## 0.1.0 - Unreleased
 
+### Fixed
+
+- Reserve governed model cache capacity atomically before paid dispatch; fence abandoned
+  reservations and return the current ledger settlement status on cached delivery.
+  Hold first-delivery audit capacity atomically with dispatch so the last available
+  audit slot cannot cause a predictable billed-but-undelivered generation.
+- Add host-acknowledged bounded model authorization audit archival, preserving full
+  exported derived proof and independently pinned archive receipts without deleting
+  money debt or silently expiring audit evidence. See the [archive and compatibility contract](docs/design/v7.0.0/model-authorization-archive.md).
+
 ### Added
 
 - Opt-in local Ollama synthetic runtime smoke with a saved pre-dispatch plan,
