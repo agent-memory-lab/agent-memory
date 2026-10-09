@@ -92,9 +92,13 @@ Similarly, changing-value delta computation can legitimately extend original
 processing ancestry forever even without receipts. Such workloads can still hit
 capacity and receive backpressure. The collector does not rewrite manifests,
 expire receipts, reinterpret exact units, release accounting reservations or
-invent a lineage-reset operation to hide that limit. Model audit retention,
-instance retirement and receipt-expiry contracts require separately specified
-work. Existing fixed-size hotness counters and change windows are left unchanged.
+invent a lineage-reset operation to hide that limit. Model audit has a separate
+[host-acknowledged archive contract](model-authorization-archive.md): authorization
+rows and their reachable derived proofs are durably archived before selected
+local audit roots are removed. This collector itself still never removes model
+audit or financial receipts. Hosts without that archive setup can exhaust the
+audit cap; instance retirement and receipt-expiry contracts remain separate work.
+Existing fixed-size hotness counters and change windows are left unchanged.
 
 ## Transaction, upgrade and rollback
 

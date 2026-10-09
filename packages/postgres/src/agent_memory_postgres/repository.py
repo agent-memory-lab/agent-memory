@@ -379,6 +379,34 @@ class PostgresMemoryUnitOfWork:
 
         return await derived.records(self.connection, scope, kind)
 
+    async def model_delivery_reservation_delete(self, scope, identity, token):
+        await self.lock_admission_scope(scope)
+        row = await self.derived_get(scope, "model_authorization", identity)
+        if not row or not (
+            row.get("schema") == "model-delivery-reservation/1"
+            and row.get("state") == "reserved" and row.get("stage") == "delivery"
+            and row.get("consumed") is False and row.get("token") == token
+        ):
+            return False
+        await self.connection.execute(
+            "DELETE FROM agent_memory_derived_entries WHERE partition_key=%s "
+            "AND kind='model_authorization' AND identity=%s",
+            (scope.partition_key(), identity),
+        )
+        return True
+
+    model_authorization_archive_contract = "model-authorization-archive/1"
+
+    async def model_authorization_archive_delete(self, scope, kind, identity):
+        await self.lock_admission_scope(scope)
+        if kind not in {"model_authorization", "model_authorization_archive_pending"}:
+            raise ValueError("unsupported model authorization archive kind")
+        await self.connection.execute(
+            "DELETE FROM agent_memory_derived_entries "
+            "WHERE partition_key=%s AND kind=%s AND identity=%s",
+            (scope.partition_key(), kind, identity),
+        )
+
     async def derived_gc_snapshot(self, scope, *, max_records, max_edges, max_bytes):
         await self.refresh_scheduler_lock(scope)
         from . import derived

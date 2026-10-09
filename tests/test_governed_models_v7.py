@@ -377,7 +377,10 @@ def test_two_runtime_instances_share_a_durable_flight(store):
     asyncio.run(run())
 
 
-def test_old_backup_erasure_scrubs_model_outputs_but_keeps_minimal_cost_debt(store, tmp_path):
+@pytest.mark.parametrize("delivered", [True, False])
+def test_old_backup_erasure_scrubs_model_outputs_but_keeps_minimal_cost_debt(
+    store, tmp_path, delivered
+):
     from test_purge_restore import backup_copy, erase, replay, restorer
 
     from agent_memory.derived import ObservationService
@@ -385,7 +388,12 @@ def test_old_backup_erasure_scrubs_model_outputs_but_keeps_minimal_cost_debt(sto
     async def run():
         async with store() as (engine, kernel, scope, clock):
             authority, sealed, ledger, port, answers, _ = await setup(engine, kernel, scope, clock)
-            await answers.answer(sealed)
+            if delivered:
+                await answers.answer(sealed)
+            else:
+                # A process can die after publication and before its first
+                # delivery; the outstanding audit slot must erase on replay too.
+                await answers._execute(sealed)
             async with backup_copy(engine.repository, tmp_path) as (backup, _):
                 await erase(kernel, scope, source_id(scope, "2"))
                 checkpoint = await restorer(engine.repository, scope, clock).export()
@@ -532,7 +540,11 @@ def test_final_envelope_budget_includes_provenance_not_only_model_text(store):
                 await governor.answer(updated)
             async with engine.repository.unit_of_work() as uow:
                 rows = await uow.derived_records(scope, "model_authorization")
-                assert not any(r["payload"].get("stage") == "delivery" for r in rows)
+                assert not any(
+                    r["payload"].get("stage") == "delivery"
+                    and r["payload"].get("consumed") is True
+                    for r in rows
+                )
             assert len(port.calls) == 1
 
     asyncio.run(run())

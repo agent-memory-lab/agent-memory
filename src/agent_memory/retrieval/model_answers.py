@@ -71,6 +71,8 @@ class GovernedModelAnswers:
             if datetime.fromisoformat(row["expires_at"]) <= self.clock():
                 await self._expire(uow, sealed.key)
                 return None
+            if row.get("state") == "reserved":
+                return None
             await self.authority.validate(uow, sealed)
             if (
                 row["configuration_sha256"] != sealed.configuration.fingerprint
@@ -83,12 +85,21 @@ class GovernedModelAnswers:
                 raise ModelError("model_cache_body_invalid")
             response = ModelResponse(**body["response"])
             await self.authority.validate(uow, sealed)
-            return response, row["call_id"]
+            return (
+                response,
+                row["call_id"],
+                row.get("reservation_key"),
+                row.get("delivery_reservation"),
+            )
 
     async def _expire(self, uow, key):
         await uow.lock_admission_scope(self.scope)
+        header = await uow.derived_get(self.scope, "model_cache_header", key)
+        if header:
+            await self.authority.release_delivery(uow, header.get("delivery_reservation"))
         await uow.derived_put(self.scope, "model_cache_header", key, {"state": "expired"})
-        await uow.derived_put(self.scope, "model_cache_body", key, {"state": "expired"})
+        if header and header.get("state") != "reserved":
+            await uow.derived_put(self.scope, "model_cache_body", key, {"state": "expired"})
         await uow.derived_edges(self.scope, "model-cache:" + key, ())
 
     async def sweep_expired(self):
@@ -134,7 +145,57 @@ class GovernedModelAnswers:
             )
             return token
 
-    async def _complete_flight(self, sealed, token, state):
+    async def _reserve_cache(self, sealed, token):
+        """Claim a durable publication slot before reserving money or dispatching.
+
+        A count-only preflight is insufficient: different keys and processes
+        must see each other's in-flight slots. The flight lease bounds abandoned
+        reservations, while its token fences late publication and cleanup.
+        """
+        async with self.repository.unit_of_work() as uow:
+            await self.authority.validate(uow, sealed)
+            flight = await uow.derived_get(self.scope, "model_flight", sealed.key)
+            if (
+                not flight
+                or flight.get("state") != "running"
+                or flight.get("token") != token
+                or datetime.fromisoformat(flight["until"]) <= self.clock()
+            ):
+                raise ModelError("model_execution_fenced")
+            rows = await uow.derived_records(self.scope, "model_cache_header")
+            if not any(r["identity"] == sealed.key for r in rows) and len(rows) >= 4096:
+                raise ModelError("model_cache_audit_capacity")
+            live = [
+                r
+                for r in rows
+                if r["payload"].get("state") not in {"erased", "expired"}
+                and datetime.fromisoformat(r["payload"]["expires_at"]) > self.clock()
+            ]
+            if (
+                not any(r["identity"] == sealed.key for r in live)
+                and len(live) >= self.max_cache_entries
+            ):
+                raise ModelError("model_cache_capacity")
+            # Do not append a released finance row on every deterministic retry.
+            # The real audit reservation is still atomic with dispatch below.
+            await self.authority.dispatch_capacity(uow, sealed)
+            old = next((r["payload"] for r in rows if r["identity"] == sealed.key), None)
+            if old is not None:
+                await self._expire(uow, sealed.key)
+            await uow.derived_put(
+                self.scope,
+                "model_cache_header",
+                sealed.key,
+                dict(
+                    state="reserved",
+                    token=token,
+                    expires_at=flight["until"],
+                    sources=list(json.loads(sealed.manifest_json)["sources"]),
+                    parents=self.authority.parents(sealed),
+                ),
+            )
+
+    async def _complete_flight(self, sealed, token, state, *, delivery_reservation=None):
         async with self.repository.unit_of_work() as uow:
             # Follow the same source/scope lock order, even on failed authorization.
             await uow.lock_admission_scope(self.scope)
@@ -142,6 +203,17 @@ class GovernedModelAnswers:
             if row and row.get("state") != "erased" and row.get("token") == token:
                 row["state"] = state
                 await uow.derived_put(self.scope, "model_flight", sealed.key, row)
+            header = await uow.derived_get(self.scope, "model_cache_header", sealed.key)
+            if header and header.get("state") == "reserved" and header.get("token") == token:
+                await self._expire(uow, sealed.key)
+            # A publication commit can succeed while its acknowledgment fails.
+            # Consult durable state before releasing that answer's delivery slot.
+            if not (
+                header
+                and header.get("state") not in {"reserved", "expired", "erased"}
+                and header.get("delivery_reservation") == delivery_reservation
+            ):
+                await self.authority.release_delivery(uow, delivery_reservation)
 
     async def _execute(self, sealed):
         token = await self._claim(sealed)
@@ -161,11 +233,14 @@ class GovernedModelAnswers:
                 await asyncio.sleep(0.02)
             raise ModelError("model_shared_execution_pending")
         reservation = None
+        delivery_reservation = None
         dispatched = False
+        published = False
         try:
             cached = await self._cached(sealed)
             if cached is not None:
                 return (*cached, True)
+            await self._reserve_cache(sealed, token)
             reservation = await self.budget.reserve(
                 operation_id=sealed.key,
                 attempt_id=token,
@@ -189,6 +264,21 @@ class GovernedModelAnswers:
                     or datetime.fromisoformat(flight["until"]) <= self.clock()
                 ):
                     raise ModelError("model_execution_fenced")
+                header = await uow.derived_get(self.scope, "model_cache_header", sealed.key)
+                if (
+                    not header
+                    or header.get("state") != "reserved"
+                    or header.get("token") != token
+                    or datetime.fromisoformat(header["expires_at"]) <= self.clock()
+                ):
+                    raise ModelError("model_execution_fenced")
+                delivery_reservation = await self.authority.reserve_delivery(
+                    uow,
+                    sealed,
+                    call_id=reservation["call_id"],
+                    token=token,
+                    expires_at=datetime.fromisoformat(flight["until"]),
+                )
                 await self.authority.record(
                     uow,
                     sealed,
@@ -198,6 +288,12 @@ class GovernedModelAnswers:
                 )
                 await self.budget.intent(uow, reservation["key"], sealed.payload_sha256)
                 await self.authority.validate(uow, sealed)
+                now = self.clock()
+                if (
+                    datetime.fromisoformat(flight["until"]) <= now
+                    or datetime.fromisoformat(header["expires_at"]) <= now
+                ):
+                    raise ModelError("model_execution_fenced")
             dispatched = True
             response = await asyncio.wait_for(
                 self.port.generate(sealed), sealed.configuration.timeout_seconds * 8
@@ -220,38 +316,47 @@ class GovernedModelAnswers:
             async with self.repository.unit_of_work() as uow:
                 await self.authority.validate(uow, sealed)
                 flight = await uow.derived_get(self.scope, "model_flight", sealed.key)
-                if not flight or flight.get("state") != "running" or flight.get("token") != token:
-                    raise ModelError("model_execution_fenced")
-                rows = await uow.derived_records(self.scope, "model_cache_header")
-                if not any(r["identity"] == sealed.key for r in rows) and len(rows) >= 4096:
-                    raise ModelError("model_cache_audit_capacity")
-                live = [
-                    r
-                    for r in rows
-                    if r["payload"].get("state") not in {"erased", "expired"}
-                    and datetime.fromisoformat(r["payload"]["expires_at"]) > self.clock()
-                ]
                 if (
-                    not any(r["identity"] == sealed.key for r in live)
-                    and len(live) >= self.max_cache_entries
+                    not flight
+                    or flight.get("state") != "running"
+                    or flight.get("token") != token
+                    or datetime.fromisoformat(flight["until"]) <= self.clock()
                 ):
-                    raise ModelError("model_cache_capacity")
+                    raise ModelError("model_execution_fenced")
+                slot = await uow.derived_get(self.scope, "model_cache_header", sealed.key)
+                if (
+                    not slot
+                    or slot.get("state") != "reserved"
+                    or slot.get("token") != token
+                    or datetime.fromisoformat(slot["expires_at"]) <= self.clock()
+                ):
+                    raise ModelError("model_execution_fenced")
                 sources = list(json.loads(sealed.manifest_json)["sources"])
                 body = dict(
                     response=asdict(response),
                     sources=sources,
                     parents=self.authority.parents(sealed),
                 )
+                expires_at = self.clock() + timedelta(seconds=self.cache_seconds)
+                await self.authority.retain_delivery(
+                    uow,
+                    sealed,
+                    call_id=reservation["call_id"],
+                    reservation=delivery_reservation,
+                    expires_at=expires_at,
+                )
                 header = dict(
                     key=sealed.key,
                     call_id=reservation["call_id"],
+                    reservation_key=reservation["key"],
+                    delivery_reservation=delivery_reservation,
                     sources=sources,
                     parents=self.authority.parents(sealed),
                     configuration_sha256=sealed.configuration.fingerprint,
                     manifest_sha256=digest(json.loads(sealed.manifest_json)),
                     generation_manifest=json.loads(sealed.manifest_json),
                     body_sha256=digest(body),
-                    expires_at=(self.clock() + timedelta(seconds=self.cache_seconds)).isoformat(),
+                    expires_at=expires_at.isoformat(),
                 )
                 await uow.derived_put(self.scope, "model_cache_body", sealed.key, body)
                 await uow.derived_put(self.scope, "model_cache_header", sealed.key, header)
@@ -266,8 +371,19 @@ class GovernedModelAnswers:
                         ]
                     ),
                 )
+                await self.authority.validate(uow, sealed)
+                # Storage awaits cannot stretch an expired flight into a fresh
+                # publication or first-delivery lease. Roll the whole commit back.
+                now = self.clock()
+                if (
+                    datetime.fromisoformat(flight["until"]) <= now
+                    or datetime.fromisoformat(slot["expires_at"]) <= now
+                    or expires_at <= now
+                ):
+                    raise ModelError("model_execution_fenced")
+            published = True
             await self.budget.outcome(reservation["key"], "completed")
-            return response, reservation["call_id"], False
+            return response, reservation["call_id"], reservation["key"], delivery_reservation, False
         except BaseException as error:
             if reservation is not None:
                 if dispatched:
@@ -290,7 +406,14 @@ class GovernedModelAnswers:
                 raise
             raise ModelError("model_execution_failed") from None
         finally:
-            await asyncio.shield(self._complete_flight(sealed, token, "finished"))
+            await asyncio.shield(
+                self._complete_flight(
+                    sealed,
+                    token,
+                    "finished",
+                    delivery_reservation=delivery_reservation if not published else None,
+                )
+            )
 
     async def answer(self, sealed, *, serialize=None):
         observed = await self.authority.clock_barrier()
@@ -316,34 +439,39 @@ class GovernedModelAnswers:
                         done.exception()  # Consume failures even when all waiters cancel.
 
                 task.add_done_callback(finished)
-            response, call_id, cache_hit = await asyncio.shield(task)
+            (
+                response,
+                call_id,
+                reservation_key,
+                delivery_reservation,
+                cache_hit,
+            ) = await asyncio.shield(task)
             cache_hit = cache_hit or joined
         else:
-            response, call_id = cached
+            response, call_id, reservation_key, delivery_reservation = cached
             cache_hit = True
         # The final serialized return object is fixed before authorization; there
         # is no later await between commit and handing it to the controlled host.
-        delivery_id = uuid4().hex
-        answer = ModelAnswer(
-            response.text,
-            sealed.key,
-            call_id,
-            delivery_id,
-            cache_hit,
-            "measured" if response.actual_microunits is not None else "unknown",
-        )
-        result = serialize(answer) if serialize is not None else answer
-        encoded = result if serialize is not None else asdict(answer)
-        serialized = canonical(encoded).encode()
-        if len(serialized) > sealed.configuration.max_output_bytes:
-            raise ModelError("model_delivery_budget_exceeded")
-        # The serializer may return a dictionary still owned by another task.
-        # Decode the exact canonical bytes into our own graph before any await.
-        # Default ModelAnswer already consists solely of frozen scalar fields.
-        if serialize is not None:
-            result = json.loads(serialized)
-        payload_hash = sha256(serialized).hexdigest()
         async with self.repository.unit_of_work() as uow:
+            # Finance locks precede lifecycle locks. The ledger, slot claim,
+            # exact serialized bytes and final authorization share one commit.
+            cost_status = await self.budget.cost_status(uow, call_id=call_id, key=reservation_key)
+            delivery_id, reservation_token = await self.authority.delivery_id(
+                uow, sealed, call_id=call_id, reservation=delivery_reservation
+            )
+            answer = ModelAnswer(
+                response.text, sealed.key, call_id, delivery_id, cache_hit, cost_status
+            )
+            result = serialize(answer) if serialize is not None else answer
+            encoded = result if serialize is not None else asdict(answer)
+            serialized = canonical(encoded).encode()
+            if len(serialized) > sealed.configuration.max_output_bytes:
+                raise ModelError("model_delivery_budget_exceeded")
+            # The serializer may return a graph owned by another task.
+            # Own the exact bytes before an await and final authorization.
+            if serialize is not None:
+                result = json.loads(serialized)
+            payload_hash = sha256(serialized).hexdigest()
             await self.authority.record(
                 uow,
                 sealed,
@@ -351,5 +479,6 @@ class GovernedModelAnswers:
                 payload_sha256=payload_hash,
                 call_id=call_id,
                 authorization_id=delivery_id,
+                reservation_token=reservation_token,
             )
         return result

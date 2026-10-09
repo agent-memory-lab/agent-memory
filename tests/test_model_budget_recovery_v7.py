@@ -238,8 +238,13 @@ def test_sigkill_after_recording_provider_accepts_body_keeps_debt_and_fences_del
                     assert await uow.derived_records(scope, "model_cache_body") == ()
                     assert not any(
                         row["payload"]["stage"] == "delivery"
+                        and row["payload"]["consumed"] is True
                         for row in await uow.derived_records(scope, "model_authorization")
                     )
+                    assert sum(
+                        row["payload"].get("state") == "reserved"
+                        for row in await uow.derived_records(scope, "model_authorization")
+                    ) == 1
                 clock[0] += timedelta(seconds=42)
                 recovered = GovernedModelAnswers(
                     authority,
@@ -261,6 +266,11 @@ def test_sigkill_after_recording_provider_accepts_body_keeps_debt_and_fences_del
                         "reconciliation_pending",
                     }
                     assert all(row["actual_microunits"] is None for row in rows)
+                    async with repo.unit_of_work() as uow:
+                        assert not any(
+                            row["payload"].get("state") == "reserved"
+                            for row in await uow.derived_records(scope, "model_authorization")
+                        )
 
     asyncio.run(run())
 

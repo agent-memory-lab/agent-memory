@@ -318,6 +318,31 @@ class ModelBudget:
             await self.lock(uow)
             return tuple(await uow.model_budget_records("call"))
 
+    async def cost_status(self, uow, *, call_id, key=None):
+        """Current settlement state, read under the delivery transaction's lock.
+
+        New cache headers retain the reservation key. Legacy headers contain only
+        the opaque call ID; their bounded lookup keeps existing caches readable.
+        Neither path infers payment from an immutable provider response.
+        """
+        await self.lock(uow)
+        if key is not None:
+            row = await uow.model_budget_get("call", key)
+        else:
+            matches = [
+                row
+                for row in await uow.model_budget_records("call")
+                if row["call_id"] == call_id
+            ]
+            row = matches[0] if len(matches) == 1 else None
+        if not row or row["call_id"] != call_id:
+            raise ModelError("model_reservation_missing")
+        return (
+            "measured"
+            if row["state"] == "settled" and row["actual_microunits"] is not None
+            else "unknown"
+        )
+
     async def export(self):
         """Host-only current finance snapshot; pin checkpoint outside the backup.
 

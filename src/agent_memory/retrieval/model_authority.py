@@ -251,12 +251,125 @@ class SourceModelAuthority:
                 parents.add("atom:" + item["id"])
         return sorted(parents)
 
-    async def record(self, uow, sealed, stage, *, payload_sha256, call_id, authorization_id=None):
+    async def _authorization_rows(self, uow):
+        """Reclaim only unused, expired capacity, never consumed audit evidence."""
+        from ..operations.model_authorization_archive import _audit
+
+        rows = await uow.derived_records(self.scope, "model_authorization")
+        live = []
+        for item in rows:
+            row = item["payload"]
+            if row.get("state") == "reserved":
+                _audit(row, item["identity"])
+                if datetime.fromisoformat(row["expires_at"]) <= self.clock():
+                    await uow.model_delivery_reservation_delete(
+                        self.scope, item["identity"], row["token"]
+                    )
+                    continue
+            live.append(item)
+        return live
+
+    async def dispatch_capacity(self, uow, sealed):
+        """Avoid new finance rows on a known-full audit; not a reservation."""
+        if not callable(getattr(uow, "model_delivery_reservation_delete", None)):
+            raise ModelError("model_delivery_reservation_backend_unsupported")
+        await self.validate(uow, sealed)
+        rows = await self._authorization_rows(uow)
+        if len(rows) + 2 > 4096:
+            raise ModelError("model_authorization_capacity")
+
+    async def reserve_delivery(self, uow, sealed, *, call_id, token, expires_at):
+        """Reserve the first delivery in the SAME transaction as dispatch."""
+        # Recheck even if an earlier preflight succeeded. This placeholder counts
+        # against the same physical cap as every cache hit and other delivery.
+        await self.dispatch_capacity(uow, sealed)
+        identity = uuid4().hex
+        await uow.derived_put(
+            self.scope,
+            "model_authorization",
+            identity,
+            dict(
+                schema="model-delivery-reservation/1",
+                state="reserved",
+                id=identity,
+                stage="delivery",
+                consumed=False,
+                token=token,
+                expires_at=expires_at.isoformat(),
+                call_id=call_id,
+                key=sealed.key,
+                sources=list(json.loads(sealed.manifest_json)["sources"]),
+                parents=self.parents(sealed),
+            ),
+        )
+        return dict(id=identity, token=token)
+
+    async def delivery_id(self, uow, sealed, *, call_id, reservation=None):
+        """Choose the held slot for exactly one caller under the scope lock."""
+        await self.validate(uow, sealed)
+        if reservation is not None:
+            row = await uow.derived_get(self.scope, "model_authorization", reservation["id"])
+            if (
+                row
+                and row.get("state") == "reserved"
+                and row.get("consumed") is False
+                and row.get("token") == reservation["token"]
+                and row.get("key") == sealed.key
+                and row.get("call_id") == call_id
+                and datetime.fromisoformat(row["expires_at"]) > self.clock()
+            ):
+                return reservation["id"], reservation["token"]
+        return uuid4().hex, None
+
+    async def retain_delivery(self, uow, sealed, *, call_id, reservation, expires_at):
+        """Extend a live flight's slot through its atomically published cache TTL."""
+        identity, token = await self.delivery_id(
+            uow, sealed, call_id=call_id, reservation=reservation
+        )
+        if token is None:
+            raise ModelError("model_delivery_reservation_fenced")
+        row = await uow.derived_get(self.scope, "model_authorization", identity)
+        row["expires_at"] = expires_at.isoformat()
+        await uow.derived_put(self.scope, "model_authorization", identity, row)
+
+    async def release_delivery(self, uow, reservation):
+        if reservation is not None:
+            await uow.lock_admission_scope(self.scope)
+            await uow.model_delivery_reservation_delete(
+                self.scope, reservation["id"], reservation["token"]
+            )
+
+    async def record(
+        self,
+        uow,
+        sealed,
+        stage,
+        *,
+        payload_sha256,
+        call_id,
+        authorization_id=None,
+        reservation_token=None,
+    ):
         if stage not in {"dispatch", "delivery"}:
             raise ModelError("invalid_model_authorization_stage")
         await self.validate(uow, sealed)
         key = authorization_id or uuid4().hex
-        if len(await uow.derived_records(self.scope, "model_authorization")) >= 4096:
+        rows = await self._authorization_rows(uow)
+        old = await uow.derived_get(self.scope, "model_authorization", key)
+        if reservation_token is not None:
+            if (
+                stage != "delivery"
+                or not old
+                or old.get("state") != "reserved"
+                or old.get("consumed") is not False
+                or old.get("token") != reservation_token
+                or old.get("key") != sealed.key
+                or old.get("call_id") != call_id
+            ):
+                raise ModelError("model_delivery_reservation_fenced")
+        elif old is not None:
+            raise ModelError("model_authorization_conflict")
+        elif len(rows) >= 4096:
             raise ModelError("model_authorization_capacity")
         # Audit identifiers are random; content, coordinates, IDs live only in
         # scrub-able metadata with source reverse associations.
