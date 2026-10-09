@@ -21,6 +21,10 @@ class FusedCandidate:
     source_event_ids: tuple[str, ...]
     method_ranks: tuple[tuple[str, int], ...]
     retrievers: tuple[str, ...]
+    original_fusion_score: float | None = None
+    pair_score: float | None = None
+    pair_probability: float | None = None
+    pair_rank: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

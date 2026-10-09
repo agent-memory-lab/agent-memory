@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
+from collections.abc import Sequence
+from dataclasses import dataclass
 from statistics import mean
 from time import monotonic
-from typing import Mapping, Protocol, Sequence
+from typing import Protocol
 
 from ..domain import MemoryScope
 
@@ -88,6 +89,11 @@ class RetrievalObservation:
     memory_ids: tuple[str, ...]
     source_event_ids: tuple[str, ...]
     token_estimate: int
+    model_calls: int | None = None
+    cost_microunits: int | None = None
+    candidates_considered: int | None = None
+    cpu_ms: float | None = None
+    peak_rss_bytes: int | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -102,6 +108,16 @@ class RetrievalObservation:
         )
         if type(self.token_estimate) is not int or not 0 <= self.token_estimate <= 10_000_000:
             raise ValueError("token_estimate must be between 0 and 10000000")
+        for name in ("model_calls", "cost_microunits", "candidates_considered", "peak_rss_bytes"):
+            value = getattr(self, name)
+            if value is not None and (type(value) is not int or not 0 <= value <= 2**63 - 1):
+                raise ValueError(f"{name} must be a non-negative count or unknown")
+        if self.cpu_ms is not None and (
+            type(self.cpu_ms) not in (float, int)
+            or not math.isfinite(self.cpu_ms)
+            or self.cpu_ms < 0
+        ):
+            raise ValueError("cpu_ms must be finite and non-negative or unknown")
 
 
 class RetrievalEvaluationArm(Protocol):
@@ -117,7 +133,9 @@ class NoMemoryEvaluationArm:
         return "no-memory"
 
     async def retrieve(self, case: RetrievalEvalCase) -> RetrievalObservation:
-        return RetrievalObservation((), (), 0)
+        return RetrievalObservation(
+            (), (), 0, model_calls=0, cost_microunits=0, candidates_considered=0
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,6 +157,16 @@ class RetrievalArmMetrics:
     mean_tokens: float
     latency_p50_ms: float
     latency_p95_ms: float
+    latency_count: int = 0
+    known_model_calls: int = 0
+    unknown_model_call_cases: int = 0
+    known_cost_microunits: int = 0
+    unknown_cost_cases: int = 0
+    known_candidates_considered: int = 0
+    unknown_candidate_count_cases: int = 0
+    known_cpu_ms: float = 0.0
+    unknown_resource_cases: int = 0
+    peak_known_rss_bytes: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,6 +195,15 @@ class _Accumulator:
     forbidden_hits: int = 0
     tokens: int = 0
     latencies: list[float] | None = None
+    model_calls: int = 0
+    measured_calls: int = 0
+    cost: int = 0
+    measured_cost: int = 0
+    candidates: int = 0
+    measured_candidates: int = 0
+    cpu: float = 0.0
+    measured_resources: int = 0
+    peak_rss: int | None = None
 
     def __post_init__(self) -> None:
         self.latencies = []
@@ -187,12 +224,24 @@ def _percentile(values: Sequence[float], fraction: float) -> float:
 async def run_retrieval_benchmark(
     snapshot: RetrievalDatasetSnapshot,
     arms: Sequence[RetrievalEvaluationArm],
+    *,
+    required_arms: Sequence[str] = tuple(sorted(_REQUIRED_ARMS)),
 ) -> RetrievalBenchmarkReport:
-    """Evaluate exactly the three V4 baseline arms in stable case order."""
+    """Evaluate 1–16 bounded arms, retaining the original required baselines.
+
+    Hosts may explicitly select a different required set for a controlled
+    experiment. Additional arms never silently remove the V4 baselines.
+    Failed calls contribute elapsed latency; unobserved costs remain unknown.
+    """
     if not isinstance(snapshot, RetrievalDatasetSnapshot):
         raise TypeError("snapshot must be a RetrievalDatasetSnapshot")
     if not isinstance(arms, Sequence) or isinstance(arms, (str, bytes)):
         raise TypeError("arms must be a sequence")
+    if not 1 <= len(arms) <= 16:
+        raise ValueError("evaluation requires 1 to 16 bounded arms")
+    required = _ids(required_arms, "required_arms", maximum=16)
+    if not required or len(required) != len(required_arms):
+        raise ValueError("required arm identities must be non-empty and unique")
     by_name: dict[str, RetrievalEvaluationArm] = {}
     for arm in arms:
         name = _identifier(getattr(arm, "name", None), "arm.name")
@@ -201,8 +250,10 @@ async def run_retrieval_benchmark(
         if not callable(getattr(arm, "retrieve", None)):
             raise TypeError("evaluation arm must implement retrieve")
         by_name[name] = arm
-    if set(by_name) != _REQUIRED_ARMS:
-        raise ValueError("arms must be exactly: no-memory, lexical-only, hybrid")
+    if not set(required) <= set(by_name):
+        raise ValueError(
+            "arms must include exactly named required baselines: " + ", ".join(required)
+        )
 
     accumulators = {name: _Accumulator() for name in sorted(by_name)}
     failures: list[RetrievalBenchmarkFailure] = []
@@ -221,20 +272,32 @@ async def run_retrieval_benchmark(
                 if not isinstance(observation, RetrievalObservation):
                     raise TypeError("arm returned an invalid observation")
             except Exception as error:
-                failures.append(
-                    RetrievalBenchmarkFailure(name, case.case_id, type(error).__name__)
-                )
+                accumulator.latencies.append((monotonic() - started) * 1_000)
+                failures.append(RetrievalBenchmarkFailure(name, case.case_id, type(error).__name__))
                 continue
             elapsed = (monotonic() - started) * 1_000
             accumulator.successful += 1
             accumulator.latencies.append(elapsed)
             accumulator.tokens += observation.token_estimate
+            if observation.model_calls is not None:
+                accumulator.model_calls += observation.model_calls
+                accumulator.measured_calls += 1
+            if observation.cost_microunits is not None:
+                accumulator.cost += observation.cost_microunits
+                accumulator.measured_cost += 1
+            if observation.candidates_considered is not None:
+                accumulator.candidates += observation.candidates_considered
+                accumulator.measured_candidates += 1
+            if observation.cpu_ms is not None:
+                accumulator.cpu += observation.cpu_ms
+            if observation.peak_rss_bytes is not None:
+                accumulator.peak_rss = max(accumulator.peak_rss or 0, observation.peak_rss_bytes)
+            if observation.cpu_ms is not None and observation.peak_rss_bytes is not None:
+                accumulator.measured_resources += 1
             returned = set(observation.memory_ids)
             accumulator.retrieved += len(returned)
             accumulator.relevant_hits += len(returned & relevant)
-            accumulator.evidence_hits += len(
-                set(observation.source_event_ids) & required_evidence
-            )
+            accumulator.evidence_hits += len(set(observation.source_event_ids) & required_evidence)
             accumulator.forbidden_hits += len(returned & set(case.forbidden_memory_ids))
 
     metrics: list[RetrievalArmMetrics] = []
@@ -262,6 +325,16 @@ async def run_retrieval_benchmark(
                 mean_tokens=mean([value.tokens / value.successful]) if value.successful else 0.0,
                 latency_p50_ms=_percentile(latencies, 0.50),
                 latency_p95_ms=_percentile(latencies, 0.95),
+                latency_count=len(latencies),
+                known_model_calls=value.model_calls,
+                unknown_model_call_cases=case_count - value.measured_calls,
+                known_cost_microunits=value.cost,
+                unknown_cost_cases=case_count - value.measured_cost,
+                known_candidates_considered=value.candidates,
+                unknown_candidate_count_cases=case_count - value.measured_candidates,
+                known_cpu_ms=value.cpu,
+                unknown_resource_cases=case_count - value.measured_resources,
+                peak_known_rss_bytes=value.peak_rss,
             )
         )
     failures.sort(key=lambda value: (value.arm, value.case_id, value.error_type))
