@@ -23,6 +23,10 @@ class QuestionRefreshProcessor:
         return definition["facet_id"]
 
     def target_metadata(self, definition):
+        if definition["spec"].get("schema") == "question-page-refresh/1":
+            return dict(definition_fingerprint=definition["fingerprint"],
+                        context_fingerprint=digest(definition["spec"]["context"]),
+                        request_semantics_digest=digest([self.key, definition["spec"]]))
         instance = definition["spec"]["instance"]
         return dict(
             definition_fingerprint=definition["fingerprint"],
@@ -39,15 +43,23 @@ class QuestionRefreshProcessor:
 
     async def definition(self, uow, facet_id):
         await self.service._open(uow)
+        if facet_id.startswith("question-page:"):
+            return await self.service.pages.maintenance.definition(uow, facet_id)
         return await self.service._definition(uow, facet_id)
 
     async def authorize(self, uow, definition, actor):
+        if definition["spec"].get("schema") == "question-page-refresh/1":
+            return await self.service.pages.maintenance.authorize(uow, definition, actor)
         return await self.service._authorize(uow, definition, actor)
 
     async def required_parents(self, uow, definition):
+        if definition["spec"].get("schema") == "question-page-refresh/1":
+            return await self.service.pages.maintenance.required_parents(uow, definition)
         return []
 
     async def freeze(self, uow, definition):
+        if definition["spec"].get("schema") == "question-page-refresh/1":
+            return await self.service.pages.maintenance.freeze(uow, definition)
         proof = await self.service._proof(uow, definition, at=self.service.clock())
         unit = self.service._unit(definition, proof)
         key = "question-unit:" + digest(unit)
@@ -77,12 +89,20 @@ class QuestionRefreshProcessor:
         return await checked_job(self.service, uow, task, completed=completed)
 
     async def snapshot(self, task):
+        if task.payload["unit"].get("schema") == "question-page-refresh-unit/1":
+            return await self.service.pages.maintenance.snapshot(task)
         return await self.service.snapshot(task)
 
     def prepare(self, snapshot):
+        if snapshot.get("page_refresh"):
+            from copy import deepcopy
+
+            return deepcopy(snapshot)
         return self.service.prepare(snapshot)
 
     async def publish(self, task, snapshot, prepared):
+        if task.payload["unit"].get("schema") == "question-page-refresh-unit/1":
+            return await self.service.pages.maintenance.publish(task, snapshot, prepared)
         return await self.service.publish(task, snapshot, prepared)
 
     async def verify_coverage(self, uow, execution):
@@ -103,6 +123,23 @@ class QuestionRefreshProcessor:
             != digest({k: v for k, v in publication.items() if k != "sha256"})
         ):
             return None
+        if job["unit"].get("schema") == "question-page-refresh-unit/1":
+            from .question_pages import checked
+
+            try:
+                for kind, revision, sha in (
+                    ("question_page_content", "revision_id", "content_sha256"),
+                    ("question_page_certificate", "certificate_revision_id", "certificate_sha256"),
+                ):
+                    value = await uow.derived_get(self.scope, kind, job[revision])
+                    checked(value, kind.replace("_", "-") + "/1")
+                    if digest(value) != job[sha] or value["instance_id"] != job["unit"]["facet_id"]:
+                        return None
+                if value["content_revision_id"] != job["revision_id"]:
+                    return None
+            except (DerivedError, KeyError, TypeError):
+                return None
+            return publication
         # Finite completion is not current-readiness. It verifies the actual
         # committed immutable content/certificate, independent of a later head.
         cert = await uow.derived_get(
@@ -122,3 +159,14 @@ class QuestionRefreshProcessor:
         except (DerivedError, ValueError, TypeError):
             return None
         return publication
+
+
+class QuestionPageRefreshProcessor(QuestionRefreshProcessor):
+    """A distinct route prevents older QuestionView workers claiming page units."""
+
+    def __init__(self, service):
+        super().__init__(service)
+        self.key = "question-page-refresh/1:" + digest(self.key)
+
+    async def initialize(self, uow):
+        await self.service.pages.maintenance.initialize(uow)

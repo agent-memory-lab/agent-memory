@@ -467,7 +467,7 @@ async def publish_coverage(uow, service, job, definition, *, manifest, now):
 class RefreshDemandQueue:
     """Multi-processor worker queue with one database-wide admission budget."""
 
-    def __init__(self, processors, *, limits=None, clock=utc_now):
+    def __init__(self, processors, *, limits=None, clock=utc_now, default_processor_key=None):
         processors = tuple(processors)
         if (
             not processors
@@ -478,12 +478,17 @@ class RefreshDemandQueue:
         if any(p.repository is not processors[0].repository for p in processors):
             raise ValueError("refresh processors must share one repository")
         self.processors = {p.key: p for p in processors}
+        if default_processor_key is not None and default_processor_key not in self.processors:
+            raise ValueError("default refresh processor must be registered")
+        self.default_processor_key = default_processor_key
         self.repository = processors[0].repository
         self.limits = limits or RefreshLimits()
         self.clock = clock
         self.stopping = False
 
     def _processor(self, key=None):
+        if key is None:
+            key = self.default_processor_key
         if key is None and len(self.processors) == 1:
             return next(iter(self.processors.values()))
         if key not in self.processors:
@@ -705,30 +710,60 @@ class RefreshDemandQueue:
                 await open_derived(uow, processor.scope)
                 await observed_clock(uow, processor.scope, self.clock)
                 await uow.refresh_scheduler_config(self.limits.payload())
+                initialize = getattr(processor, "initialize", None)
+                if initialize is not None:
+                    await initialize(uow)
         self.stopping = False
 
-    async def claim(self, worker_id, *, lease_seconds):
+    async def claim(self, worker_id, *, lease_seconds, target_id=None, processor_key=None):
         identity(worker_id)
         if type(lease_seconds) is not int or not 5 <= lease_seconds <= 86400:
             raise ValueError("invalid refresh lease duration")
         if self.stopping:
             return None
         now = _utc(self.clock())
+        target_demand_id = None
         # Indexed candidate hints only. Unsupported routes are filtered before LIMIT.
         async with self.repository.unit_of_work() as uow:
             if not supported(uow):
                 raise DerivedError("refresh_backend_unsupported")
-            now = await observed_clock(uow, next(iter(self.processors.values())).scope, self.clock)
-            expired = await uow.refresh_scheduler_expired(
-                now=now.isoformat(),
-                adapter_keys=tuple(self.processors),
-                limit=128,
+            discovery_scope = (
+                self._processor(processor_key).scope
+                if target_id is not None else next(iter(self.processors.values())).scope
             )
-            due = await uow.refresh_scheduler_due(
-                now=now.isoformat(),
-                adapter_keys=tuple(self.processors),
-                limit=128,
-            )
+            now = await observed_clock(uow, discovery_scope, self.clock)
+            if target_id is not None:
+                # A bounded direct answer spends its step on its exact finite
+                # demand. It still enters the same admission/fence path below.
+                processor = self._processor(processor_key)
+                receipt = await uow.derived_get(
+                    processor.scope, "coverage_request", identity(target_id)
+                )
+                if (not receipt or receipt.get("state") == "erased"
+                        or receipt.get("adapter_key") != processor.key):
+                    raise DerivedError("derived_target_unavailable")
+                row = await uow.derived_get(
+                    processor.scope, "refresh_demand", receipt["demand_id"]
+                )
+                target_demand_id = receipt["demand_id"]
+                # Expired unrelated reservations still consume the shared budget.
+                # Reconcile them below, but never execute their work for this reader.
+                expired = await uow.refresh_scheduler_expired(
+                    now=now.isoformat(), adapter_keys=tuple(self.processors), limit=128,
+                )
+                due = [dict(partition_key=processor.scope.partition_key(),
+                            identity=receipt["demand_id"], payload=row)] if row else []
+            else:
+                expired = await uow.refresh_scheduler_expired(
+                    now=now.isoformat(),
+                    adapter_keys=tuple(self.processors),
+                    limit=128,
+                )
+                due = await uow.refresh_scheduler_due(
+                    now=now.isoformat(),
+                    adapter_keys=tuple(self.processors),
+                    limit=128,
+                )
         seen = set()
         for hint in (*expired, *due):
             if self.stopping:
@@ -757,6 +792,8 @@ class RefreshDemandQueue:
                     await self._expire(uow, processor, row, now)
                     if row["status"] == "dead":
                         continue
+                if target_demand_id is not None and key != target_demand_id:
+                    continue
                 if _parse(row.get("runnable_at") or row.get("due_at")) is None or (
                     _parse(row.get("runnable_at") or row["due_at"]) > now
                 ):

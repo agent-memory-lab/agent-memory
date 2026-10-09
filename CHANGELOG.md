@@ -11,9 +11,11 @@ the first stable release.
   reservations and return the current ledger settlement status on cached delivery.
   Hold first-delivery audit capacity atomically with dispatch so the last available
   audit slot cannot cause a predictable billed-but-undelivered generation.
+- Maintain already-published project pages through the existing bounded refresh host,
+  dependencies, leases and shared budgets, with restart and erasure safeguards.
 - Add host-acknowledged bounded model authorization audit archival, preserving full
   exported derived proof and independently pinned archive receipts without deleting
-  money debt or silently expiring audit evidence. See the [archive and compatibility contract](docs/design/v7.0.0/model-authorization-archive.md).
+  money debt or silently expiring audit evidence. See [scope and compatibility](docs/design/v7.0.0/runtime-repairs.md).
 
 ### Added
 

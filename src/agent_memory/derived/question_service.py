@@ -84,10 +84,14 @@ class QuestionService:
         )
         self.registry = admission.registry
         from ..operations.refresh_demand import RefreshDemandQueue
-        from .question_refresh import QuestionRefreshProcessor
+        from .question_refresh import QuestionPageRefreshProcessor, QuestionRefreshProcessor
 
         self.processor = QuestionRefreshProcessor(self)
-        self.queue = RefreshDemandQueue((self.processor,), limits=limits, clock=self.clock)
+        self.page_processor = QuestionPageRefreshProcessor(self)
+        self.queue = RefreshDemandQueue(
+            (self.processor, self.page_processor), limits=limits, clock=self.clock,
+            default_processor_key=self.processor.key,
+        )
         from .question_pages import ProjectQuestionPages
 
         self.pages = ProjectQuestionPages(self)
@@ -1030,7 +1034,9 @@ class QuestionService:
                 raise
         receipt = await self.request(question_id, actor=actor, dedupe_key=dedupe_key)
         for _ in range(max_steps):
-            lease = await self.queue.claim("question-direct", lease_seconds=30)
+            lease = await self.queue.claim(
+                "question-direct", lease_seconds=30, target_id=receipt["target_id"]
+            )
             if lease is None:
                 break
             try:
