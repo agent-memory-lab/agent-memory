@@ -130,12 +130,23 @@ def pack_memory_bundle(
         metadata = dict(candidate.item.metadata)
         metadata.update(
             {
-                "fusion_score": candidate.score,
+                "fusion_score": (
+                    candidate.original_fusion_score
+                    if candidate.original_fusion_score is not None else candidate.score
+                ),
                 "retrieval_methods": candidate.method_ranks,
                 "retrievers": candidate.retrievers,
                 "policy_version": policy_version,
             }
         )
+        if candidate.original_fusion_score is not None:
+            metadata.update({
+                "selection_score": candidate.score,
+                "selection_score_kind": "pair-rank-order/1",
+                "pair_score": candidate.pair_score,
+                "pair_probability": candidate.pair_probability,
+                "pair_rank": candidate.pair_rank,
+            })
         included.append(replace(candidate.item, score=candidate.score, metadata=metadata))
         citations.append(Citation(candidate.item.id, candidate.source_event_ids))
         # Only evidence actually packed spends diversity quotas. Oversized or

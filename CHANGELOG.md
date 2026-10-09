@@ -7,6 +7,12 @@ the first stable release.
 
 ### Fixed
 
+- Recheck compact-reranker promotion approval across invocation and delivery
+  boundaries, fail closed on revocation or configuration changes, and enforce
+  final expiry after host callbacks. Controlled retrieval evidence now requires
+  independent supporting-span/qualifier judgments and measured zero unsafe/stale
+  deliveries; unknown observations cannot qualify promotion.
+
 - Pack native recall by feasible evidence coverage without dropping later claims
   after an oversized state entry. Preserve exact indexed chunks and annotate
   legacy excerpts with contiguous source spans; keep distinct same-source claims.
@@ -38,6 +44,14 @@ the first stable release.
   authorization/retention lifecycle. The generic embedding reranker still keeps
   no vectors. See [index scope](docs/SQLITE_LEXICAL_INDEX.md) and
   [source embedding reuse](docs/source-embedding-reuse.md).
+
+- Default-off host-local compact pair-reranker contract and actual final-token
+  yes/no-logit adapter, with exact rank-only identities, processing authorization,
+  fresh post-score governance and separate RRF/neural/selection metadata. Add a
+  frozen four-arm cold/warm controlled promotion harness with full maintenance
+  costs, unknown/failure accounting and paired group uncertainty. Contract tests
+  do not qualify real efficacy or enable deployment. See
+  [compact pair reranking](docs/design/retrieval/compact-pair-reranking.md).
 
 - Opt-in local Ollama synthetic runtime smoke with a saved pre-dispatch plan,
   pinned installation/configuration, actual question/cache/authorization/erasure

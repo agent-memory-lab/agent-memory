@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
-from typing import Protocol, Sequence
+from collections.abc import Sequence
+from copy import deepcopy
+from dataclasses import asdict, dataclass, replace
+from typing import Protocol
 
+from ..domain import Claim, MemoryBundle, MemoryCapabilities, MemoryQuery, MemoryScope
+from ..extensions.loader import LoadedPlugin
 from .bundle import BundleBudget, BundlePackingTrace, pack_memory_bundle
 from .diversity import DiversityBudget, DiversityTrace
 from .fusion import FusedCandidate
@@ -13,12 +17,11 @@ from .guard import (
     GovernedCandidate,
     guard_candidates,
 )
-from ..domain import Claim, MemoryBundle, MemoryCapabilities, MemoryQuery, MemoryScope
+from .pair_reranker import CompactPairReranker, PairRerankTrace
 from .parallel import (
     ParallelRetrieverOrchestrator,
     RetrieverExecutionTrace,
 )
-from ..extensions.loader import LoadedPlugin
 from .scoped_lexical import ScopeIsolationError
 
 
@@ -47,6 +50,7 @@ class GovernedRecallTrace:
     diversity: DiversityTrace
     packing: BundlePackingTrace
     degraded: bool
+    pair_rerank: PairRerankTrace | None = None
 
 
 class GovernedRecallPipeline:
@@ -62,6 +66,7 @@ class GovernedRecallPipeline:
         bundle_budget: BundleBudget | None = None,
         capabilities: MemoryCapabilities | None = None,
         policy_version: str = "governed-recall-v1",
+        pair_reranker: CompactPairReranker | None = None,
     ) -> None:
         if not isinstance(plugins, Sequence) or isinstance(plugins, (str, bytes)) or not plugins:
             raise ValueError("plugins must contain at least one loaded retriever")
@@ -75,6 +80,9 @@ class GovernedRecallPipeline:
         self._bundle_budget = bundle_budget or BundleBudget()
         self._capabilities = capabilities or MemoryCapabilities()
         self._policy_version = policy_version
+        if pair_reranker is not None and type(pair_reranker) is not CompactPairReranker:
+            raise TypeError("pair_reranker must be a CompactPairReranker")
+        self._pair_reranker = pair_reranker
         self._last_trace: GovernedRecallTrace | None = None
 
     @property
@@ -98,30 +106,34 @@ class GovernedRecallPipeline:
             raise ValueError("candidate capacity must cover each loaded retriever")
         candidate_limit = min(100, capacity // len(self._plugins), max(16, query.limit * 4))
         parallel = await self._orchestrator.retrieve(
-            replace(query, limit=candidate_limit), self._plugins,
+            replace(query, limit=candidate_limit),
+            self._plugins,
         )
         fused = parallel.fusion.candidates
-        records = await self._governance.resolve(query.scope, fused)
-        if not isinstance(records, Sequence) or isinstance(records, (str, bytes)):
-            raise ScopeIsolationError("governance resolver must return a bounded sequence")
-        if len(records) > len(fused):
-            raise ScopeIsolationError("governance resolver injected additional candidates")
-        expected = {candidate.item.id: candidate for candidate in fused}
-        seen: set[str] = set()
-        for record in records:
-            if not isinstance(record, GovernedCandidate):
-                raise ScopeIsolationError("governance resolver returned an unlabelled candidate")
-            memory_id = record.candidate.item.id
-            if memory_id in seen or expected.get(memory_id) != record.candidate:
-                raise ScopeIsolationError("governance resolver altered retrieval candidates")
-            seen.add(memory_id)
-
-        guarded = guard_candidates(
-            query.scope,
-            records,
-            now=self._plugins[0].context.clock.now(),
-            max_candidates=min(256, max(1, len(fused))),
-        )
+        guarded = await self._resolve_guard(query.scope, fused)
+        packing_candidates = guarded.accepted
+        rank_trace = None
+        ranker = self._pair_reranker
+        if ranker is not None and ranker.enabled:
+            # Never expose candidate objects or mutable metadata to the scorer.
+            # Keep an independent version snapshot over all asynchronous work.
+            snapshot = deepcopy(guarded.accepted)
+            result = await ranker.rank(query.scope, query.text, guarded.accepted)
+            if guarded.accepted != snapshot:
+                raise ScopeIsolationError("candidate data changed during pair scoring")
+            # Authorization and scoring both await external host code. Resolve
+            # current policy and source versions AFTER those waits, before packing.
+            fresh = await self._resolve_guard(
+                query.scope,
+                snapshot,
+                exact=True,
+                before_guard=ranker.require_current_approval,
+            )
+            if self._pair_reranker is not ranker:
+                raise ScopeIsolationError("pair ranking configuration was replaced")
+            if guarded.accepted != snapshot or fresh.rejected or fresh.accepted != snapshot:
+                raise ScopeIsolationError("candidate authorization or version became stale")
+            packing_candidates, rank_trace = result.candidates, result.trace
         diversity_budget = DiversityBudget(
             max_items=min(query.limit, self._diversity_budget.max_items),
             max_per_kind=self._diversity_budget.max_per_kind,
@@ -134,7 +146,7 @@ class GovernedRecallPipeline:
         )
         packed = pack_memory_bundle(
             query.scope,
-            guarded.accepted,
+            packing_candidates,
             current_state=current_state if query.include_current_state else (),
             budget=bundle_budget,
             diversity_budget=diversity_budget,
@@ -148,7 +160,13 @@ class GovernedRecallPipeline:
             guard=guarded,
             diversity=packed.diversity_trace,
             packing=packed.trace,
-            degraded=parallel.degraded or bool(guarded.rejected),
+            degraded=(
+                parallel.degraded
+                or bool(guarded.rejected)
+                or rank_trace is not None
+                and rank_trace.status == "degraded"
+            ),
+            pair_rerank=rank_trace,
         )
         self._last_trace = trace
         metadata = dict(packed.bundle.retrieval_metadata)
@@ -177,4 +195,36 @@ class GovernedRecallPipeline:
                 "diversity_selected": trace.diversity.selected_count,
             }
         )
+        if rank_trace is not None:
+            metadata["pair_rerank"] = asdict(rank_trace)
         return replace(packed.bundle, retrieval_metadata=metadata)
+
+    async def _resolve_guard(self, scope, candidates, *, exact=False, before_guard=None):
+        snapshot = deepcopy(tuple(candidates))
+        records = await self._governance.resolve(scope, deepcopy(snapshot))
+        if before_guard is not None:
+            before_guard()
+        # All host callbacks have completed before current clock/expiry checks.
+        if not isinstance(records, Sequence) or isinstance(records, (str, bytes)):
+            raise ScopeIsolationError("governance resolver must return a bounded sequence")
+        if len(records) > len(snapshot):
+            raise ScopeIsolationError("governance resolver injected additional candidates")
+        if exact and len(records) != len(snapshot):
+            raise ScopeIsolationError("candidate authorization or version became stale")
+        expected = {candidate.item.id: candidate for candidate in snapshot}
+        seen = set()
+        for record in records:
+            if not isinstance(record, GovernedCandidate) or not isinstance(
+                record.candidate, FusedCandidate
+            ):
+                raise ScopeIsolationError("governance resolver returned an unlabelled candidate")
+            memory_id = record.candidate.item.id
+            if memory_id in seen or expected.get(memory_id) != record.candidate:
+                raise ScopeIsolationError("governance resolver altered retrieval candidates")
+            seen.add(memory_id)
+        return guard_candidates(
+            scope,
+            records,
+            now=self._plugins[0].context.clock.now(),
+            max_candidates=min(256, max(1, len(snapshot))),
+        )
