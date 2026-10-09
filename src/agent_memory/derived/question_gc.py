@@ -235,7 +235,9 @@ def plan(scope, policy, snapshot, now):
                 if (
                     not execution
                     or execution.get("schema") != "refresh-execution/1"
-                    or not execution.get("adapter_key", "").startswith("question-refresh/2:")
+                    or not execution.get("adapter_key", "").startswith(
+                        ("question-refresh/2:", "question-page-refresh/1:")
+                    )
                     or execution.get("status") != "completed"
                 ):
                     pin(node, "unfinished_or_legacy")

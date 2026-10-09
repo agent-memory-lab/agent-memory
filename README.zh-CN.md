@@ -235,7 +235,7 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 
 Observation 只开放文档规定的语言模板。发布点和可证明稳定区间的历史保留冻结政策/上下文，并检查当前权限；覆盖缺口明确拒绝。当前 `locale-parents/1` 视图固定实际父版本及传递处理许可。当前 `language-scenario/1` 页面组合同一 exact scope 下 1–4 个非条件语言 Observation 父，要求主体、用途与 authority 兼容。
 
-显式启用 `qualified_current=True` 后，`locale-qualified-parents/1` 与 `language-qualified-scenario/1` 保留可信条件和例外。`QuestionService` 另支持有限当前项目问题与宿主触发的项目页面 full 发布、证书复用及[有界确定性类型化块补丁](docs/design/v7.0.0/typed-page-patches.md)；向 SDK/MCP 适配器传入 `questions=service` 才开放该可选接口。历史父/页面、页面作父、旧 facet/page 的 delta 与自由部分块编辑、通用场景、跨 scope 合成、远端 ACL 同步和 L3 仍关闭或待实现。有界页面交付不代表完整 L2/L3 生命周期完成。L1 已有的双时态查询可独立使用；`l1_decided` 只说明处理完成，不代表事实正确。
+显式启用 `qualified_current=True` 后，`locale-qualified-parents/1` 与 `language-qualified-scenario/1` 保留可信条件和例外。`QuestionService` 另支持有限当前项目问题、宿主触发的项目页面首次 full 发布、共享调度器后台重验证、证书复用及[有界确定性类型化块补丁](docs/design/v7.0.0/typed-page-patches.md)；向 SDK/MCP 适配器传入 `questions=service` 才开放该可选接口。历史父/页面、页面作父、旧 facet/page 的 delta 与自由部分块编辑、通用场景、跨 scope 合成、远端 ACL 同步和 L3 仍关闭或待实现。有界页面交付不代表完整 L2/L3 生命周期完成。L1 已有的双时态查询可独立使用；`l1_decided` 只说明处理完成，不代表事实正确。
 
 工程证据按被测版本和范围分别记录，不累计跨阶段测试成绩：
 
@@ -252,7 +252,7 @@ Observation 只开放文档规定的语言模板。发布点和可证明稳定�
 
 [ProjectAdmission](src/agent_memory/consolidation/project_admission.py)要求可信来源 authority、已审查成员关系及字段/时间支持。缺少完成证据仍为未知，互斥负责人保留争议，无风险命中仅代表已知获准范围内的完整空集。支持 admitted-L1 与明确闭合的有限 publication manifest；正文前和交付前均检查当前权限、上下文和时间。擦除与旧备份回放也覆盖未发布注册和页面路由。
 
-升级必须停止旧写进程。项目候选索引为加性迁移；新能力默认关闭，回滚时关闭新读者/worker 并保留权威删除日志。项目页面提供由宿主触发、消费已就绪父结果的有界投影。B4 增加持久待验证责任、公平有界宿主验证与安全证书复用；不宣告自动页面 worker 或自由部分编辑器。
+升级必须停止旧写进程。项目候选索引为加性迁移；新能力默认关闭，回滚时关闭新读者/worker 并保留权威删除日志。项目页面是当前父结果的有界投影。宿主首次发布后，启用的 `RefreshHost` 沿用已有共享调度、父依赖、租约和资源预算维护已发布页面；重新有效发布前，过期页面仍拒绝读取。不另建队列，也不提供自由部分编辑器。受治理模型回答在调用前预留缓存槽，并返回账本当前结算状态。长期保留模型授权审计需要宿主明确执行持久归档与 checkpoint/存储回执确认；财务回执及其他有限保留上限仍受保护。详见[运行时修复与兼容说明](docs/design/v7.0.0/runtime-repairs.md)。
 
 [B4](docs/design/v7.0.0/batch-b4.md)增加完整分组确定性增量、旧贡献撤去/新贡献加入、连续日志检查与真实 full 回退，以及不可变生成谱系和当前验证证明的分离。同值公开证据不能洗掉旧私有输入。[验证记录](docs/design/v7.0.0/validation-b4.json)包含随机 full 等价、真实双后端生命周期/擦除与独立反例复核。运行/注册/worker 合同升至版本 2；升级须排空旧写进程后重新注册。
 

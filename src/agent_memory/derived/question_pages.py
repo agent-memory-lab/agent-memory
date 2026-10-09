@@ -42,6 +42,9 @@ class ProjectQuestionPages:
 
     def __init__(self, service):
         self.service, self.scope = service, service.scope
+        from .question_page_refresh import QuestionPageRefresh
+
+        self.maintenance = QuestionPageRefresh(service)
 
     def key(self, page_id):
         return "question-page:" + digest([self.scope.partition_key(), identity(page_id)])
@@ -122,6 +125,13 @@ class ProjectQuestionPages:
                 key,
                 [("query", "question-instance:" + parent["instance_id"]) for parent in parents],
             )
+            head = await uow.derived_get(self.scope, "question_page_head", key)
+            if head and head.get("state") != "erased":
+                definition = await self.maintenance.install(uow, value)
+                from ..operations.refresh_demand import record_dirty
+
+                await record_dirty(uow, self.scope, definition, at=self.service.clock(),
+                                   reason="page_registration_changed")
             return deepcopy(value)
 
     async def _registration(self, uow, page_id, actor):
@@ -170,6 +180,14 @@ class ProjectQuestionPages:
             head = await uow.derived_get(self.scope, "question_page_head", key)
             if not head or head.get("state") == "erased":
                 continue
+            registration = checked(await uow.derived_get(
+                self.scope, "question_page_registration", key
+            ), "question-page-registration/1")
+            definition = await self.maintenance.install(uow, registration)
+            from ..operations.refresh_demand import record_dirty
+
+            await record_dirty(uow, self.scope, definition, at=self.service.clock(),
+                               reason="page_parent_published")
             pending = await uow.derived_get(self.scope, "question_page_validation", key) or {}
             targets = dict(pending.get("targets", {}))
             targets[instance_id] = header["sha256"]
@@ -351,9 +369,12 @@ class ProjectQuestionPages:
                     raise
             raise
 
-    async def _publish(self, page_id, *, actor):
+    async def _publish(self, page_id, *, actor, maintenance_task=None):
         async with self.service.repository.unit_of_work() as uow:
             await self._open(uow)
+            if maintenance_task is not None:
+                job, definition = await self.maintenance.check(uow, maintenance_task)
+                page_id, actor = definition["spec"]["page_id"], definition["spec"]["readers"][0]
             registration = await self._registration(uow, page_id, actor)
             parents = await self._parents(uow, registration, actor)
             answers = [
@@ -489,10 +510,26 @@ class ProjectQuestionPages:
             budget(self._response(content, certificate, blocks), registration["max_output_bytes"])
             await self._store(uow, registration, content, certificate, blocks, head)
             await self._guard(uow, page_id, actor, registration, head)
+            if maintenance_task is not None:
+                await self.maintenance.complete(
+                    uow, maintenance_task, job, definition, content, certificate, head
+                )
+                from ..operations.facet_refresh import checked_job
+
+                await checked_job(self.service, uow, maintenance_task, completed=True)
+                await self._guard(uow, page_id, actor, registration, head)
+                if any(self.service.clock() >= datetime.fromisoformat(job[key])
+                       for key in ("lease_until", "expires_at")):
+                    from ..operations.facet_refresh import stale
+
+                    raise stale()
+        if maintenance_task is not None:
+            return dict(page_id=page_id, state="valid", rebuild=certificate["rebuild"])
         return await self.read(page_id, actor=actor)
 
     async def _store(self, uow, registration, content, certificate, blocks, head):
         """Immutable rows, dependency edges and the head share the locked scope UoW."""
+        await self.maintenance.published(uow, registration, head)
         for kind, values in (
             ("question_page_block", blocks),
             ("question_page_content", [content]),

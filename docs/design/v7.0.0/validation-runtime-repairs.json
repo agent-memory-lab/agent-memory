@@ -1,0 +1,71 @@
+{
+  "schema": "v7-runtime-repairs-validation/1",
+  "status": "local_engineering_verification_passed_hosted_final_head_ci_required",
+  "base_commit": "685742df8a9dd26a5e960f43c61ae85295e82c38",
+  "model_batch_merge": "ac541b0b2fefd82a8a67ee842e5623d01724c088",
+  "source_commit": "e958ff2b4049e2dd54412839ccd2bcddb49238c9",
+  "source_fingerprint_sha256": "b82d4774d1bf9639340c2fe54c2f21c00366a1e618143902daf86f0ce6bf9cee",
+  "environment": {
+    "python": "3.13.5",
+    "postgres": "17.11",
+    "pgvector": "0.8.0",
+    "backends": [
+      "SQLite",
+      "PostgreSQL"
+    ]
+  },
+  "full_suite": {
+    "tests": 4073,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 937.689,
+    "sha256": "1851642f03582daa4982c526d33c6dbd4984a37ea4b037310d01173d39480952"
+  },
+  "upgrade_quiescent_rollback": {
+    "tests": 2,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 2.987,
+    "sha256": "3eaf53336ce0ad3d6e3a1f7db07bd56e4d990c9d11441b043eced454829ee91e"
+  },
+  "model_batch_focused": {
+    "tests": 237,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 141.861,
+    "sha256": "f8a219f903e8838d9e4056b080b0f7736f79fee464f43cab00824db7549378f6"
+  },
+  "packages": {
+    "built_wheels": 6,
+    "built_sdists": 6,
+    "external_noneditable_install": true,
+    "isolated_smoke": "passed",
+    "dependency_check": "78 compatible installed packages",
+    "dependency_provenance": "Existing third-party dependencies copied to fresh external virtualenv because offline cache lacked langgraph. All six project packages installed from newly built wheels with no editable paths. Hosted CI separately requires clean dependency resolution.",
+    "installed_source_equivalence_python_files": 244,
+    "source_scan": "complete, zero findings",
+    "archive_scan": "12 archives, complete, zero findings"
+  },
+  "review": {
+    "page_and_documentation": "Independent read-only review found no blockers; bilingual claims, bounded policy and rollback agree.",
+    "changed_page_source_tests_lint": "passed",
+    "diff_check": "passed"
+  },
+  "full_v7_acceptance": false,
+  "production_benefit_claim": false,
+  "paid_model_calls": 0,
+  "remaining_acceptance": [
+    "T02",
+    "T12",
+    "T13",
+    "T15"
+  ],
+  "limitations": [
+    "Synthetic provider/source tests are engineering evidence, not licensed-domain quality or whole-cost acceptance.",
+    "Host must durably archive audit exports and independently verify pinned receipts/checkpoints. Financial ledger and other finite retention caps remain.",
+    "Previously recorded real Ollama synthetic smoke is preserved, not rerun by these repairs."
+  ]
+}

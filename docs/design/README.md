@@ -15,8 +15,9 @@ v7 保留事实抽取/接纳、完整双时态、Hindsight 生命周期借鉴、
 ## 当前实施入口
 
 - [v7 plan.md](v7.0.0/plan.md)：B0–B6 批次、模块边界、依赖、迁移、度量与最终验收。
-- [v7 task.md](v7.0.0/task.md)：revision 11；15 项新增任务中 11 项在声明范围 DONE、4 项 IN_PROGRESS，保留 32 项 Q7 主责任及 44 项旧任务状态。
-- [最新本地模型验证](v7.0.0/ollama-smoke.md)：真实 Qwen 9B 的合成运行验证；不替代许可领域和成本验收。
+- [v7 task.md](v7.0.0/task.md)：revision 12；15 项新增任务中 11 项在声明范围 DONE、4 项 IN_PROGRESS，保留 32 项 Q7 主责任及 44 项旧任务状态。
+- [最新运行时修复](v7.0.0/runtime-repairs.md)：缓存/结算一致性、显式授权审计归档与共享调度页面维护。
+- [本地模型验证](v7.0.0/ollama-smoke.md)：真实 Qwen 9B 的合成运行验证；不替代许可领域和成本验收。
 - [B6 工程验证](v7.0.0/batch-b6.md)：记录固定源码 3931 项全量通过；本轮新增入口仅运行专项及受影响回归。
 - [文档验证](v7.0.0/design-validation.json)：正文指纹、继承、链接、图表与版本一致性；不是运行验收。
 
@@ -33,7 +34,7 @@ M0/M1/M2 尚未整体验收；新版本不重置历史状态。v7 台账后续�
 
 | 版本 | 日期 | 状态 | 说明 |
 | --- | --- | --- | --- |
-| [7.0.0](AGENT_MEMORY_DESIGN_V7.0.0.md) | 2026-10-08 | PROPOSED_BASELINE | 当前完整方案；正文冻结基线 `583e20d`，执行进度见 revision 11 |
+| [7.0.0](AGENT_MEMORY_DESIGN_V7.0.0.md) | 2026-10-08 | PROPOSED_BASELINE | 当前完整方案；正文冻结基线 `583e20d`，执行进度见 revision 12 |
 | [6.1.0](AGENT_MEMORY_DESIGN_V6.1.0.md) | 2026-10-06 | PROPOSED_BASELINE | 前序方案；纳入 N01–N08 与 R05–R13；正文冻结时基线 `5cff9f4` |
 | [6.0.0](AGENT_MEMORY_DESIGN_V6.0.0.md) | 2026-10-06 | PROPOSED_BASELINE | 前序方案；R01–R04 修订；历史正文保留 |
 | [5.0.0](AGENT_MEMORY_DESIGN_V5.0.0.md) | 2026-10-06 | PROPOSED_BASELINE | 首份统一完整方案；基线 `5cff9f4` |
