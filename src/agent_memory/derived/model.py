@@ -437,11 +437,26 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
         if descendants.issubset(affected):
             break
         affected.update(descendants)
+    # Source-vector header/body slots erase together even if one half is a
+    # reserved placeholder, corrupted, or a future schema with no source list.
+    # Never leave an unreadable but retained vector behind its erased header.
+    embedding_kinds = {"source_embedding_header", "source_embedding_body"}
+    embedding_slots = {
+        r["identity"]
+        for r in rows
+        if r["kind"] in embedding_kinds
+        and (
+            all_in_scope
+            or any("source:" + source in parents for source in r["payload"].get("sources", ()))
+        )
+    }
     # Active jobs carry identities only; they remain useful after object deletion.
     result = []
     for item in rows:
         kind, key, row = item["kind"], item["identity"], item["payload"]
-        if kind in {
+        if kind in embedding_kinds and key in embedding_slots:
+            result.append((kind, key, {"state": "erased"}))
+        elif kind in {
             "model_cache_header",
             "model_cache_body",
             "model_flight",
@@ -452,7 +467,7 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
             or set(row.get("parents", ())).intersection(parents)
         ):
             result.append((kind, key, {"state": "erased"}))
-        elif kind == "model_processing_grant" and (
+        elif kind in {"model_processing_grant", "source_embedding_grant"} and (
             all_in_scope or "source:" + row.get("source_id", "") in parents
         ):
             result.append((kind, key, {"state": "erased", "version": row.get("version", 0) + 1}))

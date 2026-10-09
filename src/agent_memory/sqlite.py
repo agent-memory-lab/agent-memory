@@ -130,6 +130,9 @@ class SQLiteMemoryUnitOfWork:
         assert self._connection is not None
         try:
             if exc_type is None:
+                from .retrieval import sqlite_lexical_index
+
+                sqlite_lexical_index.synchronize(self._connection)
                 self._connection.commit()
             else:
                 self._connection.rollback()
@@ -1149,6 +1152,12 @@ class SQLiteMemoryRepository:
         try:
             with connection:
                 yield connection
+                if connection.in_transaction and connection.execute(
+                    "SELECT 1 FROM sqlite_master WHERE name='lexical_dirty'"
+                ).fetchone():
+                    from .retrieval import sqlite_lexical_index
+
+                    sqlite_lexical_index.synchronize(connection)
         finally:
             connection.close()
 
@@ -1402,6 +1411,10 @@ class SQLiteMemoryRepository:
                     row["version"],
                     routes=False,
                 )
+
+            from .retrieval import sqlite_lexical_index
+
+            sqlite_lexical_index.initialize(connection)
 
     def _enable_wal(self) -> None:
         for attempt in range(8):
@@ -1816,56 +1829,52 @@ class SQLiteMemoryRepository:
         return await asyncio.to_thread(read)
 
     def load_recent_event_evidence(self, scope: MemoryScope, *, limit: int):
-        """Read a bounded, exact-scope window of source events for lexical ranking.
+        """Compatibility browse API, preserving newest-first exact-scope ordering."""
+        return self._load_event_evidence(scope, "", limit=limit, recent=True)
 
-        This is a recent-window source, not a full-text index. Stored scope fields
-        are returned independently so the caller can reject inconsistent rows.
-        """
-        from datetime import datetime
+    def load_indexed_event_evidence(self, scope: MemoryScope, query_text: str, *, limit: int):
+        """Retrieve ranked, exact-scope source spans before hydrating bounded evidence."""
+        return self._load_event_evidence(scope, query_text, limit=limit)
 
-        from .domain import MemoryChannel, MemoryItem, MemoryKind
+    def _load_event_evidence(self, scope, query_text, *, limit, recent=False):
+        from .retrieval import sqlite_lexical_index as index
         from .retrieval.lexical import EvidenceItem
         from .retrieval.scoped_lexical import ScopedEvidenceItem
 
-        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 512:
+        if type(limit) is not int or not 1 <= limit <= 512:
             raise ValueError("limit must be between 1 and 512")
         with self._connection() as connection:
-            rows = connection.execute(
-                """
-                SELECT id, tenant_id, namespace, user_id, agent_id, workspace_id,
-                       session_id, content, occurred_at
-                FROM events
-                WHERE partition_key = ? AND archived_at IS NULL
-                  AND length(content) BETWEEN 1 AND 2048
-                ORDER BY occurred_at DESC, id DESC
-                LIMIT ?
-                """,
-                (scope.partition_key(), limit),
-            ).fetchall()
-        return tuple(
-            ScopedEvidenceItem(
-                scope=MemoryScope(
-                    row["tenant_id"],
-                    namespace=row["namespace"],
-                    user_id=row["user_id"],
-                    agent_id=row["agent_id"],
-                    workspace_id=row["workspace_id"],
-                    session_id=row["session_id"],
-                ),
-                evidence=EvidenceItem(
-                    item=MemoryItem(
-                        row["id"],
-                        MemoryKind.EVENT,
-                        row["content"],
-                        0.5,
-                        datetime.fromisoformat(row["occurred_at"]),
+            index.prepare_read(connection)
+            if recent:
+                locators = connection.execute(
+                    "SELECT c.chunk_id,c.source_id,c.owner_id,0.0 AS overlap "
+                    "FROM events e CROSS JOIN lexical_chunks c ON c.source_id=e.id "
+                    "AND c.source_table='events' AND c.span_start=0 "
+                    "WHERE e.partition_key=? AND e.archived_at IS NULL "
+                    "ORDER BY e.occurred_at DESC,e.id DESC LIMIT ?",
+                    (scope.partition_key(), limit),
+                ).fetchall()
+            else:
+                locators = index.candidates(
+                    connection, scope, query_text, source_table="events", limit=limit,
+                    eligibility="events.archived_at IS NULL", exact=True,
+                )
+            return tuple(
+                ScopedEvidenceItem(
+                    scope=self._scope_from_row(row),
+                    evidence=EvidenceItem(
+                        item=MemoryItem(
+                            row["id"], MemoryKind.EVENT, row["content"], overlap,
+                            _datetime(row["occurred_at"]) or utc_now(),
+                            {"event_type": row["event_type"],
+                             "source_event_ids": (row["id"],), **index.lineage(row)},
+                        ),
+                        channel=MemoryChannel.EPISODIC,
+                        source_event_ids=(row["id"],),
                     ),
-                    channel=MemoryChannel.EPISODIC,
-                    source_event_ids=(row["id"],),
-                ),
+                )
+                for row, overlap in index.hydrate_events(connection, locators)
             )
-            for row in rows
-        )
 
     async def claims_at(self, scope, *, valid_at, known_at):
         return await asyncio.to_thread(self._claims_at_sync, scope, valid_at, known_at)
@@ -1932,95 +1941,190 @@ class SQLiteMemoryRepository:
         return await asyncio.to_thread(self._search_sync, query, limit)
 
     def _search_sync(self, query: MemoryQuery, limit: int) -> Sequence[MemoryItem]:
-        if query.valid_at is not None or query.known_at is not None:
-            now = utc_now()
-            claims = self._claims_at_sync(query.scope, query.valid_at or now, query.known_at or now)
-            return (temporal_candidates(claims, query.text, limit)
-                    if MemoryChannel.SEMANTIC in query.channels else ())
-        where, params = self._visible_scope_clause(query.scope)
-        with self._connection() as connection:
-            event_rows = connection.execute(
-                f"SELECT * FROM events WHERE {where} "
-                "AND archived_at IS NULL ORDER BY occurred_at DESC, id DESC",
-                params,
-            ).fetchall()
-            artifact_rows = connection.execute(
-                f"SELECT * FROM artifacts WHERE {where} AND {self._artifact_validity_sql()} "
-                "ORDER BY occurred_at DESC, id DESC",
-                params,
-            ).fetchall()
-            artifact_rows = self._live_artifact_rows(connection, query.scope, artifact_rows)
+        from .retrieval import sqlite_lexical_index as index
 
-        query_tokens = _tokens(query.text)
+        if type(limit) is not int or limit < 1:
+            raise ValueError("limit must be a positive integer")
+        pool = min(index.MAX_CANDIDATES, max(32, limit * 4))
         candidates: list[MemoryItem] = []
-        if MemoryChannel.SEMANTIC in query.channels:
-            now = utc_now()
-            candidates.extend(temporal_candidates(
-                self._claims_at_sync(query.scope, now, now), query.text, limit
-            ))
-            for row in event_rows:
-                overlap = self._overlap(query_tokens, row["content"])
-                if query_tokens and overlap == 0:
-                    continue
-                candidates.append(
-                    MemoryItem(
-                        id=row["id"],
-                        kind=MemoryKind.EVENT,
-                        text=row["content"],
-                        score=0.8 * overlap + 0.05,
-                        occurred_at=_datetime(row["occurred_at"]) or utc_now(),
-                        metadata={
-                            "channel": MemoryChannel.SEMANTIC,
-                            "event_type": row["event_type"],
-                            "source_event_ids": (row["id"],),
-                        },
+        historical = query.valid_at is not None or query.known_at is not None
+        now = utc_now()
+        with self._connection() as connection:
+            index.prepare_read(connection)
+            if MemoryChannel.SEMANTIC in query.channels:
+                candidates.extend(self._lexical_claim_candidates(
+                    connection, query, pool, query.valid_at or now, query.known_at or now
+                ))
+                if not historical:
+                    where, params = self._visible_scope_clause(query.scope)
+                    locators = index.candidates(
+                        connection, query.scope, query.text, source_table="events", limit=pool,
+                        eligibility=f"events.archived_at IS NULL AND {where}", params=params,
                     )
+                    for row, overlap in index.hydrate_events(connection, locators):
+                        candidates.append(MemoryItem(
+                            id=row["id"], kind=MemoryKind.EVENT, text=row["content"],
+                            score=0.8 * overlap + 0.05,
+                            occurred_at=_datetime(row["occurred_at"]) or now,
+                            metadata={"channel": MemoryChannel.SEMANTIC,
+                                      "event_type": row["event_type"],
+                                      "source_event_ids": (row["id"],), **index.lineage(row)},
+                        ))
+            if not historical and query.channels:
+                rows = self._lexical_artifact_rows(
+                    connection, query.scope, query.text, query.channels, pool
                 )
+                for row, overlap, lineage in rows:
+                    kind = MemoryKind(row["kind"])
+                    block = self._block_from_row(row) if kind == MemoryKind.BLOCK else None
+                    channel = block.channel if block else (
+                        MemoryChannel.EPISODIC if kind == MemoryKind.EPISODE
+                        else MemoryChannel.PROCEDURAL
+                    )
+                    provenance = _provenance(row["provenance_json"])
+                    candidates.append(MemoryItem(
+                        id=row["id"], kind=kind, text=row["indexed_text"],
+                        score=0.75 * overlap + 0.25 * row["quality"],
+                        occurred_at=_datetime(row["occurred_at"]) or now,
+                        metadata={"channel": channel, "status": row["status"],
+                                  "version": row["version"],
+                                  "token_budget": block.token_budget if block else None,
+                                  "source_event_ids": provenance.source_event_ids, **lineage},
+                    ))
+        return tuple(sorted(candidates, key=lambda item: (-item.score, item.id))[:limit])
 
-        enabled_kinds: set[MemoryKind] = set()
-        if MemoryChannel.EPISODIC in query.channels:
-            enabled_kinds.add(MemoryKind.EPISODE)
-        if MemoryChannel.PROCEDURAL in query.channels:
-            enabled_kinds.add(MemoryKind.PROCEDURE)
-        if query.channels:
-            enabled_kinds.add(MemoryKind.BLOCK)
-        for row in artifact_rows:
-            kind = MemoryKind(row["kind"])
-            if kind not in enabled_kinds:
+    def _lexical_claim_candidates(self, connection, query, limit, valid_at, known_at):
+        from .retrieval import sqlite_lexical_index as index
+        from .retrieval.temporal_history import TemporalHistoryUnavailable, aware, load_claim
+
+        valid_at, known_at = aware(valid_at, "valid_at"), aware(known_at, "known_at")
+        where, params = self._visible_scope_clause(query.scope)
+        keys = index.partitions(query.scope)
+        key_marks = ",".join("?" for _ in keys)
+        legacy = connection.execute(
+            "SELECT MIN(observed_at) AS floor FROM claim_observations "
+            f"WHERE legacy=1 AND partition_key IN ({key_marks}) AND EXISTS ("
+            f"SELECT 1 FROM claims WHERE id=claim_observations.claim_id AND {where} "
+            "AND archived_at IS NULL)", (*keys, *params),
+        ).fetchone()
+        if legacy["floor"] and known_at < datetime.fromisoformat(legacy["floor"]):
+            raise TemporalHistoryUnavailable("knowledge time predates the available temporal history")
+        eligibility = (
+            "EXISTS (SELECT 1 FROM claims WHERE id=claim_versions.claim_id "
+            f"AND {where} AND archived_at IS NULL) "
+            "AND system_from<=? AND (system_to IS NULL OR ?<system_to) "
+            "AND valid_from<=? AND (valid_to IS NULL OR ?<valid_to) "
+            "AND EXISTS (SELECT 1 FROM json_each(claim_versions.payload_json,"
+            "'$.provenance.source_event_ids') evidence JOIN events e ON e.id=evidence.value "
+            "WHERE e.archived_at IS NULL)"
+        )
+        locators = index.candidates(
+            connection, query.scope, query.text, source_table="claim_versions", limit=limit,
+            eligibility=eligibility,
+            params=(*params, known_at.isoformat(), known_at.isoformat(),
+                    valid_at.isoformat(), valid_at.isoformat()),
+        )
+        candidates = []
+        for locator in locators:
+            row = connection.execute(
+                "SELECT v.*,c.chunk_id,c.source_revision,c.span_start,c.span_end,c.source_chars "
+                "FROM claim_versions v JOIN lexical_chunks c ON c.source_id=v.revision_id "
+                "AND c.source_table='claim_versions' WHERE c.chunk_id=?", (locator["chunk_id"],),
+            ).fetchone()
+            claim = load_claim(row["payload_json"])
+            sources = tuple(source_id for source_id in claim.provenance.source_event_ids
+                            if connection.execute(
+                                "SELECT 1 FROM events WHERE id=? AND archived_at IS NULL",
+                                (source_id,),
+                            ).fetchone())
+            if not sources:
                 continue
-            if kind == MemoryKind.BLOCK:
-                block = self._block_from_row(row)
-                channel = block.channel
-                if channel not in query.channels:
-                    continue
-            else:
-                channel = (
-                    MemoryChannel.EPISODIC
-                    if kind == MemoryKind.EPISODE
-                    else MemoryChannel.PROCEDURAL
-                )
-            provenance = _provenance(row["provenance_json"])
-            candidates.append(
-                MemoryItem(
-                    id=row["id"],
-                    kind=kind,
-                    text=row["text"],
-                    score=0.75 * self._overlap(query_tokens, row["text"]) + 0.25 * row["quality"],
-                    occurred_at=_datetime(row["occurred_at"]) or utc_now(),
-                    metadata={
-                        "channel": channel,
-                        "status": row["status"],
-                        "version": row["version"],
-                        "token_budget": (
-                            block.token_budget if kind == MemoryKind.BLOCK else None
-                        ),
-                        "source_event_ids": provenance.source_event_ids,
-                    },
-                )
+            claim = replace(
+                claim, provenance=replace(claim.provenance, source_event_ids=sources),
+                system_from=datetime.fromisoformat(row["system_from"]),
+                system_to=_datetime(row["system_to"]),
             )
-        # Apply the limit only after scoring every visible item. A LIMIT on the
-        # SQL rows silently made claim-key index order decide recall eligibility.
-        return tuple(sorted(candidates, key=lambda item: item.score, reverse=True)[:limit])
+            item = temporal_candidates((claim,), query.text, 1)[0]
+            candidates.append(replace(
+                item, text=claim.text[row["span_start"]:row["span_end"]],
+                metadata={**item.metadata, **index.lineage(row),
+                          "source_revision_id": row["revision_id"]},
+            ))
+        return tuple(candidates)
+
+    def _lexical_artifact_rows(self, connection, scope, text, channels, limit, *, blocks_only=False):
+        from .retrieval import sqlite_lexical_index as index
+
+        where, params = self._visible_scope_clause(scope)
+        kinds = []
+        if not blocks_only:
+            if MemoryChannel.EPISODIC in channels:
+                kinds.append("artifacts.kind='episode'")
+            if MemoryChannel.PROCEDURAL in channels:
+                kinds.append("artifacts.kind='procedure'")
+        if channels:
+            marks = ",".join("?" for _ in channels)
+            kinds.append(
+                "(artifacts.kind='block' AND (CASE WHEN json_type(payload_json,'$.channel') "
+                "IS NULL THEN 'semantic' ELSE json_extract(payload_json,'$.channel') END) "
+                f"IN ({marks}))"
+            )
+            params = (*params, *channels)
+        if not kinds:
+            return ()
+        locators = []
+        offset = 0
+        while len(locators) < limit and offset < index.MAX_CANDIDATES:
+            page_size = min(limit - len(locators), index.MAX_CANDIDATES - offset)
+            page = index.candidates(
+                connection, scope, text, source_table="artifacts", limit=page_size,
+                eligibility=f"{where} AND ({' OR '.join(kinds)}) AND {self._artifact_validity_sql()}",
+                params=params, offset=offset,
+            )
+            # Validate dependency headers before the evidence hydration limit.
+            # Rejected legacy rows do not consume the accepted candidate budget.
+            live = self._live_artifact_ids(connection, scope, [row["owner_id"] for row in page])
+            locators.extend(row for row in page if row["owner_id"] in live)
+            offset += len(page)
+            if len(page) < page_size:
+                break
+        else:
+            if len(locators) < limit and index.candidates(
+                connection, scope, text, source_table="artifacts", limit=1,
+                eligibility=f"{where} AND ({' OR '.join(kinds)}) AND {self._artifact_validity_sql()}",
+                params=params, offset=offset,
+            ):
+                raise ValueError("artifact lexical validation capacity exceeded")
+        rows = []
+        for locator in locators:
+            row = connection.execute(
+                "SELECT a.*,c.chunk_id,c.source_revision,c.span_start,c.span_end,c.source_chars,"
+                "CAST(substr(CAST(a.text AS BLOB),c.byte_start+1,c.byte_end-c.byte_start) "
+                "AS TEXT) AS indexed_text "
+                "FROM artifacts a JOIN lexical_chunks c ON c.source_id=a.id "
+                "AND c.source_table='artifacts' WHERE c.chunk_id=?", (locator["chunk_id"],),
+            ).fetchone()
+            if row is not None:
+                rows.append((row, locator["overlap"], index.lineage(row)))
+        return tuple(rows)
+
+    def _live_artifact_ids(self, connection, scope, identities):
+        """Resolve the dependency graph without loading candidate evidence bodies."""
+        graph = []
+        pending, seen = set(identities), set()
+        while pending:
+            batch = set(sorted(pending)[:256])
+            pending.difference_update(batch)
+            seen.update(batch)
+            rows = self._artifact_dependency_rows(
+                connection, scope, batch, tombstones=True, metadata_only=True
+            )
+            graph.extend(rows)
+            for row in rows:
+                pending.update(dependency_ids(row) - seen)
+        validity = ArtifactValidity(graph)
+        return {row["id"] for row in graph if row["table"] == "artifacts"
+                and row["id"] in identities and validity.accepts(row)}
 
     @staticmethod
     def _artifact_validity_sql() -> str:
@@ -2084,25 +2188,17 @@ class SQLiteMemoryRepository:
         channels: Sequence[MemoryChannel],
         limit: int,
     ) -> Sequence[MemoryBlock]:
-        where, params = self._visible_scope_clause(scope)
+        from .retrieval import sqlite_lexical_index as index
+
+        if type(limit) is not int or limit < 1:
+            raise ValueError("limit must be a positive integer")
         with self._connection() as connection:
-            rows = connection.execute(
-                f"SELECT * FROM artifacts WHERE {where} AND kind = ? AND status = ? "
-                f"AND {self._artifact_validity_sql()}",
-                (*params, MemoryKind.BLOCK, ArtifactStatus.ACTIVE),
-            ).fetchall()
-            rows = self._live_artifact_rows(connection, scope, rows)
-        query_tokens = _tokens(text)
-        allowed = set(channels)
-        ranked = [
-            (self._overlap(query_tokens, row["text"]), self._block_from_row(row))
-            for row in rows
-        ]
-        return tuple(
-            block
-            for _, block in sorted(ranked, key=lambda item: item[0], reverse=True)
-            if block.channel in allowed
-        )[:limit]
+            index.prepare_read(connection)
+            rows = self._lexical_artifact_rows(
+                connection, scope, text, channels,
+                min(index.MAX_CANDIDATES, max(32, limit * 4)), blocks_only=True,
+            )
+            return tuple(self._block_from_row(row) for row, _, _ in rows[:limit])
 
     async def forget(self, request: ForgetRequest) -> ForgetResult:
         async with self._write_lock:
@@ -2257,7 +2353,7 @@ class SQLiteMemoryRepository:
             return self._forget_on_connection(connection, request)
 
     def _artifact_dependency_rows(
-        self, connection, scope, identities=None, *, tombstones=False, lock=False
+        self, connection, scope, identities=None, *, tombstones=False, lock=False, metadata_only=False
     ):
         rows = []
         tables = [
@@ -2268,6 +2364,22 @@ class SQLiteMemoryRepository:
         if tombstones:
             tables.append(("memory_tombstones", ", memory_table"))
         for table, columns in tables:
+            if metadata_only and "payload_json" in columns:
+                # These are the typed dependency/lineage fields consumed by
+                # ArtifactValidity, never body/content/summary evidence fields.
+                fields = (
+                    "event_ids", "source_event_ids", "source_episode_ids",
+                    "counterexample_episode_ids", "decision_ids", "outcome_ids",
+                    "retrieval_trace_ids", "used_memory_ids", "memory_ids",
+                    "returned_memory_ids", "procedure_ids", "bundle_id", "decision_id",
+                    "outcome_id", "evaluation_id", "corrects_id", "redacted",
+                )
+                projection = (
+                    "CASE WHEN json_type(payload_json)='object' THEN json_object(" + ",".join(
+                        f"'{field}',json_extract(payload_json,'$.{field}')" for field in fields
+                    ) + ") ELSE payload_json END AS payload_json"
+                )
+                columns = columns.replace("payload_json", projection)
             filter_sql = ""
             params = (scope.tenant_id, scope.namespace)
             if identities is not None:

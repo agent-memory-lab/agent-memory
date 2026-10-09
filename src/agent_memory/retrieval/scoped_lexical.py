@@ -51,7 +51,11 @@ def scoped_lexical_candidates(
     if isinstance(max_items, bool) or not isinstance(max_items, int) or not 1 <= max_items <= 512:
         raise ValueError("max_items must be between 1 and 512")
 
-    records = source.load(scope, limit=max_items)
+    if not isinstance(query_text, str) or len(query_text) > 512:
+        raise ValueError("query_text must be a string of at most 512 characters")
+    search = getattr(source, "search", None)
+    records = (search(scope, query_text, limit=max_items) if callable(search)
+               else source.load(scope, limit=max_items))
     if not isinstance(records, Sequence) or isinstance(records, (str, bytes)):
         raise ScopeIsolationError("evidence source must return a bounded sequence")
     if len(records) > max_items:

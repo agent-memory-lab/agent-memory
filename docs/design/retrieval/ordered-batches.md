@@ -77,3 +77,22 @@ The fixture and tracked-source hashes are recorded in the resulting manifest.
 logical SQL result materialization and uncontrolled-host latency, not physical
 rows scanned, answer quality, production performance or financial cost.
 [The comparison plan](controlled-comparison-plan.json) leaves unmeasured gates open.
+
+## Batch 2: retrieval index and source embedding reuse
+
+SQLite now ranks versioned lexical chunk locators before bounded hydration;
+source text remains exact and original IDs remain subject to native admission.
+See [migration/lifecycle contracts](../../SQLITE_LEXICAL_INDEX.md). The source-bound
+embedding cache is a separate host-only opt-in with authoritative retained-source
+revisions, processing grants, pinned model specification and erasure/restore
+integration. Generic MemoryQuery reranking and query embeddings retain their prior
+no-retention behavior; no model is bundled or called by default.
+
+[The synthetic comparison](batch2-synthetic-comparison.json) shows improved old/long
+evidence retrieval and lower logical result materialization, along with explicit
+maintenance cost. On its one uncontrolled-host 534-event ingest sample, indexed
+ingest took about 88 ms versus 44 ms, and allocated SQLite pages were about 5.0 MB
+versus 0.79 MB. These measurements demonstrate a write/storage tradeoff, not a
+production cost win; broad corpus sweeps and real cold/warm whole-workload evidence
+remain unmeasured. The indexed path is not substituted for any complete census or
+negative-proof query, and existing V7 real-quality gates remain open.

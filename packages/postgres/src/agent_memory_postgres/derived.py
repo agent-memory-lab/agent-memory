@@ -198,6 +198,7 @@ async def forget(connection, request):
         "history_interval",
         "model_cache_header", "model_cache_body", "model_flight",
         "model_authorization", "model_processing_grant",
+        "source_embedding_header", "source_embedding_body", "source_embedding_grant",
         *QUESTION_KINDS,
     ):
         # The outer scheduler erase hook handles these records without parsing
@@ -247,6 +248,8 @@ async def forget(connection, request):
     for kind, key, payload in changes:
         if kind == "model_cache_header":
             await edges(connection, request.scope, "model-cache:" + key, [])
+        elif kind == "source_embedding_header":
+            await edges(connection, request.scope, "source-embedding:" + key, [])
     for owner in question_owners:
         await edges(connection, request.scope, owner, [])
     for slot in slots:
