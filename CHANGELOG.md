@@ -7,6 +7,13 @@ the first stable release.
 
 ### Fixed
 
+- Pack native recall by feasible evidence coverage without dropping later claims
+  after an oversized state entry. Preserve exact indexed chunks and annotate
+  legacy excerpts with contiguous source spans; keep distinct same-source claims.
+  Add an opt-in bounded host planner that reuses exact registered questions and
+  preserves abstention, historical axes and partial-retrieval boundaries. See
+  [adaptive retrieval and packing](docs/design/retrieval/adaptive-and-packing.md).
+
 - Preserve retrieval query constraints and reject unsupported historical plugin
   paths instead of silently answering as current. Keep bounded candidate headroom
   through policy checks and feasible diversity packing, and share a versioned

@@ -1,0 +1,72 @@
+{
+  "classification": "Synthetic mechanism regression comparison only; no answer quality or total-cost acceptance",
+  "fixture_sha256": "2dd3696764d54efdac77a77871432a5cb0b2ec1081fea5cb67bb06da33423399",
+  "repeats": 9,
+  "model_calls": 0,
+  "cold_os_cache_measured": false,
+  "control": {
+    "source_tree": "407937684ffe28e2e7d4795e14f027af8b43c129",
+    "kernel": {
+      "all_observations_stable": true,
+      "case_count": 9,
+      "errors": 0,
+      "forbidden_hits": 0,
+      "mean_reciprocal_rank_over_positive_cases": 1.0,
+      "relevant_count": 7,
+      "relevant_hits": 7
+    },
+    "long_tail": {
+      "required_text_hit": true,
+      "required_source_hits": 1,
+      "token_estimate": 35,
+      "returned_text_chars": 50
+    },
+    "returned_token_estimates": {
+      "han-contiguous": 34,
+      "mixed-punctuation": 5,
+      "mixed-version": 34,
+      "entity-text": 26,
+      "time-text": 63,
+      "long-document-tail": 35,
+      "old-evidence": 16,
+      "scope-isolation": 0,
+      "archive-isolation": 0
+    }
+  },
+  "candidate": {
+    "source_tree": "ade47583d69cbf2c1554b0ab6db668fd2f079b08",
+    "kernel": {
+      "all_observations_stable": true,
+      "case_count": 9,
+      "errors": 0,
+      "forbidden_hits": 0,
+      "mean_reciprocal_rank_over_positive_cases": 1.0,
+      "relevant_count": 7,
+      "relevant_hits": 7
+    },
+    "long_tail": {
+      "required_text_hit": true,
+      "required_source_hits": 1,
+      "token_estimate": 187,
+      "returned_text_chars": 203
+    },
+    "returned_token_estimates": {
+      "han-contiguous": 34,
+      "mixed-punctuation": 5,
+      "mixed-version": 34,
+      "entity-text": 26,
+      "time-text": 63,
+      "long-document-tail": 187,
+      "old-evidence": 16,
+      "scope-isolation": 0,
+      "archive-isolation": 0
+    }
+  },
+  "limits": [
+    "The control is the recorded Batch 2 mechanism run at its listed tree, not an independent real-model trial.",
+    "Exact-span packing recovered an intermediate long-tail omission. Both recorded final arms retrieve all seven annotated positives.",
+    "Preserving contiguous context can increase delivered tokens: the long-tail fixture grows from 35 to 187 estimated tokens. No universal cost reduction is claimed.",
+    "Latency, loaded rows and limited synthetic labels do not prove answer correctness, qualifiers, exhaustive coverage, absence, or deployment efficacy.",
+    "Candidate bounds and early exit remain partial retrieval. Registered QuestionView proofs preserve their separate complete/negative semantics."
+  ]
+}
