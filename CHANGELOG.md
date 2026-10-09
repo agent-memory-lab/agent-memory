@@ -25,6 +25,13 @@ the first stable release.
 
 ### Added
 
+- Incremental SQLite lexical locators with bounded pre-hydration ranking, exact
+  long-source spans and legacy-write repair; PostgreSQL keeps native indexes.
+  Add explicit host-only current retained-source embedding reuse with separate
+  authorization/retention lifecycle. The generic embedding reranker still keeps
+  no vectors. See [index scope](docs/SQLITE_LEXICAL_INDEX.md) and
+  [source embedding reuse](docs/source-embedding-reuse.md).
+
 - Opt-in local Ollama synthetic runtime smoke with a saved pre-dispatch plan,
   pinned installation/configuration, actual question/cache/authorization/erasure
   checks, token receipts and unknown-cost ledger retention. Real local Qwen 9B

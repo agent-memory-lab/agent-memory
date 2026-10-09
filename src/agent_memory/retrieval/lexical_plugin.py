@@ -1,7 +1,7 @@
 """Opt-in, async lexical candidate plugin for an agent's retrieval pipeline.
 
 The plugin owns no memory store or background worker. Hosts can inject any
-trusted scoped evidence source, or use the bundled SQLite recent-event source.
+trusted scoped evidence source, or use the bundled SQLite indexed evidence source.
 """
 
 import asyncio
@@ -39,7 +39,7 @@ class LexicalCandidatePlugin:
         limit: int = 8,
         max_items: int = 128,
     ) -> "LexicalCandidatePlugin":
-        """Use a recent-event window without creating a duplicate index."""
+        """Use the incremental SQLite lexical index with evidence-preserving source spans."""
         from .sqlite_source import SQLiteRecentEventEvidenceSource
 
         return cls(

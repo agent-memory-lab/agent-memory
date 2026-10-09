@@ -34,6 +34,11 @@ RELATED_KINDS = (
 
 
 def _instance(kind, key, row):
+    # Raw-source embeddings have no QuestionView/atom/derived lineage. Their
+    # typed source edges are erased by model.erase_rows after this graph pass.
+    # In particular, a reusable slot must never be treated as an instance ID.
+    if kind in {"source_embedding_header", "source_embedding_body", "source_embedding_grant"}:
+        return None
     if kind in PAGE_KINDS:
         return row.get("instance_id")
     if kind == "question_content":

@@ -1,0 +1,162 @@
+{
+  "classification": "synthetic mechanism and maintenance observation only; no real quality or total-cost acceptance",
+  "fixture_sha256": "2dd3696764d54efdac77a77871432a5cb0b2ec1081fea5cb67bb06da33423399",
+  "runner_sha256": "9e1ffa65dc32cd3ecd8b35370ae17b79a51bb5c99308c00e6424adc022de99f9",
+  "cold_os_cache_measured": false,
+  "model_embedding_generation_calls": 0,
+  "limits": [
+    "One uncontrolled host and one maintenance sample per phase; no confidence claim.",
+    "Rows are logical SQL result rows returned to Python, not physical database scans.",
+    "Actual reader/reranker efficacy, migration/backfill, multi-user workloads and complete financial/energy costs remain unmeasured."
+  ],
+  "control": {
+    "source_tree": "20d73af25bbfa207e52ef5fbe458f6b07ed434fa",
+    "maintenance": {
+      "allocated_database_bytes": 794624,
+      "archive_event": {
+        "elapsed_ms": 0.8638499998596672,
+        "process_cpu_ms": 0.8655029999999897
+      },
+      "bulk_ingest": {
+        "elapsed_ms": 44.473632000062935,
+        "event_count": 534,
+        "process_cpu_ms": 44.476605999999975
+      },
+      "fresh_initialize": {
+        "elapsed_ms": 36.07396500001414,
+        "process_cpu_ms": 36.150768
+      },
+      "limits": [
+        "Single synthetic process; uncontrolled host and OS caches.",
+        "Bulk-ingest includes incremental index maintenance when present.",
+        "Archive measures one fixture event, not complete erasure/restore workload.",
+        "Migration/backfill, long-run maintenance, GPU and money costs remain unmeasured."
+      ]
+    },
+    "paths": {
+      "repository-default": {
+        "case_count": 9,
+        "samples": 81,
+        "rows_materialized_range": [
+          533,
+          533
+        ],
+        "median_rows_materialized": 533,
+        "p95_ms": 13.04446399990411,
+        "all_observations_stable": true,
+        "errors": 0,
+        "forbidden_hits": 0,
+        "mean_reciprocal_rank_over_positive_cases": 0.9285714285714286,
+        "relevant_count": 7,
+        "relevant_hits": 7
+      },
+      "kernel-default": {
+        "case_count": 9,
+        "samples": 81,
+        "rows_materialized_range": [
+          533,
+          533
+        ],
+        "median_rows_materialized": 533,
+        "p95_ms": 16.649137000058545,
+        "all_observations_stable": true,
+        "errors": 0,
+        "forbidden_hits": 0,
+        "mean_reciprocal_rank_over_positive_cases": 0.9285714285714286,
+        "relevant_count": 7,
+        "relevant_hits": 7
+      },
+      "recent-lexical": {
+        "case_count": 9,
+        "samples": 81,
+        "rows_materialized_range": [
+          128,
+          128
+        ],
+        "median_rows_materialized": 128,
+        "p95_ms": 4.138557999795012,
+        "all_observations_stable": true,
+        "errors": 0,
+        "forbidden_hits": 0,
+        "mean_reciprocal_rank_over_positive_cases": 0.7142857142857143,
+        "relevant_count": 7,
+        "relevant_hits": 5
+      }
+    }
+  },
+  "candidate": {
+    "source_tree": "407937684ffe28e2e7d4795e14f027af8b43c129",
+    "maintenance": {
+      "allocated_database_bytes": 5017600,
+      "archive_event": {
+        "elapsed_ms": 0.8656229997541232,
+        "process_cpu_ms": 0.866845000000005
+      },
+      "bulk_ingest": {
+        "elapsed_ms": 88.42601400010608,
+        "event_count": 534,
+        "process_cpu_ms": 88.42633099999998
+      },
+      "fresh_initialize": {
+        "elapsed_ms": 41.90408900012699,
+        "process_cpu_ms": 41.93422399999999
+      },
+      "limits": [
+        "Single synthetic process; uncontrolled host and OS caches.",
+        "Bulk-ingest includes incremental index maintenance when present.",
+        "Archive measures one fixture event, not complete erasure/restore workload.",
+        "Migration/backfill, long-run maintenance, GPU and money costs remain unmeasured."
+      ]
+    },
+    "paths": {
+      "repository-default": {
+        "case_count": 9,
+        "samples": 81,
+        "rows_materialized_range": [
+          2,
+          10
+        ],
+        "median_rows_materialized": 6,
+        "p95_ms": 2.9483230000550975,
+        "all_observations_stable": true,
+        "errors": 0,
+        "forbidden_hits": 0,
+        "mean_reciprocal_rank_over_positive_cases": 1.0,
+        "relevant_count": 7,
+        "relevant_hits": 7
+      },
+      "kernel-default": {
+        "case_count": 9,
+        "samples": 81,
+        "rows_materialized_range": [
+          4,
+          12
+        ],
+        "median_rows_materialized": 8,
+        "p95_ms": 6.639392000124644,
+        "all_observations_stable": true,
+        "errors": 0,
+        "forbidden_hits": 0,
+        "mean_reciprocal_rank_over_positive_cases": 1.0,
+        "relevant_count": 7,
+        "relevant_hits": 7
+      },
+      "recent-lexical": {
+        "case_count": 9,
+        "samples": 81,
+        "rows_materialized_range": [
+          1,
+          9
+        ],
+        "median_rows_materialized": 5,
+        "p95_ms": 1.9545549998838396,
+        "all_observations_stable": true,
+        "errors": 0,
+        "forbidden_hits": 0,
+        "mean_reciprocal_rank_over_positive_cases": 1.0,
+        "relevant_count": 7,
+        "relevant_hits": 7
+      }
+    }
+  }
+}

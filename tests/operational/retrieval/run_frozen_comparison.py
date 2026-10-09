@@ -18,7 +18,7 @@ from pathlib import Path
 import platform
 import subprocess
 import sys
-from time import perf_counter
+from time import perf_counter, process_time
 import tempfile
 
 parser = argparse.ArgumentParser()
@@ -191,7 +191,10 @@ async def measured(fn, meter, calls):
     return {'observation': results[0], 'observations_stable': all(r == results[0] for r in results),
             'latency_ms_samples': timings, 'latency_p50_ms': percentile(timings, .5),
             'latency_p95_ms': percentile(timings, .95), 'cost_samples': costs,
-            'costs_stable': all(c == costs[0] for c in costs)}
+            'costs_stable': all(c == costs[0] for c in costs),
+            'first_observation_ms': timings[0],
+            'warm_repeat_ms_samples': timings[1:],
+            'cold_os_cache_measured': False}
 
 
 class FixedClock:
@@ -316,17 +319,27 @@ async def main():
         'module_file':sqlite_module.__file__, 'python_hash_seed':'use PYTHONHASHSEED=0 for process-stable floating-point set traversal'}
     dump(args.out/'source-manifest.json', source)
     outcomes = []
+    maintenance = {}
     with tempfile.TemporaryDirectory(prefix='retrieval-frozen-') as td:
+        begin, cpu_begin = perf_counter(), process_time()
         kernel = build_local_kernel(Path(td)/'fixture.db'); await kernel.initialize()
+        maintenance['fresh_initialize'] = {'elapsed_ms': (perf_counter()-begin)*1000, 'process_cpu_ms': (process_time()-cpu_begin)*1000}
         repository = kernel._repository
         try:
+            begin, cpu_begin = perf_counter(), process_time()
             async with repository.unit_of_work() as uow:
                 for row in fixture['records']:
                     scope = MemoryScope('foreign-tenant', session_id='fixture-session') if row.get('foreign') else SCOPE
                     event = MemoryEvent(scope,'user.message',row['text'],id=row['id'],occurred_at=datetime.fromisoformat(row['at']),ingested_at=NOW)
                     await uow.append_event(event)
+            maintenance['bulk_ingest'] = {'event_count':len(fixture['records']), 'elapsed_ms':(perf_counter()-begin)*1000, 'process_cpu_ms':(process_time()-cpu_begin)*1000}
+            begin, cpu_begin = perf_counter(), process_time()
             with repository._connection() as con:
                 con.execute('UPDATE events SET archived_at=? WHERE id=?',(NOW.isoformat(),'archived-forbidden'))
+            maintenance['archive_event'] = {'elapsed_ms':(perf_counter()-begin)*1000, 'process_cpu_ms':(process_time()-cpu_begin)*1000}
+            with repository._connection() as con:
+                maintenance['allocated_database_bytes'] = con.execute('PRAGMA page_count').fetchone()[0] * con.execute('PRAGMA page_size').fetchone()[0]
+            maintenance['limits'] = ['Single synthetic process; uncontrolled host and OS caches.', 'Bulk-ingest includes incremental index maintenance when present.', 'Archive measures one fixture event, not complete erasure/restore workload.', 'Migration/backfill, long-run maintenance, GPU and money costs remain unmeasured.']
             meter, calls = SQLMeter(), Counter()
             original_connect = repository._connect
             repository._connect = lambda: ConnectionProxy(original_connect(), meter)
@@ -385,10 +398,10 @@ async def main():
           'Latency samples include Python scheduling and local SQLite, excluding fixture setup; trace persistence is disabled, OS caches and host contention are uncontrolled.',
           'SQL read counters count executed SELECT/WITH statements and rows/text bytes returned to Python, not rows scanned, pages, disk I/O, or server work.',
           'Scripted entity/temporal/governed fixtures exercise contracts and mechanics, never semantic efficacy.',
-          'In-memory lexical receives only the most recent 512 authorized events; recent lexical receives its default 128-item window.',
+          'In-memory lexical receives only the most recent 512 authorized events; shipped lexical uses its source adapter at this source revision (indexed when available).',
           'No baseline ranking metric is real-data efficacy or a product quality claim.'],
         'model_endpoint_calls':0,'embedding_calls':0,'generation_calls':0,'reranker_calls':0,
-        'totals':totals,'retrieval_results':outcomes,'tokenizer_samples':tokenizer,
+        'maintenance':maintenance,'totals':totals,'retrieval_results':outcomes,'tokenizer_samples':tokenizer,
         'pipeline_fixtures':pipeline,'plugin_contracts':contracts}
     dump(args.out/'results.json',report)
     print(json.dumps({'out':str(args.out),'source_tree':source['tree'],'totals':totals,'pipeline':{k:v.get('expected_hit_count',v.get('error_type')) for k,v in pipeline.items()}},ensure_ascii=False,indent=2))
