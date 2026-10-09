@@ -113,8 +113,10 @@ def pack_memory_bundle(
             if kind_counts.get(candidate.item.kind, 0) >= diversity_budget.max_per_kind.get(candidate.item.kind, 0):
                 kind_drops += 1
                 continue
-            if any(source_counts.get(source, 0) >= diversity_budget.max_per_source_event
-                   for source in candidate.source_event_ids):
+            if candidate.item.kind is not MemoryKind.CLAIM and any(
+                source_counts.get(source, 0) >= diversity_budget.max_per_source_event
+                for source in candidate.source_event_ids
+            ):
                 source_drops += 1
                 continue
         item_chars = len(candidate.item.text)
@@ -140,8 +142,12 @@ def pack_memory_bundle(
         # policy-rejected candidates cannot crowd out feasible lower ranks.
         seen_ids.add(candidate.item.id)
         kind_counts[candidate.item.kind] = kind_counts.get(candidate.item.kind, 0) + 1
-        for source in set(candidate.source_event_ids):
-            source_counts[source] = source_counts.get(source, 0) + 1
+        # A shared source may contain several distinct or conflicting claims.
+        # It is not a truth-equivalence key, and claims must not prevent their
+        # supporting original event from being included.
+        if candidate.item.kind is not MemoryKind.CLAIM:
+            for source in set(candidate.source_event_ids):
+                source_counts[source] = source_counts.get(source, 0) + 1
         characters += item_chars
         tokens += item_tokens
 
