@@ -52,3 +52,31 @@ def test_all_98_acceptance_responsibilities_have_explicit_evidence_state():
         assert isinstance(case["evidence"], list)
         if case["v7_status"] == "passed":
             assert case["evidence"], "A prior status or same-named unit test is not new evidence"
+
+
+def test_current_execution_index_matches_ledger_and_scoped_artifacts():
+    versions = json.loads((DOCS / "versions.json").read_text())
+    current = next(item for item in versions["versions"] if item["version"] == "7.0.0")
+    ledger = (DOCS / current["execution_tasks"]).read_text()
+    statuses = Counter()
+    for line in ledger.splitlines():
+        if re.match(r"\| AM70-T\d\d \|", line):
+            status = line.split("|")[4].strip()
+            statuses["DONE" if status.startswith("DONE") else status] += 1
+    assert sum(statuses.values()) == current["new_tasks"] == 15
+    assert dict(statuses) == current["new_task_status_counts"]
+    assert f"revision {current['execution_revision']} /" in ledger
+    assert (DOCS / current["implementation_record"]).is_file()
+    assert (DOCS / current["implementation_validation"]).is_file()
+    assert current["design_freeze_execution_state"]["new_task_status_counts"] == {"TODO": 15}
+    folder = DOCS / "v7.0.0"
+    frozen = json.loads((folder / "validation-ollama-smoke-2026-10-09.plan.json").read_text())
+    report = json.loads((folder / "validation-ollama-smoke-2026-10-09.json").read_text())
+    from agent_memory.retrieval.model_contracts import digest
+
+    assert digest(frozen["plan"]) == frozen["sha256"] == report["plan_sha256"]
+    assert report["status"] == "passed_synthetic_runtime_smoke"
+    assert len(report["attempts"]) == len(report["model_ledger"]) == 7
+    assert report["total_cost_microunits"] is None
+    assert not report["full_v7_acceptance"] and not report["production_benefit_claim"]
+    assert current["real_model_quality_cost_acceptance"] is False

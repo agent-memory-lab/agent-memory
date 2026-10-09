@@ -214,7 +214,7 @@ The public boundary is `MemoryProvider`. Optional packages use lazy discovery; i
 
 ## Capability status and roadmap
 
-The current documented delivery baseline is **[V7-B6: integrated engineering verification](docs/design/v7.0.0/batch-b6.md)**, building on the existing language and L1 lifecycle. The software package is **v0.1.0 / Alpha**; architecture, protocol, and package versions are tracked separately.
+The current documented delivery baseline is **[V7-B6: integrated engineering verification](docs/design/v7.0.0/batch-b6.md)** plus the [local real Ollama synthetic smoke](docs/design/v7.0.0/ollama-smoke.md), building on the existing language and L1 lifecycle. The software package is **v0.1.0 / Alpha**; architecture, protocol, and package versions are tracked separately.
 
 | Capability | Current implementation | Evidence |
 | --- | --- | --- |
@@ -228,7 +228,7 @@ The current documented delivery baseline is **[V7-B6: integrated engineering ver
 | Current language L2 pages | Typed Scenario/Page/Block versions, stable block identities, atomic full rebuild, fixed readiness targets, guarded delivery, and transitive erasure | [Stage 15](docs/design/v6.1.0/stage-15.md) |
 | Trusted project questions | Host-reviewed owner, status, commitments and risks; deterministic full/delta answers and guarded proof reuse, shared durable refresh, exact routing and opt-in SDK/MCP reads | [B3](docs/design/v7.0.0/batch-b3.md) · [B4](docs/design/v7.0.0/batch-b4.md) · [Example](examples/project_questions.py) |
 | Qualified current parents and project L2 pages | Compatible trusted contexts, preserved conditions/exceptions, stable blocks, host-only typed patches and immutable provenance; guarded whole-page delivery | [B3](docs/design/v7.0.0/batch-b3.md) · [Typed patches](docs/design/v7.0.0/typed-page-patches.md) |
-| Governed model/cache contracts (opt-in) | Host-bound immutable provider/input/output identity, exact caching, multi-account reservations and unknown-cost recovery; synthetic protocol evidence only | [B5](docs/design/v7.0.0/batch-b5.md) · [B6](docs/design/v7.0.0/batch-b6.md) |
+| Governed model/cache contracts (opt-in) | Host-bound immutable provider/input/output identity, exact caching, multi-account reservations and unknown-cost recovery; real local Qwen 9B smoke over synthetic facts, domain/cost acceptance open | [B5](docs/design/v7.0.0/batch-b5.md) · [Local smoke](docs/design/v7.0.0/ollama-smoke.md) |
 | Bounded host retention | Atomic reference-aware QuestionView GC with explicit holds; exact receipts, delta ancestry and model audits can remain pinned and exhaust capacity | [Retention/GC](docs/design/v7.0.0/retention-gc.md) |
 | Offline A9 evaluation tooling | Actual SQLite runtime arms, isolated ablations, all-phase unknown debt, paired bootstrap and opt-in observer/tariff/Ollama binding; synthetic evidence only | [A9 runner](docs/design/v7.0.0/a9-experiment-runner.md) |
 | Retrieval and feedback foundations | Scoped, bounded recall; optional lexical/hybrid candidates; outcome-linked Episode/Procedure and gated Evolution components | [Architecture](docs/ARCHITECTURE.md) · [Feedback](docs/FEEDBACK_CONTRACT.md) |
@@ -249,11 +249,11 @@ Upgrade requires stopping old writers. The project candidate index is additive; 
 
 B2's [verified lifecycle evidence](docs/design/v7.0.0/validation-b2.json) includes fixed responsibilities, fair shared limits, clock guards and process-kill recovery. Its deterministic resource limits do not represent model-spend budgets or measured production savings.
 
-Remaining acceptance follows the [v7 plan](docs/design/v7.0.0/plan.md) and [task ledger](docs/design/v7.0.0/task.md): actual Ollama configuration, licensed held-out domain quality and whole-cost comparison. The governed model/cache contracts are implemented; they do not establish those external results. All 44 previous task statuses remain preserved. Synthetic deterministic tests do not establish licensed real-data quality, production savings or full M0/M1/M2 acceptance; those gates remain open.
+Remaining acceptance follows the [v7 plan](docs/design/v7.0.0/plan.md) and [task ledger](docs/design/v7.0.0/task.md): licensed held-out domain quality and measured whole-cost comparison. Local Ollama configuration and nine synthetic runtime checks passed with seven actual Qwen 9B generations; this does not establish those external results. All 44 previous task statuses remain preserved. Synthetic tests and this local smoke do not establish licensed real-data quality, production savings or full M0/M1/M2 acceptance; those gates remain open.
 
 Advanced retrieval and optional read-only Reflect remain on the [task ledger](docs/design/v6.1.0/task.md). Remote deployments use the [security policy](SECURITY.md) and [threat model](docs/THREAT_MODEL.md); external caches, remote ACL systems, and provider-held copies need their own integration contracts.
 
-Explicit model explanations are available through the host-bound [B5 runtime](docs/design/v7.0.0/batch-b5.md) and SDK `question_model_answer`. Ordinary structured answers remain model-free. Ollama setup and real quality/cost acceptance are pending; local compute is never assumed free.
+Explicit model explanations are available through the host-bound [B5 runtime](docs/design/v7.0.0/batch-b5.md) and SDK `question_model_answer`. Ordinary structured answers remain model-free. The opt-in [local validation CLI](docs/design/v7.0.0/ollama-smoke.md) freezes installed model/configuration and exercises caching, authorization and erasure. Real-domain quality/cost acceptance remains open; local compute is never assumed free.
 
 ## Documentation
 
@@ -287,4 +287,4 @@ Integration and live PostgreSQL tests have additional setup; see [CI](.github/wo
 
 [Apache License 2.0](LICENSE).
 
-B6 fixed-source closeout verification: 3931 passed, zero skips/failures/errors across the complete repository/all package suite; all prior 3783 passing cases remain covered. Six distributions were built/clean-installed, 241 Python files and 19 SQL migrations matched, and full source/12 archives scanned with zero findings. Bounded reference-aware GC and frozen offline A9 tooling are included. See [the scoped report](docs/design/v7.0.0/batch-b6.md); actual Ollama/licensed-domain quality and measured whole-cost acceptance remain blocked.
+B6 fixed-source closeout verification: 3931 passed, zero skips/failures/errors across the complete repository/all package suite; all prior 3783 passing cases remain covered. Six distributions were built/clean-installed, 241 Python files and 19 SQL migrations matched, and full source/12 archives scanned with zero findings. Bounded reference-aware GC and frozen offline A9 tooling are included. See [the scoped report](docs/design/v7.0.0/batch-b6.md). The later [local Ollama smoke](docs/design/v7.0.0/ollama-smoke.md) has separate targeted evidence; licensed-domain quality and measured whole-cost acceptance remain open.

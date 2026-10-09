@@ -214,7 +214,7 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 
 ## 能力状态与路线图
 
-当前文档交付基线为 **[V7-B6：集成工程验证](docs/design/v7.0.0/batch-b6.md)**，建立在已有语言视图和 L1 生命周期之上。软件包仍为 **v0.1.0 / Alpha**；架构、协议和软件版本分别管理。
+当前文档交付基线为 **[V7-B6：集成工程验证](docs/design/v7.0.0/batch-b6.md)**及[本地真实 Ollama 合成运行验证](docs/design/v7.0.0/ollama-smoke.md)，建立在已有语言视图和 L1 生命周期之上。软件包仍为 **v0.1.0 / Alpha**；架构、协议和软件版本分别管理。
 
 | 领域 | 已交付范围 | 实施证据 |
 | --- | --- | --- |
@@ -228,7 +228,7 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 | 当前语言 L2 页面 | 类型化 Scenario/Page/Block 版本、稳定块身份、原子完整重建、固定就绪目标、交付守卫及传递擦除 | [第十五阶段](docs/design/v6.1.0/stage-15.md) |
 | 可信项目问题 | 宿主审查的负责人、状态、承诺和风险；确定性 full/delta 答案与受守卫证明复用、共享持久刷新、精确路由及可选 SDK/MCP 读取 | [B3](docs/design/v7.0.0/batch-b3.md) · [B4](docs/design/v7.0.0/batch-b4.md) · [示例](examples/project_questions.py) |
 | 资格保持当前父与项目 L2 页面 | 兼容可信上下文、保留条件/例外、稳定块、宿主类型化补丁、不可变谱系与整页交付守卫 | [B3](docs/design/v7.0.0/batch-b3.md) · [类型化补丁](docs/design/v7.0.0/typed-page-patches.md) |
-| 受治理模型/缓存合同（可选） | 宿主绑定的不可变供应商/输入/输出身份、精确缓存、多账户预留及未知费用恢复；仅有合成协议证据 | [B5](docs/design/v7.0.0/batch-b5.md) · [B6](docs/design/v7.0.0/batch-b6.md) |
+| 受治理模型/缓存合同（可选） | 宿主绑定的不可变供应商/输入/输出身份、精确缓存、多账户预留及未知费用恢复；已完成合成事实上的本地真实 Qwen 9B 验证，领域/成本验收开放 | [B5](docs/design/v7.0.0/batch-b5.md) · [本地验证](docs/design/v7.0.0/ollama-smoke.md) |
 | 有界宿主保留 | QuestionView 原子引用保护 GC 与显式保留；精确回执、delta 谱系和模型审计可持续占满容量 | [保留/GC](docs/design/v7.0.0/retention-gc.md) |
 | 离线 A9 评测工具 | 真实 SQLite 运行时对照、隔离消融、全阶段未知账、配对 bootstrap 及显式观测/费率/Ollama 接线；仅合成证据 | [A9 执行器](docs/design/v7.0.0/a9-experiment-runner.md) |
 | 检索与反馈基础 | 受范围和预算约束的检索、可选 lexical/hybrid 候选、关联结果的 Episode/Procedure 与受控 Evolution 组件 | [代码架构](docs/ARCHITECTURE.md) · [反馈契约](docs/FEEDBACK_CONTRACT.md) |
@@ -258,11 +258,11 @@ Observation 只开放文档规定的语言模板。发布点和可证明稳定�
 
 B2 的[独立生命周期证据](docs/design/v7.0.0/validation-b2.json)覆盖固定责任、公平共享限额、时钟守卫与实际进程强杀恢复。确定性资源限额不代表模型金额预算或已验证的生产收益。
 
-后续按 [v7 计划](docs/design/v7.0.0/plan.md)与[任务台账](docs/design/v7.0.0/task.md)完成真实 Ollama 配置、许可留出领域质量及全链路成本比较。受治理模型/缓存合同已实现，不代表这些外部效果已验收。保留全部 44 项旧任务状态。合成确定性测试不代表许可真实数据质量、生产收益或完整 M0/M1/M2 验收；这些门仍开放。
+后续按 [v7 计划](docs/design/v7.0.0/plan.md)与[任务台账](docs/design/v7.0.0/task.md)完成许可留出领域质量及实测全链路成本比较。本地 Ollama 配置和 9 组合成运行检查已通过，实际调用 Qwen 9B 生成 7 次；不代表这些外部效果已验收。保留全部 44 项旧任务状态。合成测试及本地验证不代表许可真实数据质量、生产收益或完整 M0/M1/M2 验收；这些门仍开放。
 
 高级检索和可选的只读 Reflect 继续按[任务台账](docs/design/v6.1.0/task.md)推进。远程部署见[安全策略](SECURITY.md)和[威胁模型](docs/THREAT_MODEL.md)；外部缓存、远端 ACL 和供应商副本需要各自完成集成合同。
 
-宿主可显式绑定 [B5 受治理模型解释](docs/design/v7.0.0/batch-b5.md)，通过 SDK `question_model_answer` 调用；普通结构化回答不调用模型。Ollama 部署及真实质量/成本验收仍待完成，本地计算不默认免费。
+宿主可显式绑定 [B5 受治理模型解释](docs/design/v7.0.0/batch-b5.md)，通过 SDK `question_model_answer` 调用；普通结构化回答不调用模型。显式启用[本地验证命令](docs/design/v7.0.0/ollama-smoke.md)可冻结已安装模型/配置并检查缓存、授权和擦除。真实领域质量/成本验收仍开放，本地计算不默认免费。
 
 ## 文档导航
 
@@ -298,4 +298,4 @@ python -m pytest -q
 
 [Apache License 2.0](LICENSE)。
 
-B6 固定源码收尾验证：完整仓库/全部扩展包 3931 通过、零 skip/失败/错误，原 3783 项通过节点均保留。六包构建及全新离线安装完成，241 份 Python 与 19 份 SQL 迁移逐字节相符，源码及 12 个归档扫描零发现；已含有引用保护的 GC 与冻结离线 A9 工具。范围见[B6 报告](docs/design/v7.0.0/batch-b6.md)；实际 Ollama/许可领域质量与实测全成本验收仍受阻。
+B6 固定源码收尾验证：完整仓库/全部扩展包 3931 通过、零 skip/失败/错误，原 3783 项通过节点均保留。六包构建及全新离线安装完成，241 份 Python 与 19 份 SQL 迁移逐字节相符，源码及 12 个归档扫描零发现；已含有引用保护的 GC 与冻结离线 A9 工具。范围见[B6 报告](docs/design/v7.0.0/batch-b6.md)。后续[本地 Ollama 验证](docs/design/v7.0.0/ollama-smoke.md)有单独专项证据；许可领域质量与实测全成本验收仍开放。

@@ -7,6 +7,12 @@ the first stable release.
 
 ### Added
 
+- Opt-in local Ollama synthetic runtime smoke with a saved pre-dispatch plan,
+  pinned installation/configuration, actual question/cache/authorization/erasure
+  checks, token receipts and unknown-cost ledger retention. Real local Qwen 9B
+  execution is recorded; licensed-domain quality and whole-cost acceptance stay open.
+  CLI and scope: [local Ollama smoke](docs/design/v7.0.0/ollama-smoke.md).
+
 - Host-only bounded QuestionView garbage collection with atomic SQLite/PostgreSQL
   reference checks, explicit retention holds, immutable lineage and finite-receipt pins.
   Background proof-only and independent full generations can reclaim unused objects;

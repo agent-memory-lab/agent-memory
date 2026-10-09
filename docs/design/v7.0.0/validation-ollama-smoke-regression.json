@@ -1,0 +1,120 @@
+{
+  "schema": "v7-local-model-smoke-validation/1",
+  "date": "2026-10-09",
+  "status": "passed_scoped_validation",
+  "source_commit_before_change": "cdca16eef72bca4b38346acb6c168e91c196daf0",
+  "source_manifest_sha256": "f68a9c12438d7f12cbc5053f46a6ff86ac3a2269ebf3d51d5df3bc4a5ad98a6b",
+  "source_fingerprint_algorithm": "question_fixture._code_fingerprint: sorted installed Python/SQL paths and content digests",
+  "source_bound_to_real_run": true,
+  "full_suite_run": false,
+  "full_v7_acceptance": false,
+  "production_benefit_claim": false,
+  "default_enablement": false,
+  "real_model_executed": true,
+  "dataset_kind": "authored_synthetic",
+  "real_model_downloaded": false,
+  "paid_api_called": false,
+  "tests": {
+    "command": [
+      ".venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "tests/test_ollama_smoke_v7.py",
+      "tests/test_ollama_port_v7.py",
+      "tests/test_question_models_v7.py",
+      "tests/test_governed_models_v7.py",
+      "tests/test_question_model_v7.py",
+      "tests/test_model_cost_runtime_v7.py",
+      "tests/test_architecture.py",
+      "tests/test_v7_acceptance_inventory.py",
+      "tests/test_v7_b6_evidence_plan.py",
+      "--junitxml=/tmp/agent-memory-ollama-smoke-regression.xml"
+    ],
+    "passed": 371,
+    "skipped": 0,
+    "failures": 0,
+    "errors": 0,
+    "duration_seconds": 26.701,
+    "started_at": "2026-10-09T08:40:27.791723+08:00",
+    "postgres": "isolated disposable PostgreSQL 17.11; test database and temporary server removed after run",
+    "provider_parameters": {
+      "pure_or_http": 313,
+      "sqlite": 30,
+      "postgres": 28
+    },
+    "per_module": {
+      "tests.test_ollama_smoke_v7": 21,
+      "tests.test_ollama_port_v7": 6,
+      "tests.test_question_models_v7": 22,
+      "tests.test_governed_models_v7": 53,
+      "tests.test_question_model_v7": 166,
+      "tests.test_model_cost_runtime_v7": 5,
+      "tests.test_architecture": 93,
+      "tests.test_v7_acceptance_inventory": 4,
+      "tests.test_v7_b6_evidence_plan": 1
+    },
+    "junit_sha256": "2709ce2c6425075b67692a7c1ee5d01d7d473516ea78258f8a0c20fe878e1d85"
+  },
+  "tested_file_sha256": {
+    "src/agent_memory/evaluation/ollama_smoke.py": "e2d3b039e59a7aa728aee209a24e4dc46d248311aac1f06cf2978ac1697dedc5",
+    "tests/test_ollama_smoke_v7.py": "5968abd9554aa80b0df97405195e07565a69fc5c8717c42041954c035dd0b37d",
+    "tests/test_ollama_port_v7.py": "4868a6dbb28a69ae1bd84856e6c7fb9a18f9a661818b9cf03c6fd070b8929280",
+    "tests/test_question_models_v7.py": "a845b5870cc8e17a2f7ca9bb5c7b375fa8f7de3c2d260fa082faf2653e487b38",
+    "tests/test_governed_models_v7.py": "b38ff5d1b28a7b2d6ec017bf7b06e9fb29fa7db49c1b67b14f4461ca786376dd",
+    "tests/test_question_model_v7.py": "df240d21f41e9ad11e47f92e8d5e4812050890e6b8758b6e5a3b512f15638685",
+    "tests/test_model_cost_runtime_v7.py": "3aa80581b597e62d23fe12336eff0ef096540ee93fb75c0f3148a76ad9b4470d",
+    "tests/test_architecture.py": "402d54a7334fc479cc08d98705cb2ceee71a60b83606e46522be09917b838143",
+    "tests/test_v7_acceptance_inventory.py": "339d6f57e754554913e208313257b4c1c84c1ba6fb0abe517df1c8f3a703ce10",
+    "tests/test_v7_b6_evidence_plan.py": "087381b6a7241964d43eb883900d09a40c7ab58485c5efab2925ad392eb6788f",
+    "pyproject.toml": "ce26ca68109d81650d68dd5176c8fe6e03b7c976d5e2b14afc2955dd4e13da19"
+  },
+  "lint": {
+    "tool": "ruff 0.16.7",
+    "paths": [
+      "src/agent_memory/evaluation/ollama_smoke.py",
+      "tests/test_ollama_smoke_v7.py",
+      "tests/test_v7_acceptance_inventory.py"
+    ],
+    "status": "passed"
+  },
+  "build": {
+    "scope": "core_wheel_only",
+    "wheel": "agent_memory-0.1.0-py3-none-any.whl",
+    "sha256": "479fcce7502d4367dec9e7a259af183b053fc00f1b79e6d28ac5fd9f9e19ef1c",
+    "source_bytes_match": true,
+    "clean_dependency_free_install_and_cli_help": "passed",
+    "build_environment": "isolated pep517 environment; initial no-isolation attempt lacked hatchling"
+  },
+  "real_run": {
+    "plan": "validation-ollama-smoke-2026-10-09.plan.json",
+    "report": "validation-ollama-smoke-2026-10-09.json",
+    "report_sha256": "475df3f180b29a5b21c0c0131a77ba522aae1f5511b3394db801c859f718a05c",
+    "plan_sha256": "b648e4c0f100b12a27dc79b387b9c29885149a9e76944e213ed5eb2aa5ed1ad2",
+    "checks": 9,
+    "generations": 7,
+    "input_tokens": 31782,
+    "output_tokens": 173,
+    "client_wall_seconds": 71.39702404197305,
+    "cost_status": "unknown",
+    "total_cost_microunits": null,
+    "call_ledger_states": {
+      "reconciliation_pending": 7
+    }
+  },
+  "not_verified": [
+    "licensed held-out domain quality",
+    "actual extraction by a semantic model",
+    "real conditional/time/adversarial matrix",
+    "real A9 multi-arm whole-cost comparison",
+    "GPU/IO/network/storage observation and authoritative tariffs",
+    "provider invoices",
+    "independent judge and calibrated thresholds/statistical sufficiency",
+    "new production page maintenance worker"
+  ],
+  "preserved_user_draft": {
+    "path": "docs/AGENT_MEMORY_ARCHITECTURE_PLAN.md",
+    "sha256": "81095de8aa02db4f59a643d0d6708b4fa9ee415bfb3f230bab4a7abf962fe849",
+    "staged": false
+  }
+}

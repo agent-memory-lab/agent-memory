@@ -157,6 +157,11 @@ real-world data, or a completed real-model acceptance experiment.
 
 ## Later real Ollama invocation (not run here)
 
+The separate [local Ollama synthetic smoke](ollama-smoke.md) now records real
+Qwen 9B execution and runtime cache/authorization/erasure checks. It does not
+execute this licensed-domain A9 binding, supply its judge/tariff inputs, or change
+the synthetic-only CLI and acceptance boundaries below.
+
 The existing production `OllamaPort` is already wired by
 `run_ollama_experiment`; swapping the local stub does not require another model or
 question-runtime adapter. This programmatic path is opt-in only; the CLI above

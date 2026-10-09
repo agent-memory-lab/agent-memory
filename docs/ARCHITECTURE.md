@@ -59,8 +59,10 @@ SQLite/PostgreSQL 适配器负责批次原子性、版本比较和删除屏障�
 同事务的快照清理与版本更新。候选不进入无条件 Claim 表；完整合同及边界见
 [第二阶段实施记录](design/v6.1.0/stage-02.md)。
 
-最新目标设计见 [v7 架构与算法](design/AGENT_MEMORY_DESIGN_V7.0.0.md)，其中的问题视图、调度与精确缓存仍按 [v7 计划](design/v7.0.0/plan.md)实施。
-本文描述已有代码组织，新设计不代表相应能力已经交付。
+最新目标设计见 [v7 架构与算法](design/AGENT_MEMORY_DESIGN_V7.0.0.md)。有限当前问题视图、共享调度和精确缓存已按 B0–B6 交付；
+其支持边界及后续工作见 [v7 计划](design/v7.0.0/plan.md)。新设计不代表其中全部能力已经交付。
+本地真实模型验证入口位于 `evaluation/ollama_smoke.py`，复用现有生产能力而不被生产代码导入；
+冻结计划、运行数据流及合成证据边界见 [本地 Ollama 验证](design/v7.0.0/ollama-smoke.md)。
 
 ## 拆分与合并标准
 

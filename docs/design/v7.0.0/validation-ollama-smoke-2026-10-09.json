@@ -1,0 +1,286 @@
+{
+  "schema": "ollama-synthetic-runtime-smoke/1",
+  "plan_sha256": "b648e4c0f100b12a27dc79b387b9c29885149a9e76944e213ed5eb2aa5ed1ad2",
+  "dataset_kind": "authored_synthetic",
+  "model_configuration_sha256": "fef0acb349e1e8326592c8e3d7dbff3a9773126e004d127f1717d37b0e1c5e5b",
+  "status": "passed_synthetic_runtime_smoke",
+  "checks": [
+    {
+      "name": "model_free_views",
+      "status": "passed",
+      "model_calls": 0
+    },
+    {
+      "name": "first_model_answers",
+      "status": "passed",
+      "model_calls": 4,
+      "concurrent_owner_deliveries": 2
+    },
+    {
+      "name": "exact_cache",
+      "status": "passed",
+      "hits": 4,
+      "new_model_calls": 0
+    },
+    {
+      "name": "restart_cache",
+      "status": "passed",
+      "new_model_calls": 0
+    },
+    {
+      "name": "source_change",
+      "status": "passed",
+      "new_model_calls": 1,
+      "stale_view_denied": true
+    },
+    {
+      "name": "proof_change",
+      "status": "passed",
+      "new_model_calls": 1
+    },
+    {
+      "name": "provider_revoke",
+      "status": "passed",
+      "new_model_calls": 0
+    },
+    {
+      "name": "provider_restore",
+      "status": "passed",
+      "new_model_calls": 1
+    },
+    {
+      "name": "erase",
+      "status": "passed",
+      "new_model_calls": 0,
+      "cached_body_scrubbed": true
+    }
+  ],
+  "attempts": [
+    {
+      "payload_sha256": "ef8ae442be185053d25738f8c4057d37bc446d608501b6b21d17e6737030f97b",
+      "input_bytes": 10361,
+      "outcome": "returned",
+      "input_tokens": 4175,
+      "output_tokens": 27,
+      "total_duration_ns": 10952118167
+    },
+    {
+      "payload_sha256": "678fac065aa3ce1f8a58f55017bf86a11ec1a5773505c8245f481bd1d54166b4",
+      "input_bytes": 10389,
+      "outcome": "returned",
+      "input_tokens": 4134,
+      "output_tokens": 27,
+      "total_duration_ns": 10829338292
+    },
+    {
+      "payload_sha256": "a05e86c7c748e2ce4fe9f26df4bb10bb89da3b34f2eba3ff50da1b172fba559e",
+      "input_bytes": 8371,
+      "outcome": "returned",
+      "input_tokens": 3591,
+      "output_tokens": 19,
+      "total_duration_ns": 9327119417
+    },
+    {
+      "payload_sha256": "aae6a3e0f12ec1a2864d8c17a202d6e886bb2ad6cb87ad3774b2727f9d28f1df",
+      "input_bytes": 8359,
+      "outcome": "returned",
+      "input_tokens": 3598,
+      "output_tokens": 19,
+      "total_duration_ns": 9327252334
+    },
+    {
+      "payload_sha256": "6dd54674e3c4b120cab54ef95a94609a64a2dad4405f2d2731313a8de514813a",
+      "input_bytes": 12710,
+      "outcome": "returned",
+      "input_tokens": 5422,
+      "output_tokens": 27,
+      "total_duration_ns": 13921200250
+    },
+    {
+      "payload_sha256": "5eb83c45e84bf949dd33d94ea907ac49307513f0ac58c1f5882e422f1af06600",
+      "input_bytes": 12722,
+      "outcome": "returned",
+      "input_tokens": 5431,
+      "output_tokens": 27,
+      "total_duration_ns": 13935065583
+    },
+    {
+      "payload_sha256": "5eb83c45e84bf949dd33d94ea907ac49307513f0ac58c1f5882e422f1af06600",
+      "input_bytes": 12722,
+      "outcome": "returned",
+      "input_tokens": 5431,
+      "output_tokens": 27,
+      "total_duration_ns": 986315500
+    }
+  ],
+  "full_v7_acceptance": false,
+  "production_benefit_claim": false,
+  "total_cost_microunits": null,
+  "cost_status": "unknown",
+  "evidence_scope": "local_transport_synthetic_runtime_smoke",
+  "model_ledger": [
+    {
+      "accounts": [
+        "a33646b46bfdeb7e30145e4120566e51645838295692ec546f1969a1d1fd4b08"
+      ],
+      "actual_microunits": null,
+      "call_id": "4be3af772b34404593d11987ee94c06c",
+      "configuration_sha256": "fef0acb349e1e8326592c8e3d7dbff3a9773126e004d127f1717d37b0e1c5e5b",
+      "currency": "USD",
+      "input_tokens": 4134,
+      "key": "02271122ebe47009f16fb753364a459d719ee0f49b931f2cb6729cef1096f332",
+      "maximum_microunits": null,
+      "model_role": "generation_model",
+      "outcome": "completed",
+      "output_tokens": 27,
+      "phase": "foreground",
+      "provider": "ollama",
+      "provider_request_sha256": null,
+      "receipt_sha256": null,
+      "request_sha256": "678fac065aa3ce1f8a58f55017bf86a11ec1a5773505c8245f481bd1d54166b4",
+      "state": "reconciliation_pending",
+      "total_duration_ns": 10829338292,
+      "upper_bound_evidence_sha256": null
+    },
+    {
+      "accounts": [
+        "a33646b46bfdeb7e30145e4120566e51645838295692ec546f1969a1d1fd4b08"
+      ],
+      "actual_microunits": null,
+      "call_id": "2cec677e364248dca53d0e1ceb9b721f",
+      "configuration_sha256": "fef0acb349e1e8326592c8e3d7dbff3a9773126e004d127f1717d37b0e1c5e5b",
+      "currency": "USD",
+      "input_tokens": 5422,
+      "key": "2336c00a295c74262627a3e2ac0211a1e024d9ce9be5c7bddb33e568a00fb6f7",
+      "maximum_microunits": null,
+      "model_role": "generation_model",
+      "outcome": "completed",
+      "output_tokens": 27,
+      "phase": "foreground",
+      "provider": "ollama",
+      "provider_request_sha256": null,
+      "receipt_sha256": null,
+      "request_sha256": "6dd54674e3c4b120cab54ef95a94609a64a2dad4405f2d2731313a8de514813a",
+      "state": "reconciliation_pending",
+      "total_duration_ns": 13921200250,
+      "upper_bound_evidence_sha256": null
+    },
+    {
+      "accounts": [
+        "a33646b46bfdeb7e30145e4120566e51645838295692ec546f1969a1d1fd4b08"
+      ],
+      "actual_microunits": null,
+      "call_id": "374251acbfa74ceb840e6acbd0650614",
+      "configuration_sha256": "fef0acb349e1e8326592c8e3d7dbff3a9773126e004d127f1717d37b0e1c5e5b",
+      "currency": "USD",
+      "input_tokens": 5431,
+      "key": "5e705d224abbe116b6985c9d1b4371f091c4ded2e4834ba91270a130ba157d75",
+      "maximum_microunits": null,
+      "model_role": "generation_model",
+      "outcome": "completed",
+      "output_tokens": 27,
+      "phase": "foreground",
+      "provider": "ollama",
+      "provider_request_sha256": null,
+      "receipt_sha256": null,
+      "request_sha256": "5eb83c45e84bf949dd33d94ea907ac49307513f0ac58c1f5882e422f1af06600",
+      "state": "reconciliation_pending",
+      "total_duration_ns": 986315500,
+      "upper_bound_evidence_sha256": null
+    },
+    {
+      "accounts": [
+        "a33646b46bfdeb7e30145e4120566e51645838295692ec546f1969a1d1fd4b08"
+      ],
+      "actual_microunits": null,
+      "call_id": "3bdfb38c6dd9434aa5e19a4ee38049aa",
+      "configuration_sha256": "fef0acb349e1e8326592c8e3d7dbff3a9773126e004d127f1717d37b0e1c5e5b",
+      "currency": "USD",
+      "input_tokens": 3591,
+      "key": "7d7f7fcc6ceca7b97f76ae02ff78f200a9a46f418e8bfec06db39391ce519f08",
+      "maximum_microunits": null,
+      "model_role": "generation_model",
+      "outcome": "completed",
+      "output_tokens": 19,
+      "phase": "foreground",
+      "provider": "ollama",
+      "provider_request_sha256": null,
+      "receipt_sha256": null,
+      "request_sha256": "a05e86c7c748e2ce4fe9f26df4bb10bb89da3b34f2eba3ff50da1b172fba559e",
+      "state": "reconciliation_pending",
+      "total_duration_ns": 9327119417,
+      "upper_bound_evidence_sha256": null
+    },
+    {
+      "accounts": [
+        "a33646b46bfdeb7e30145e4120566e51645838295692ec546f1969a1d1fd4b08"
+      ],
+      "actual_microunits": null,
+      "call_id": "d631afbb2f6d4c19b0ae861bd752908f",
+      "configuration_sha256": "fef0acb349e1e8326592c8e3d7dbff3a9773126e004d127f1717d37b0e1c5e5b",
+      "currency": "USD",
+      "input_tokens": 5431,
+      "key": "7fa3e633d6b6492bccf3f9620ff12fa020f3149f31114cca8ba37e8ee797cd46",
+      "maximum_microunits": null,
+      "model_role": "generation_model",
+      "outcome": "completed",
+      "output_tokens": 27,
+      "phase": "foreground",
+      "provider": "ollama",
+      "provider_request_sha256": null,
+      "receipt_sha256": null,
+      "request_sha256": "5eb83c45e84bf949dd33d94ea907ac49307513f0ac58c1f5882e422f1af06600",
+      "state": "reconciliation_pending",
+      "total_duration_ns": 13935065583,
+      "upper_bound_evidence_sha256": null
+    },
+    {
+      "accounts": [
+        "a33646b46bfdeb7e30145e4120566e51645838295692ec546f1969a1d1fd4b08"
+      ],
+      "actual_microunits": null,
+      "call_id": "235c5a748bd4480ca8966ebbadb2e3f2",
+      "configuration_sha256": "fef0acb349e1e8326592c8e3d7dbff3a9773126e004d127f1717d37b0e1c5e5b",
+      "currency": "USD",
+      "input_tokens": 3598,
+      "key": "7fac2c13e67f03a3ec29561972cb86531af3a4551bf5d7f64555e32be4635aac",
+      "maximum_microunits": null,
+      "model_role": "generation_model",
+      "outcome": "completed",
+      "output_tokens": 19,
+      "phase": "foreground",
+      "provider": "ollama",
+      "provider_request_sha256": null,
+      "receipt_sha256": null,
+      "request_sha256": "aae6a3e0f12ec1a2864d8c17a202d6e886bb2ad6cb87ad3774b2727f9d28f1df",
+      "state": "reconciliation_pending",
+      "total_duration_ns": 9327252334,
+      "upper_bound_evidence_sha256": null
+    },
+    {
+      "accounts": [
+        "a33646b46bfdeb7e30145e4120566e51645838295692ec546f1969a1d1fd4b08"
+      ],
+      "actual_microunits": null,
+      "call_id": "6b2fb7a5d5d5470d940e548759e89c1f",
+      "configuration_sha256": "fef0acb349e1e8326592c8e3d7dbff3a9773126e004d127f1717d37b0e1c5e5b",
+      "currency": "USD",
+      "input_tokens": 4175,
+      "key": "dbdb19ab22c724f0a8c8d968a537431b594331ec9eea8e7eb0369c1988561c27",
+      "maximum_microunits": null,
+      "model_role": "generation_model",
+      "outcome": "completed",
+      "output_tokens": 27,
+      "phase": "foreground",
+      "provider": "ollama",
+      "provider_request_sha256": null,
+      "receipt_sha256": null,
+      "request_sha256": "ef8ae442be185053d25738f8c4057d37bc446d608501b6b21d17e6737030f97b",
+      "state": "reconciliation_pending",
+      "total_duration_ns": 10952118167,
+      "upper_bound_evidence_sha256": null
+    }
+  ],
+  "client_wall_seconds": 71.39702404197305,
+  "source_unchanged": true
+}
