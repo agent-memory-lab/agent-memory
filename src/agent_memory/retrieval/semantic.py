@@ -222,6 +222,14 @@ class SemanticRetrieverPlugin:
                 code=PluginErrorCode.INVALID_IMPLEMENTATION,
                 field="scope",
             )
+        if query.valid_at is not None or query.known_at is not None:
+            # This index contract exposes current evidence only; neither axis
+            # can be reconstructed safely from an item's occurrence time.
+            raise PluginError(
+                "semantic retriever does not support historical query constraints",
+                code=PluginErrorCode.INVALID_IMPLEMENTATION,
+                field="valid_at" if query.valid_at is not None else "known_at",
+            )
         descriptor = await self._index.describe()
         self._require_compatible_index(descriptor)
         if descriptor.state is not SemanticIndexState.READY:
@@ -260,7 +268,10 @@ class SemanticRetrieverPlugin:
         for item_id in conflicts:
             accepted.pop(item_id, None)
 
-        ranked = sorted(accepted.values(), key=lambda item: (-item.score, item.item.id))
+        ranked = sorted(
+            (value for value in accepted.values() if value.channel in query.channels),
+            key=lambda value: (-value.score, value.item.id),
+        )
         return tuple(
             RetrievalCandidate(
                 item=match.item,

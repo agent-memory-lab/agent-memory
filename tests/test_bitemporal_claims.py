@@ -543,3 +543,65 @@ def test_mcp_does_not_advertise_or_silently_ignore_unsupported_temporal_query(tm
             await memory.__aexit__(None, None, None)
 
     asyncio.run(scenario())
+
+
+def test_parallel_temporal_plugin_preserves_backend_history_snapshot(store):
+    """Plugin query rebounding must not turn an as-of read into a current read."""
+    from agent_memory.domain import MemoryChannel, MemoryItem
+    from agent_memory.extensions.loader import LoadedPlugin, PluginCandidateReference
+    from agent_memory.extensions.protocol import PluginContext, PluginHealth, PluginHealthStatus
+    from agent_memory.extensions.registry import PluginKind, PluginResourceLimits
+    from agent_memory.retrieval.parallel import ParallelRetrieverOrchestrator
+    from agent_memory.retrieval.temporal import ScopedTemporalMatch, TemporalRetrieverPlugin
+
+    async def scenario():
+        async with store() as (memory, clock):
+            await assert_fact(memory, clock, "Shanghai", 1, 1)
+            moved = await assert_fact(memory, clock, "Hangzhou", 5, 10)
+            await assert_fact(memory, clock, "Hangzhou", 8, 20, corrects=moved.claim_ids[0])
+            clock[0] = at(25)
+
+            class Clock:
+                def now(self):
+                    return clock[0]
+
+            class HistoryIndex:
+                async def search(self, text, scope, window, *, limit):
+                    claims = await memory.provider.get_state_at(
+                        scope, valid_at=window.valid_at, known_at=window.recorded_before
+                    )
+                    return tuple(
+                        ScopedTemporalMatch(
+                            scope=claim.scope,
+                            item=MemoryItem(claim.id, MemoryKind.CLAIM, claim.text, 1.0, claim.valid_from),
+                            channel=MemoryChannel.SEMANTIC,
+                            source_event_ids=claim.provenance.source_event_ids,
+                            valid_from=claim.valid_from,
+                            valid_to=claim.valid_to,
+                            recorded_at=claim.system_from,
+                            score=1.0,
+                        )
+                        for claim in claims[:limit]
+                    )
+
+            plugin = TemporalRetrieverPlugin(HistoryIndex())
+            manifest = plugin.plugin_manifest()
+            context = PluginContext(
+                scope=memory.scope, resource_limits=PluginResourceLimits(max_candidates=8),
+                request_id="historical-plugin-request", clock=Clock(),
+            )
+            await plugin.initialize(context)
+            loaded = LoadedPlugin(
+                PluginCandidateReference(manifest.name, PluginKind.RETRIEVER, "test", "HistoryIndex", None),
+                manifest, plugin, context, PluginHealth(PluginHealthStatus.READY),
+            )
+            for valid, known, expected in ((6, 2, "Shanghai"), (6, 15, "Hangzhou"), (6, 25, "Shanghai")):
+                result = await ParallelRetrieverOrchestrator().retrieve(
+                    MemoryQuery(memory.scope, "city", valid_at=at(valid), known_at=at(known)),
+                    (loaded,),
+                )
+                assert not result.degraded
+                assert [value.item.text for value in result.fusion.candidates] == [f"city: {expected}"]
+            await plugin.close()
+
+    asyncio.run(scenario())

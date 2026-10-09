@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 from typing import Protocol, Sequence
 
 from .bundle import BundleBudget, BundlePackingTrace, pack_memory_bundle
-from .diversity import DiversityBudget, DiversityTrace, select_diverse_candidates
+from .diversity import DiversityBudget, DiversityTrace
 from .fusion import FusedCandidate
 from .guard import (
     CandidateGuardResult,
@@ -69,7 +69,8 @@ class GovernedRecallPipeline:
             raise ValueError("policy_version must be non-empty")
         self._plugins = tuple(plugins)
         self._governance = governance
-        self._orchestrator = orchestrator or ParallelRetrieverOrchestrator()
+        # Fusion bounds candidates; final item limits apply after policy guards.
+        self._orchestrator = orchestrator or ParallelRetrieverOrchestrator(max_results=100)
         self._diversity_budget = diversity_budget or DiversityBudget()
         self._bundle_budget = bundle_budget or BundleBudget()
         self._capabilities = capabilities or MemoryCapabilities()
@@ -85,7 +86,20 @@ class GovernedRecallPipeline:
         query: MemoryQuery,
         current_state: Sequence[Claim],
     ) -> MemoryBundle:
-        parallel = await self._orchestrator.retrieve(query, self._plugins)
+        if query.valid_at is not None or query.known_at is not None:
+            raise NotImplementedError(
+                "historical governed recall requires a snapshot-aware governance resolver; "
+                "use the provider bitemporal retrieval path"
+            )
+        # One wave, no unbounded refill. Divide the total cap between loaded
+        # retrievers while keeping MemoryQuery's 100-item bound per plugin.
+        capacity = self._orchestrator.candidate_capacity
+        if capacity < len(self._plugins):
+            raise ValueError("candidate capacity must cover each loaded retriever")
+        candidate_limit = min(100, capacity // len(self._plugins), max(16, query.limit * 4))
+        parallel = await self._orchestrator.retrieve(
+            replace(query, limit=candidate_limit), self._plugins,
+        )
         fused = parallel.fusion.candidates
         records = await self._governance.resolve(query.scope, fused)
         if not isinstance(records, Sequence) or isinstance(records, (str, bytes)):
@@ -113,7 +127,6 @@ class GovernedRecallPipeline:
             max_per_kind=self._diversity_budget.max_per_kind,
             max_per_source_event=self._diversity_budget.max_per_source_event,
         )
-        diverse = select_diverse_candidates(guarded.accepted, budget=diversity_budget)
         bundle_budget = BundleBudget(
             max_items=min(query.limit, self._bundle_budget.max_items),
             max_characters=self._bundle_budget.max_characters,
@@ -121,17 +134,19 @@ class GovernedRecallPipeline:
         )
         packed = pack_memory_bundle(
             query.scope,
-            diverse.candidates,
-            current_state=current_state,
+            guarded.accepted,
+            current_state=current_state if query.include_current_state else (),
             budget=bundle_budget,
+            diversity_budget=diversity_budget,
             capabilities=self._capabilities,
-            request_id=None,
+            request_id=query.request_id,
             policy_version=self._policy_version,
         )
+        assert packed.diversity_trace is not None
         trace = GovernedRecallTrace(
             retrievers=parallel.traces,
             guard=guarded,
-            diversity=diverse.trace,
+            diversity=packed.diversity_trace,
             packing=packed.trace,
             degraded=parallel.degraded or bool(guarded.rejected),
         )
@@ -140,6 +155,12 @@ class GovernedRecallPipeline:
         metadata.update(
             {
                 "degraded": trace.degraded,
+                "query_policy_version": query.policy_version,
+                "run_id": query.run_id,
+                "candidate_limit": candidate_limit,
+                "fusion_truncated": parallel.fusion.trace.truncated,
+                "coverage": "partial",
+                "world_negative": False,
                 "retrievers": tuple(
                     {
                         "name": value.name,

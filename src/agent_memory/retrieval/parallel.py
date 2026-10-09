@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from time import monotonic
 from typing import Sequence
 
@@ -49,6 +49,11 @@ class ParallelRetrieverOrchestrator:
         self._max_plugins = max_plugins
         self._max_candidates = max_candidates
         self._max_results = max_results
+
+    @property
+    def candidate_capacity(self) -> int:
+        """Total raw candidates allowed across the complete retrieval wave."""
+        return self._max_candidates
 
     async def retrieve(
         self,
@@ -106,6 +111,9 @@ class ParallelRetrieverOrchestrator:
                 "retrievers exceeded the global candidate budget",
                 code=PluginErrorCode.INVALID_IMPLEMENTATION,
             )
+        # Fusion no longer retains channels. Filter only after accounting for
+        # all raw candidates so excluded channels cannot bypass the work bound.
+        candidates = [value for value in candidates if value.channel in query.channels]
         traces.sort(key=lambda trace: trace.name)
         return ParallelRetrievalResult(
             fusion=fuse_candidates(
@@ -123,13 +131,17 @@ class ParallelRetrieverOrchestrator:
     ) -> tuple[tuple[RetrievalCandidate, ...], RetrieverExecutionTrace]:
         started = monotonic()
         limits = loaded.context.resource_limits
-        bounded_query = MemoryQuery(
-            scope=query.scope,
-            text=query.text,
-            limit=min(query.limit, limits.max_candidates),
-            token_budget=query.token_budget,
-            trace_enabled=query.trace_enabled,
-        )
+        if (
+            query.valid_at is not None or query.known_at is not None
+        ) and "temporal.bitemporal" not in loaded.manifest.capabilities:
+            raise PluginError(
+                "retriever does not support explicit historical query constraints",
+                code=PluginErrorCode.INVALID_IMPLEMENTATION,
+                field="capabilities",
+            )
+        # Keep every caller constraint and correlation field when tightening only
+        # the per-plugin result budget, including future MemoryQuery additions.
+        bounded_query = replace(query, limit=min(query.limit, limits.max_candidates))
         values = await asyncio.wait_for(
             loaded.instance.retrieve(bounded_query, loaded.context),
             timeout=limits.timeout_ms / 1_000,

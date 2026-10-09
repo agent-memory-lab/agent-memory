@@ -1,0 +1,258 @@
+{
+  "classification": "Synthetic mechanism baseline only; no real quality or real benefit measured.",
+  "cost_summary": {
+    "in-memory-lexical-512": {
+      "latency_p50_ms": 3.4115579999252077,
+      "latency_p95_ms": 5.275815000004513,
+      "rows_materialized_per_call": [
+        0
+      ],
+      "samples": 81,
+      "sql_read_statements_per_call": [
+        0
+      ],
+      "text_bytes_materialized_per_call": [
+        0
+      ]
+    },
+    "kernel-default": {
+      "latency_p50_ms": 9.615329000098427,
+      "latency_p95_ms": 13.920628000050783,
+      "rows_materialized_per_call": [
+        533
+      ],
+      "samples": 81,
+      "sql_read_statements_per_call": [
+        9
+      ],
+      "text_bytes_materialized_per_call": [
+        181317
+      ]
+    },
+    "no-memory": {
+      "latency_p50_ms": 0.003155000058541191,
+      "latency_p95_ms": 0.00872399982654315,
+      "rows_materialized_per_call": [
+        0
+      ],
+      "samples": 81,
+      "sql_read_statements_per_call": [
+        0
+      ],
+      "text_bytes_materialized_per_call": [
+        0
+      ]
+    },
+    "recent-lexical": {
+      "latency_p50_ms": 2.322543999980553,
+      "latency_p95_ms": 3.4674529999847437,
+      "rows_materialized_per_call": [
+        128
+      ],
+      "samples": 81,
+      "sql_read_statements_per_call": [
+        1
+      ],
+      "text_bytes_materialized_per_call": [
+        17094
+      ]
+    },
+    "repository-default": {
+      "latency_p50_ms": 7.30980600019393,
+      "latency_p95_ms": 9.995885999842358,
+      "rows_materialized_per_call": [
+        533
+      ],
+      "samples": 81,
+      "sql_read_statements_per_call": [
+        4
+      ],
+      "text_bytes_materialized_per_call": [
+        181317
+      ]
+    }
+  },
+  "fixture_sha256": "2dd3696764d54efdac77a77871432a5cb0b2ec1081fea5cb67bb06da33423399",
+  "limits": [
+    "No model endpoint called; no answer generation, embeddings, reranking logits, vendor quality, or financial costs measured.",
+    "Model and embedding call count is zero by construction: this harness contains no model adapter or network path.",
+    "Latency samples include Python scheduling and local SQLite, excluding fixture setup; trace persistence is disabled, OS caches and host contention are uncontrolled.",
+    "SQL read counters count executed SELECT/WITH statements and rows/text bytes returned to Python, not rows scanned, pages, disk I/O, or server work.",
+    "Scripted entity/temporal/governed fixtures exercise contracts and mechanics, never semantic efficacy.",
+    "In-memory lexical receives only the most recent 512 authorized events; recent lexical receives its default 128-item window.",
+    "No baseline ranking metric is real-data efficacy or a product quality claim."
+  ],
+  "long_and_old_text_checks": [
+    {
+      "case_id": "long-document-tail",
+      "path": "no-memory",
+      "relevant_hits": 0,
+      "required_text_hit": false
+    },
+    {
+      "case_id": "long-document-tail",
+      "path": "repository-default",
+      "relevant_hits": 1,
+      "required_text_hit": true
+    },
+    {
+      "case_id": "long-document-tail",
+      "path": "kernel-default",
+      "relevant_hits": 1,
+      "required_text_hit": true
+    },
+    {
+      "case_id": "long-document-tail",
+      "path": "recent-lexical",
+      "relevant_hits": 0,
+      "required_text_hit": false
+    },
+    {
+      "case_id": "long-document-tail",
+      "path": "in-memory-lexical-512",
+      "relevant_hits": 0,
+      "required_text_hit": false
+    },
+    {
+      "case_id": "old-evidence",
+      "path": "no-memory",
+      "relevant_hits": 0,
+      "required_text_hit": false
+    },
+    {
+      "case_id": "old-evidence",
+      "path": "repository-default",
+      "relevant_hits": 1,
+      "required_text_hit": true
+    },
+    {
+      "case_id": "old-evidence",
+      "path": "kernel-default",
+      "relevant_hits": 1,
+      "required_text_hit": true
+    },
+    {
+      "case_id": "old-evidence",
+      "path": "recent-lexical",
+      "relevant_hits": 0,
+      "required_text_hit": false
+    },
+    {
+      "case_id": "old-evidence",
+      "path": "in-memory-lexical-512",
+      "relevant_hits": 0,
+      "required_text_hit": false
+    }
+  ],
+  "model_calls": {
+    "embedding": 0,
+    "generation": 0,
+    "reranker": 0
+  },
+  "regressions": {
+    "guard_survivors_expected": 4,
+    "guard_survivors_returned": 0,
+    "lexical_punctuation_phantom_bigram": false,
+    "packing_backfill_expected": 1,
+    "packing_backfill_returned": 0,
+    "query_fields_preserved": {
+      "channels": false,
+      "include_current_state": false,
+      "known_at": false,
+      "policy_version": false,
+      "request_id": false,
+      "run_id": false,
+      "trace_enabled": true,
+      "valid_at": false
+    },
+    "repository_punctuation_phantom_bigram": true,
+    "unsupported_history_retriever_was_called": true
+  },
+  "reproducibility": {
+    "excluded_fields": [
+      "latency_ms_samples",
+      "latency_p50_ms",
+      "latency_p95_ms"
+    ],
+    "first_results_sha256": "972705dd1f4ffb2fe7cd10c2279007ba28feaa747bec879fd87f74e10b024936",
+    "fixture_equal": true,
+    "repeat_results_sha256": "4bc47e52d7274c29075040e4b4ef5c5c520d346979ac840b200e48fa4660849b",
+    "stable_reports_equal": true
+  },
+  "runner_sha256": "702aea6bcde8197c3d60adfaa7860d59dd832dc3fa993be9c6be2d776e0331ac",
+  "source_clean": true,
+  "source_commit": "840cca0d1fe274ad28c2ff407bde57b1d407d64c",
+  "source_sha256": {
+    "src/agent_memory/evaluation/retrieval.py": "56a9e0652e41d31f48a0a2c4145e872c4df8046970fb118280b1a9129a0c40ab",
+    "src/agent_memory/kernel.py": "f4aed05c1e83637f9da0d43f38718072031f8c2e9148767e8229d693b19f618c",
+    "src/agent_memory/retrieval/bundle.py": "afe2ce931152021f09efdc85ec3cd4578c97429e151f305f1452091531299f41",
+    "src/agent_memory/retrieval/diversity.py": "10e880b0a688ff55bf9cd5d6f9eaae35ac31e3c7c1ca0a03c3ca7965ee2a0942",
+    "src/agent_memory/retrieval/governed.py": "a9e37ce5b3f59c1781d43372ae7ef1b3fa092b7e3779de49efb9876f66c9fe41",
+    "src/agent_memory/retrieval/lexical.py": "dcbd110d378d80ab449792893b56db4bfebccdb866c2a4d080c193296d10f374",
+    "src/agent_memory/retrieval/parallel.py": "572771861df30c45ad0013eab29fc805a1badd325cff78771f5e434e61bfabe8",
+    "src/agent_memory/retrieval/scoped_lexical.py": "93baa57ce3aeb6611b9c41343f4be894623e3b9ea4bc841b6f219c6d4b5586b7",
+    "src/agent_memory/retrieval/sqlite_source.py": "74b15db26e6fdd10674de47c40d7564139311a41d4b2e0561fafeb30f05f5d4d",
+    "src/agent_memory/sqlite.py": "18266dd86c00bf5003e41f648bfeb9ad0a0bfc43bffff4d6e9eea51d8a351708"
+  },
+  "source_tree": "20d73af25bbfa207e52ef5fbe458f6b07ed434fa",
+  "synthetic_corpus": {
+    "negative_isolation_cases": 2,
+    "observed_runs": 405,
+    "paths": 5,
+    "positive_query_cases": 7,
+    "raw_events": 534,
+    "repeats_per_case_per_path": 9
+  },
+  "targeted_tests": {
+    "failed": 0,
+    "passed": 21,
+    "scope": "Existing frozen retrieval-evaluation, lexical, default regression, loaded-retriever, v4 modules, and governed integration tests"
+  },
+  "totals": {
+    "in-memory-lexical-512": {
+      "all_observations_stable": true,
+      "case_count": 9,
+      "errors": 0,
+      "forbidden_hits": 0,
+      "mean_reciprocal_rank_over_positive_cases": 0.7142857142857143,
+      "relevant_count": 7,
+      "relevant_hits": 5
+    },
+    "kernel-default": {
+      "all_observations_stable": true,
+      "case_count": 9,
+      "errors": 0,
+      "forbidden_hits": 0,
+      "mean_reciprocal_rank_over_positive_cases": 0.9285714285714286,
+      "relevant_count": 7,
+      "relevant_hits": 7
+    },
+    "no-memory": {
+      "all_observations_stable": true,
+      "case_count": 9,
+      "errors": 0,
+      "forbidden_hits": 0,
+      "mean_reciprocal_rank_over_positive_cases": 0.0,
+      "relevant_count": 7,
+      "relevant_hits": 0
+    },
+    "recent-lexical": {
+      "all_observations_stable": true,
+      "case_count": 9,
+      "errors": 0,
+      "forbidden_hits": 0,
+      "mean_reciprocal_rank_over_positive_cases": 0.7142857142857143,
+      "relevant_count": 7,
+      "relevant_hits": 5
+    },
+    "repository-default": {
+      "all_observations_stable": true,
+      "case_count": 9,
+      "errors": 0,
+      "forbidden_hits": 0,
+      "mean_reciprocal_rank_over_positive_cases": 0.9285714285714286,
+      "relevant_count": 7,
+      "relevant_hits": 7
+    }
+  }
+}

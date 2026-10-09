@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 from typing import Sequence
 
 from .fusion import FusedCandidate
+from .diversity import DiversityBudget, DiversityTrace
 from ..domain import (
     Citation,
     Claim,
@@ -47,6 +48,7 @@ class BundlePackingTrace:
 class PackedMemoryBundle:
     bundle: MemoryBundle
     trace: BundlePackingTrace
+    diversity_trace: DiversityTrace | None = None
 
 
 def _token_estimate(text: str) -> int:
@@ -66,6 +68,7 @@ def pack_memory_bundle(
     capabilities: MemoryCapabilities | None = None,
     request_id: str | None = None,
     policy_version: str = "candidate-policy-v1",
+    diversity_budget: DiversityBudget | None = None,
 ) -> PackedMemoryBundle:
     """Pack candidates without truncating individual memory text or provenance."""
     if not isinstance(scope, MemoryScope):
@@ -93,12 +96,27 @@ def pack_memory_bundle(
     characters = state_chars
     tokens = state_tokens
     item_drops = character_drops = token_drops = 0
+    seen_ids: set[str] = set()
+    kind_counts: dict[MemoryKind, int] = {}
+    source_counts: dict[str, int] = {}
+    duplicate_drops = kind_drops = source_drops = 0
     for candidate in sorted(candidates, key=lambda value: (-value.score, value.item.id)):
         if not isinstance(candidate, FusedCandidate):
             raise TypeError("all candidates must be FusedCandidate values")
-        if len(included) >= limits.max_items:
+        if diversity_budget is not None and candidate.item.id in seen_ids:
+            duplicate_drops += 1
+            continue
+        if len(included) >= min(limits.max_items, diversity_budget.max_items if diversity_budget else limits.max_items):
             item_drops += 1
             continue
+        if diversity_budget is not None:
+            if kind_counts.get(candidate.item.kind, 0) >= diversity_budget.max_per_kind.get(candidate.item.kind, 0):
+                kind_drops += 1
+                continue
+            if any(source_counts.get(source, 0) >= diversity_budget.max_per_source_event
+                   for source in candidate.source_event_ids):
+                source_drops += 1
+                continue
         item_chars = len(candidate.item.text)
         item_tokens = _token_estimate(candidate.item.text)
         if characters + item_chars > limits.max_characters:
@@ -118,6 +136,12 @@ def pack_memory_bundle(
         )
         included.append(replace(candidate.item, score=candidate.score, metadata=metadata))
         citations.append(Citation(candidate.item.id, candidate.source_event_ids))
+        # Only evidence actually packed spends diversity quotas. Oversized or
+        # policy-rejected candidates cannot crowd out feasible lower ranks.
+        seen_ids.add(candidate.item.id)
+        kind_counts[candidate.item.kind] = kind_counts.get(candidate.item.kind, 0) + 1
+        for source in set(candidate.source_event_ids):
+            source_counts[source] = source_counts.get(source, 0) + 1
         characters += item_chars
         tokens += item_tokens
 
@@ -156,4 +180,9 @@ def pack_memory_bundle(
         capability_snapshot=capabilities or MemoryCapabilities(),
         request_id=request_id,
     )
-    return PackedMemoryBundle(bundle=bundle, trace=trace)
+    diversity_trace = (
+        DiversityTrace(len(candidates), len(included), duplicate_drops,
+                       kind_drops, source_drops, item_drops)
+        if diversity_budget is not None else None
+    )
+    return PackedMemoryBundle(bundle=bundle, trace=trace, diversity_trace=diversity_trace)

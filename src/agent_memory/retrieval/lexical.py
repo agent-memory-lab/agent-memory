@@ -10,24 +10,11 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from math import log
-import re
 
 from ..domain import MemoryChannel, MemoryItem
 from ..extensions.protocol import RetrievalCandidate
-
-
-_WORDS = re.compile(r"[a-z0-9]+|[\u3400-\u9fff]+")
-
-
-def _terms(text: str) -> tuple[str, ...]:
-    tokens: list[str] = []
-    for word in _WORDS.findall(text.casefold()):
-        if "\u3400" <= word[0] <= "\u9fff":
-            tokens.extend(word)
-            tokens.extend(word[index : index + 2] for index in range(len(word) - 1))
-        else:
-            tokens.append(word)
-    return tuple(tokens)
+from .analyzer import LEXICAL_ANALYZER_VERSION
+from .analyzer import lexical_terms as _terms
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,7 +135,10 @@ def lexical_candidates(
             source_event_ids=event_ids,
             retriever="builtin.lexical.bm25",
             retrieval_method="lexical",
-            metadata={"lexical_score": score},
+            metadata={
+                "lexical_score": score,
+                "lexical_analyzer_version": LEXICAL_ANALYZER_VERSION,
+            },
         )
         for rank, (score, entry, event_ids) in enumerate(ranked[:limit], start=1)
     )

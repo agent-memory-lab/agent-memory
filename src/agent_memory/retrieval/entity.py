@@ -118,6 +118,14 @@ class EntityRetrieverPlugin:
                 code=PluginErrorCode.INVALID_IMPLEMENTATION,
                 field="scope",
             )
+        if query.valid_at is not None or query.known_at is not None:
+            # This index contract exposes current evidence only; neither axis
+            # can be reconstructed safely from an item's occurrence time.
+            raise PluginError(
+                "entity retriever does not support historical query constraints",
+                code=PluginErrorCode.INVALID_IMPLEMENTATION,
+                field="valid_at" if query.valid_at is not None else "known_at",
+            )
         raw_entities = await self._resolver.resolve(query.text, query.scope)
         if not isinstance(raw_entities, Sequence) or isinstance(raw_entities, (str, bytes)):
             raise PluginError(
@@ -162,7 +170,10 @@ class EntityRetrieverPlugin:
             previous = accepted.get(match.item.id)
             if previous is None or match.score > previous.score:
                 accepted[match.item.id] = match
-        ranked = sorted(accepted.values(), key=lambda value: (-value.score, value.item.id))
+        ranked = sorted(
+            (value for value in accepted.values() if value.channel in query.channels),
+            key=lambda value: (-value.score, value.item.id),
+        )
         return tuple(
             RetrievalCandidate(
                 item=match.item,

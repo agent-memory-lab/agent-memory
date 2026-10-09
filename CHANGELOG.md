@@ -7,6 +7,12 @@ the first stable release.
 
 ### Fixed
 
+- Preserve retrieval query constraints and reject unsupported historical plugin
+  paths instead of silently answering as current. Keep bounded candidate headroom
+  through policy checks and feasible diversity packing, and share a versioned
+  contiguous-Han analyzer. PostgreSQL native FTS remains indexed. See
+  [retrieval batch scope and measurement gates](docs/design/retrieval/ordered-batches.md).
+
 - Reserve governed model cache capacity atomically before paid dispatch; fence abandoned
   reservations and return the current ledger settlement status on cached delivery.
   Hold first-delivery audit capacity atomically with dispatch so the last available
