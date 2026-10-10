@@ -5,6 +5,18 @@ the first stable release.
 
 ## 0.1.0 - Unreleased
 
+### Added
+
+- Add host-bound automatic raw-source project extraction, explicit storage and
+  independent-verification policies, typed qualifier verification and complete
+  refutation provenance. Registered scenes/personas share the existing refresh
+  scheduler; persona revisions preserve historical beliefs and current security.
+- Rebuild registered admitted-L1 questions/pages at arbitrary dual-time
+  coordinates inside proven coverage, with frozen business definitions and live
+  authorization/erasure. Add gold-free A9 raw-host execution and explicitly
+  grouped model configuration accounting. Real business acceptance remains open.
+  See [v7.2 architecture and limits](docs/design/AGENT_MEMORY_DESIGN_V7.2.0.md).
+
 ### Fixed
 
 - Keep core imports and SQLite operations available without Unix `resource`;

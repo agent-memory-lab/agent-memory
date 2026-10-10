@@ -70,8 +70,11 @@ async def call(service, operation, payload, context):
             templates=sorted(PROJECT_QUESTIONS),
             renderer=ALGORITHM,
             compute_modes=["full", "delta", "proof_reuse"],
-            historical=service.history_points,
-            historical_mode="published_point" if service.history_points else None,
+            historical=service.history_points or service.history_rebuild,
+            historical_mode=("ledger_rebuild" if service.history_rebuild
+                             else "published_point" if service.history_points else None),
+            historical_source_bases=["admitted_l1"] if service.history_rebuild else [],
+            historical_coverage_floor="opt_in_registration" if service.history_rebuild else None,
             models=bool(getattr(service, "models", None)),
             model_runtime=(
                 service.models.capabilities() if getattr(service, "models", None) else None

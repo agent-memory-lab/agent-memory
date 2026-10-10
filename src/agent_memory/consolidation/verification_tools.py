@@ -78,6 +78,12 @@ class LocalRecordVerifier:
         if len(matches) != 1:
             return VerificationFinding("unknown")
         row, known, lower, upper = matches[0]
+        # Coverage of the asserted interval does not prove its exact end. A
+        # longer/open record cannot justify making a project fact disappear at
+        # the candidate's earlier boundary. Native field qualification requires
+        # that boundary itself, rather than a convenient supported subinterval.
+        if end is not None and upper != end:
+            return VerificationFinding("unknown")
         body = canonical(row)
         event = MemoryEvent(
             engine_scope(candidate),
@@ -97,5 +103,11 @@ class LocalRecordVerifier:
             body,
             lower,
             upper,
-            ("subject_id", "predicate", "value", "valid_from"),
+            (
+                "subject_id",
+                "predicate",
+                "value",
+                "valid_from",
+                *(("valid_to",) if end is not None else ()),
+            ),
         )

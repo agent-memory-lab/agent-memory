@@ -71,7 +71,7 @@ class QuestionService:
 
         return await call(self, operation, payload, context)
 
-    def __init__(self, admission, context, *, limits=None, history_points=False):
+    def __init__(self, admission, context, *, limits=None, history_points=False, history_rebuild=False):
         if type(admission) is not ProjectAdmission or type(context) is not QuestionContext:
             _fail("question_trusted_registration_required")
         # Context attributes must match the supported deterministic evaluator;
@@ -84,12 +84,15 @@ class QuestionService:
             admission.scope,
             admission.clock,
         )
-        if type(history_points) is not bool:
+        if type(history_points) is not bool or type(history_rebuild) is not bool:
             _fail("question_history_option_invalid")
         self.history_points = history_points
+        self.history_rebuild = history_rebuild
         from .question_history import QuestionHistory
+        from .project_history import ProjectHistory
 
         self.history = QuestionHistory(self)
+        self.project_history = ProjectHistory(self)
         self.registry = admission.registry
         self.input_work = QuestionInputWork()
         from ..operations.refresh_demand import RefreshDemandQueue
@@ -267,6 +270,7 @@ class QuestionService:
             await uow.derived_put(
                 self.scope, "question_registration", registration_key(question_id), registration_row
             )
+            await self.project_history.register(uow, question_id, row)
         # A crash here leaves an unavailable unconfigured definition. No alternate
         # compute path can turn that partial registration into an ungoverned job.
         await self.queue.configure(instance.id, policy)
@@ -1164,11 +1168,12 @@ class QuestionService:
 
     async def read(self, question_id, *, actor, valid_at=None, known_at=None):
         if valid_at is not None or known_at is not None:
-            if not self.history_points:
+            if not self.history_points and not self.history_rebuild:
                 _fail("question_historical_unsupported")
             if valid_at is None or known_at is None:
                 _fail("question_history_both_times_required")
-            return await self.history.read(question_id, actor=actor, valid_at=valid_at, known_at=known_at)
+            history = self.project_history if self.history_rebuild else self.history
+            return await history.read(question_id, actor=actor, valid_at=valid_at, known_at=known_at)
         identity(question_id)
         identity(actor)
         observed = await self._clock_barrier()

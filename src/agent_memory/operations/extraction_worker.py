@@ -22,7 +22,7 @@ from .worker_tasks import WorkerLease, WorkerQueueError, WorkerTask, WorkerTaskS
 
 
 def processing_configuration_sha256(
-    pipeline, policy, authority, *, index_channel=None, publication_policy=None
+    pipeline, policy, authority, *, index_channel=None, publication_policy=None, project_bridge=None
 ):
     return sha256(
         json.dumps(
@@ -38,6 +38,7 @@ def processing_configuration_sha256(
                     if publication_policy
                     else {}
                 ),
+                **({"project_bridge": project_bridge.config_payload()} if project_bridge else {}),
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -306,6 +307,7 @@ class DurableAtomHandler:
         local_only,
         index_channel=None,
         publication_policy=None,
+        project_bridge=None,
     ):
         if local_only is not True:
             raise NotImplementedError("external dispatch authorization is not enabled")
@@ -324,6 +326,15 @@ class DurableAtomHandler:
             if not isinstance(publication_policy, PublicationPolicy):
                 raise TypeError("expected PublicationPolicy")
         self.publication_policy = publication_policy
+        if project_bridge is not None:
+            from ..consolidation.project_extraction import ProjectExtractionBridge
+
+            if (
+                type(project_bridge) is not ProjectExtractionBridge
+                or publication_policy is not None
+            ):
+                raise ValueError("native atomic project bridge required")
+        self.project_bridge = project_bridge
         self._check_config()
 
     def _check_config(self):
@@ -334,6 +345,7 @@ class DurableAtomHandler:
                 self.authority,
                 index_channel=self.index_channel,
                 publication_policy=self.publication_policy,
+                project_bridge=self.project_bridge,
             )
             != self.queue.configuration_sha256
         ):
@@ -366,6 +378,9 @@ class DurableAtomHandler:
             source = await uow.get_source_event(task.scope, row["event_id"])
             if source is None or source.id != row["event_id"]:
                 raise stale()
+            if self.project_bridge is not None:
+                source_fence = await self.project_bridge.validate_source(uow, source)
+                source_fence()
             if source.metadata.get("lifecycle", {}).get("origin") == "model":
                 raise RetentionError("model_output_is_not_independent_evidence")
             origin = source.metadata.get("lifecycle", {}).get("origin")
@@ -377,6 +392,8 @@ class DurableAtomHandler:
             if origin is not None and origin != expected_origin.get(self.authority.kind):
                 raise RetentionError("source_origin_authority_mismatch")
             reprocessing = row.get("reprocessing")
+            if reprocessing and self.project_bridge is not None:
+                raise RetentionError("project_extraction_reprocessing_requires_native_review")
             records = (
                 (
                     await checked_records(
@@ -430,6 +447,7 @@ class DurableAtomHandler:
             if current is None or current.content_hash != source.content_hash:
                 raise stale()
             interpretation = None
+            project_fence = None
             if reprocessing:
                 from ..consolidation.interpretation import activate
 
@@ -444,15 +462,22 @@ class DurableAtomHandler:
                     self.authority,
                 )
             else:
-                receipt = await self.pipeline.publish_prepared(
-                    self.queue.repository,
-                    source,
-                    prepared,
-                    authority=self.authority,
-                    policy=self.policy,
-                    unit_of_work=uow,
-                    retained=True,
-                )
+                if self.project_bridge is not None:
+                    receipt, project_fence = await self.project_bridge.publish_prepared(
+                        self.pipeline, self.queue.repository, source, prepared,
+                        authority=self.authority, policy=self.policy,
+                        unit_of_work=uow, request=row,
+                    )
+                else:
+                    receipt = await self.pipeline.publish_prepared(
+                        self.queue.repository,
+                        source,
+                        prepared,
+                        authority=self.authority,
+                        policy=self.policy,
+                        unit_of_work=uow,
+                        retained=True,
+                    )
                 active_ids = [
                     d.candidate_id
                     for d in receipt.decisions
@@ -469,7 +494,11 @@ class DurableAtomHandler:
                 status="completed",
                 result={
                     **to_jsonable(receipt),
-                    "extraction": prepared["audit"],
+                    "extraction": {
+                        **prepared["audit"],
+                        **({"project_transfer": row["project_stage"]["audit"]}
+                           if project_fence is not None else {}),
+                    },
                     **({"interpretation": interpretation} if interpretation else {}),
                 },
                 publication_id="publication:" + task.id,
@@ -494,4 +523,6 @@ class DurableAtomHandler:
             await self.pipeline.validate_prepared_source(
                 source, prepared, authority=self.authority, policy=self.policy, unit_of_work=uow
             )
+            if project_fence is not None:
+                project_fence()
             self._publication_guard(task, row)

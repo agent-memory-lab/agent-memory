@@ -170,3 +170,8 @@ class QuestionPageRefreshProcessor(QuestionRefreshProcessor):
 
     async def initialize(self, uow):
         await self.service.pages.maintenance.initialize(uow)
+
+    def coverage_instance_id(self, definition):
+        return "question-instance:" + digest(
+            [self.scope.partition_key(), "question-page-coverage/1", definition["facet_id"]]
+        )

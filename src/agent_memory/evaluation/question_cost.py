@@ -11,7 +11,7 @@ separate unless an explicit tariff supplies a priced-resource entry.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 
 from .acceptance import _hash
@@ -364,11 +364,36 @@ class WorkloadManifest:
 class ModelEvidence:
     configuration_sha256: str
     execution: str
+    execution_configurations: tuple[str, ...] = field(default=(), metadata={"omit_if_empty": True})
 
     def __post_init__(self) -> None:
         _hash(self.configuration_sha256, "configuration_sha256")
         if self.execution not in {"real", "stub", "not_used"}:
             raise ValueError("model execution must be real, stub or not_used")
+        configurations = tuple(self.execution_configurations)
+        if configurations:
+            if self.execution == "not_used" or not 2 <= len(configurations) <= 16:
+                raise ValueError("bounded executed model configuration group required")
+            for value in configurations:
+                _hash(value, "execution_configuration")
+            if len(set(configurations)) != len(configurations):
+                raise ValueError("duplicate execution configuration")
+            configurations = tuple(sorted(configurations))
+            if self.configuration_sha256 != self.group_fingerprint(configurations):
+                raise ValueError("model configuration group fingerprint differs")
+        object.__setattr__(self, "execution_configurations", configurations)
+
+    @staticmethod
+    def group_fingerprint(configurations):
+        return _digest({"schema": "model-execution-group/1", "configurations": sorted(configurations)})
+
+    @classmethod
+    def group(cls, configurations, execution):
+        configurations = tuple(configurations)
+        return cls(cls.group_fingerprint(configurations), execution, configurations)
+
+    def accepts_configuration(self, configuration):
+        return configuration in (self.execution_configurations or (self.configuration_sha256,))
 
 
 @dataclass(frozen=True, slots=True)
@@ -427,7 +452,7 @@ class QuestionCostRun:
             model = getattr(self, entry.model_role)
             if model.execution == "not_used":
                 raise ValueError("not_used model declaration contradicts a role-bound call")
-            if entry.model_configuration_sha256 != model.configuration_sha256:
+            if not model.accepts_configuration(entry.model_configuration_sha256):
                 raise ValueError("model call configuration differs from its declared role")
 
     @property

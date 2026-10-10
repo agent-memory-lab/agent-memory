@@ -120,6 +120,7 @@ class ProjectQuestionPages:
                 )
             )
             await uow.derived_put(self.scope, "question_page_registration", key, value)
+            await self.service.project_history.register(uow, page_id, value, kind="page")
             await uow.derived_edges(
                 self.scope,
                 key,
@@ -564,6 +565,7 @@ class ProjectQuestionPages:
                     ),
                 )
         await uow.derived_put(self.scope, "question_page_head", registration["instance_id"], head)
+        await self.service.project_history.layout(uow, registration, blocks)
         pending = await uow.derived_get(
             self.scope, "question_page_validation", registration["instance_id"]
         )
@@ -660,11 +662,12 @@ class ProjectQuestionPages:
 
     async def read(self, page_id, *, actor, valid_at=None, known_at=None):
         if valid_at is not None or known_at is not None:
-            if not self.service.history_points:
+            if not self.service.history_points and not self.service.history_rebuild:
                 raise DerivedError("question_historical_unsupported")
             if valid_at is None or known_at is None:
                 raise DerivedError("question_history_both_times_required")
-            return await self.service.history.read(page_id, actor=actor, kind="page", valid_at=valid_at, known_at=known_at)
+            history = self.service.project_history if self.service.history_rebuild else self.service.history
+            return await history.read(page_id, actor=actor, kind="page", valid_at=valid_at, known_at=known_at)
         observed = await self.service._clock_barrier()
         try:
             return await self._read(page_id, actor=actor)

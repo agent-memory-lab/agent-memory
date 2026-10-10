@@ -767,6 +767,16 @@ class SQLiteMemoryUnitOfWork:
         )
         return tuple(r for r in rows if "contribution_barrier" in r["payload"])
 
+    async def get_admission_record_at(self, scope, record_id, known_at, *, metadata_only=False):
+        from .operations.sqlite_project_history import record_at
+
+        return record_at(self.connection, scope, record_id, known_at, metadata_only=metadata_only)
+
+    async def get_source_revision_metadata(self, scope, event_id):
+        from .operations.sqlite_project_history import source_revision_metadata
+
+        return source_revision_metadata(self.connection, scope, event_id)
+
     async def save_admission_record(
         self,
         scope: MemoryScope,

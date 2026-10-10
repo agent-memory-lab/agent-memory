@@ -133,3 +133,16 @@ QuestionView。它复用 `ontology/rules.py` 的类型检查与有界关系链�
 有效时间交集、未知/冲突与聚合资格，沿用完整查询前沿、逆依赖、删除屏障及
 `next_transition_at` 调度。范围、上界和协调索引升级见
 [关系视图维护](design/incremental/relation-views.md)。
+
+## V7.2 生命周期闭环
+
+`consolidation/business_policy.py` 分别判定保存范围与独立核验要求；
+`consolidation/project_extraction.py` 在已有抽取 lease 事务内绑定宿主项目映射。
+用户自述保持原始角色及待决状态，领域字段证据决定接纳权威。
+`derived/project_history.py` 通过两后端系统版本元数据查询重建注册覆盖期内的历史问题/场景；
+当前 ACL、来源与擦除守卫仍优先。
+`derived/evolution.py` 管画像完整证据集合、稳定性与共享调度，`persona_policy.py` 管宿主批准的语义政策，
+`persona.py` 管不可变存储/历史/权限，`scenario_evolution.py` 将首次场景构建接入已有页面维护器。
+`MemoryHost(evolutions=...)` 使用同一 RefreshHost 调度这些处理器，不增加事实库或任务队列。
+真实原文 A9 接线单独位于 `evaluation/raw_workflow.py`，生产代码不导入评测；
+状态、图表和验收边界见 [v7.2](design/AGENT_MEMORY_DESIGN_V7.2.0.md)。
