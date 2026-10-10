@@ -38,6 +38,19 @@ the first stable release.
 
 ### Added
 
+- Opt-in governed Atom model generation/review, bounded cross-turn provenance, durable
+  authority-backed domain verification and native project/conditional publishers.
+  Add an assembled capture/extraction/verification/question-refresh host with atomic
+  grants, restart/stop behavior and body-free metrics.
+- Exact final-request token budgets checked after current source authorization and
+  before financial reservation; optional local Qwen3 Transformer rendering/generation
+  and actual final-token reranking in a separate dependency-bearing package.
+- Published-point question/page history with current permissions, explicit same-repository
+  cross-scope current composition, host-reviewed L3 support/counterexamples and Atom
+  version guards, and bounded read-only Reflect. Real acceptance input binding delegates
+  to the existing four-arm evaluator; actual business gold/pricing are still missing.
+  Scope, algorithms and evidence: [v7.1](docs/design/AGENT_MEMORY_DESIGN_V7.1.0.md).
+
 - Incremental SQLite lexical locators with bounded pre-hydration ranking, exact
   long-source spans and legacy-write repair; PostgreSQL keeps native indexes.
   Add explicit host-only current retained-source embedding reuse with separate
