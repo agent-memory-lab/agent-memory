@@ -5,10 +5,11 @@ model download, execution or network request. Model artifacts must be installed
 explicitly, identified by an exact manifest, and loaded with local_files_only.
 No provider processing permission or production promotion is granted by installation.
 
-Install this package only in a host that explicitly uses its adapters:
+The base package supports offline contracts without heavy inference dependencies.
+Install the inference extra only in a host that explicitly uses its adapters:
 
 ```sh
-python -m pip install -e packages/local-models
+python -m pip install -e 'packages/local-models[inference]'
 ```
 
 Runtime integration, pinned model records and validation are recorded in the

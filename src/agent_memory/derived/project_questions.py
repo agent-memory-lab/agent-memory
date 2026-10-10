@@ -20,6 +20,12 @@ from ..fact_qualification import FieldEvidence, SourceSpan
 from ..serialization import to_jsonable
 from .model import DerivedError, digest, identity
 from .question_model import AnswerStatus
+from .relation_questions import (
+    DATE_PREDICATES,
+    EDGE_PREDICATES,
+    RELATION_PREDICATES,
+    DependencyRiskPlan,
+)
 
 PROJECT_CONTRACT_SCHEMA = "project-question-domain/1"
 PROJECT_INPUT_SCHEMA = "qualified-project-snapshot/1"
@@ -113,6 +119,7 @@ class ProjectDomainContract:
     timezone: str = "UTC"
     calendar_version: str = "absolute-deadline/1"
     schema: str = PROJECT_CONTRACT_SCHEMA
+    relation_plans: tuple[DependencyRiskPlan, ...] = ()
 
     def __post_init__(self):
         for value in (self.id, self.version, self.qualification_revision, self.owner_role):
@@ -148,6 +155,11 @@ class ProjectDomainContract:
             if rule.equals not in values:
                 _error("unregistered_project_risk_value")
         object.__setattr__(self, "risk_rules", tuple(sorted(rules, key=lambda rule: rule.id)))
+        plans = _sequence(self.relation_plans, DependencyRiskPlan, maximum=8)
+        if (len({p.id for p in plans}) != len(plans)
+                or {p.id for p in plans} & {r.id for r in rules}):
+            _error("project_duplicate_risk_rule")
+        object.__setattr__(self, "relation_plans", tuple(sorted(plans, key=lambda p: p.id)))
         try:
             ZoneInfo(self.timezone)
         except (ZoneInfoNotFoundError, ValueError, TypeError) as error:
@@ -155,7 +167,11 @@ class ProjectDomainContract:
 
     @property
     def fingerprint(self):
-        return digest(to_jsonable(self))
+        value = to_jsonable(self)
+        # Preserve the pre-relation registration identity for disabled plans.
+        if not self.relation_plans:
+            value.pop("relation_plans")
+        return digest(value)
 
     @property
     def predicate_specs(self):
@@ -167,7 +183,7 @@ class ProjectDomainContract:
                 allow_self_report=False,
                 required_evidence_fields=tuple(sorted(_BASE_SUPPORT)),
             )
-            for predicate in _PREDICATES
+            for predicate in (*_PREDICATES, *(RELATION_PREDICATES if self.relation_plans else ()))
         )
 
 
@@ -182,7 +198,7 @@ def project_query_fingerprint(contract, scope, project_id):
             "scope": to_jsonable(scope),
             "project_id": project_id,
             "contract_fingerprint": contract.fingerprint,
-            "predicates": list(_PREDICATES),
+            "predicates": [p.predicate for p in contract.predicate_specs],
             "membership": "all_project_candidates",
         }
     )
@@ -511,7 +527,7 @@ def _field(name, candidates, context, *, multiple=False):
         else:
             values.add(
                 _deadline(item.fact.value).isoformat()
-                if name == "commitment.deadline"
+                if name in {"commitment.deadline", *DATE_PREDICATES}
                 else item.fact.value
             )
     if len(values) > 1 and not multiple:
@@ -552,11 +568,12 @@ def _validate_values(contract, snapshot):
         ),
         "risk.state": ("open", "closed", "unknown"),
     }
+    predicates = {p.predicate for p in contract.predicate_specs}
     for item in snapshot.facts:
         fact = item.fact
         if fact.entity_id.startswith("rule:"):
             _error("project_reserved_entity_identity")
-        if fact.predicate not in _PREDICATES:
+        if fact.predicate not in predicates:
             _error("unregistered_project_predicate")
         if fact.predicate.startswith("project.") and fact.entity_id != snapshot.project_id:
             _error("project_subject_binding_mismatch")
@@ -564,8 +581,13 @@ def _validate_values(contract, snapshot):
             _error("project_qualification_revision_mismatch")
         if fact.predicate in enums and fact.value not in enums[fact.predicate]:
             _error("unregistered_project_state")
-        if fact.predicate == "commitment.deadline":
+        if fact.predicate in {"commitment.deadline", *DATE_PREDICATES}:
             _deadline(fact.value)
+        if (fact.predicate in {"deliverable.depends_on", "deliverable.commitment_date"}
+                and fact.entity_id == snapshot.project_id):
+            _error("relation_entity_type_mismatch")
+        if fact.predicate in EDGE_PREDICATES and fact.value == snapshot.project_id:
+            _error("relation_entity_type_mismatch")
 
 
 def full_project_question(contract, snapshot, question, *, overdue_only=False):
@@ -612,7 +634,7 @@ def full_project_question(contract, snapshot, question, *, overdue_only=False):
     # A conservative calendar boundary is safe even if an individual weekday
     # expression does not actually change there. No TTL/rounded time identity.
     if any(item.fact.conditions or item.fact.exceptions for item in active) or any(
-        rule.impact_conditions for rule in contract.risk_rules
+        rule.impact_conditions for rule in (*contract.risk_rules, *contract.relation_plans)
     ):
         local = context.valid_at.astimezone(ZoneInfo(contract.timezone))
         transitions.add(
@@ -711,6 +733,9 @@ def full_project_question(contract, snapshot, question, *, overdue_only=False):
             rows.append(
                 ProjectRowResult("rule:" + rule.id, state, matches, (source,), "inferred", rule)
             )
+        from .relation_questions import evaluate_dependency_plan
+
+        rows.extend(evaluate_dependency_plan(plan, snapshot) for plan in contract.relation_plans)
     rows = tuple(sorted(rows, key=lambda row: (row.id, row.origin)))
     relevant = [row for row in rows if row.matches is not False]
     reasons = set(snapshot.coverage.incomplete_reasons)
@@ -718,6 +743,9 @@ def full_project_question(contract, snapshot, question, *, overdue_only=False):
     # this question. Preserve known rows, but block a resolved/empty answer.
     if any({"subject_id", "predicate"} & set(item.missing_support) for item in active):
         reasons.add("candidate_membership_unproved")
+    for row in rows:
+        if row.status == AnswerStatus.INCOMPLETE:
+            reasons.update(getattr(row, "reasons", ("relation_frontier_incomplete",)))
     if reasons:
         status = AnswerStatus.INCOMPLETE
     elif any(row.status == AnswerStatus.CONTESTED for row in relevant):

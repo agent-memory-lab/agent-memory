@@ -7,7 +7,7 @@ namespace lock; oversized legacy scopes remain explicitly incomplete and fenced.
 
 from .model import DerivedError, digest
 
-INDEX_SCHEMA = "derived-project-index/1"
+INDEX_SCHEMA = "derived-project-index/2"
 MAX_BACKFILL = 4096
 WILDCARD_KEY = "route:project-wildcard"
 PROJECT_PREFIX = "route:project:"
@@ -111,12 +111,18 @@ def erasure_header_keys(header):
 def checked_gate(row):
     if row is None:
         return None
-    if not isinstance(row, dict) or row.get("schema") != INDEX_SCHEMA:
+    if not isinstance(row, dict) or row.get("schema") not in {
+        "derived-project-index/1", INDEX_SCHEMA
+    }:
         raise DerivedError("project_candidate_index_schema_unsupported")
     if type(row.get("generation")) is not int or row["generation"] < 1:
         raise DerivedError("project_candidate_index_version_invalid")
     if row.get("state") not in {"ready", "needs_backfill", "scope"}:
         raise DerivedError("project_candidate_index_incomplete")
+    if row["schema"] == "derived-project-index/1":
+        # New recognized relation predicates must not hide behind old ready routes.
+        # Existing transactional ensure() rebuilds bounded headers and bumps fallback.
+        return {**row, "schema": INDEX_SCHEMA, "state": "needs_backfill"}
     return row
 
 
@@ -160,7 +166,10 @@ async def changed(uow, scope, old_header, new_header, *, at=None, reason="candid
     if gate and gate["state"] != "ready":
         await subscriptions.scope_fallback(uow, scope, at=at, reason="project_index_incomplete")
     elif keys:
-        await subscriptions.invalidate(uow, scope, tuple(sorted(keys)), at=at, reason=reason)
+        await subscriptions.invalidate(
+            uow, scope, tuple(sorted(keys)), at=at, reason=reason,
+            candidate_change=(old_header, new_header) if reason == "candidate" else None,
+        )
 
 
 async def source_changed(uow, scope, source_id, *, at=None, reason="source", safety=False):

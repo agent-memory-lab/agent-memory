@@ -9,7 +9,10 @@ description = "Opt-in local tokenizer and final-logit model adapters for agent-m
 readme = "README.md"
 requires-python = ">=3.13"
 license = { text = "Apache-2.0" }
-dependencies = ["agent-memory>=0.1,<0.2", "transformers>=4.51,<5", "torch>=2.6,<3", "tokenizers>=0.21", "safetensors>=0.5"]
+dependencies = ["agent-memory>=0.1,<0.2"]
+
+[project.optional-dependencies]
+inference = ["transformers>=4.51,<5", "torch>=2.6,<3", "tokenizers>=0.21", "safetensors>=0.5"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agent_memory_local_models"]

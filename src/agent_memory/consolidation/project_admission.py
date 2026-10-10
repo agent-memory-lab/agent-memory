@@ -24,6 +24,7 @@ from ..derived.project_questions import (
     project_query_fingerprint,
 )
 from ..derived.registry import DerivedRegistry
+from ..derived.relation_questions import DATE_PREDICATES, EDGE_PREDICATES, RELATION_PREDICATES
 from ..domain import AtomDraft, MemoryEvent, MemoryScope, SourceAuthority, utc_now
 from ..evidence_support import evaluate_support
 from ..fact_qualification import FieldEvidence, SourceSpan
@@ -49,6 +50,7 @@ PROJECT_PREDICATES = frozenset(
         "commitment.deadline",
         "risk.label",
         "risk.state",
+        *RELATION_PREDICATES,
     }
 )
 
@@ -204,6 +206,15 @@ class ProjectAdmission:
             _fail("project_membership_unregistered")
         if draft.predicate.startswith("project.") and item.project_id != draft.subject_id:
             _fail("project_subject_binding_mismatch")
+        if draft.predicate in EDGE_PREDICATES:
+            if draft.value == item.project_id or not any(
+                m.entity_id == draft.value and m.project_id == item.project_id
+                for m in self.memberships.values()
+            ):
+                _fail("relation_target_membership_unregistered")
+        if (draft.predicate in {"deliverable.depends_on", "deliverable.commitment_date"}
+                and draft.subject_id == item.project_id):
+            _fail("relation_entity_type_mismatch")
         return to_jsonable(item)
 
     def _draft(self, draft, *, review=False):
@@ -225,7 +236,7 @@ class ProjectAdmission:
         }
         if draft.predicate in enums and draft.value not in enums[draft.predicate]:
             _fail("unregistered_project_state")
-        if draft.predicate == "commitment.deadline":
+        if draft.predicate in {"commitment.deadline", *DATE_PREDICATES}:
             try:
                 instant(datetime.fromisoformat(draft.value))
             except (TypeError, ValueError):
@@ -682,14 +693,8 @@ class ProjectAdmission:
             )
 
     async def _snapshot(
-        self,
-        uow,
-        context,
-        *,
-        at,
-        source_basis="admitted_l1",
-        publication_request_ids=(),
-        input_guard=None,
+        self, uow, context, *, at, source_basis="admitted_l1", publication_request_ids=(),
+        input_guard=None, candidate_headers=None,
     ):
         """Transaction-internal QuestionService bridge; lock held by the caller.
 
@@ -712,7 +717,12 @@ class ProjectAdmission:
         reader = getattr(uow, "derived_project_candidates", None)
         if not callable(reader):
             _fail("project_census_backend_unsupported")
-        headers = await reader(self.scope, self.contract.fingerprint, context.subject_id)
+        if candidate_headers is None:
+            headers = await reader(self.scope, self.contract.fingerprint, context.subject_id)
+        else:
+            from ..derived.project_index import checked_headers
+
+            headers = checked_headers(candidate_headers, self.contract.fingerprint, context.subject_id)
         if len(headers) > MAX_CANDIDATES:
             _fail("project_candidate_capacity")
         if len({h["id"] for h in headers}) != len(headers):

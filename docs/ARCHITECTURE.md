@@ -117,3 +117,19 @@ python -m build --wheel
 受治理模型在调用前持久预留容量，最终费用状态来自当前账本。授权审计通过显式宿主
 归档/确认协议释放已归档行；财务债务、回执、删除日志与其他有限保留约束不受该协议删除。
 既有真实 Ollama smoke 证据保留；上述工程合同不宣告抽取质量或全成本收益验收完成。
+
+来源级遗漏审计由 `consolidation/source_audit.py` 承担独立的有界合同，
+`atom_extraction.py` 接入可选阶段；它不把候选忠实度审查当成召回证明。
+补提候选只进入既有待核验接纳流程，持久任务与批次收尾沿用同一事务的授权检查。
+现有元数据承载版本化范围记录，不增加表或调度器；参见
+[来源遗漏审计 B2](source-omission-audits.md)。
+
+
+## 有限关系维护补充
+
+`derived/relation_questions.py` 将宿主注册的有限依赖边/日期连接接入现有项目风险
+QuestionView。它复用 `ontology/rules.py` 的类型检查与有界关系链内核；输入仍是同一事务
+授权、语义核验的完整项目 census，不另建图数据库或授权路径。候选推论保留前提血缘、
+有效时间交集、未知/冲突与聚合资格，沿用完整查询前沿、逆依赖、删除屏障及
+`next_transition_at` 调度。范围、上界和协调索引升级见
+[关系视图维护](design/incremental/relation-views.md)。

@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import dataclass
-from datetime import datetime
-from enum import StrEnum
 import inspect
 import json
 import math
 import os
 import platform
-import resource
 import sys
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import datetime
+from enum import StrEnum
 from time import perf_counter_ns
 from typing import Protocol
 
@@ -177,9 +176,20 @@ class SystemMeasurementClock:
 
 
 class ProcessResourceProbe:
-    """Dependency-free peak RSS probe normalized to bytes."""
+    """Unix peak RSS in bytes; unsupported hosts must supply a ResourceProbe.
+
+    Importing the runtime does not require the Unix-only ``resource`` module.
+    An unavailable measurement raises rather than inventing a zero RSS value.
+    """
 
     def rss_bytes(self) -> int:
+        try:
+            import resource
+        except ImportError as exc:
+            raise NotImplementedError(
+                "Peak RSS measurement requires the Unix resource module; "
+                "supply a platform-supported ResourceProbe for resource evaluation"
+            ) from exc
         peak = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
         return peak if sys.platform == "darwin" else peak * 1_024
 

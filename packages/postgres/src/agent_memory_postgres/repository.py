@@ -379,6 +379,16 @@ class PostgresMemoryUnitOfWork:
 
         return await derived.records(self.connection, scope, kind)
 
+    async def verification_candidates(self, scope, *, after=None, limit=128):
+        from . import verification
+
+        return await verification.candidates(self.connection, scope, after=after, limit=limit)
+
+    async def verification_active(self, scope, *, limit=4096):
+        from . import verification
+
+        return await verification.active(self.connection, scope, limit=limit)
+
     async def model_delivery_reservation_delete(self, scope, identity, token):
         await self.lock_admission_scope(scope)
         row = await self.derived_get(scope, "model_authorization", identity)

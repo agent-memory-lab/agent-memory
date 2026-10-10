@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import subprocess
+import sys
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from agent_memory import (
+    ProcessResourceProbe,
     ResourceEvaluationPlan,
     ResourceGateStatus,
     ResourceHardware,
@@ -21,8 +27,7 @@ from agent_memory import (
     run_resource_evaluation,
 )
 
-
-NOW = datetime(2026, 9, 21, 10, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 9, 21, 10, 0, tzinfo=UTC)
 HARDWARE = ResourceHardware("test-os", "arm64", 8, "ci-runner")
 
 
@@ -166,7 +171,10 @@ def test_repeated_reports_apply_tolerances_and_reject_incomparable_runs():
         slower_phase = replace(minimal.phases[0], latency_p95_ms=2.0)
         regressed = replace(
             candidate,
-            profiles=(replace(minimal, phases=(slower_phase, *minimal.phases[1:])), *candidate.profiles[1:]),
+            profiles=(
+                replace(minimal, phases=(slower_phase, *minimal.phases[1:])),
+                *candidate.profiles[1:],
+            ),
         )
         failed = compare_resource_reports(baseline, regressed)
         assert failed.profiles[0].status is ResourceGateStatus.FAIL
@@ -193,3 +201,55 @@ def test_plan_requires_python_313_fixed_hardware_and_complete_profile_matrix():
         replace(_plan(), profiles=(_plan().profiles[0],))
     with pytest.raises(ValueError, match="timezone-aware"):
         replace(_plan(), fixed_clock=datetime(2026, 9, 21))
+
+
+def test_unavailable_resource_does_not_block_root_import_or_sqlite_write_recall():
+    root = Path(__file__).resolve().parents[1]
+    script = """
+import asyncio
+import runpy
+import sys
+sys.modules['resource'] = None
+import agent_memory
+smoke = runpy.run_path(sys.argv[1])
+asyncio.run(smoke['sqlite_roundtrip']())
+try:
+    agent_memory.ProcessResourceProbe().rss_bytes()
+except NotImplementedError as exc:
+    assert 'ResourceProbe' in str(exc)
+else:
+    raise AssertionError('unavailable RSS must not become a fabricated measurement')
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(root / "tests/operational/v7_installed_smoke.py")],
+        env={**os.environ, "PYTHONPATH": str(root / "src")},
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_unavailable_rss_stops_evaluation_before_actions_but_allows_explicit_probe(monkeypatch):
+    monkeypatch.setitem(sys.modules, "resource", None)
+    actions = []
+    scenario = ResourceScenario(
+        cold_start=lambda: actions.append("cold"), construction=lambda: None,
+        retrieval=lambda: None, generation=lambda: None,
+        queue_depth=lambda: 0, storage_bytes=lambda: 0,
+    )
+    with pytest.raises(NotImplementedError, match="Peak RSS measurement"):
+        asyncio.run(run_resource_evaluation(_plan(), {ResourceProfile.MINIMAL: scenario}))
+    assert actions == []
+    report = asyncio.run(run_resource_evaluation(
+        _plan(), {ResourceProfile.MINIMAL: scenario}, clock=StepClock(), probe=StepProbe(),
+    ))
+    assert report.profiles[0].phases[0].rss_start_bytes > 0
+    assert actions == ["cold"]
+
+
+@pytest.mark.parametrize(("platform", "expected"), [("linux", 7 * 1024), ("darwin", 7)])
+def test_peak_rss_keeps_platform_units(monkeypatch, platform, expected):
+    monkeypatch.setitem(sys.modules, "resource", SimpleNamespace(
+        RUSAGE_SELF=0, getrusage=lambda who: SimpleNamespace(ru_maxrss=7),
+    ))
+    monkeypatch.setattr(sys, "platform", platform)
+    assert ProcessResourceProbe().rss_bytes() == expected

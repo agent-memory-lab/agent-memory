@@ -234,7 +234,7 @@ class GovernedSourceCalls:
             host_guard=self.host_guard,
         )
 
-    async def snapshot(self, event, source_ids, *, unit_of_work=None):
+    async def snapshot(self, event, source_ids, *, unit_of_work=None, with_guard=False):
         from contextlib import nullcontext
 
         source_ids = tuple(sorted(set(source_ids)))
@@ -243,6 +243,15 @@ class GovernedSourceCalls:
         authority = self.authority(
             {"operation": "extraction_source_proof", "primary": event.id}, self.service.clock()
         )
+        controls = (
+            self.service.repository,
+            self.service.scope,
+            self.service.clock,
+            self.service.authority_id,
+            self.service.authority_min_version,
+            self.service.registry,
+        )
+        observed = self.service.clock()
         transaction = (
             nullcontext(unit_of_work)
             if unit_of_work is not None
@@ -263,14 +272,37 @@ class GovernedSourceCalls:
             final = await authority._metadata(uow, authority.expected, source_ids)
             if final != (epoch, current, grants):
                 raise ModelError("model_extraction_inputs_changed")
-            authority._check_expiry(current, grants)
-            return {
+
+            def guard():
+                # Other composed guards can await after this snapshot. Recheck
+                # local controls and time synchronously at their final boundary;
+                # authoritative rows remain protected by the caller's UoW lock.
+                self.authority(
+                    {"operation": "extraction_source_proof", "primary": event.id}, observed
+                )
+                if controls != (
+                    self.service.repository,
+                    self.service.scope,
+                    self.service.clock,
+                    self.service.authority_id,
+                    self.service.authority_min_version,
+                    self.service.registry,
+                ):
+                    raise ModelError("model_extraction_configuration_changed")
+                if self.service.clock() < observed:
+                    raise ModelError("model_extraction_clock_discontinuity")
+                self.service.registry._authority_floor(current)
+                authority._check_expiry(current, grants)
+
+            guard()
+            proof = {
                 "source_event_ids": list(source_ids),
                 "sources": sources,
                 "epoch": epoch,
                 "authority_sha256": digest(current),
                 "configuration": self.port.configuration.fingerprint,
             }
+            return (proof, guard) if with_guard else proof
 
     async def call(self, event, request, *, context_source_ids=()):
         source_ids = tuple(sorted({event.id, *tuple(context_source_ids)}))
@@ -376,9 +408,18 @@ class ModelAtomGenerator:
         return await self.calls.snapshot(event, self.processing_sources(event))
 
     async def validate_processing(self, uow, event, proof):
-        current = await self.calls.snapshot(event, self.processing_sources(event), unit_of_work=uow)
+        sources, calls = self.processing_sources(event), self.calls
+        current, fence = await calls.snapshot(event, sources, unit_of_work=uow, with_guard=True)
         if current != proof:
             raise ModelError("model_extraction_inputs_changed")
+
+        def guard():
+            if self.calls is not calls or self.processing_sources(event) != sources:
+                raise ModelError("model_extraction_inputs_changed")
+            fence()
+
+        guard()
+        return guard
 
     async def generate_atoms(self, event):
         self.processing_sources(event)
@@ -428,9 +469,18 @@ class ModelAtomReviewer:
         return await self.calls.snapshot(event, self.processing_sources(event))
 
     async def validate_processing(self, uow, event, proof):
-        current = await self.calls.snapshot(event, self.processing_sources(event), unit_of_work=uow)
+        sources, calls = self.processing_sources(event), self.calls
+        current, fence = await calls.snapshot(event, sources, unit_of_work=uow, with_guard=True)
         if current != proof:
             raise ModelError("model_extraction_inputs_changed")
+
+        def guard():
+            if self.calls is not calls or self.processing_sources(event) != sources:
+                raise ModelError("model_extraction_inputs_changed")
+            fence()
+
+        guard()
+        return guard
 
     async def review_atoms(self, event, candidates):
         self.processing_sources(event)

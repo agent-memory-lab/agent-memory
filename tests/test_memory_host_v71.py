@@ -128,7 +128,7 @@ def test_host_connects_native_project_verification_and_question_refresh(store):
             from datetime import timedelta
 
             clock[0] += timedelta(seconds=2)  # Let the existing coalescing boundary become due.
-            await host.run_once()
+            assert (await host.run_once())["verification_scheduled"] == 0
             result = await questions.read("project-a:owner", actor=ACTOR)
             assert result["answer_status"] == "resolved"
             assert result["result"]["rows"][0]["fields"][0]["known_values"] == ["Alice"]

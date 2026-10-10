@@ -49,3 +49,18 @@ python -m pytest -q tests packages/evolution/tests packages/langgraph/tests \
 它们不证明真实业务质量、裁判校准或费用下降。没有源码/权重下载被当作效果成绩。
 
 本轮保留的用户草稿 SHA-256：`81095de8aa02db4f59a643d0d6708b4fa9ee415bfb3f230bab4a7abf962fe849`，不提交。
+
+## PR18 整合前置检查
+
+[真实业务验收前置清单与 A9 参数化](real-acceptance-preflight.md)复用现有完整工作流实验器，
+新增冻结基线/共享证明/遗漏审查/关系视图对照与正负样本、时间撤回覆盖合同。
+本次只做离线合同检查，不重跑历史模型、不更改上面的历史计数，不代表 M5 真实业务验收完成。
+
+整合前置检查的专项范围：A9/资源/成本/Ollama 协议回归 212 passed、0 failed、0 skipped；
+其后补充输入/对照合同并独立复测 real-input/workflow/controlled-retrieval 范围 61 passed、
+0 failed、0 skipped。两个范围有重叠，不相加为全量成绩；均未调用真实模型或真实业务数据。
+命令、范围和最终源码指纹见 [validation-real-acceptance-preflight.json](validation-real-acceptance-preflight.json)。
+
+授权等待边界补充：完整工作流 wrapper 在 authorize_inputs 返回后再次核验输入工件；
+gold/pricing 在执行前或交付前授权等待期间变化均拒绝。补充四例后，独立合同范围
+65 passed、0 failed、0 skipped；与前述范围重叠，不相加。原 retrieval wrapper 未修改。

@@ -302,4 +302,4 @@ python -m pytest -q
 
 B6 固定源码收尾验证：完整仓库/全部扩展包 3931 通过、零 skip/失败/错误，原 3783 项通过节点均保留。六包构建及全新离线安装完成，241 份 Python 与 19 份 SQL 迁移逐字节相符，源码及 12 个归档扫描零发现；已含有引用保护的 GC 与冻结离线 A9 工具。范围见[B6 报告](docs/design/v7.0.0/batch-b6.md)。后续[本地 Ollama 验证](docs/design/v7.0.0/ollama-smoke.md)有单独专项证据；许可领域质量与实测全成本验收仍开放。
 
-[v7.1 运行时补充](docs/design/AGENT_MEMORY_DESIGN_V7.1.0.md)描述模块边界、算法架构、数据流与加性升级；[验证](docs/design/v7.1.0/validation.md)区分协议、实际本地模型运行和缺失的真实业务 gold/费率。`setup.sh --all` 安装既有集成包，本地模型需单独 `python -m pip install -e packages/local-models`。代码接口不等于生产验收。
+[v7.1 运行时补充](docs/design/AGENT_MEMORY_DESIGN_V7.1.0.md)描述模块边界、算法架构、数据流与加性升级；[验证](docs/design/v7.1.0/validation.md)区分协议、实际本地模型运行和缺失的真实业务 gold/费率。`setup.sh --all` 安装既有集成包，本地模型需单独 `python -m pip install -e 'packages/local-models[inference]'`。代码接口不等于生产验收。

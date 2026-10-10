@@ -8,11 +8,12 @@ shared derived erasure path. A publisher executes in the lease transaction.
 import asyncio
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from secrets import token_urlsafe
 
 from ..consolidation.admission import draft_from_payload
 from ..consolidation.admission_runtime import AdmissionEngine
+from ..derived.model import DerivedError
 from ..domain import MemoryEvent, SourceAuthority, utc_now
 from ..retrieval.model_contracts import ModelError, digest
 from .refresh_demand import observed_clock
@@ -98,6 +99,15 @@ class VerificationFinding:
 
 
 class DomainVerificationQueue:
+    """Capacity bounds active work, not durable terminal idempotency receipts.
+
+    Completed (including unknown), cancelled, dead and erased tasks are terminal:
+    discovery never retries their request IDs. A new candidate version, tool
+    fingerprint or explicit host request is required to schedule a fresh task.
+    Terminal receipts are retained until the repository's erasure/retention policy
+    removes them; their history does not enter the bounded active selectors.
+    """
+
     def __init__(
         self,
         repository,
@@ -129,9 +139,11 @@ class DomainVerificationQueue:
         self.specs = {t.spec.id: t.spec for t in tools}
         self.authorize, self.publisher = authorize, publisher
         self.max_attempts, self.capacity, self.timeout = max_attempts, capacity, timeout_seconds
+        self._pending_clock_high_water = None
+        self._clock_persistence_error = None
 
-    async def _guard(self, uow, task):
-        await observed_clock(uow, self.scope, self.clock)
+    async def _guard(self, uow, task, *, clock=None):
+        await observed_clock(uow, self.scope, clock or self.clock)
         if await self.authorize(uow, self.scope, task["tool_id"]) is not True:
             raise ModelError("verification_authority_unavailable")
         tool = self.tools.get(task["tool_id"])
@@ -170,6 +182,7 @@ class DomainVerificationQueue:
             raise ValueError("bounded candidate/version/request required")
         if tool_id not in self.tools:
             raise ValueError("unregistered verification tool")
+        await self._flush_clock_checkpoint()
         spec = self.specs[tool_id]
         identity = "verification:" + digest([self.scope.partition_key(), request_id])
         async with self.repository.unit_of_work() as uow:
@@ -194,6 +207,7 @@ class DomainVerificationQueue:
                 parents=["atom:" + candidate_id],
                 state="pending",
                 attempts=0,
+                created_at=self.clock().isoformat(),
                 due_at=self.clock().isoformat(),
             )
             await self._guard(uow, task)
@@ -205,7 +219,15 @@ class DomainVerificationQueue:
                 ):
                     raise ModelError("verification_request_conflict")
                 return identity
-            if len(await uow.derived_records(self.scope, KIND)) >= self.capacity:
+            active = await uow.verification_active(self.scope)
+            if any(
+                row["payload"].get("candidate_id") == candidate_id
+                and row["payload"].get("candidate_version") == expected_version
+                and row["payload"].get("publication_attempt", {}).get("state") == "pending"
+                for row in active
+            ):
+                raise ModelError("verification_publication_recovery_required")
+            if len(active) >= self.capacity:
                 raise ModelError("verification_capacity")
             await uow.derived_put(self.scope, KIND, identity, task)
             return identity
@@ -215,17 +237,19 @@ class DomainVerificationQueue:
             raise ValueError("bounded worker identity required")
         if type(lease_seconds) is not int or not self.timeout < lease_seconds <= 600:
             raise ValueError("verification lease must outlive bounded tool timeout")
+        await self._flush_clock_checkpoint()
+        recovery_required = False
         async with self.repository.unit_of_work() as uow:
             await uow.lock_admission_scope(self.scope)
             await observed_clock(uow, self.scope, self.clock)
             now = self.clock()
-            rows = await uow.derived_records(self.scope, KIND)
+            # Every writer enforces the hard 4096 active-task ceiling. Reading
+            # that bounded set also drains work after a lower capacity is configured.
+            rows = await uow.verification_active(self.scope)
             for item in sorted(rows, key=lambda r: r["identity"]):
                 task = item["payload"]
                 if task.get("state") not in {"pending", "retry", "running"}:
                     continue
-                from datetime import datetime
-
                 if datetime.fromisoformat(task.get("lease_until", task["due_at"])) > now:
                     continue
                 try:
@@ -237,13 +261,19 @@ class DomainVerificationQueue:
                         self.scope,
                         KIND,
                         item["identity"],
-                        {"state": "cancelled", "reason": error.code},
+                        {**task, "state": "cancelled", "reason": error.code},
                     )
+                    continue
+                if task.get("publication_attempt", {}).get("state") == "pending":
+                    recovery_required = True
                     continue
                 if task["attempts"] >= self.max_attempts:
                     task["state"] = "dead"
                     await uow.derived_put(self.scope, KIND, item["identity"], task)
                     continue
+                # Only a successfully checkpointed/recovered old attempt may
+                # yield a genuinely new lease. The old lease remains consumed.
+                task.pop("publication_attempt", None)
                 task.update(
                     state="running",
                     token=token_urlsafe(24),
@@ -257,24 +287,184 @@ class DomainVerificationQueue:
                     "task": deepcopy(task),
                     "candidate": deepcopy(candidate),
                 }
+        if recovery_required:
+            raise ModelError("verification_publication_recovery_required")
         return None
 
-    async def publish(self, lease, finding):
-        if type(finding) is not VerificationFinding:
-            raise ValueError("typed authoritative finding required")
+    async def _begin_publication(self, lease, clock):
+        """Commit a single-use attempt before any fact transaction can begin."""
+        attempt = token_urlsafe(24)
         async with self.repository.unit_of_work() as uow:
             await uow.lock_admission_scope(self.scope)
             task = await uow.derived_get(self.scope, KIND, lease["id"])
-            from datetime import datetime
-
             if (
                 not task
                 or task.get("state") != "running"
                 or task.get("token") != lease["task"]["token"]
-                or datetime.fromisoformat(task["lease_until"]) <= self.clock()
+                or datetime.fromisoformat(task["lease_until"]) <= clock()
             ):
                 raise ModelError("verification_lease_fenced")
-            candidate = await self._guard(uow, task)
+            if task.get("publication_attempt"):
+                raise ModelError("verification_publication_recovery_required")
+            task["publication_attempt"] = {
+                "token": attempt,
+                "state": "pending",
+                "started_at": clock().isoformat(),
+            }
+            await uow.derived_put(self.scope, KIND, lease["id"], task)
+        return attempt
+
+    async def _fence_publication_attempt(self, lease, attempt):
+        """Called only after the failed publication's clock checkpoint is durable."""
+        async with self.repository.unit_of_work() as uow:
+            await uow.lock_admission_scope(self.scope)
+            task = await uow.derived_get(self.scope, KIND, lease["id"])
+            marker = (task or {}).get("publication_attempt", {})
+            if (
+                task is None
+                or task.get("state") != "running"
+                or task.get("token") != lease["task"]["token"]
+                or marker.get("token") != attempt
+                or marker.get("state") != "pending"
+            ):
+                raise ModelError("verification_publication_outcome_uncertain")
+            task["publication_attempt"] = {**marker, "state": "fenced"}
+            await uow.derived_put(self.scope, KIND, lease["id"], task)
+
+    async def recover_publication(self, lease, *, trusted_clock_at):
+        """Explicit trusted-host recovery; never accept this assertion from a model.
+
+        The host attests a trustworthy floor covering the interrupted attempt,
+        not merely the current wall time of a restarted worker. Require the exact
+        old lease, expiry, current source/epoch/tool and live authorization.
+        """
+        lease = deepcopy(lease)
+        if (
+            not isinstance(trusted_clock_at, datetime)
+            or trusted_clock_at.utcoffset() is None
+            or trusted_clock_at > self.clock()
+            or (
+                self._pending_clock_high_water is not None
+                and trusted_clock_at < self._pending_clock_high_water
+            )
+        ):
+            raise ValueError("trusted recovery clock floor is unavailable")
+        async with self.repository.unit_of_work() as uow:
+            await uow.lock_admission_scope(self.scope)
+            task = await uow.derived_get(self.scope, KIND, lease["id"])
+            marker = (task or {}).get("publication_attempt", {})
+            if (
+                task is None
+                or task.get("state") != "running"
+                or task.get("token") != lease["task"]["token"]
+                or marker.get("state") not in {"pending", "fenced"}
+                or trusted_clock_at < datetime.fromisoformat(task["lease_until"])
+            ):
+                raise ModelError("verification_publication_recovery_fenced")
+            await self._guard(uow, task)
+            observed = await observed_clock(
+                uow, self.scope, lambda: max(trusted_clock_at, self.clock())
+            )
+            task["publication_attempt"] = {**marker, "state": "fenced"}
+            await uow.derived_put(self.scope, KIND, lease["id"], task)
+            authorized = await self.authorize(uow, self.scope, task["tool_id"])
+            tool = self.tools.get(task["tool_id"])
+            if (
+                self.clock() < observed
+                or authorized is not True
+                or tool is None
+                or tool.spec.fingerprint != task["tool_sha256"]
+            ):
+                raise ModelError("verification_publication_recovery_fenced")
+        if (
+            self._pending_clock_high_water is not None
+            and self._pending_clock_high_water <= trusted_clock_at
+        ):
+            self._pending_clock_high_water = None
+            self._clock_persistence_error = None
+        return "recovered"
+
+    async def _clock_barrier(self, clock):
+        async with self.repository.unit_of_work() as uow:
+            return await observed_clock(uow, self.scope, clock)
+
+    async def _persist_clock_checkpoint(self, observed):
+        self._pending_clock_high_water = max(self._pending_clock_high_water or observed, observed)
+        target = self._pending_clock_high_water
+        try:
+            await self._clock_barrier(lambda: target)
+        except DerivedError as error:
+            if error.code != "refresh_clock_discontinuity":
+                self._clock_persistence_error = "verification_clock_checkpoint_failed"
+                return False
+            # A concurrent worker already persisted a newer floor.
+        except Exception:
+            self._clock_persistence_error = "verification_clock_checkpoint_failed"
+            return False
+        if self._pending_clock_high_water is not None and self._pending_clock_high_water <= target:
+            self._pending_clock_high_water = None
+            self._clock_persistence_error = None
+        return True
+
+    async def _flush_clock_checkpoint(self):
+        if self._pending_clock_high_water is not None:
+            stored = await self._persist_clock_checkpoint(self._pending_clock_high_water)
+            if not stored or self._pending_clock_high_water is not None:
+                raise ModelError("verification_clock_checkpoint_unavailable")
+
+    async def publish(self, lease, finding):
+        if type(finding) is not VerificationFinding:
+            raise ValueError("typed authoritative finding required")
+        lease, finding = deepcopy((lease, finding))
+        await self._flush_clock_checkpoint()
+        high_water = self.clock()
+
+        def sample():
+            nonlocal high_water
+            now = self.clock()
+            high_water = max(high_water, now)
+            return now
+
+        await self._clock_barrier(sample)
+        attempt = await self._begin_publication(lease, sample)
+        try:
+            result = await self._publish(lease, finding, sample, attempt)
+        except BaseException as error:
+            # A denied/expired publication rolls back its own clock observation.
+            # Try to persist every sampled high-water independently. Only a
+            # successful checkpoint may fence/release this consumed attempt;
+            # otherwise its durable pending marker requires explicit recovery.
+            sample()
+            recovered = await self._persist_clock_checkpoint(high_water)
+            if recovered:
+                try:
+                    await self._fence_publication_attempt(lease, attempt)
+                except Exception:
+                    recovered = False
+            if not recovered and isinstance(error, Exception):
+                raise ModelError("verification_commit_fenced_recovery_required") from None
+            raise
+        # Publication is already committed. Checkpointing its final clock sample
+        # must not turn success into a reported publication failure. A failed
+        # checkpoint is visible in metrics and retried before more queue work.
+        if not await self._persist_clock_checkpoint(high_water):
+            return f"committed_{result}_clock_checkpoint_pending"
+        return result
+
+    async def _publish(self, lease, finding, clock, attempt):
+        async with self.repository.unit_of_work() as uow:
+            await uow.lock_admission_scope(self.scope)
+            task = await uow.derived_get(self.scope, KIND, lease["id"])
+            if (
+                not task
+                or task.get("state") != "running"
+                or task.get("token") != lease["task"]["token"]
+                or task.get("publication_attempt", {}).get("token") != attempt
+                or task.get("publication_attempt", {}).get("state") != "pending"
+                or datetime.fromisoformat(task["lease_until"]) <= clock()
+            ):
+                raise ModelError("verification_lease_fenced")
+            candidate = await self._guard(uow, task, clock=clock)
             if finding.event is not None:
                 origin = finding.event.metadata.get("lifecycle", {}).get("origin")
                 expected = {"document": "host", "tool_observation": "tool"}[
@@ -284,7 +474,7 @@ class DomainVerificationQueue:
                     raise ModelError("verification_origin_authority_mismatch")
             if finding.event is not None and finding.event.scope != self.scope:
                 raise ModelError("verification_evidence_scope_mismatch")
-            if finding.event is not None and finding.event.occurred_at > self.clock():
+            if finding.event is not None and finding.event.occurred_at > clock():
                 raise ModelError("verification_future_observation")
             if finding.disposition != "unknown":
                 if finding.disposition == "supported" and not {
@@ -295,24 +485,70 @@ class DomainVerificationQueue:
                 } <= set(finding.supported_fields):
                     raise ModelError("verification_field_support_incomplete")
                 await self.publisher(uow, candidate, finding, self.specs[task["tool_id"]])
-            # The publisher may await: recheck live authority and lease at commit.
-            await observed_clock(uow, self.scope, self.clock)
+            # Tool completion and actual fact publication share the transaction.
+            # Complete before the final checks: this write can itself suspend.
+            if finding.event is not None:
+                task["sources"] = sorted(set(task["sources"]) | {finding.event.id})
+            task.update(state="completed", disposition=finding.disposition)
+            task["publication_attempt"]["state"] = "completed"
+            task.pop("token", None)
+            await uow.derived_put(self.scope, KIND, lease["id"], task)
+            epoch = await uow.retention_epoch(self.scope)
+            authorized = await self.authorize(uow, self.scope, task["tool_id"])
+            observed = await observed_clock(uow, self.scope, clock)
+            # The clock write may suspend while host authorization is revoked.
+            # This is the last authority await, followed by a no-await local fence.
+            authorized = authorized is True and await self.authorize(
+                uow, self.scope, task["tool_id"]
+            )
+            # Sample host state and time after every potentially suspending
+            # operation. Nothing else is awaited before leaving this transaction;
+            # a failed final guard rolls back both facts and task completion.
+            now = clock()
             tool = self.tools.get(task["tool_id"])
             if (
-                datetime.fromisoformat(task["lease_until"]) <= self.clock()
-                or task["epoch"] != await uow.retention_epoch(self.scope)
-                or await self.authorize(uow, self.scope, task["tool_id"]) is not True
+                now < observed
+                or datetime.fromisoformat(task["lease_until"]) <= now
+                or task["epoch"] != epoch
+                or authorized is not True
                 or tool is None
                 or tool.spec.fingerprint != task["tool_sha256"]
             ):
                 raise ModelError("verification_commit_fenced")
-            # Tool completion and actual fact publication share the transaction.
-            if finding.event is not None:
-                task["sources"] = sorted(set(task["sources"]) | {finding.event.id})
-            task.update(state="completed", disposition=finding.disposition)
-            task.pop("token", None)
-            await uow.derived_put(self.scope, KIND, lease["id"], task)
             return finding.disposition
+
+    async def backlog(self):
+        """Bounded scope-local operational metrics, with no candidate/source IDs."""
+        from collections import Counter
+
+        async with self.repository.unit_of_work() as uow:
+            rows = await uow.verification_active(self.scope)
+        now = self.clock()
+        ages = [
+            max(
+                0,
+                (
+                    now
+                    - datetime.fromisoformat(
+                        row["payload"].get("created_at", row["payload"]["due_at"])
+                    )
+                ).total_seconds(),
+            )
+            for row in rows
+        ]
+        return {
+            "capacity": self.capacity,
+            "active": len(rows),
+            "states": dict(Counter(row["payload"]["state"] for row in rows)),
+            "oldest_age_seconds": max(ages, default=0),
+            "backpressured": len(rows) >= self.capacity,
+            "terminal_policy": "retain_receipts_exclude_from_capacity",
+            "clock_persistence_error": self._clock_persistence_error,
+            "publication_attempts_pending": sum(
+                row["payload"].get("publication_attempt", {}).get("state") == "pending"
+                for row in rows
+            ),
+        }
 
     async def run_once(self, worker_id, *, lease_seconds=30):
         lease = await self.claim(worker_id, lease_seconds=lease_seconds)
@@ -329,15 +565,19 @@ class DomainVerificationQueue:
                 await uow.lock_admission_scope(self.scope)
                 task = await uow.derived_get(self.scope, KIND, lease["id"])
                 if task and task.get("token") == lease["task"]["token"]:
-                    task.update(
-                        state="retry",
-                        due_at=(self.clock() + timedelta(seconds=2)).isoformat(),
-                        reason=error.code
-                        if isinstance(error, ModelError)
-                        else "verification_tool_failed",
+                    task["reason"] = (
+                        error.code if isinstance(error, ModelError) else "verification_tool_failed"
                     )
-                    task.pop("token", None)
-                    task.pop("lease_until", None)
+                    if not task.get("publication_attempt"):
+                        task.update(
+                            state="retry",
+                            due_at=(self.clock() + timedelta(seconds=2)).isoformat(),
+                        )
+                        task.pop("token", None)
+                        task.pop("lease_until", None)
+                    # Attempted publication consumes this lease even on rollback.
+                    # Keep its deadline/token; pending recovery cannot become an
+                    # immediate retry under a rolled-back wall clock.
                     await uow.derived_put(self.scope, KIND, lease["id"], task)
             if isinstance(error, ModelError):
                 raise

@@ -28,8 +28,15 @@ KNOWN_KINDS = frozenset(
     (
         *COLLECTIBLE_KINDS,
         *PAGE_KINDS,
-        "authority", "domain_verification_task", "question_history_header", "question_history_body",
-        "persona_header", "persona_body",
+        "authority",
+        "domain_verification_task",
+        "question_history_header",
+        "question_history_body",
+        # Host pagination metadata owns no collectible revisions. Retain it as
+        # a root; only discovery advancement or source/scope erasure rewrites it.
+        "verification_discovery",
+        "persona_header",
+        "persona_body",
         "barrier",
         "coverage_request",
         "definition",

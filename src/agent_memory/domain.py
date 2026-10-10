@@ -923,6 +923,8 @@ class AtomExtractionReceipt:
     generation_calls: int
     review_calls: int
     elapsed_ms: float
+    # Historical diagnostic only; live reuse requires the pipeline host fence.
+    source_audit: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)

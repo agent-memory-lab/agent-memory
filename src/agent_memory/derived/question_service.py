@@ -20,6 +20,8 @@ from .question_contracts import (
     project_definition,
     registration_key,
 )
+from .question_dependencies import readset
+from .question_inputs import MAX_BATCH, QuestionInputWork, SharedQuestionInputs, compatibility
 from .question_materialize import (
     budget,
     check_time,
@@ -89,6 +91,7 @@ class QuestionService:
 
         self.history = QuestionHistory(self)
         self.registry = admission.registry
+        self.input_work = QuestionInputWork()
         from ..operations.refresh_demand import RefreshDemandQueue
         from .question_refresh import QuestionPageRefreshProcessor, QuestionRefreshProcessor
 
@@ -204,6 +207,8 @@ class QuestionService:
             publication_request_ids=list(requests),
             instance=instance.payload(),
             aliases=list(aliases),
+            semantic_readset=readset(self.admission.contract, self.scope, project_id, question,
+                                    overdue_only=overdue_only),
         )
         async with self.repository.unit_of_work() as uow:
             epoch = await self._open(uow)
@@ -370,7 +375,7 @@ class QuestionService:
         authority = await self.registry.authority(uow, self.admission.authority_id)
         self.registry.permission(authority, (actor,), (self.admission.purpose,))
 
-    async def _proof(self, uow, definition, *, at):
+    async def _proof(self, uow, definition, *, at, shared=None):
         """Complete indexed metadata and original processing ACL, before any bodies."""
         from ..operations.refresh_demand import observed_clock
 
@@ -381,9 +386,21 @@ class QuestionService:
             or spec["registration_fingerprint"] != self.admission.registration_fingerprint
         ):
             _fail("question_registration_changed")
-        headers = await uow.derived_project_candidates(
-            self.scope, spec["contract_fingerprint"], spec["project_id"]
-        )
+        keys = (*query_keys(spec["contract_fingerprint"], spec["project_id"]),
+                subscriptions.FALLBACK_BARRIER)
+        generations = {
+            key: (await uow.derived_get(self.scope, "barrier", key) or {"generation": 0})[
+                "generation"
+            ] for key in keys
+        }
+        epoch = await uow.retention_epoch(self.scope)
+        if shared is None:
+            headers = await uow.derived_project_candidates(
+                self.scope, spec["contract_fingerprint"], spec["project_id"]
+            )
+            self.input_work.candidate_census_reads += 1
+        else:
+            headers = await shared.headers(uow, self, definition, at, generations, epoch)
         if len(headers) > MAX_CANDIDATES:
             _fail("project_candidate_capacity")
         relevant = [
@@ -392,13 +409,14 @@ class QuestionService:
         ids = sorted({key for header in relevant for key in header["source_ids"]})
         if len(ids) + len(headers) > MAX_INPUTS:
             _fail("project_input_capacity")
+        self.input_work.authorization_checks += 1
         grants = await self.admission._grants(uow, ids, at)
         for grant in grants.values():
             if not set(spec["readers"]) <= set(grant["readers"]):
                 _fail("project_processing_denied")
-        epoch = await uow.retention_epoch(self.scope)
         sources = []
         for source_id in ids:
+            self.input_work.source_proof_reads += 1
             source = await uow.derived_project_source_proof(self.scope, source_id)
             if source is None:
                 _fail("project_source_unavailable")
@@ -413,16 +431,6 @@ class QuestionService:
                     "authority_version": grant.get("authority_version"),
                 }
             )
-        keys = (
-            *query_keys(spec["contract_fingerprint"], spec["project_id"]),
-            subscriptions.FALLBACK_BARRIER,
-        )
-        generations = {
-            key: (await uow.derived_get(self.scope, "barrier", key) or {"generation": 0})[
-                "generation"
-            ]
-            for key in keys
-        }
         subscription = await subscriptions.subscription(uow, self.scope, definition)
         authority = await self.registry.authority(uow, self.admission.authority_id)
         manifests = await self.admission._publication(
@@ -431,6 +439,15 @@ class QuestionService:
             spec["publication_request_ids"],
             relevant,
         )
+        now = instant(self.clock())
+        self._input_guard(spec, at)
+        if authority:
+            self.registry._authority_floor(authority)
+            if datetime.fromisoformat(authority["spec"]["expires_at"]) <= now:
+                _fail("derived_authority_expired")
+        if any(g.get("expires_at") and datetime.fromisoformat(g["expires_at"]) <= now
+               for g in grants.values()):
+            _fail("project_processing_grant_expired")
         return dict(
             schema="question-input-proof/1",
             epoch=epoch,
@@ -459,10 +476,12 @@ class QuestionService:
         ):
             _fail("question_original_generation_unavailable")
         originals = {s["source_event_id"]: s for s in generation_proof["sources"]}
+        self.input_work.authorization_checks += 1
         grants = await self.admission._grants(uow, originals, instant(self.clock()))
         for source_id, original in originals.items():
             if not set(definition["spec"]["readers"]) <= set(grants[source_id]["readers"]):
                 _fail("project_processing_denied")
+            self.input_work.source_proof_reads += 1
             current = await uow.derived_project_source_proof(self.scope, source_id)
             if current is None or any(current[k] != original.get(k) for k in current):
                 _fail("question_original_generation_changed")
@@ -594,6 +613,215 @@ class QuestionService:
         ):
             _fail("question_registration_changed")
 
+    async def _census(self, uow, definition, proof, context, *, shared, minimum=None):
+        """Reuse qualified bytes only behind the caller's fresh complete proof."""
+        spec = definition["spec"]
+        minimum = context.valid_at if minimum is None else minimum
+        self._input_guard(spec, minimum)
+        key = shared.census_key(self, definition, proof, context)
+        census = shared.census(uow, key, context)
+        if census is None:
+            census = await self.admission._snapshot(
+                uow, context, at=context.valid_at,
+                source_basis=spec["instance"]["definition"]["source_basis"],
+                publication_request_ids=tuple(spec["publication_request_ids"]),
+                input_guard=lambda: self._input_guard(spec, minimum),
+                candidate_headers=proof["candidates"],
+            )
+            shared.remember(uow, key, census)
+        # A shared immutable input never extends its source/authority/time grant.
+        now = instant(self.clock())
+        if census.next_transition_at is not None and now >= census.next_transition_at:
+            _fail("derived_time_coverage_expired")
+        self._input_guard(spec, minimum)
+        return census
+
+    @staticmethod
+    def _batch(values):
+        values = tuple(values)
+        if not 1 <= len(values) <= MAX_BATCH:
+            _fail("question_batch_capacity")
+        return values
+
+    async def snapshot_many(self, tasks):
+        """Capture up to eight already-leased jobs atomically; no alternate scheduler.
+
+        Compatible views share the qualified census, with individual job tokens,
+        manifests and fenced publication still owned by the usual runtime.
+        """
+        tasks = deepcopy(self._batch(tasks))
+        if len({task.id for task in tasks}) != len(tasks):
+            _fail("question_batch_duplicate")
+        observed = await self._clock_barrier()
+        try:
+            async with self.repository.unit_of_work() as uow:
+                await self._open(uow)
+                shared = SharedQuestionInputs(uow, self.input_work)
+                at = instant(self.clock())
+                snapshots = [await self._snapshot_in_uow(uow, task, shared=shared, at=at)
+                             for task in tasks]
+                # Host controls and expiry may change at any awaited boundary.
+                for snapshot in snapshots:
+                    proof = await self._proof(uow, snapshot["definition"], at=at, shared=shared)
+                    if proof != snapshot["proof"]:
+                        _fail("derived_snapshot_changed")
+                now = instant(self.clock())
+                for snapshot in snapshots:
+                    self._input_guard(snapshot["definition"]["spec"], at)
+                    until = snapshot["census"].next_transition_at
+                    if until is not None and now >= until:
+                        _fail("derived_time_coverage_expired")
+                return snapshots
+        except BaseException:
+            await self._failed_batch_clock(observed)
+            raise
+
+    async def _failed_batch_clock(self, observed):
+        try:
+            await self._clock_barrier(observed_at=max(observed, instant(self.clock())))
+        except DerivedError as error:
+            if error.code != "refresh_clock_discontinuity":
+                raise
+
+    async def _guard_batch(self, uow, entries, *, actor, shared, minimum):
+        """One *fresh* final guard per exact common proof, never a saved decision.
+
+        All members already passed their own body guards in this locked UoW.
+        Revalidate individual registrations/heads/subscriptions, then run the
+        full current source, original-lineage and authorization scan once per
+        identical group. A final synchronous time/host check covers every member.
+        """
+        groups = {}
+        for definition, header in entries:
+            _checked(header, "question-head-proof/1")
+            current = await self._definition(uow, definition["facet_id"])
+            if (current != definition or await uow.derived_get(
+                self.scope, "question_head", definition["facet_id"]
+            ) != header):
+                _fail("question_view_stale")
+            subscription = await uow.derived_get(self.scope, "subscription", definition["facet_id"])
+            if (subscription["sha256"] != header["proof"]["subscription_sha256"]
+                    or self._unit(definition, header["proof"]) != header["unit"]):
+                _fail("question_view_stale")
+            common = {k: v for k, v in header["proof"].items() if k != "subscription_sha256"}
+            original = {k: v for k, v in header["generation_proof"].items()
+                        if k != "subscription_sha256"}
+            key = digest([compatibility(self, definition, None), common, original])
+            groups.setdefault(key, (definition, header))
+        for definition, header in groups.values():
+            await self._guard(uow, definition, header, actor=actor, shared=shared)
+        now = instant(self.clock())
+        for definition, header in entries:
+            self._input_guard(definition["spec"], minimum)
+            check_time(header, now)
+
+    async def _batch_lease_deadlines(self, uow, tasks):
+        """Read authenticated durable lease bounds after all batch publications.
+
+        Heartbeat renews these rows without replacing the caller's WorkerTask.
+        Its optional lease_expires_at field is therefore never lease authority.
+        Completed rows still need to remain inside the publication lease until
+        this transaction commits; ordinary completion reads alone skip that bound.
+        """
+        from ..operations.facet_refresh import stale
+
+        deadlines = []
+        for task in tasks:
+            job = await self.processor.check_task(uow, task, completed=True)
+            execution_id = task.payload.get("refresh_execution")
+            execution = await uow.derived_get(self.scope, "refresh_execution", execution_id)
+            if (
+                job.get("id") != task.id
+                or job.get("status") != "completed"
+                or job.get("refresh_execution") != execution_id
+                or not execution
+                or execution.get("schema") != "refresh-execution/1"
+                or execution.get("id") != execution_id
+                or execution.get("status") != "completed"
+                or execution.get("adapter_key") != self.processor.key
+                or execution.get("unit_id") != job["id"]
+                or execution.get("unit") != job["unit"]
+                or execution.get("epoch") != job["unit"]["epoch"]
+                or execution.get("generation") != job["generation"]
+                or execution.get("fence") != job["fence"]
+            ):
+                raise stale()
+            try:
+                deadlines.extend(instant(datetime.fromisoformat(row[key]))
+                                 for row in (job, execution)
+                                 for key in ("lease_until", "expires_at"))
+            except (KeyError, TypeError, ValueError) as error:
+                raise stale() from error
+        return tuple(deadlines)
+
+    async def publish_many(self, tasks, snapshots, prepared):
+        """Atomic batch over the same per-job lease, input and output CAS checks."""
+        tasks, snapshots, prepared = deepcopy((self._batch(tasks), tuple(snapshots),
+                                               tuple(prepared)))
+        if len(snapshots) != len(tasks) or len(prepared) != len(tasks):
+            _fail("question_batch_capacity")
+        if len({task.id for task in tasks}) != len(tasks):
+            _fail("question_batch_duplicate")
+        observed = await self._clock_barrier()
+        try:
+            async with self.repository.unit_of_work() as uow:
+                shared = SharedQuestionInputs(uow, self.input_work)
+                entries = []
+                results = [await self._publish_in_uow(
+                    uow, task, snapshot, result, shared=shared, guarded_entries=entries
+                ) for task, snapshot, result in zip(tasks, snapshots, prepared)]
+                # Audiences may differ between incompatible groups. Their usual
+                # processing checks still cover every registered reader.
+                audiences = {}
+                for entry in entries:
+                    audiences.setdefault(entry[0]["spec"]["readers"][0], []).append(entry)
+                for actor, values in audiences.items():
+                    await self._guard_batch(uow, values, actor=actor, shared=shared, minimum=observed)
+                deadlines = await self._batch_lease_deadlines(uow, tasks)
+                from ..operations.refresh_demand import observed_clock
+
+                observed = await observed_clock(uow, self.scope, self.clock)
+                for definition, _ in entries:
+                    self._input_guard(definition["spec"], observed)
+                # Last clock sample follows every awaited read and host guard;
+                # no caller-owned task timestamp can extend a durable boundary.
+                now = instant(self.clock())
+                if now < observed:
+                    _fail("refresh_clock_discontinuity")
+                if any(now >= deadline for deadline in deadlines):
+                    from ..operations.facet_refresh import stale
+
+                    raise stale()
+                for _, header in entries:
+                    check_time(header, now)
+                return results
+        except BaseException:
+            await self._failed_batch_clock(observed)
+            raise
+
+    async def read_many(self, question_ids, *, actor):
+        """Read a bounded compatible set with independent current delivery guards."""
+        question_ids = self._batch(question_ids)
+        if len(set(question_ids)) != len(question_ids):
+            _fail("question_batch_duplicate")
+        for question_id in question_ids:
+            identity(question_id)
+        identity(actor)
+        observed = await self._clock_barrier()
+        try:
+            async with self.repository.unit_of_work() as uow:
+                await self._open(uow)
+                shared = SharedQuestionInputs(uow, self.input_work)
+                headers = []
+                results = [await self._read_in_uow(
+                    uow, key, actor=actor, shared=shared, guarded_entries=headers
+                ) for key in question_ids]
+                await self._guard_batch(uow, headers, actor=actor, shared=shared, minimum=observed)
+                return results
+        except BaseException:
+            await self._failed_batch_clock(observed)
+            raise
+
     async def snapshot(self, task):
         task = deepcopy(task)
         observed = await self._clock_barrier()
@@ -610,70 +838,68 @@ class QuestionService:
 
     async def _snapshot(self, task):
         async with self.repository.unit_of_work() as uow:
-            await self._open(uow)
-            job = await self.processor.check_task(uow, task)
-            definition = await self._definition(uow, job["unit"]["facet_id"])
-            at = instant(self.clock())
-            proof = await self._proof(uow, definition, at=at)
-            if self._unit(definition, proof) != job["unit"]:
-                _fail("derived_snapshot_changed")
-            spec = deepcopy(definition["spec"])
-            execution = await uow.derived_get(
-                self.scope, "refresh_execution", job["refresh_execution"]
+            return await self._snapshot_in_uow(
+                uow, task, shared=SharedQuestionInputs(uow, self.input_work)
             )
-            refresh_policy = RefreshPolicyRef(
-                "project-refresh-policy:" + digest(execution["policy"]), 1
-            ).payload()
-            context = QueryContext(
-                self.admission.principal,
-                self.scope,
-                spec["project_id"],
-                spec["purpose"],
-                at,
-                at,
-                tuple(
-                    ContextAttribute(name, value, self.context.issuer_id)
-                    for name, value in self.context.attributes.items()
-                ),
-                self.admission.contract.timezone,
-                "question-snapshot:" + digest(job["unit"]),
+
+    async def _snapshot_in_uow(self, uow, task, *, shared, at=None):
+        await self._open(uow)
+        job = await self.processor.check_task(uow, task)
+        definition = await self._definition(uow, job["unit"]["facet_id"])
+        at = instant(self.clock()) if at is None else at
+        proof = await self._proof(uow, definition, at=at, shared=shared)
+        if self._unit(definition, proof) != job["unit"]:
+            _fail("derived_snapshot_changed")
+        spec = deepcopy(definition["spec"])
+        execution = await uow.derived_get(
+            self.scope, "refresh_execution", job["refresh_execution"]
+        )
+        refresh_policy = RefreshPolicyRef(
+            "project-refresh-policy:" + digest(execution["policy"]), 1
+        ).payload()
+        context = QueryContext(
+            self.admission.principal,
+            self.scope,
+            spec["project_id"],
+            spec["purpose"],
+            at,
+            at,
+            tuple(
+                ContextAttribute(name, value, self.context.issuer_id)
+                for name, value in self.context.attributes.items()
+            ),
+            self.admission.contract.timezone,
+            "question-snapshot:" + digest(job["unit"]),
+        )
+        census = await self._census(uow, definition, proof, context, shared=shared)
+        if list(census.source_proofs) != proof["sources"] or list(
+            census.candidate_versions
+        ) != [(h["id"], h["version"], h["version"]) for h in proof["candidates"]]:
+            _fail("derived_snapshot_changed")
+        if await self._proof(uow, definition, at=at, shared=shared) != proof:
+            _fail("derived_snapshot_changed")
+        frozen = deepcopy(
+            dict(
+                instance=spec["instance"],
+                refresh_policy=refresh_policy,
+                definition=definition,
+                proof=proof,
+                census=census,
+                unit=job["unit"],
+                unit_id=job["id"],
+                question_id=spec["question_id"],
+                question=spec["question"],
+                overdue_only=spec["instance"]["parameters"]["overdue_only"],
+                **await self._baseline(uow, definition, proof),
             )
-            census = await self.admission._snapshot(
-                uow,
-                context,
-                at=at,
-                source_basis=spec["instance"]["definition"]["source_basis"],
-                publication_request_ids=tuple(spec["publication_request_ids"]),
-                input_guard=lambda: self._input_guard(spec, at),
-            )
-            if list(census.source_proofs) != proof["sources"] or list(
-                census.candidate_versions
-            ) != [(h["id"], h["version"], h["version"]) for h in proof["candidates"]]:
-                _fail("derived_snapshot_changed")
-            if await self._proof(uow, definition, at=at) != proof:
-                _fail("derived_snapshot_changed")
-            frozen = deepcopy(
-                dict(
-                    instance=spec["instance"],
-                    refresh_policy=refresh_policy,
-                    definition=definition,
-                    proof=proof,
-                    census=census,
-                    unit=job["unit"],
-                    unit_id=job["id"],
-                    question_id=spec["question_id"],
-                    question=spec["question"],
-                    overdue_only=spec["instance"]["parameters"]["overdue_only"],
-                    **await self._baseline(uow, definition, proof),
-                )
-            )
-            # Bind the complete owned snapshot to the fenced job. A caller may
-            # recompute deterministic IDs after changing context or question;
-            # recomputing output does not authorize those altered coordinates.
-            job["snapshot_sha256"] = digest(to_jsonable(frozen))
-            await uow.derived_put(self.scope, "job", job["id"], job)
-            self._input_guard(spec, at)
-            return frozen
+        )
+        # Bind the complete owned snapshot to the fenced job. A caller may
+        # recompute deterministic IDs after changing context or question;
+        # recomputing output does not authorize those altered coordinates.
+        job["snapshot_sha256"] = digest(to_jsonable(frozen))
+        await uow.derived_put(self.scope, "job", job["id"], job)
+        self._input_guard(spec, at)
+        return frozen
 
     def prepare(self, snapshot):
         snapshot = deepcopy(snapshot)
@@ -694,203 +920,213 @@ class QuestionService:
             raise
 
     async def _publish(self, task, snapshot, prepared):
+        async with self.repository.unit_of_work() as uow:
+            return await self._publish_in_uow(
+                uow, task, snapshot, prepared, shared=SharedQuestionInputs(uow, self.input_work)
+            )
+
+    async def _publish_in_uow(
+        self, uow, task, snapshot, prepared, *, shared, guarded_entries=None
+    ):
         if prepared != self.prepare(snapshot):
             _fail("derived_output_invalid")
         content = QuestionContent.from_payload(prepared["content"])
         certificate = QuestionCertificate.from_payload(prepared["certificate"])
-        async with self.repository.unit_of_work() as uow:
-            epoch = await self._open(uow)
-            job = await self.processor.check_task(uow, task)
-            if digest(to_jsonable(snapshot)) != job.get("snapshot_sha256"):
-                _fail("derived_input_changed")
-            definition = await self._definition(uow, job["unit"]["facet_id"])
-            now = instant(self.clock())
-            proof = await self._proof(uow, definition, at=now)
-            if (
-                self._unit(definition, proof) != job["unit"]
-                or proof != snapshot["proof"]
-                or job["unit"] != snapshot["unit"]
-                or job["id"] != snapshot["unit_id"]
-                or definition["spec"] != snapshot["definition"]["spec"]
-                or content.instance.payload() != definition["spec"]["instance"]
-            ):
-                _fail("derived_snapshot_changed")
-            if (
-                not certificate.time_coverage.valid_from
-                <= now
-                < certificate.time_coverage.valid_until
-            ):
-                _fail("derived_time_coverage_expired")
-            if (
-                await uow.derived_get(self.scope, "question_head", definition["facet_id"])
-                != snapshot["expected_head"]
-            ):
-                _fail("derived_head_conflict")
-            # Re-establish the actual host-reviewed semantic input. A caller may
-            # mutate a returned snapshot, even while keeping its metadata proof.
-            # Recompute under this same locked snapshot coordinate before commit.
-            actual_census = await self.admission._snapshot(
-                uow,
-                snapshot["census"].snapshot.context,
-                at=snapshot["census"].snapshot.context.valid_at,
-                source_basis=definition["spec"]["instance"]["definition"]["source_basis"],
-                publication_request_ids=tuple(definition["spec"]["publication_request_ids"]),
-                input_guard=lambda: self._input_guard(definition["spec"], now),
-            )
-            if actual_census != snapshot["census"]:
-                _fail("derived_input_changed")
-            execution = await uow.derived_get(
-                self.scope, "refresh_execution", job["refresh_execution"]
-            )
-            expected_policy = RefreshPolicyRef(
-                "project-refresh-policy:" + digest(execution["policy"]), 1
-            ).payload()
-            if snapshot["refresh_policy"] != expected_policy:
-                _fail("derived_snapshot_changed")
-            baseline = await self._baseline(uow, definition, proof)
-            if any(snapshot.get(k) != v for k, v in baseline.items()):
-                _fail("derived_input_changed")
-            certificate.validate_content_binding(content)
-            if (
-                not prepared["reused"]
-                and len(await uow.derived_records(self.scope, "question_content")) >= 4096
-            ):
-                _fail("question_content_capacity")
-            if len(await uow.derived_records(self.scope, "question_certificate")) >= 4096:
-                _fail("question_certificate_capacity")
-            head = QuestionHead(
-                content.instance.id,
-                self.scope,
-                content.id,
-                certificate.id,
-                content.instance.definition.semantic_fingerprint,
-                content.instance.definition.generation,
-                epoch,
-            )
-            edges = set()
-            for ref in content.generation_manifest.inputs:
-                edges.add(
-                    (
-                        "query" if ref.kind == "query" else "processing",
-                        "facet:" + ref.id
-                        if ref.kind == "query"
-                        else "derived:" + ref.id
-                        if ref.kind.startswith("derived_")
-                        else ref.kind + ":" + ref.id,
-                    )
-                )
-            for ref in certificate.validation_manifest.inputs:
-                edges.add(
-                    (
-                        "query" if ref.kind == "query" else "processing",
-                        "facet:" + ref.id
-                        if ref.kind == "query"
-                        else "derived:" + ref.id
-                        if ref.kind.startswith("derived_")
-                        else ref.kind + ":" + ref.id,
-                    )
-                )
-            edges.update(("support", ref.kind + ":" + ref.id) for ref in certificate.support)
-            for kind, key, value in (
-                ("question_content", content.id, content.payload()),
-                ("question_certificate", certificate.id, certificate.payload()),
-            ):
-                await uow.derived_put(self.scope, kind, key, value)
-                await uow.derived_edges(self.scope, key, sorted(edges))
-            header = _seal(
-                dict(
-                    schema="question-head-proof/1",
-                    facet_id=definition["facet_id"],
-                    head=head.payload(),
-                    proof=proof,
-                    unit=job["unit"],
-                    content_sha256=digest(content.payload()),
-                    certificate_sha256=digest(certificate.payload()),
-                    generation_manifest_sha256=content.generation_manifest_digest,
-                    generation_manifest=content.generation_manifest.payload(),
-                    generation_proof=prepared["generation_proof"],
-                    delta_state_sha256=digest(prepared["delta_state"]),
-                    digests=content_digests(content, certificate),
-                    compute_mode=prepared["trace"]["compute_mode"],
-                    compute_trace=prepared["trace"],
-                    result_metadata=prepared["result_metadata"],
-                    validated_at=certificate.validated_at.isoformat(),
-                    next_transition_at=prepared["next_transition_at"],
+        epoch = await self._open(uow)
+        job = await self.processor.check_task(uow, task)
+        if digest(to_jsonable(snapshot)) != job.get("snapshot_sha256"):
+            _fail("derived_input_changed")
+        definition = await self._definition(uow, job["unit"]["facet_id"])
+        now = instant(self.clock())
+        proof = await self._proof(uow, definition, at=now, shared=shared)
+        if (
+            self._unit(definition, proof) != job["unit"]
+            or proof != snapshot["proof"]
+            or job["unit"] != snapshot["unit"]
+            or job["id"] != snapshot["unit_id"]
+            or definition["spec"] != snapshot["definition"]["spec"]
+            or content.instance.payload() != definition["spec"]["instance"]
+        ):
+            _fail("derived_snapshot_changed")
+        if (
+            not certificate.time_coverage.valid_from
+            <= now
+            < certificate.time_coverage.valid_until
+        ):
+            _fail("derived_time_coverage_expired")
+        if (
+            await uow.derived_get(self.scope, "question_head", definition["facet_id"])
+            != snapshot["expected_head"]
+        ):
+            _fail("derived_head_conflict")
+        # Re-establish the actual host-reviewed semantic input. A caller may
+        # mutate a returned snapshot, even while keeping its metadata proof.
+        # Recompute under this same locked snapshot coordinate before commit.
+        actual_census = await self._census(
+            uow, definition, proof, snapshot["census"].snapshot.context, shared=shared,
+            minimum=now,
+        )
+        if actual_census != snapshot["census"]:
+            _fail("derived_input_changed")
+        execution = await uow.derived_get(
+            self.scope, "refresh_execution", job["refresh_execution"]
+        )
+        expected_policy = RefreshPolicyRef(
+            "project-refresh-policy:" + digest(execution["policy"]), 1
+        ).payload()
+        if snapshot["refresh_policy"] != expected_policy:
+            _fail("derived_snapshot_changed")
+        baseline = await self._baseline(uow, definition, proof)
+        if any(snapshot.get(k) != v for k, v in baseline.items()):
+            _fail("derived_input_changed")
+        certificate.validate_content_binding(content)
+        if (
+            not prepared["reused"]
+            and len(await uow.derived_records(self.scope, "question_content")) >= 4096
+        ):
+            _fail("question_content_capacity")
+        if len(await uow.derived_records(self.scope, "question_certificate")) >= 4096:
+            _fail("question_certificate_capacity")
+        head = QuestionHead(
+            content.instance.id,
+            self.scope,
+            content.id,
+            certificate.id,
+            content.instance.definition.semantic_fingerprint,
+            content.instance.definition.generation,
+            epoch,
+        )
+        edges = set()
+        for ref in content.generation_manifest.inputs:
+            edges.add(
+                (
+                    "query" if ref.kind == "query" else "processing",
+                    "facet:" + ref.id
+                    if ref.kind == "query"
+                    else "derived:" + ref.id
+                    if ref.kind.startswith("derived_")
+                    else ref.kind + ":" + ref.id,
                 )
             )
-            await uow.derived_put(
-                self.scope, "question_delta_state", definition["facet_id"], prepared["delta_state"]
+        for ref in certificate.validation_manifest.inputs:
+            edges.add(
+                (
+                    "query" if ref.kind == "query" else "processing",
+                    "facet:" + ref.id
+                    if ref.kind == "query"
+                    else "derived:" + ref.id
+                    if ref.kind.startswith("derived_")
+                    else ref.kind + ":" + ref.id,
+                )
             )
-            await uow.derived_put(self.scope, "question_head", definition["facet_id"], header)
-            await uow.derived_edges(self.scope, definition["facet_id"], sorted(edges))
-            await self.pages.parent_published(uow, definition["facet_id"], header)
-            definition.update(next_transition_at=prepared["next_transition_at"])
-            outcome = "noop" if prepared["reused"] else "applied"
-            token = "derived-commit:" + digest(
-                [self.scope.partition_key(), job["unit"], content.id, outcome]
-            )
-            job.update(
-                status="completed",
-                outcome=outcome,
-                no_outputs=False,
-                revision_id=content.id,
-                commit_token=token,
-                completed_at=now.isoformat(),
-                certificate_revision_id=certificate.id,
-                certificate_sha256=digest(certificate.payload()),
+        edges.update(("support", ref.kind + ":" + ref.id) for ref in certificate.support)
+        for kind, key, value in (
+            ("question_content", content.id, content.payload()),
+            ("question_certificate", certificate.id, certificate.payload()),
+        ):
+            await uow.derived_put(self.scope, kind, key, value)
+            await uow.derived_edges(self.scope, key, sorted(edges))
+        header = _seal(
+            dict(
+                schema="question-head-proof/1",
+                facet_id=definition["facet_id"],
+                head=head.payload(),
+                proof=proof,
+                unit=job["unit"],
                 content_sha256=digest(content.payload()),
+                certificate_sha256=digest(certificate.payload()),
+                generation_manifest_sha256=content.generation_manifest_digest,
+                generation_manifest=content.generation_manifest.payload(),
+                generation_proof=prepared["generation_proof"],
+                delta_state_sha256=digest(prepared["delta_state"]),
+                digests=content_digests(content, certificate),
+                compute_mode=prepared["trace"]["compute_mode"],
+                compute_trace=prepared["trace"],
+                result_metadata=prepared["result_metadata"],
+                validated_at=certificate.validated_at.isoformat(),
+                next_transition_at=prepared["next_transition_at"],
             )
-            await uow.derived_put(self.scope, "job", job["id"], job)
-            from ..operations.refresh_demand import publish_coverage
+        )
+        await uow.derived_put(
+            self.scope, "question_delta_state", definition["facet_id"], prepared["delta_state"]
+        )
+        await uow.derived_put(self.scope, "question_head", definition["facet_id"], header)
+        await uow.derived_edges(self.scope, definition["facet_id"], sorted(edges))
+        await self.pages.parent_published(uow, definition["facet_id"], header)
+        definition.update(next_transition_at=prepared["next_transition_at"],
+                          semantic_dirty=False, proof_dirty=False)
+        await uow.derived_put(self.scope, "definition", definition["facet_id"], definition)
+        outcome = "noop" if prepared["reused"] else "applied"
+        token = "derived-commit:" + digest(
+            [self.scope.partition_key(), job["unit"], content.id, outcome]
+        )
+        job.update(
+            status="completed",
+            outcome=outcome,
+            no_outputs=False,
+            revision_id=content.id,
+            commit_token=token,
+            completed_at=now.isoformat(),
+            certificate_revision_id=certificate.id,
+            certificate_sha256=digest(certificate.payload()),
+            content_sha256=digest(content.payload()),
+        )
+        await uow.derived_put(self.scope, "job", job["id"], job)
+        from ..operations.refresh_demand import publish_coverage
 
-            await publish_coverage(
-                uow,
-                self,
-                job,
-                definition,
-                manifest={
-                    "schema": "question-publication/1",
-                    "unit": job["unit"],
-                    "query_complete": True,
-                    "head_sha256": header["sha256"],
-                    "generation_manifest": content.generation_manifest.payload(),
-                },
-                now=now,
+        await publish_coverage(
+            uow,
+            self,
+            job,
+            definition,
+            manifest={
+                "schema": "question-publication/1",
+                "unit": job["unit"],
+                "query_complete": True,
+                "head_sha256": header["sha256"],
+                "generation_manifest": content.generation_manifest.payload(),
+            },
+            now=now,
+        )
+        if self.history_points:
+            await self.history.capture(
+                definition["spec"]["question_id"], actor=self.admission.principal,
+                unit_of_work=uow,
             )
-            if self.history_points:
-                await self.history.capture(definition["spec"]["question_id"], actor=self.admission.principal, unit_of_work=uow)
-            # Final clock/context/lease safety check while the same publication
-            # transaction still owns all compare-and-swap coordinates.
-            await self._generation_guard(uow, definition, header["generation_proof"])
-            from ..operations.refresh_demand import observed_clock
+        # Final clock/context/lease safety check while the same publication
+        # transaction still owns all compare-and-swap coordinates.
+        await self._generation_guard(uow, definition, header["generation_proof"])
+        from ..operations.refresh_demand import observed_clock
 
-            observed = await observed_clock(uow, self.scope, self.clock)
-            now = instant(self.clock())
-            if now < observed:
-                _fail("refresh_clock_discontinuity")
-            check_time(header, now)
-            if any(
-                now >= datetime.fromisoformat(job[key])
-                for key in ("lease_until", "expires_at")
-                if job.get(key)
-            ):
-                from ..operations.facet_refresh import stale
+        observed = await observed_clock(uow, self.scope, self.clock)
+        now = instant(self.clock())
+        if now < observed:
+            _fail("refresh_clock_discontinuity")
+        check_time(header, now)
+        if any(
+            now >= datetime.fromisoformat(job[key])
+            for key in ("lease_until", "expires_at")
+            if job.get(key)
+        ):
+            from ..operations.facet_refresh import stale
 
-                raise stale()
-            if (
-                self._context() != definition["spec"]["context"]
-                or self.admission.registration_fingerprint != proof["registration_fingerprint"]
-            ):
-                _fail("question_registration_changed")
-            return dict(
-                outcome=outcome,
-                no_outputs=False,
-                revision_id=content.id,
-                certificate_revision_id=certificate.id,
-                commit_token=token,
-            )
+            raise stale()
+        if (
+            self._context() != definition["spec"]["context"]
+            or self.admission.registration_fingerprint != proof["registration_fingerprint"]
+        ):
+            _fail("question_registration_changed")
+        if guarded_entries is not None:
+            guarded_entries.append((definition, header))
+        return dict(
+            outcome=outcome,
+            no_outputs=False,
+            revision_id=content.id,
+            certificate_revision_id=certificate.id,
+            commit_token=token,
+        )
 
-    async def _guard(self, uow, definition, header, *, actor):
+    async def _guard(self, uow, definition, header, *, actor, shared=None):
         _checked(header, "question-head-proof/1")
         current = await self._definition(uow, definition["facet_id"])
         if (
@@ -901,7 +1137,7 @@ class QuestionService:
         await self._authorize(uow, definition, actor)
         await self._generation_guard(uow, definition, header.get("generation_proof"))
         check_time(header, self.clock())
-        proof = await self._proof(uow, definition, at=instant(self.clock()))
+        proof = await self._proof(uow, definition, at=instant(self.clock()), shared=shared)
         if proof != header["proof"] or self._unit(definition, proof) != header["unit"]:
             _fail("question_view_stale")
         head = QuestionHead.from_payload(header["head"])
@@ -952,19 +1188,23 @@ class QuestionService:
     async def _read_current(self, question_id, *, actor):
         async with self.repository.unit_of_work() as uow:
             await self._open(uow)
-            return await self._read_in_uow(uow, question_id, actor=actor)
+            return await self._read_in_uow(
+                uow, question_id, actor=actor, shared=SharedQuestionInputs(uow, self.input_work)
+            )
 
-    async def _read_in_uow(self, uow, question_id, *, actor, record_usage=True):
+    async def _read_in_uow(
+        self, uow, question_id, *, actor, shared=None, guarded_entries=None, record_usage=True
+    ):
         definition = await self._registration(uow, question_id, actor)
         header = await uow.derived_get(self.scope, "question_head", definition["facet_id"])
         if header is None:
             _fail("question_view_unavailable")
-        head = await self._guard(uow, definition, header, actor=actor)
+        head = await self._guard(uow, definition, header, actor=actor, shared=shared)
 
         # No answer body is loaded until complete original-generation and
         # current-census metadata, source ACL, context and time checks pass.
         async def guard():
-            return await self._guard(uow, definition, header, actor=actor)
+            return await self._guard(uow, definition, header, actor=actor, shared=shared)
 
         body = await self._cached_body(
             uow, "question_content", head.content_revision_id, guard=guard
@@ -1001,7 +1241,7 @@ class QuestionService:
         demand = await uow.derived_get(self.scope, "refresh_demand", demand_id)
         result["refresh_status"] = refresh_state((demand or {}).get("status"))
         budget(result, content.instance.definition.max_output_bytes)
-        await self._guard(uow, definition, header, actor=actor)
+        await self._guard(uow, definition, header, actor=actor, shared=shared)
         from ..operations.refresh_demand import observed_clock, record_guarded_read
 
         if record_usage:
@@ -1017,6 +1257,8 @@ class QuestionService:
             != header["proof"]["registration_fingerprint"]
         ):
             _fail("question_registration_changed")
+        if guarded_entries is not None:
+            guarded_entries.append((definition, header))
         return result
 
     async def request(self, question_id, *, actor, dedupe_key, deadline=None):

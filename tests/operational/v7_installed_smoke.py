@@ -1,4 +1,4 @@
-"""Validate all six built distributions from a clean non-editable install.
+"""Validate every release distribution from a clean non-editable install.
 
 Run with the target environment's Python -I, from outside the checkout. This
 checks packaging, not runtime feature completeness or production model quality.
@@ -8,22 +8,14 @@ import argparse
 import asyncio
 import importlib
 import importlib.metadata
+import importlib.util
 import json
+import runpy
 import sys
 import sysconfig
 import tempfile
-import tomllib
 from hashlib import sha256
 from pathlib import Path
-
-PACKAGES = (
-    (".", "agent-memory", "agent_memory"),
-    ("packages/evolution", "agent-memory-evolution", "agent_memory_evolution"),
-    ("packages/langgraph", "agent-memory-langgraph", "agent_memory_langgraph"),
-    ("packages/python-sdk", "agent-memory-sdk", "agent_memory_sdk"),
-    ("packages/mcp-server", "agent-memory-mcp", "agent_memory_mcp"),
-    ("packages/postgres", "agent-memory-postgres", "agent_memory_postgres"),
-)
 
 
 async def sqlite_roundtrip():
@@ -48,11 +40,14 @@ def run(source_root):
     assert sys.version_info[:2] == (3, 13), "release acceptance is pinned to Python 3.13"
     installed = Path(sysconfig.get_paths()["purelib"]).resolve()
     assert not installed.is_relative_to(source_root), "install in a fresh external virtualenv"
+    inventory = runpy.run_path(str(source_root / "tools/package_inventory.py"))[
+        "package_inventory"
+    ](source_root)
     evidence = []
-    for relative, distribution_name, module_name in PACKAGES:
-        expected = tomllib.loads((source_root / relative / "pyproject.toml").read_text())
+    for package in inventory:
+        distribution_name, module_name = package["distribution"], package["module"]
         distribution = importlib.metadata.distribution(distribution_name)
-        assert distribution.version == expected["project"]["version"]
+        assert distribution.version == package["version"]
         direct = distribution.read_text("direct_url.json")
         assert not (direct and json.loads(direct).get("dir_info", {}).get("editable")), (
             "editable install is not built-artifact evidence"
@@ -66,6 +61,14 @@ def run(source_root):
             "entry_points": sorted(entry.name for entry in distribution.entry_points),
             "installed_from_artifact": True,
         })
+    # Import the real adapter modules too, not just the inert package namespace.
+    # A base wheel install must not pull heavy inference dependencies or weights.
+    for dependency in ("torch", "transformers", "tokenizers", "safetensors"):
+        assert importlib.util.find_spec(dependency) is None, dependency
+    for name in ("agent_memory_local_models.models", "agent_memory_local_models.smoke"):
+        module = importlib.import_module(name)
+        assert Path(module.__file__).resolve().is_relative_to(installed), name
+    assert not {"torch", "transformers", "tokenizers", "safetensors"} & sys.modules.keys()
     source_migrations = source_root / "packages/postgres/migrations"
     packaged_migrations = installed / "agent_memory_postgres/migrations"
     expected = {path.name: sha256(path.read_bytes()).hexdigest()
@@ -74,7 +77,18 @@ def run(source_root):
               for path in packaged_migrations.glob("*.sql")}
     assert expected and actual == expected, "wheel migration contents differ from the tested source"
     asyncio.run(sqlite_roundtrip())
-    return {"status": "passed", "scope": "six installed distributions and SQLite smoke only",
+    from agent_memory.evaluation.resources import ProcessResourceProbe
+
+    try:
+        rss = {"status": "measured", "peak_bytes": ProcessResourceProbe().rss_bytes()}
+    except NotImplementedError as exc:
+        assert sys.platform == "win32", "RSS unexpectedly unavailable on a Unix runner"
+        rss = {"status": "unsupported", "reason": str(exc)}
+    else:
+        assert rss["peak_bytes"] > 0
+    return {"status": "passed",
+            "scope": f"{len(inventory)} installed distributions and SQLite smoke only",
+            "platform": sys.platform, "rss": rss, "local_model_inference": "not_run",
             "packages": evidence, "migration_sha256": actual,
             "production_benefit_claim": False, "full_v7_acceptance": False}
 

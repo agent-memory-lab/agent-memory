@@ -126,7 +126,7 @@ async def header(
         if routes:
             await edges(connection, scope, candidate_owner(record_id), ())
         return
-    data = header_data(record_id, event_id, slot_key, payload, version)
+    data = header_data(record_id, event_id, slot_key, payload, version, scope=scope)
     if routes:
         await project_index.replace(connection, scope, record_id, data)
     await connection.execute(
@@ -199,7 +199,7 @@ async def forget(connection, request):
         "model_cache_header", "model_cache_body", "model_flight",
         "model_authorization", "model_processing_grant",
         "source_embedding_header", "source_embedding_body", "source_embedding_grant",
-        "domain_verification_task", "question_history_header", "question_history_body",
+        "verification_discovery", "question_history_header", "question_history_body",
         "persona_header", "persona_body",
         *QUESTION_KINDS,
     ):
@@ -239,6 +239,9 @@ async def forget(connection, request):
     # A certificate/content erase retires its whole question instance. Carry
     # that derived ancestry into model-cache erasure, including older revisions.
     parents.update("derived:" + key for key in question_affected)
+    from . import verification
+
+    await verification.erase(connection, request.scope, parents, all_in_scope=request.all_in_scope)
     changes, affected = erase_rows(rows, parents, request.all_in_scope, slots)
     affected.update(question_affected)
     # Scheduler metadata is physically scrubbed by the outer B2 scope hook.

@@ -7,6 +7,12 @@ the first stable release.
 
 ### Fixed
 
+- Keep core imports and SQLite operations available without Unix `resource`;
+  unavailable peak RSS raises explicitly instead of fabricating a measurement.
+  Add a unified seven-distribution build/install/archive gate on Linux, macOS,
+  and Windows, with local-model inference dependencies behind an explicit extra.
+  See [platform scope and validation](docs/PACKAGE_VALIDATION.md).
+
 - Recheck compact-reranker promotion approval across invocation and delivery
   boundaries, fail closed on revocation or configuration changes, and enforce
   final expiry after host callbacks. Controlled retrieval evidence now requires
@@ -38,6 +44,13 @@ the first stable release.
 
 ### Added
 
+- Integrate the governed v7.1 runtime with shared question proofs, source omission
+  holds and maintained relation views. Fence composed model/audit publication,
+  durable completion and historical delivery after final awaited work. Bounded
+  indexed verification discovery and active-only backpressure keep terminal
+  history from blocking progress; per-stage errors do not suppress independent
+  work. See [integration boundaries](docs/design/v7.1.0/runtime-integration.md).
+
 - Opt-in governed Atom model generation/review, bounded cross-turn provenance, durable
   authority-backed domain verification and native project/conditional publishers.
   Add an assembled capture/extraction/verification/question-refresh host with atomic
@@ -50,6 +63,37 @@ the first stable release.
   version guards, and bounded read-only Reflect. Real acceptance input binding delegates
   to the existing four-arm evaluator; actual business gold/pricing are still missing.
   Scope, algorithms and evidence: [v7.1](docs/design/AGENT_MEMORY_DESIGN_V7.1.0.md).
+
+- Transaction-local shared qualified inputs for bounded batches of already-leased
+  project QuestionViews, preserving fresh source, permission, erasure, time and
+  original-lineage checks. Add versioned semantic readsets/field effects and
+  separate semantic-versus-proof invalidation diagnostics; complete-project
+  coverage and certificate invalidation remain unchanged. Batch commit revalidates
+  durable job/execution leases, including heartbeat renewal and final expiry, rather
+  than trusting caller task timestamps. Frozen SQLite evidence
+  reports fewer repeated qualification reads and full workflow SQL SELECTs, while
+  explicitly retaining read-phase CPU overhead and zero-model-call baseline.
+  See [scope and evidence](docs/design/incremental/shared-question-inputs.md).
+
+- Default-off bounded source-level omission audits for exact host-selected
+  questions, predicates and source spans, including zero-candidate generation.
+  Recovered candidates remain pending explicit host verification; conflict and
+  unresolved coverage never prove recall or world-negative facts. Reuse and
+  durable publication recheck source/version/authorization/erasure/time fences.
+  Same-source audited-slot holds survive model withdrawal and regenerated
+  candidates without blocking unrelated subjects, predicates or independent sources.
+  Explicit contract-test mode and live configuration/report-bound host promotion
+  approval prevent unmeasured production enablement. No new table or dependency
+  on PR #18; real local Qwen model-gain remains
+  unmeasured. See [source omission audits](docs/source-omission-audits.md).
+
+- Host-registered bounded dependency/date joins in maintained project risk views,
+  reusing typed ontology relation rules and full-census QuestionView guards.
+  Preserve inferred candidate lineage, validity intersections, exact/unknown
+  aggregates, new-premise invalidation and clock-boundary refresh; bounded
+  truncation remains incomplete. Includes coordinated relation-predicate index
+  migration and dual-provider adversarial contracts. See
+  [maintained relation views](docs/design/incremental/relation-views.md).
 
 - Incremental SQLite lexical locators with bounded pre-hydration ranking, exact
   long-source spans and legacy-write repair; PostgreSQL keeps native indexes.

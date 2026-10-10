@@ -12,7 +12,7 @@ from ipaddress import ip_address
 from urllib.parse import urlsplit
 
 from ..domain import utc_now
-from ..serialization import to_jsonable
+from ..retrieval.model_contracts import ModelError
 from .extraction_worker import DurableAtomHandler, ExtractionQueue, processing_configuration_sha256
 from .refresh_host import RefreshHost
 from .retention import DurableReceiver
@@ -89,12 +89,14 @@ class MemoryHost:
         )
         self._stop = asyncio.Event()
         self._initialized = False
+        self._extraction_initialized = False
         self._last_error = None
+        self._stage_errors = {}
+        self._verification_backpressured = False
 
     async def initialize(self):
         if not self._initialized:
             await self.repository.initialize()
-            await self.queue.initialize()
             self._initialized = True
         return self
 
@@ -157,73 +159,116 @@ class MemoryHost:
         )
 
     async def _schedule_verification(self):
+        self._verification_backpressured = False
         if self.verification is None:
             return 0
-        rows = await self.repository.admission_records(self.scope)
-        if len(rows) > 128:
-            raise ValueError("host verification discovery capacity exceeded")
+        # One keyset page per cycle. Terminal/unrelated/qualified records are
+        # excluded by the database index before the LIMIT, never by a full scan.
+        async with self.repository.unit_of_work() as uow:
+            cursor = await uow.derived_get(self.scope, "verification_discovery", "scope") or {}
+            after = cursor.get("after")
+            rows = await uow.verification_candidates(self.scope, after=after)
+            if not rows and after is not None:
+                rows = await uow.verification_candidates(self.scope)
+                after = None
         count = 0
         for row in rows:
-            if row["scope"] != to_jsonable(self.scope) or row["payload"]["action"] not in {
-                "PENDING_VERIFICATION",
-                "CONTESTED",
-            }:
-                continue
-            if row["payload"].get("qualification") or row["payload"].get(
-                "project_candidate", {}
-            ).get("review"):
-                continue
-            draft = row["payload"]["draft"]
-            matches = [
-                spec
-                for spec in self.verification.specs.values()
-                if draft["subject_id"] in spec.subjects and draft["predicate"] in spec.predicates
-            ]
-            if len(matches) != 1:
-                continue
-            spec = matches[0]
-            await self.verification.schedule(
-                row["id"],
-                row["version"],
-                tool_id=spec.id,
-                request_id=f"auto:{row['id']}:{row['version']}:{spec.fingerprint}",
+            try:
+                draft = row["payload"]["draft"]
+                matches = [
+                    spec
+                    for spec in self.verification.specs.values()
+                    if draft["subject_id"] in spec.subjects
+                    and draft["predicate"] in spec.predicates
+                ]
+                if len(matches) == 1:
+                    spec = matches[0]
+                    await self.verification.schedule(
+                        row["id"], row["version"], tool_id=spec.id,
+                        request_id=f"auto:{row['id']}:{row['version']}:{spec.fingerprint}",
+                    )
+                    count += 1
+            except Exception as error:
+                if isinstance(error, ModelError) and error.code == "verification_capacity":
+                    # Leave this row for the next cycle; claim/refresh still run.
+                    self._verification_backpressured = True
+                    break
+                # A malformed/stale/unauthorized candidate cannot starve later
+                # candidates. Revisit it on the next sweep, without exposing input.
+                self._stage_errors["verification_discovery"] = (
+                    "memory_host_verification_discovery_failed"
+                )
+            after = row["id"]
+        async with self.repository.unit_of_work() as uow:
+            await uow.lock_admission_scope(self.scope)
+            # A source may be erased while scheduling awaits. Do not restore
+            # its candidate identity into a cursor after the erasure commits.
+            if after and await uow.get_admission_record(self.scope, after) is None:
+                after = None
+            await uow.derived_put(
+                self.scope, "verification_discovery", "scope",
+                {"after": after, "parents": ["atom:" + after] if after else []},
             )
-            count += 1
         return count
 
     async def run_once(self):
         if self._stop.is_set():
             return {"state": "stopped"}
         await self.initialize()
-        extraction = await self.worker.run_batch(max_tasks=1)
-        scheduled = await self._schedule_verification()
+        self._stage_errors = {}
+
+        async def stage(name, call, fallback=None):
+            try:
+                return await call()
+            except Exception:
+                # Detailed provider exceptions may repeat private source bodies.
+                self._stage_errors[name] = f"memory_host_{name}_failed"
+                return fallback
+
+        async def extract():
+            if not self._extraction_initialized:
+                await self.queue.initialize()
+                self._extraction_initialized = True
+            return await self.worker.run_batch(max_tasks=1)
+
+        extraction = await stage("extraction", extract)
+        scheduled = await stage("verification_discovery", self._schedule_verification, 0)
         verification = (
-            await self.verification.run_once(
-                self.worker_id + ":verify", lease_seconds=max(30, self.verification.timeout + 10)
+            await stage(
+                "verification",
+                lambda: self.verification.run_once(
+                    self.worker_id + ":verify",
+                    lease_seconds=max(30, self.verification.timeout + 10),
+                ),
+                "failed",
             )
-            if self.verification
-            else "disabled"
+            if self.verification else "disabled"
         )
-        refresh = await self.refresh.run_once() if self.refresh else None
+        refresh = await stage("refresh", self.refresh.run_once) if self.refresh else None
+        self._last_error = "memory_host_stage_failed" if self._stage_errors else None
         return {
-            "extraction": asdict(extraction),
+            "extraction": asdict(extraction) if extraction is not None else None,
             "verification_scheduled": scheduled,
+            "verification_backpressured": self._verification_backpressured,
             "verification": verification,
             "refresh": asdict(refresh) if refresh else None,
+            "stage_errors": dict(self._stage_errors),
         }
 
     async def metrics(self):
         """Aggregate scope-local lifecycle state; no source IDs, quotes or model bodies."""
+        await self.initialize()
+        backlog = await self.verification.backlog() if self.verification else None
         async with self.repository.unit_of_work() as uow:
             requests = await uow.retention_active(self.scope)
-            verification = await uow.derived_records(self.scope, "domain_verification_task")
             refresh = await uow.derived_records(self.scope, "refresh_demand")
         return {
-            "schema": "memory-host-metrics/1",
+            "schema": "memory-host-metrics/2",
             "processing": dict(Counter(r["status"] for r in requests)),
-            "verification": dict(
-                Counter(r["payload"].get("state", "unknown") for r in verification)
-            ),
+            "verification": backlog["states"] if backlog else {},
+            "verification_backlog": backlog,
+            "verification_discovery_backpressured": self._verification_backpressured,
+            "stage_errors": dict(self._stage_errors),
             "refresh_pending": sum(bool(r["payload"].get("requested")) for r in refresh),
             "stopped": self._stop.is_set(),
             "last_error_code": self._last_error,
@@ -241,7 +286,6 @@ class MemoryHost:
             while not self._stop.is_set():
                 try:
                     await self.run_once()
-                    self._last_error = None
                 except Exception:
                     # Detailed provider exceptions may repeat private inputs.
                     self._last_error = "memory_host_cycle_failed"

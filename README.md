@@ -71,7 +71,7 @@ Create `demo.py` from the example below before running the last command. This us
 
 </details>
 
-On macOS or Linux, `./setup.sh` creates a development environment; `./setup.sh --all` also installs the integration packages. Local inference is installed separately with `python -m pip install -e packages/local-models`. Select an interpreter with `PYTHON_BIN=/path/to/python3.13 ./setup.sh`.
+On macOS or Linux, `./setup.sh` creates a development environment; `./setup.sh --all` also installs the integration packages. Local inference is installed separately with `python -m pip install -e 'packages/local-models[inference]'`. Select an interpreter with `PYTHON_BIN=/path/to/python3.13 ./setup.sh`.
 
 ### Remember → recall → inspect the source
 
