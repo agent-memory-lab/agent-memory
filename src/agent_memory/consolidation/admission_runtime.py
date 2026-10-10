@@ -34,6 +34,7 @@ from ..retrieval.atom_state import project_records
 from ..serialization import to_jsonable
 from .admission import (
     AdmissionPolicy,
+    authority_from_payload,
     authority_to_payload,
     candidate_id,
     draft_from_payload,
@@ -682,7 +683,14 @@ class AdmissionEngine:
                 valid_from=support_from or event.occurred_at,
                 valid_to=support_to,
             )
-            action, reasons = policy.evaluate(event, checked, authority)
+            verification_policy = getattr(policy, "evaluate_verification", None)
+            if callable(verification_policy):
+                action, reasons = verification_policy(
+                    event, checked, authority,
+                    original_authority=authority_from_payload(payload["authority"]),
+                )
+            else:
+                action, reasons = policy.evaluate(event, checked, authority)
             if action != "ACCEPT":
                 raise ValueError("verification source failed admission: " + ", ".join(reasons))
             if original.change_kind != "replace":
