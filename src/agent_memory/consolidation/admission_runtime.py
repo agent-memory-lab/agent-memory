@@ -40,6 +40,7 @@ from .admission import (
     draft_to_payload,
     slot_key,
 )
+from .source_audit import audit_review_required
 
 ATOM_PREFIX = "atom:"
 ATOM_EVENT_TYPES = frozenset({"memory.atom", "memory.atom.verification"})
@@ -164,6 +165,7 @@ class AdmissionEngine:
         _retained: bool = False,
         _publication_id: str | None = None,
         _contribution_write: bool = False,
+        _extraction_guard=None,
     ) -> AdmissionReceipt:
         # Keep fingerprinting and transactional admission on the same owned
         # inputs, even if callers mutate their objects while we await a lock.
@@ -249,6 +251,8 @@ class AdmissionEngine:
                 key=lambda s: s.partition_key(),
             ):
                 await uow.lock_admission_scope(scope)
+            if _extraction_guard is not None:
+                await _extraction_guard(uow)
             stored = await uow.find_event_by_idempotency(event.scope, event.idempotency_key)
             if _retained:
                 if (
@@ -261,12 +265,14 @@ class AdmissionEngine:
                     raise ValueError("retained source is unavailable or changed")
             elif stored:
                 if _extraction_audit is not None:
-                    receipt, _ = await self._extraction_receipt(
+                    receipt, committed_audit = await self._extraction_receipt(
                         uow,
                         stored,
                         _extraction_audit["input_fingerprint"],
                         duplicate=True,
                     )
+                    if _extraction_guard is not None:
+                        await _extraction_guard(uow, committed_audit)
                     return receipt
                 if stored.metadata.get("atom_fingerprint") != fingerprint:
                     raise ValueError("idempotency key reused with different atom input")
@@ -277,6 +283,8 @@ class AdmissionEngine:
                         raise ValueError("admission input was deleted or is incomplete")
                     if row["id"] not in {r["id"] for r in rows}:
                         rows.append(row)
+                if _extraction_guard is not None:
+                    await _extraction_guard(uow)
                 return self.receipt(stored.id, rows, duplicate=True)
             if not _retained:
                 await uow.append_event(event)
@@ -296,6 +304,18 @@ class AdmissionEngine:
                 )):
                     raise ValueError("managed slot requires versioned contribution operations")
                 action, reasons = policy.evaluate(event, draft, authority)
+                # Model-only reinterpretation cannot shed an earlier audit hold
+                # by changing quote, value, dates, qualifiers or candidate ID.
+                # Existing slot rows include withdrawn historical interpretations.
+                inherited_hold = next((
+                    row for row in existing[key]
+                    if _extraction_audit is not None
+                    and event.id in row["payload"].get("source_event_ids", ())
+                    and audit_review_required(row["payload"])
+                ), None)
+                if inherited_hold is not None and action == "ACCEPT":
+                    action = "PENDING_VERIFICATION"
+                    reasons = ("source_audit_recovery_requires_host_verification", *reasons)
                 payload: dict[str, Any] = {
                     "draft": draft_to_payload(draft),
                     "authority": authority_to_payload(authority),
@@ -315,6 +335,12 @@ class AdmissionEngine:
                     "base_candidate_id": None,
                     "valid_time_basis": "explicit" if draft.valid_from else "observation",
                 }
+                if inherited_hold is not None:
+                    payload["source_audit_hold"] = {
+                        "source_event_id": event.id,
+                        "origin_candidate_id": inherited_hold["id"],
+                        "identity_policy": "same-source-subject-predicate-slot/1",
+                    }
                 if _extraction_audit is not None:
                     matching_indexes = {
                         i for i, item in enumerate(drafts) if identity_for(item) == identity
@@ -372,11 +398,14 @@ class AdmissionEngine:
                 await uow.save_admission_record(
                     MemoryScope(**row["scope"]), row["id"], event.id, row["slot_key"], payload, 0
                 )
+            if _extraction_guard is not None:
+                await _extraction_guard(uow)
             return self.receipt(event.id, rows)
 
     async def extraction_status(
         self, scope: MemoryScope, idempotency_key: str, *,
         input_fingerprint: str | None = None, duplicate: bool = False,
+        _extraction_guard=None,
     ) -> tuple[AdmissionReceipt, dict[str, Any]] | None:
         """Read the saved first result without rerunning an external generator."""
         self._require_support()
@@ -385,9 +414,12 @@ class AdmissionEngine:
             stored = await uow.find_event_by_idempotency(scope, idempotency_key)
             if stored is None:
                 return None
-            return await self._extraction_receipt(
+            result = await self._extraction_receipt(
                 uow, stored, input_fingerprint, duplicate=duplicate,
             )
+            if _extraction_guard is not None:
+                await _extraction_guard(uow, stored, result[1])
+            return result
 
     async def _extraction_receipt(
         self, uow: AdmissionUnitOfWork, stored: MemoryEvent,

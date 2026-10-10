@@ -58,6 +58,9 @@ async def evaluate_extraction(
         failed_cases=0,
         generation_calls=0,
         review_calls=0,
+        source_audit_calls=0,
+        source_audit_missing_candidate_findings=0,
+        source_audit_unresolved_scopes=0,
     )
     results, latencies = [], []
     for case in cases:
@@ -70,6 +73,7 @@ async def evaluate_extraction(
                 scope_level=pipeline.scope_level,
                 max_candidates=pipeline.max_candidates,
                 timeout_seconds=pipeline.timeout_seconds,
+                source_audit=pipeline.source_audit,
             )
         event = MemoryEvent(
             replace(scope, namespace=f"extraction-eval-{uuid4().hex}"),
@@ -100,6 +104,16 @@ async def evaluate_extraction(
         counts["failed_cases"] += receipt.processing_state == "failed"
         counts["generation_calls"] += receipt.generation_calls
         counts["review_calls"] += receipt.review_calls
+        coverage = receipt.source_audit or {}
+        counts["source_audit_calls"] += coverage.get("calls", 0)
+        counts["source_audit_missing_candidate_findings"] += sum(
+            observation["finding_status"] == "missing_candidate"
+            for observation in coverage.get("observations", ())
+        )
+        counts["source_audit_unresolved_scopes"] += sum(
+            observation["status"] == "unresolved"
+            for observation in coverage.get("observations", ())
+        )
         results.append(
             {
                 "id": case["id"],
