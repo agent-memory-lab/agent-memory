@@ -8,11 +8,12 @@ every project write still invalidates the complete answer/certificate proof.
 
 from datetime import datetime
 
-from ..conditions import instant
+from ..conditions import Condition, instant
 from ..domain import MemoryScope
 from ..evidence_support import evaluate_support
 from ..serialization import to_jsonable
 from .model import DerivedError, digest, identity
+from .relation_questions import DependencyRiskPlan, RELATION_PREDICATES
 
 READSET_SCHEMA = "question-semantic-readset/1"
 EFFECT_SCHEMA = "question-candidate-field-effect/1"
@@ -22,7 +23,7 @@ PREDICATES = frozenset(
     {
         "project.owner", "project.status", "project.phase",
         "commitment.promisor", "commitment.action", "commitment.state", "commitment.deadline",
-        "risk.label", "risk.state",
+        "risk.label", "risk.state", *RELATION_PREDICATES,
     }
 )
 
@@ -38,10 +39,10 @@ def predicates(contract, question):
             "commitment.promisor", "commitment.action", "commitment.state", "commitment.deadline",
         )
     if question == "risks":
-        # Future operator extensions must first declare their own complete reads.
-        if getattr(contract, "relation_plans", ()):
-            return ("*",)  # Persistable, but never accepted as a narrow readset.
-        return tuple(sorted({"risk.label", "risk.state", *(r.predicate for r in contract.risk_rules)}))
+        return tuple(sorted({
+            "risk.label", "risk.state", *(r.predicate for r in contract.risk_rules),
+            *(predicate for plan in contract.relation_plans for predicate in plan.predicates),
+        }))
     raise DerivedError("unsupported_project_question")
 
 
@@ -74,7 +75,7 @@ def readset(contract, scope, project_id, question, *, overdue_only=False):
     identity(project_id)
     if type(overdue_only) is not bool or (overdue_only and question != "commitments"):
         raise DerivedError("unsupported_project_question")
-    return _seal(dict(
+    value = dict(
         schema=READSET_SCHEMA,
         operator=OPERATOR,
         scope_sha256=digest(to_jsonable(scope)),
@@ -84,7 +85,55 @@ def readset(contract, scope, project_id, question, *, overdue_only=False):
         overdue_only=overdue_only,
         predicates=sorted(predicates(contract, question)),
         proof_scope="complete_project_census",
-    ))
+    )
+    if question == "risks" and contract.relation_plans:
+        value["relation_plans"] = [_plan_reads(plan) for plan in contract.relation_plans]
+    return _seal(value)
+
+
+def _plan_reads(plan):
+    return dict(
+        schema="question-relation-reads/1",
+        plan=to_jsonable(plan),
+        fingerprint=plan.fingerprint,
+        predicates=list(plan.predicates),
+        # All qualifiers on these fields remain semantic inputs, including
+        # qualifiers whose context attributes were unknown at registration.
+        qualifier_scope="all_declared_predicate_conditions_and_exceptions",
+        context_scope="complete_registered_context",
+    )
+
+
+def _bound_plan_reads(value):
+    """Only the implemented finite operator may turn a wildcard into exact reads."""
+    from ..ontology.rules import RelationRule
+
+    plans = value.get("relation_plans")
+    if plans is None:
+        return not set(value["predicates"]).intersection(RELATION_PREDICATES)
+    if value["question"] != "risks" or type(plans) is not list or not 1 <= len(plans) <= 8:
+        return False
+    ids, required = set(), {"risk.label", "risk.state"}
+    try:
+        for declared in plans:
+            raw = declared["plan"]
+            if (type(raw) is not dict or type(raw.get("relation_rules")) is not list
+                    or len(raw["relation_rules"]) > 8
+                    or type(raw.get("impact_conditions")) is not list
+                    or len(raw["impact_conditions"]) > 16):
+                return False
+            plan = DependencyRiskPlan(**{
+                **raw,
+                "relation_rules": tuple(RelationRule(**r) for r in raw["relation_rules"]),
+                "impact_conditions": tuple(Condition(**c) for c in raw["impact_conditions"]),
+            })
+            if declared != _plan_reads(plan) or plan.id in ids:
+                return False
+            ids.add(plan.id)
+            required.update(plan.predicates)
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return False
+    return required <= set(value["predicates"])
 
 
 def bound_readset(definition, scope):
@@ -109,6 +158,8 @@ def bound_readset(definition, scope):
         or any(type(p) is not str or p not in PREDICATES for p in value["predicates"])
         or value["predicates"] != sorted(set(value["predicates"]))
     ):
+        return None
+    if not _bound_plan_reads(value):
         return None
     return value
 

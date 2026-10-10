@@ -92,6 +92,31 @@ class OntologyRuleEngine:
         for assertion in roots:
             if not await self.verifier.verify(scope, assertion.source_event_ids):
                 raise ValueError("premise evidence is no longer available")
+        result = self.derive_checked_roots(scope, roots, at_time=now)
+        # A source verifier can change while the bounded derivation runs.
+        for assertion in roots:
+            if not await self.verifier.verify(scope, assertion.source_event_ids):
+                raise ValueError("premise evidence changed during inference")
+        return result
+
+    def derive_checked_roots(self, scope, roots, *, at_time):
+        """Pure bounded kernel for an already authorized, host-checked census.
+
+        This is not a standalone admission/read API: unlike derive(), it cannot
+        check live source permissions. The QuestionView host fences its complete
+        owned census at capture, publication and delivery.
+        """
+        roots = tuple(sorted(roots, key=lambda assertion: assertion.assertion_id))
+        if not 1 <= len(roots) <= 128 or len({a.assertion_id for a in roots}) != len(roots):
+            raise ValueError("provide one to 128 distinct root assertions")
+        if at_time.utcoffset() is None or any(
+            a.scope != scope or a.ontology_id != self.schema.ontology_id
+            or a.ontology_version != self.schema.version
+            or a.status != "active" or a.valid_from > at_time
+            or (a.valid_to is not None and at_time >= a.valid_to)
+            for a in roots
+        ):
+            raise ValueError("premises must be active in the exact scope and schema")
         by_id = {a.assertion_id: a for a in roots}
         facts = {(a.subject_entity_id, a.predicate_id, a.object_entity_id): (a.assertion_id,)
                  for a in roots if a.object_entity_id is not None}
@@ -140,10 +165,6 @@ class OntologyRuleEngine:
             facts.update(added)
             if round_number + 1 == self.max_rounds:
                 truncated = True
-        # A source verifier can change while the bounded derivation runs.
-        for assertion in roots:
-            if not await self.verifier.verify(scope, assertion.source_event_ids):
-                raise ValueError("premise evidence changed during inference")
         return InferenceResult(tuple(results.values()), truncated)
 
     async def valid(self, candidate, *, at_time=None):
