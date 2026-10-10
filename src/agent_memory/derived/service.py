@@ -1,6 +1,6 @@
 """Host-owned derived lifecycle: authorize snapshot, prepare, CAS publish, guarded read."""
 
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 from copy import deepcopy
 from datetime import datetime
 
@@ -284,10 +284,11 @@ class ObservationService:
             await invalidate_descendants(uow, self.scope, (spec["id"],), at=self.clock())
             return deepcopy(row)
 
-    async def grant(self, grant, *, expected_version=0):
+    async def grant(self, grant, *, expected_version=0, _unit_of_work=None):
         if not isinstance(grant, ProcessingGrant):
             raise TypeError("trusted ProcessingGrant required")
-        async with self.repository.unit_of_work() as uow:
+        transaction = nullcontext(_unit_of_work) if _unit_of_work is not None else self.repository.unit_of_work()
+        async with transaction as uow:
             await open_derived(uow, self.scope, self.history_mode)
             authority = await self.registry.authority(uow, self.authority_id)
             self.registry.permission(authority, grant.readers, grant.purposes)

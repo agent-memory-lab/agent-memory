@@ -206,6 +206,8 @@ def _source_ids(payload: dict[str, Any]) -> set[str]:
     if any(not isinstance(item, str) or not item for item in ids):
         raise ValueError("admission source IDs must be nonempty strings")
     result = set(ids)
+    for proof in payload.get("extraction", {}).get("processing_inputs", {}).values():
+        result.update(proof["source_event_ids"])
     for item in evidence:
         if not isinstance(item, dict):
             raise ValueError("admission evidence must be objects")

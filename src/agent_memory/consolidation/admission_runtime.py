@@ -63,6 +63,27 @@ def _value(payload: dict[str, Any]) -> str:
 class AdmissionEngine:
     """Explicit host API; no LLM confidence or metadata becomes source authority."""
 
+    @staticmethod
+    def source_dependencies(payload):
+        """All retained support and processing sources; neither list grants truth."""
+        sources = set()
+
+        def visit(value):
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    if key == "source_event_id" and isinstance(item, str):
+                        sources.add(item)
+                    elif key == "source_event_ids" and isinstance(item, (tuple, list)):
+                        sources.update(source for source in item if isinstance(source, str))
+                    elif isinstance(item, (dict, tuple, list)):
+                        visit(item)
+            elif isinstance(value, (tuple, list)):
+                for item in value:
+                    visit(item)
+
+        visit(payload)
+        return tuple(sorted(sources))
+
     def __init__(self, repository: AdmissionRepository) -> None:
         self.repository = repository
 
@@ -100,10 +121,14 @@ class AdmissionEngine:
             next_time = min(future, key=_time) if future else None
             if visible:
                 version = max(visible, key=lambda v: v["version"])
-                selected.append({
-                    **row, **version, "_next_recorded_at": next_time,
-                    "_snapshot_version": row["version"],
-                })
+                selected.append(
+                    {
+                        **row,
+                        **version,
+                        "_next_recorded_at": next_time,
+                        "_snapshot_version": row["version"],
+                    }
+                )
             elif future:
                 selected.append(
                     {
@@ -291,9 +316,9 @@ class AdmissionEngine:
                     existing[key] = list(await uow.list_admission_records(scope, key))
                 barrier_reader = getattr(uow, "list_admission_barriers", None)
                 barriers = await barrier_reader(scope, key) if callable(barrier_reader) else ()
-                if not _contribution_write and (barriers or any(
-                    r["payload"].get("contribution") for r in existing[key]
-                )):
+                if not _contribution_write and (
+                    barriers or any(r["payload"].get("contribution") for r in existing[key])
+                ):
                     raise ValueError("managed slot requires versioned contribution operations")
                 action, reasons = policy.evaluate(event, draft, authority)
                 payload: dict[str, Any] = {
@@ -328,6 +353,10 @@ class AdmissionEngine:
                             if report["draft_index"] in matching_indexes
                         ],
                     }
+                    if _extraction_audit.get("processing_inputs"):
+                        payload["extraction"]["processing_inputs"] = _extraction_audit[
+                            "processing_inputs"
+                        ]
                 rows.append(
                     {
                         "id": identity,
@@ -375,8 +404,12 @@ class AdmissionEngine:
             return self.receipt(event.id, rows)
 
     async def extraction_status(
-        self, scope: MemoryScope, idempotency_key: str, *,
-        input_fingerprint: str | None = None, duplicate: bool = False,
+        self,
+        scope: MemoryScope,
+        idempotency_key: str,
+        *,
+        input_fingerprint: str | None = None,
+        duplicate: bool = False,
     ) -> tuple[AdmissionReceipt, dict[str, Any]] | None:
         """Read the saved first result without rerunning an external generator."""
         self._require_support()
@@ -386,12 +419,19 @@ class AdmissionEngine:
             if stored is None:
                 return None
             return await self._extraction_receipt(
-                uow, stored, input_fingerprint, duplicate=duplicate,
+                uow,
+                stored,
+                input_fingerprint,
+                duplicate=duplicate,
             )
 
     async def _extraction_receipt(
-        self, uow: AdmissionUnitOfWork, stored: MemoryEvent,
-        input_fingerprint: str | None, *, duplicate: bool,
+        self,
+        uow: AdmissionUnitOfWork,
+        stored: MemoryEvent,
+        input_fingerprint: str | None,
+        *,
+        duplicate: bool,
     ) -> tuple[AdmissionReceipt, dict[str, Any]]:
         audit = stored.metadata.get("atom_extraction")
         if not isinstance(audit, dict) or (
@@ -548,6 +588,7 @@ class AdmissionEngine:
         source_quote: str,
         support_from: datetime | None = None,
         support_to: datetime | None = None,
+        _unit_of_work=None,
     ) -> AdmissionReceipt:
         """CAS review of a pending candidate. Conflicts require explicit interval proof.
 
@@ -557,7 +598,11 @@ class AdmissionEngine:
         self._require_support()
         if type(accept) is not bool or type(expected_version) is not int or expected_version < 1:
             raise ValueError("review requires a boolean decision and positive expected_version")
-        visible = await self.repository.admission_record(scope, identity)
+        visible = (
+            await _unit_of_work.get_admission_record(scope, identity)
+            if _unit_of_work is not None
+            else await self.repository.admission_record(scope, identity)
+        )
         if visible is None:
             raise ValueError("candidate is missing or outside scope")
         target_scope = MemoryScope(**visible["scope"])
@@ -584,7 +629,12 @@ class AdmissionEngine:
             content_hash="",
             occurred_at=event.occurred_at.astimezone(UTC),
         )
-        async with self.repository.unit_of_work() as uow:
+        transaction = (
+            nullcontext(_unit_of_work)
+            if _unit_of_work is not None
+            else self.repository.unit_of_work()
+        )
+        async with transaction as uow:
             for item in sorted([scope, target_scope], key=lambda s: s.partition_key()):
                 await uow.lock_admission_scope(item)
             row = await uow.get_admission_record(target_scope, identity)

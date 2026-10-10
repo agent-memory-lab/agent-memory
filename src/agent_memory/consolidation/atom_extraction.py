@@ -267,6 +267,12 @@ class AtomExtractionPipeline:
         reports: list[dict[str, Any]] = []
         candidates: list[ExtractedAtom] = []
         review_calls = 0
+        processing_inputs = {}
+        for role, adapter in (("generator", self.generator), ("reviewer", self.reviewer)):
+            snapshot = getattr(adapter, "processing_snapshot", None)
+            if callable(snapshot):
+                async with asyncio.timeout(self.timeout_seconds):
+                    processing_inputs[role] = await snapshot(event)
         try:
             async with asyncio.timeout(self.timeout_seconds):
                 raw = await self.generator.generate_atoms(event)
@@ -361,6 +367,21 @@ class AtomExtractionPipeline:
             "review_calls": review_calls,
             "elapsed_ms": round((perf_counter() - started) * 1000, 3),
         }
+        if processing_inputs:
+            audit["processing_inputs"] = processing_inputs
+            if any(len(value["source_event_ids"]) > 1 for value in processing_inputs.values()):
+                # Context is a processing dependency, not automatically another
+                # fact witness. Host field/domain qualification must establish it.
+                for key, (action, reasons) in gates.items():
+                    if action == "ACCEPT":
+                        gates[key] = (
+                            "PENDING_VERIFICATION",
+                            (*reasons, "context_requires_qualification"),
+                        )
+                for report in reports:
+                    if report["action"] == "ACCEPT":
+                        report["action"] = "PENDING_VERIFICATION"
+                        report["reasons"].append("context_requires_qualification")
         return {
             "drafts": [draft_to_payload(c.draft) for c in candidates],
             "gates": gates,
@@ -396,6 +417,42 @@ class AtomExtractionPipeline:
                 "reviewer_version": self.reviewer.version,
             },
         )
+        if prepared["audit"].get("processing_inputs"):
+            from contextlib import nullcontext
+
+            transaction = (
+                nullcontext(unit_of_work) if unit_of_work is not None else repository.unit_of_work()
+            )
+            async with transaction as uow:
+                await uow.lock_admission_scope(event.scope)
+                expected_roles = {
+                    role
+                    for role, adapter in (
+                        ("generator", self.generator),
+                        ("reviewer", self.reviewer),
+                    )
+                    if callable(getattr(adapter, "processing_snapshot", None))
+                }
+                if set(audit["processing_inputs"]) != expected_roles:
+                    raise ValueError("model extraction publication footprint changed")
+                for role, adapter in (("generator", self.generator), ("reviewer", self.reviewer)):
+                    if role not in expected_roles:
+                        continue
+                    guard = getattr(adapter, "validate_processing", None)
+                    proof = audit["processing_inputs"].get(role)
+                    if proof is None or not callable(guard):
+                        raise ValueError("model extraction publication guard unavailable")
+                    await guard(uow, event, proof)
+                return await AdmissionEngine(repository).admit(
+                    event,
+                    drafts,
+                    authority=authority,
+                    policy=reviewed,
+                    _extraction_audit=audit,
+                    _unit_of_work=uow,
+                    _retained=retained,
+                    _publication_id=publication_id,
+                )
         return await AdmissionEngine(repository).admit(
             event,
             drafts,

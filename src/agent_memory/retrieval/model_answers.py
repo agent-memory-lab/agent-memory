@@ -215,7 +215,17 @@ class GovernedModelAnswers:
             ):
                 await self.authority.release_delivery(uow, delivery_reservation)
 
+    async def _input_guard(self, sealed):
+        input_guard = getattr(self.port, "validate_input", None)
+        if callable(input_guard):
+            # Tokenization is processing too. Validate current source rights
+            # while holding the lifecycle transaction before invoking the counter.
+            async with self.repository.unit_of_work() as uow:
+                await self.authority.validate(uow, sealed)
+                input_guard(sealed)
+
     async def _execute(self, sealed):
+        await self._input_guard(sealed)
         token = await self._claim(sealed)
         if token is None:
             # Other processes share the same durable flight. A dead leader never
@@ -424,6 +434,7 @@ class GovernedModelAnswers:
             raise
 
     async def _answer(self, sealed, *, serialize=None):
+        await self._input_guard(sealed)
         cached = await self._cached(sealed)
         if cached is None:
             task = self._tasks.get(sealed.key)

@@ -5,6 +5,7 @@ coordinate validator must check the whole current proof using the caller UoW;
 an asserted epoch or ACL in user metadata never grants access.
 """
 
+from contextlib import nullcontext
 from datetime import datetime
 
 from ..derived.model import ProcessingGrant
@@ -43,7 +44,15 @@ class SourceProcessingAuthority:
                 raise
 
     async def allow_processing(
-        self, source_id, *, readers, purposes, expires_at, expected_version=0, revoked=False
+        self,
+        source_id,
+        *,
+        readers,
+        purposes,
+        expires_at,
+        expected_version=0,
+        revoked=False,
+        _unit_of_work=None,
     ):
         """Explicit host grant for THIS recipient, independent of ordinary read rights."""
         grant = ProcessingGrant(
@@ -52,7 +61,12 @@ class SourceProcessingAuthority:
         if type(expected_version) is not int or expected_version < 0 or expires_at <= self.clock():
             raise ModelError("invalid_model_processing_grant")
         key = digest([source_id, self.configuration.recipient])
-        async with self.repository.unit_of_work() as uow:
+        transaction = (
+            nullcontext(_unit_of_work)
+            if _unit_of_work is not None
+            else self.repository.unit_of_work()
+        )
+        async with transaction as uow:
             epoch = await open_derived(uow, self.scope)
             authority = await self.service.registry.authority(uow, self.service.authority_id)
             self.service.registry.permission(authority, readers, purposes)
