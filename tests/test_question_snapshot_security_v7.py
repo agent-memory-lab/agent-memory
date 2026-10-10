@@ -93,7 +93,7 @@ def test_snapshot_rechecks_current_controls_before_each_source_body(
             lease = await svc.queue.claim("snapshot", lease_seconds=30)
             previous = clock[0]
             cls = type(engine.repository.unit_of_work())
-            original_candidates = cls.derived_project_candidates
+            original_grants = svc.admission._grants
             original_source = cls.get_source_event
             calls, headers = [], []
 
@@ -106,11 +106,12 @@ def test_snapshot_rechecks_current_controls_before_each_source_body(
                 else:
                     clock[0] = expiry
 
-            async def candidates(uow, *args):
-                value = await original_candidates(uow, *args)
+            async def grants(uow, *args):
+                value = await original_grants(uow, *args)
                 headers.append(True)
-                # First census is the metadata proof. Second is the semantic
-                # input bridge, after its initial registration checks.
+                # First current-control read is the metadata proof. Second is
+                # the semantic bridge; immutable candidate headers now share
+                # one scan, but current grant/time checks must remain fresh.
                 if boundary == "metadata" and len(headers) == 2:
                     change_control()
                 return value
@@ -124,7 +125,7 @@ def test_snapshot_rechecks_current_controls_before_each_source_body(
                 return value
 
             with monkeypatch.context() as patch:
-                patch.setattr(cls, "derived_project_candidates", candidates)
+                patch.setattr(svc.admission, "_grants", grants)
                 patch.setattr(cls, "get_source_event", source)
                 if boundary == "before_candidates":
                     async def forbidden_candidate(*args, **kwargs):

@@ -25,7 +25,7 @@ from .project_questions import (
 from .question_model import AnswerStatus
 
 SCHEMA = "project-keyed-delta/1"
-OPERATOR = "project-complete-groups/1"
+OPERATOR = "project-complete-groups/2"
 LOG_SCHEMA = "project-change-window/1"
 LOG_LIMIT = 128
 
@@ -136,6 +136,8 @@ class KeyedAggregate:
 
 
 def compatibility(contract, snapshot):
+    from .question_dependencies import OPERATOR as READSET_OPERATOR, READSET_SCHEMA
+
     return digest(
         dict(
             operator=OPERATOR,
@@ -143,6 +145,9 @@ def compatibility(contract, snapshot):
             instance=snapshot["instance"],
             question=snapshot["question"],
             overdue=snapshot["overdue_only"],
+            readset_schema=READSET_SCHEMA,
+            readset_operator=READSET_OPERATOR,
+            readset=snapshot["definition"].get("spec", {}).get("semantic_readset"),
         )
     )
 
@@ -150,8 +155,11 @@ def compatibility(contract, snapshot):
 def _groups(contract, census, question):
     facts = census.facts
     if question in {"owner", "status"}:
+        from .question_dependencies import predicates
+
+        names = set(predicates(contract, question))
         return {
-            census.project_id: tuple(f for f in facts if f.fact.predicate.startswith("project."))
+            census.project_id: tuple(f for f in facts if f.fact.predicate in names)
         }
     prefix = "commitment." if question == "commitments" else "risk."
     groups = {}
@@ -418,5 +426,9 @@ def evaluate(contract, snapshot):
             fallback_reason=reason,
             groups_evaluated=evaluated,
             groups_total=len(groups),
+            semantic_dirty_count=snapshot["definition"].get("semantic_dirty_count", 0),
+            proof_dirty_count=snapshot["definition"].get("proof_dirty_count", 0),
+            predicate_disjoint_count=snapshot["definition"].get("predicate_disjoint_count", 0),
+            last_invalidation=deepcopy(snapshot["definition"].get("last_invalidation")),
         ),
     )

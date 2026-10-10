@@ -160,7 +160,10 @@ async def changed(uow, scope, old_header, new_header, *, at=None, reason="candid
     if gate and gate["state"] != "ready":
         await subscriptions.scope_fallback(uow, scope, at=at, reason="project_index_incomplete")
     elif keys:
-        await subscriptions.invalidate(uow, scope, tuple(sorted(keys)), at=at, reason=reason)
+        await subscriptions.invalidate(
+            uow, scope, tuple(sorted(keys)), at=at, reason=reason,
+            candidate_change=(old_header, new_header) if reason == "candidate" else None,
+        )
 
 
 async def source_changed(uow, scope, source_id, *, at=None, reason="source", safety=False):
