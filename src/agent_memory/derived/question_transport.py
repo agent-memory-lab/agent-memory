@@ -24,7 +24,7 @@ FIELDS = {
     "route": ({"query"}, {"parameters"}),
     "request": ({"question_id", "dedupe_key"}, set()),
     "status": ({"target_id"}, set()),
-    "page_read": ({"page_id"}, set()),
+    "page_read": ({"page_id"}, {"valid_at", "known_at"}),
     "model_answer": ({"question_id"}, set()),
 }
 
@@ -70,7 +70,8 @@ async def call(service, operation, payload, context):
             templates=sorted(PROJECT_QUESTIONS),
             renderer=ALGORITHM,
             compute_modes=["full", "delta", "proof_reuse"],
-            historical=False,
+            historical=service.history_points,
+            historical_mode="published_point" if service.history_points else None,
             models=bool(getattr(service, "models", None)),
             model_runtime=(
                 service.models.capabilities() if getattr(service, "models", None) else None
@@ -109,8 +110,8 @@ async def call(service, operation, payload, context):
             # A provider, validator, or database error can repeat private inputs.
             raise DerivedError("model_execution_unavailable") from None
     if operation == "page_read":
-        await service.pages.read(payload["page_id"], actor=context.actor)
-        return await service.pages.read(payload["page_id"], actor=context.actor)
+        await service.pages.read(actor=context.actor, **payload)
+        return await service.pages.read(actor=context.actor, **payload)
     if operation == "status":
         return await service.queue.status(payload["target_id"], actor=context.actor)
     if operation == "request":
@@ -121,6 +122,8 @@ async def call(service, operation, payload, context):
         result = await QuestionRouter(service).answer(actor=context.actor, **payload)
     else:
         result = await service.read(actor=context.actor, **payload)
+    if result.get("historical"):
+        return await service.read(actor=context.actor, **payload)
     if result.get("availability_status") == "valid":
         # Reacquire at the transport delivery boundary. Neither an earlier
         # successful direct compute nor its held dictionary authorizes bytes.

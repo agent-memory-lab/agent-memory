@@ -279,6 +279,12 @@ class AtomExtractionPipeline:
         reports: list[dict[str, Any]] = []
         candidates: list[ExtractedAtom] = []
         review_calls = 0
+        processing_inputs = {}
+        for role, adapter in (("generator", self.generator), ("reviewer", self.reviewer)):
+            snapshot = getattr(adapter, "processing_snapshot", None)
+            if callable(snapshot):
+                async with asyncio.timeout(self.timeout_seconds):
+                    processing_inputs[role] = await snapshot(event)
         try:
             async with asyncio.timeout(self.timeout_seconds):
                 raw = await self.generator.generate_atoms(deepcopy(event))
@@ -322,16 +328,26 @@ class AtomExtractionPipeline:
             reports.append(report)
         if source_audit is not None:
             proposals, audit_failures = await self.source_audit.run(
-                event, authority, policy, source_audit, candidates,
+                event,
+                authority,
+                policy,
+                source_audit,
+                candidates,
                 timeout_seconds=self.timeout_seconds,
             )
             failures.extend(audit_failures)
             for raw_proposal, target, observation in proposals:
                 index = len(reports)
                 report = dict(
-                    candidate_index=index, draft_index=None, action="REJECT", reasons=[],
-                    faithfulness="uncertain", retention="uncertain", source_start=None,
-                    source_end=None, source_audit_target=target.target_id,
+                    candidate_index=index,
+                    draft_index=None,
+                    action="REJECT",
+                    reasons=[],
+                    faithfulness="uncertain",
+                    retention="uncertain",
+                    source_start=None,
+                    source_end=None,
+                    source_audit_target=target.target_id,
                 )
                 observation["candidate_indexes"].append(index)
                 try:
@@ -341,23 +357,31 @@ class AtomExtractionPipeline:
                     if (
                         candidate.draft.predicate != observation["predicate"]
                         or candidate.source_start is None
-                        or not target.source_start <= candidate.source_start
-                        < candidate.source_end <= target.source_end
-                        or event.content[candidate.source_start:candidate.source_end]
+                        or not target.source_start
+                        <= candidate.source_start
+                        < candidate.source_end
+                        <= target.source_end
+                        or event.content[candidate.source_start : candidate.source_end]
                         != candidate.draft.source_quote
                     ):
                         raise _InvalidCandidate("source_audit_proposal_outside_target")
                     report.update(
-                        draft_index=len(candidates), source_start=candidate.source_start,
+                        draft_index=len(candidates),
+                        source_start=candidate.source_start,
                         source_end=candidate.source_end,
                     )
                     candidates.append(candidate)
                 except _InvalidCandidate as error:
                     report["reasons"] = [str(error)]
                     observation["status"] = "unresolved"
-                    observation["reasons"] = list(dict.fromkeys((
-                        *observation["reasons"], str(error),
-                    )))
+                    observation["reasons"] = list(
+                        dict.fromkeys(
+                            (
+                                *observation["reasons"],
+                                str(error),
+                            )
+                        )
+                    )
                 reports.append(report)
         reviews: Sequence[AtomReview] = ()
         if candidates:
@@ -403,12 +427,17 @@ class AtomExtractionPipeline:
                 ):
                     action, reasons = "PENDING_VERIFICATION", ("source_audit_conflict", *reasons)
             if (
-                action == "ACCEPT" and "source_audit_target" in report
+                action == "ACCEPT"
+                and "source_audit_target" in report
                 and policy.evaluate(event, candidate.draft, authority)[0]
                 not in {"REJECT", "L0_ONLY"}
             ):
-                action, reasons = "PENDING_VERIFICATION", (
-                    "source_audit_recovery_requires_host_verification", *reasons,
+                action, reasons = (
+                    "PENDING_VERIFICATION",
+                    (
+                        "source_audit_recovery_requires_host_verification",
+                        *reasons,
+                    ),
                 )
             report.update(
                 action=action,
@@ -437,6 +466,21 @@ class AtomExtractionPipeline:
             "elapsed_ms": round((perf_counter() - started) * 1000, 3),
             **({"source_audit": source_audit} if source_audit is not None else {}),
         }
+        if processing_inputs:
+            audit["processing_inputs"] = processing_inputs
+            if any(len(value["source_event_ids"]) > 1 for value in processing_inputs.values()):
+                # Context is a processing dependency, not automatically another
+                # fact witness. Host field/domain qualification must establish it.
+                for key, (action, reasons) in gates.items():
+                    if action == "ACCEPT":
+                        gates[key] = (
+                            "PENDING_VERIFICATION",
+                            (*reasons, "context_requires_qualification"),
+                        )
+                for report in reports:
+                    if report["action"] == "ACCEPT":
+                        report["action"] = "PENDING_VERIFICATION"
+                        report["reasons"].append("context_requires_qualification")
         return {
             "drafts": [draft_to_payload(c.draft) for c in candidates],
             "gates": gates,
@@ -468,15 +512,19 @@ class AtomExtractionPipeline:
         await self.validate_prepared_source(
             event, prepared, authority=authority, policy=policy, unit_of_work=unit_of_work
         )
-        guard = None
-        if self.source_audit is not None:
-            async def guard(uow, committed_audit=None):
-                checked = prepared if committed_audit is None else {
-                    **prepared, "audit": committed_audit,
+
+        async def guard(uow, committed_audit=None):
+            checked = (
+                prepared
+                if committed_audit is None
+                else {
+                    **prepared,
+                    "audit": committed_audit,
                 }
-                await self.validate_prepared_source(
-                    event, checked, authority=authority, policy=policy, unit_of_work=uow
-                )
+            )
+            await self.validate_prepared_source(
+                event, checked, authority=authority, policy=policy, unit_of_work=uow
+            )
 
         reviewed = _ReviewedPolicy(
             policy,
@@ -486,10 +534,30 @@ class AtomExtractionPipeline:
                 "reviewer_version": self.reviewer.version,
                 **(
                     {"source_audit": self.source_audit.config_payload()}
-                    if self.source_audit else {}
+                    if self.source_audit
+                    else {}
                 ),
             },
         )
+        if prepared["audit"].get("processing_inputs"):
+            from contextlib import nullcontext
+
+            transaction = (
+                nullcontext(unit_of_work) if unit_of_work is not None else repository.unit_of_work()
+            )
+            async with transaction as uow:
+                await uow.lock_admission_scope(event.scope)
+                return await AdmissionEngine(repository).admit(
+                    event,
+                    drafts,
+                    authority=authority,
+                    policy=reviewed,
+                    _extraction_audit=audit,
+                    _unit_of_work=uow,
+                    _retained=retained,
+                    _publication_id=publication_id,
+                    _extraction_guard=guard,
+                )
         return await AdmissionEngine(repository).admit(
             event,
             drafts,
@@ -508,11 +576,45 @@ class AtomExtractionPipeline:
         """Final host fence for callers that own a larger publication transaction.
 
         Call after all awaited writes and immediately before leaving that UoW.
-        It does nothing for the unchanged baseline extraction pipeline.
+        Baseline pipelines have no external guards; their frozen configuration still applies.
         """
-        if self.source_audit is None:
-            return
         audit = prepared["audit"]
+        adapters = self.generator, self.reviewer, self.source_audit
+        fences = []
+
+        def finish():
+            if adapters != (self.generator, self.reviewer, self.source_audit):
+                raise ValueError("model extraction publication footprint changed")
+            for fence in fences:
+                fence()
+            if audit["input_fingerprint"] != self.input_fingerprint(
+                event, authority=authority, policy=policy
+            ):
+                raise ValueError("prepared extraction input changed")
+
+        if unit_of_work is not None:
+            expected_roles = {
+                role: adapter
+                for role, adapter in (
+                    ("generator", self.generator),
+                    ("reviewer", self.reviewer),
+                )
+                if callable(getattr(adapter, "processing_snapshot", None))
+            }
+            proofs = audit.get("processing_inputs", {})
+            if set(proofs) != set(expected_roles):
+                raise ValueError("model extraction publication footprint changed")
+            for role, adapter in expected_roles.items():
+                model_guard = getattr(adapter, "validate_processing", None)
+                if not callable(model_guard):
+                    raise ValueError("model extraction publication guard unavailable")
+                fence = await model_guard(unit_of_work, event, proofs[role])
+                if not callable(fence):
+                    raise ValueError("model extraction final publication guard unavailable")
+                fences.append(fence)
+        if self.source_audit is None:
+            finish()
+            return
         if "source_audit" not in audit:
             raise SourceAuditUnavailable("source_audit_receipt_missing")
         if audit["input_fingerprint"] != self.input_fingerprint(
@@ -522,6 +624,10 @@ class AtomExtractionPipeline:
         await self.source_audit.validate(
             event, authority, policy, audit["source_audit"], unit_of_work=unit_of_work
         )
+        # No await after the composed local fences. Audit authorization can yield
+        # long enough to expire an earlier model grant or change host adapters.
+        finish()
+        self.source_audit.check_expiry(audit["source_audit"])
 
     async def process(
         self,
@@ -535,13 +641,10 @@ class AtomExtractionPipeline:
         fingerprint = self.input_fingerprint(event, authority=authority, policy=policy)
         key = event.idempotency_key or event.id
         engine = AdmissionEngine(repository)
+
         async def reuse_guard(uow, stored, audit):
-            if self.source_audit is None:
-                return
-            if "source_audit" not in audit:
-                raise SourceAuditUnavailable("source_audit_receipt_missing")
-            await self.source_audit.validate(
-                event, authority, policy, audit["source_audit"], unit_of_work=uow
+            await self.validate_prepared_source(
+                event, {"audit": audit}, authority=authority, policy=policy, unit_of_work=uow
             )
 
         cached = await engine.extraction_status(

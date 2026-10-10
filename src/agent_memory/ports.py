@@ -482,6 +482,16 @@ class DerivedUnitOfWork(RetentionUnitOfWork, Protocol):
         self, scope: MemoryScope, kind: str, identity: str, payload: dict
     ) -> None: ...
     async def derived_records(self, scope: MemoryScope, kind: str) -> tuple[dict, ...]: ...
+    async def verification_candidates(
+        self, scope: MemoryScope, *, after: str | None = None, limit: int = 128
+    ) -> tuple[dict, ...]:
+        """Exact-scope unqualified pending rows, indexed by ID; at most 128 per page."""
+        ...
+    async def verification_active(
+        self, scope: MemoryScope, *, limit: int = 4096
+    ) -> tuple[dict, ...]:
+        """Only pending/retry/running tasks, indexed by ID; terminal receipts are excluded."""
+        ...
     async def model_delivery_reservation_delete(
         self, scope: MemoryScope, identity: str, token: str
     ) -> bool: ...

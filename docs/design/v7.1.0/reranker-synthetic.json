@@ -1,0 +1,49 @@
+{
+  "schema": "local-reranker-smoke/1",
+  "evidence_class": "authored_synthetic",
+  "promotion": "not_evaluated",
+  "costs": "unknown",
+  "spec": {
+    "model": "Qwen/Qwen3-Reranker-0.6B",
+    "model_sha256": "59916c6565a30bb55a777d3d3091e9b28257e28b48027cd7f960670a1dadb81e",
+    "tokenizer_sha256": "29f92b52edb04f81a84c32b947e21243c95bcffaab2ebe5e7f84c936a16f2b7d",
+    "prompt_sha256": "902637808de7424766ba2450ef537bb0fc07275705bb1483a4f82bc82fb0f9db",
+    "runtime_sha256": "e502352b513305f3b53a8a36ad651d93f41b62f602e6d3f1030130145e9a6cd9",
+    "quantization_sha256": "a9d706227706efbc4d5f023e7b5aa9e8f73a8ea5be363a6abdc7f526f01636e1",
+    "yes_token_id": 9693,
+    "no_token_id": 2152,
+    "execution": "host-local",
+    "scoring": "final-token-yes-no-logits/1"
+  },
+  "artifact_manifest": {
+    "schema": "local-transformer-artifacts/1",
+    "files": {
+      "1_LogitScore/config.json": "73e3156450564d8a98b7e47bcf5aace0f29600828b51937da545571e84db3ff3",
+      "chat_template.jinja": "6f682162495ec5b39fd9005c01b6aa2a74669379fe967039f1e2cbbe8752369d",
+      "config.json": "d479c427a9ca5295218063d4f9aca4f297ab4ac27487cca7af42c84643d51ef0",
+      "config_sentence_transformers.json": "6a153d6696f78fd588c1c728967f0b773ea869d3c6028f151ce71ebe49140762",
+      "generation_config.json": "81051cd3f6e77013827148d0b8a6ead93f8ac390d5ab805f849199f0af6a08db",
+      "merges.txt": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+      "model.safetensors": "27cd75a405b9c1b46b59abfd88aaa209e6fed2a1972cde9b70e7659537c5e65b",
+      "modules.json": "6f13b6b4a89e577b591b2077bca40c67c26541a6740a8809267cb474f90806a9",
+      "sentence_bert_config.json": "3234ebd224d492cbe8d55d5ec80a3f408451c4db3005bafb64fe1c51c763e01e",
+      "tokenizer.json": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "tokenizer_config.json": "253153d0738ceb4c668d2eff957714dd2bea0b56de772a9fdccd96cbf517e6a0",
+      "vocab.json": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+    }
+  },
+  "scores": [
+    {
+      "memory_id": "relevant",
+      "score": 7.5970001220703125,
+      "probability": 0.9994982968516418
+    },
+    {
+      "memory_id": "irrelevant",
+      "score": -10.872309267520905,
+      "probability": 1.8976138360396236e-05
+    }
+  ],
+  "elapsed_seconds": 3.1754629579372704,
+  "sha256": "ac8cda9f9f6ad33873f60e856759494ba2cc5fd14a0c3798b5e8b1fcf36995fe"
+}

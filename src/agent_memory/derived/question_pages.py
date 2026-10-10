@@ -658,7 +658,13 @@ class ProjectQuestionPages:
             model_calls=0,
         )
 
-    async def read(self, page_id, *, actor):
+    async def read(self, page_id, *, actor, valid_at=None, known_at=None):
+        if valid_at is not None or known_at is not None:
+            if not self.service.history_points:
+                raise DerivedError("question_historical_unsupported")
+            if valid_at is None or known_at is None:
+                raise DerivedError("question_history_both_times_required")
+            return await self.service.history.read(page_id, actor=actor, kind="page", valid_at=valid_at, known_at=known_at)
         observed = await self.service._clock_barrier()
         try:
             return await self._read(page_id, actor=actor)

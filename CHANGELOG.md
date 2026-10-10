@@ -7,6 +7,12 @@ the first stable release.
 
 ### Fixed
 
+- Keep core imports and SQLite operations available without Unix `resource`;
+  unavailable peak RSS raises explicitly instead of fabricating a measurement.
+  Add a unified seven-distribution build/install/archive gate on Linux, macOS,
+  and Windows, with local-model inference dependencies behind an explicit extra.
+  See [platform scope and validation](docs/PACKAGE_VALIDATION.md).
+
 - Recheck compact-reranker promotion approval across invocation and delivery
   boundaries, fail closed on revocation or configuration changes, and enforce
   final expiry after host callbacks. Controlled retrieval evidence now requires
@@ -37,6 +43,26 @@ the first stable release.
   money debt or silently expiring audit evidence. See [scope and compatibility](docs/design/v7.0.0/runtime-repairs.md).
 
 ### Added
+
+- Integrate the governed v7.1 runtime with shared question proofs, source omission
+  holds and maintained relation views. Fence composed model/audit publication,
+  durable completion and historical delivery after final awaited work. Bounded
+  indexed verification discovery and active-only backpressure keep terminal
+  history from blocking progress; per-stage errors do not suppress independent
+  work. See [integration boundaries](docs/design/v7.1.0/runtime-integration.md).
+
+- Opt-in governed Atom model generation/review, bounded cross-turn provenance, durable
+  authority-backed domain verification and native project/conditional publishers.
+  Add an assembled capture/extraction/verification/question-refresh host with atomic
+  grants, restart/stop behavior and body-free metrics.
+- Exact final-request token budgets checked after current source authorization and
+  before financial reservation; optional local Qwen3 Transformer rendering/generation
+  and actual final-token reranking in a separate dependency-bearing package.
+- Published-point question/page history with current permissions, explicit same-repository
+  cross-scope current composition, host-reviewed L3 support/counterexamples and Atom
+  version guards, and bounded read-only Reflect. Real acceptance input binding delegates
+  to the existing four-arm evaluator; actual business gold/pricing are still missing.
+  Scope, algorithms and evidence: [v7.1](docs/design/AGENT_MEMORY_DESIGN_V7.1.0.md).
 
 - Transaction-local shared qualified inputs for bounded batches of already-leased
   project QuestionViews, preserving fresh source, permission, erasure, time and

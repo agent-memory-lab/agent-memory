@@ -49,28 +49,28 @@ jobs:
           tests/test_publication_batches.py::test_every_token_and_continuous_prefix_must_be_covered
 
   packages:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
           cache: pip
-      - run: python -m pip install build
-      - run: |
-          for package in . packages/evolution packages/langgraph packages/python-sdk packages/mcp-server packages/postgres; do
-            python -m build "$package"
-          done
-      - name: Install and verify all built wheels outside the checkout
-        run: |
-          python -m venv "$RUNNER_TEMP/wheel-install"
-          "$RUNNER_TEMP/wheel-install/bin/python" -m pip install dist/*.whl packages/*/dist/*.whl
-          "$RUNNER_TEMP/wheel-install/bin/python" -m pip check
-          cd "$RUNNER_TEMP"
-          "$RUNNER_TEMP/wheel-install/bin/python" -I "$GITHUB_WORKSPACE/tests/operational/v7_installed_smoke.py" --source-root "$GITHUB_WORKSPACE"
-      - name: Scan source and all build archives without lowering the threshold
-        run: |
-          "$RUNNER_TEMP/wheel-install/bin/agent-memory-release-scan" --json --fail-on-violation .
+      - run: python -m pip install 'pip>=22.3' build
+      - name: Build, clean-install, smoke, and scan every release distribution
+        run: >-
+          python tools/package_gate.py
+          --work-dir "${{ runner.temp }}/package-gate"
+      - name: Preserve platform-scoped packaging evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ matrix.os }}
+          path: ${{ runner.temp }}/package-gate/evidence.json
+          if-no-files-found: error
 
   postgres-live:
     runs-on: ubuntu-latest
@@ -139,3 +139,18 @@ jobs:
             full-dual.xml
             version-drill.xml
           if-no-files-found: warn
+
+  local-model-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -e '.[dev]'
+      # Imports are lazy. These contracts require neither Torch nor model weights;
+      # actual inference evidence is a separate explicit local-model run.
+      - run: python -m pip install -e packages/local-models
+      - run: >-
+          python -m pytest -q packages/local-models/tests
+          -k 'not actual_final and not exact_local'

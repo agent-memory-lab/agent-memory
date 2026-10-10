@@ -171,6 +171,7 @@ async def initial(handler, task, source, prepared):
                 source, prepared, authority=handler.authority, policy=handler.policy,
                 unit_of_work=uow,
             )
+            handler._publication_guard(task, row)
     handler._check_config()
     async with queue.repository.unit_of_work() as uow:
         row = await queue.checked(uow, task.id, task.payload["fence"])
@@ -195,6 +196,7 @@ async def initial(handler, task, source, prepared):
             source, prepared, authority=handler.authority, policy=handler.policy,
             unit_of_work=uow,
         )
+        handler._publication_guard(task, row)
 
 
 async def atomic_manifest(uow, scope, row, receipt, interpretation, prepared, policy):

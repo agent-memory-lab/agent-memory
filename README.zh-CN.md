@@ -218,6 +218,8 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 
 | 领域 | 已交付范围 | 实施证据 |
 | --- | --- | --- |
+| 受治理抽取、领域核验与宿主 | 模型候选/审查、有限跨轮输入、持久权威核验及原生项目资格/刷新；真实本地模型验证使用作者编写的输入 | [v7.1](docs/design/AGENT_MEMORY_DESIGN_V7.1.0.md) · [宿主](examples/memory_host.py) · [模型宿主](examples/model_memory_host.py) |
+| 精确本地模型预算与 logits | 可选本地 Transformer 渲染/回执检查、真实 Qwen3 yes/no logits；核心零第三方依赖，生产晋升需要真实验收 | [本地适配器](packages/local-models/README.md) |
 | 可靠 L0 → L1 | 宿主持久待发队列、原子接收/发布、来源修订、显式重处理、同槽更正与双时态事实查询 | [持久交付](docs/design/v6.1.0/batch-03-05.md) · [贡献生命周期](docs/design/v6.1.0/stage-03.md) |
 | 恢复与就绪 | 固定处理目标、有界等待、分批闭合、本地候选索引、显式修复与流切换 | [索引恢复](docs/design/v6.1.0/stage-09.md) · [分批发布](docs/design/v6.1.0/stage-11.md) |
 | 擦除与备份回放 | 参与同步的待发队列删除同步，以及使用独立权威检查点的受控离线回放 | [删除同步](docs/design/v6.1.0/stage-04.md) · [备份回放](docs/design/v6.1.0/stage-10.md) |
@@ -235,7 +237,7 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 
 Observation 只开放文档规定的语言模板。发布点和可证明稳定区间的历史保留冻结政策/上下文，并检查当前权限；覆盖缺口明确拒绝。当前 `locale-parents/1` 视图固定实际父版本及传递处理许可。当前 `language-scenario/1` 页面组合同一 exact scope 下 1–4 个非条件语言 Observation 父，要求主体、用途与 authority 兼容。
 
-显式启用 `qualified_current=True` 后，`locale-qualified-parents/1` 与 `language-qualified-scenario/1` 保留可信条件和例外。`QuestionService` 另支持有限当前项目问题、宿主触发的项目页面首次 full 发布、共享调度器后台重验证、证书复用及[有界确定性类型化块补丁](docs/design/v7.0.0/typed-page-patches.md)；向 SDK/MCP 适配器传入 `questions=service` 才开放该可选接口。历史父/页面、页面作父、旧 facet/page 的 delta 与自由部分块编辑、通用场景、跨 scope 合成、远端 ACL 同步和 L3 仍关闭或待实现。有界页面交付不代表完整 L2/L3 生命周期完成。L1 已有的双时态查询可独立使用；`l1_decided` 只说明处理完成，不代表事实正确。
+显式启用 `qualified_current=True` 后，`locale-qualified-parents/1` 与 `language-qualified-scenario/1` 保留可信条件和例外。`QuestionService` 另支持有限当前项目问题、宿主触发的项目页面首次 full 发布、共享调度器后台重验证、证书复用及[有界确定性类型化块补丁](docs/design/v7.0.0/typed-page-patches.md)；向 SDK/MCP 适配器传入 `questions=service` 才开放该可选接口。[v7.1](docs/design/AGENT_MEMORY_DESIGN_V7.1.0.md)增加可选的问题/页面发布点历史、显式授权的同库当前跨 scope 问题组合、宿主审查的 L3 声明/假设和有界只读 Reflect。任意项目历史重建、页面作父、旧 facet/page 的 delta、自由部分编辑、通用场景、分布式组合和远端 ACL 同步仍不在这些合同内。有界页面交付不代表完整 L2/L3 生命周期完成。L1 已有的双时态查询可独立使用；`l1_decided` 只说明处理完成，不代表事实正确。
 
 工程证据按被测版本和范围分别记录，不累计跨阶段测试成绩：
 
@@ -248,7 +250,7 @@ Observation 只开放文档规定的语言模板。发布点和可证明稳定�
 
 这些记录验证协议、事务和恢复行为；合成输入不能代替真实对话 gold、抽取质量评测或生产验收。
 
-**最新目标方案是 [v7.0.0](docs/design/AGENT_MEMORY_DESIGN_V7.0.0.md)。** B0 提供严格协议/领域及全成本合同；[B1](docs/design/v7.0.0/batch-b1.md)提供索引失效；[B2 调度器](docs/design/v7.0.0/batch-b2.md)提供持久合并、固定覆盖目标、共享预算和宿主执行。[B3](docs/design/v7.0.0/batch-b3.md)在这些基础上闭合有限当前项目问题读取/页面生命周期。[本批验证记录](docs/design/v7.0.0/validation-b3.json)列出实际来源指纹与逐次运行结果；旧阶段成绩单独记录，不能累计为本轮通过数。
+**完整目标方案是 [v7.0.0](docs/design/AGENT_MEMORY_DESIGN_V7.0.0.md)。** B0 提供严格协议/领域及全成本合同；[B1](docs/design/v7.0.0/batch-b1.md)提供索引失效；[B2 调度器](docs/design/v7.0.0/batch-b2.md)提供持久合并、固定覆盖目标、共享预算和宿主执行。[B3](docs/design/v7.0.0/batch-b3.md)在这些基础上闭合有限当前项目问题读取/页面生命周期。[本批验证记录](docs/design/v7.0.0/validation-b3.json)列出实际来源指纹与逐次运行结果；旧阶段成绩单独记录，不能累计为本轮通过数。
 
 [ProjectAdmission](src/agent_memory/consolidation/project_admission.py)要求可信来源 authority、已审查成员关系及字段/时间支持。缺少完成证据仍为未知，互斥负责人保留争议，无风险命中仅代表已知获准范围内的完整空集。支持 admitted-L1 与明确闭合的有限 publication manifest；正文前和交付前均检查当前权限、上下文和时间。擦除与旧备份回放也覆盖未发布注册和页面路由。
 
@@ -260,7 +262,7 @@ B2 的[独立生命周期证据](docs/design/v7.0.0/validation-b2.json)覆盖固
 
 后续按 [v7 计划](docs/design/v7.0.0/plan.md)与[任务台账](docs/design/v7.0.0/task.md)完成许可留出领域质量及实测全链路成本比较。本地 Ollama 配置和 9 组合成运行检查已通过，实际调用 Qwen 9B 生成 7 次；不代表这些外部效果已验收。保留全部 44 项旧任务状态。合成测试及本地验证不代表许可真实数据质量、生产收益或完整 M0/M1/M2 验收；这些门仍开放。
 
-高级检索和可选的只读 Reflect 继续按[任务台账](docs/design/v6.1.0/task.md)推进。远程部署见[安全策略](SECURITY.md)和[威胁模型](docs/THREAT_MODEL.md)；外部缓存、远端 ACL 和供应商副本需要各自完成集成合同。
+有界只读 Reflect 已实现两次受治理来源调用、精确引用和最终授权检查，不写入记忆或开放任意工具。更广目标继续见 [v7.1 台账](docs/design/v7.1.0/task.md)。远程部署见[安全策略](SECURITY.md)和[威胁模型](docs/THREAT_MODEL.md)；外部缓存、远端 ACL 和供应商副本需要各自完成集成合同。
 
 宿主可显式绑定 [B5 受治理模型解释](docs/design/v7.0.0/batch-b5.md)，通过 SDK `question_model_answer` 调用；普通结构化回答不调用模型。显式启用[本地验证命令](docs/design/v7.0.0/ollama-smoke.md)可冻结已安装模型/配置并检查缓存、授权和擦除。真实领域质量/成本验收仍开放，本地计算不默认免费。
 
@@ -299,3 +301,5 @@ python -m pytest -q
 [Apache License 2.0](LICENSE)。
 
 B6 固定源码收尾验证：完整仓库/全部扩展包 3931 通过、零 skip/失败/错误，原 3783 项通过节点均保留。六包构建及全新离线安装完成，241 份 Python 与 19 份 SQL 迁移逐字节相符，源码及 12 个归档扫描零发现；已含有引用保护的 GC 与冻结离线 A9 工具。范围见[B6 报告](docs/design/v7.0.0/batch-b6.md)。后续[本地 Ollama 验证](docs/design/v7.0.0/ollama-smoke.md)有单独专项证据；许可领域质量与实测全成本验收仍开放。
+
+[v7.1 运行时补充](docs/design/AGENT_MEMORY_DESIGN_V7.1.0.md)描述模块边界、算法架构、数据流与加性升级；[验证](docs/design/v7.1.0/validation.md)区分协议、实际本地模型运行和缺失的真实业务 gold/费率。`setup.sh --all` 安装既有集成包，本地模型需单独 `python -m pip install -e 'packages/local-models[inference]'`。代码接口不等于生产验收。

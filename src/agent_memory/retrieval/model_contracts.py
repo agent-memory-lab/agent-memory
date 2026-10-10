@@ -57,7 +57,8 @@ class ModelConfiguration:
 
     JSON fields are immutable canonical strings, obtained with ``canonical``.
     Bytes are a declared bound, not a claim of exact tokenizer enforcement.
-    ``model_revision`` must be the installed Ollama digest, not a mutable tag.
+    ``model_revision`` pins the installed Ollama digest or approved local artifact
+    manifest; it is never a mutable model tag.
     """
 
     provider: str
@@ -135,7 +136,10 @@ class ModelConfiguration:
             raise ModelError("model_output_token_reservation_required")
         if type(options.get("num_ctx")) is not int or options["num_ctx"] < 1:
             raise ModelError("model_context_limit_required")
-        if self.tools_revision != "none/1" or self.adapter_revision != "ollama-buffered/1":
+        if self.tools_revision != "none/1" or self.adapter_revision not in {
+            "ollama-buffered/1",
+            "local-transformers/1",
+        }:
             raise ModelError("unsupported_model_configuration")
         if type(self.think) not in (bool, str) or isinstance(self.think, str) and not self.think:
             raise ModelError("invalid_model_thinking_mode")

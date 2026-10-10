@@ -1,0 +1,68 @@
+{
+  "schema": "real-acceptance-integration-preflight/1",
+  "date": "2026-10-10",
+  "evidence_class": "offline_contracts",
+  "base": "runtime/pr18-original (local tree-identical snapshot of PR18 head 244bec8d)",
+  "runs": [
+    {
+      "name": "workflow_cost_and_ollama_contract_regression",
+      "command": "PYTHONPATH=src python -m pytest tests/test_real_acceptance_v71.py tests/test_real_workflow_acceptance_v71.py tests/test_question_experiment_v7.py tests/test_question_resources_v7.py tests/test_question_cost_v7.py tests/test_ollama_smoke_v7.py tests/test_ollama_port_v7.py -q --tb=short",
+      "tests": 212,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "junit_sha256": "e22073b1cd62230d3ceab5a41478d253f1071f67cf3c1f8e8bba2802f8ed0674",
+      "note": "Scopes overlap; do not add counts. The second run includes seven additional contracts added after the first run."
+    },
+    {
+      "name": "final_real_input_workflow_and_retrieval_contracts",
+      "command": "PYTHONPATH=src python -m pytest tests/test_real_acceptance_v71.py tests/test_real_workflow_acceptance_v71.py tests/test_controlled_retrieval_promotion.py -q --tb=short",
+      "tests": 61,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "junit_sha256": "2da59ec91834aebc1bd0b341670c545ed9814524ec02699e299d39f6777b52b8",
+      "note": "Scopes overlap; do not add counts. The second run includes seven additional contracts added after the first run."
+    },
+    {
+      "name": "post_authorization_artifact_fence_contracts",
+      "command": "PYTHONPATH=src python -m pytest tests/test_real_acceptance_v71.py tests/test_real_workflow_acceptance_v71.py tests/test_controlled_retrieval_promotion.py -q --tb=short",
+      "tests": 65,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "junit_sha256": "d56436cc361154f9a0bf3f17bb7ffd5296b5fed059f4a744a6a970021e960638",
+      "note": "Supersedes the earlier 61-case binding scope with four new gold/pricing mutation tests; counts overlap and are not additive."
+    }
+  ],
+  "checks": {
+    "ruff": "passed",
+    "git_diff_check": "passed"
+  },
+  "final_sha256": {
+    "src/agent_memory/evaluation/real_acceptance.py": "6c6c30fc995a923869e4f342588daaba3008ac92c75118e7275788da357388ed",
+    "tests/test_real_workflow_acceptance_v71.py": "60312369587dc8a15664ae26c6223e529398f1be6a1f7da9cf43943506117bf6",
+    "docs/design/v7.1.0/real-acceptance-preflight.md": "f779a62422c9c7dd85344bd09441557224b86270bf2bbb9de23b314c77c72ea3",
+    "docs/design/v7.1.0/validation.md": "0539f41ea928634a983b4f8ea8b293bde6b11e960d9163ad5d3bb8fd70118408"
+  },
+  "real_model_calls": 0,
+  "model_downloads": 0,
+  "real_business_acceptance_completed": false,
+  "production_benefit_claim": false,
+  "historical_task_statuses_changed": false,
+  "remaining": [
+    "reachable authorized local Qwen3.5:9B endpoint/runtime and call budget",
+    "licensed raw sources and scoped provenance",
+    "independent held-out gold and authenticated business verification",
+    "frozen independent judge, calibration, thresholds and paired statistical choices",
+    "trusted real raw-source A9 host adapter implementing and attesting all controls",
+    "actual host resources, approved tariffs, token/attempt receipts and billing reconciliation"
+  ],
+  "limitations": [
+    "Coverage summaries are descriptive request-level outcomes; they are not atom-level recall or feature-quality promotion.",
+    "Existing annotation-only Ollama A9 binding cannot validate semantic extraction or source-omission recall.",
+    "Historical real synthetic smoke is not re-executed on the integrated code.",
+    "No full integrated suite or actual backend/model acceptance is claimed by these focused checks.",
+    "Artifact hashes are rechecked after authorization awaits in the whole-workflow wrapper; no filesystem lock or complete TOCTOU prevention is claimed. Adapters need immutable verified snapshots or governed per-dispatch reads."
+  ]
+}

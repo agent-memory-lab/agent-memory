@@ -339,6 +339,24 @@ class DurableAtomHandler:
         ):
             raise RetentionError("processing_configuration_changed")
 
+    def _publication_guard(self, task, row):
+        """No await after the final model/audit fence and before this UoW exits.
+
+        The row came from the authenticated durable lease in this transaction.
+        A caller's older WorkerTask timestamp cannot extend or shorten renewal.
+        Completion acknowledgement may occur later; publication may not.
+        """
+        self._check_config()
+        if (
+            task.scope != self.queue.scope
+            or row["request_id"] != task.id
+            or row.get("lease_token") != task.payload.get("fence")
+            or row["configuration_sha256"] != self.queue.configuration_sha256
+            or row.get("status") not in {"running", "completed"}
+            or datetime.fromisoformat(row["lease_until"]) <= _time(self.queue.clock())
+        ):
+            raise stale()
+
     async def __call__(self, task, checkpoint):
         if task.scope != self.queue.scope:
             raise stale()
@@ -476,3 +494,4 @@ class DurableAtomHandler:
             await self.pipeline.validate_prepared_source(
                 source, prepared, authority=self.authority, policy=self.policy, unit_of_work=uow
             )
+            self._publication_guard(task, row)

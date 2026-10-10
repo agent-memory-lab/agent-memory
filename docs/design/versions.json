@@ -1,9 +1,22 @@
 {
   "manifest_schema_version": 1,
   "document_id": "AM-DESIGN",
-  "current_design_version": "7.0.0",
+  "current_design_version": "7.1.0",
   "versioning_scope": "architecture_design_only",
   "versions": [
+    {
+      "version": "7.1.0",
+      "date": "2026-10-10",
+      "status": "IMPLEMENTED_SLICES_VALIDATION_OPEN",
+      "file": "AGENT_MEMORY_DESIGN_V7.1.0.md",
+      "sha256": "207c0886a0432f83c5c83cc74f6cd0eb8f381dd7cb503a0dcbc802145482c6c2",
+      "predecessor_design": "7.0.0",
+      "implementation_baseline_commit": "c5424dcacad00fa11df018e3d5ff84753a4f637c",
+      "execution_plan": "v7.1.0/plan.md",
+      "execution_tasks": "v7.1.0/task.md",
+      "implementation_validation": "v7.1.0/validation.md",
+      "real_model_quality_cost_acceptance": false
+    },
     {
       "version": "7.0.0",
       "date": "2026-10-08",
