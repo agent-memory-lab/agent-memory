@@ -139,3 +139,19 @@ jobs:
             full-dual.xml
             version-drill.xml
           if-no-files-found: warn
+
+  local-model-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -e '.[dev]' build
+      # Imports are lazy. These contracts require neither Torch nor model weights;
+      # actual inference evidence is a separate explicit local-model run.
+      - run: python -m pip install --no-deps -e packages/local-models
+      - run: python -m build packages/local-models
+      - run: >-
+          python -m pytest -q packages/local-models/tests
+          -k 'not actual_final and not exact_local'
