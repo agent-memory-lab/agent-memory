@@ -214,7 +214,7 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 
 ## 能力状态与路线图
 
-当前文档交付基线为 **[V7-B6：集成工程验证](docs/design/v7.0.0/batch-b6.md)**及[本地真实 Ollama 合成运行验证](docs/design/v7.0.0/ollama-smoke.md)，建立在已有语言视图和 L1 生命周期之上。软件包仍为 **v0.1.0 / Alpha**；架构、协议和软件版本分别管理。
+当前文档交付基线为 **[v7.2：原文项目闭环与派生演化](docs/design/v7.2.0/validation.md)**，承接 [V7-B6](docs/design/v7.0.0/batch-b6.md) 与 [v7.1 运行时](docs/design/v7.1.0/validation.md)。本轮定向工程验证与真实业务质量、成本验收分开。软件包仍为 **v0.1.0 / Alpha**；架构、协议和软件版本分别管理。
 
 | 领域 | 已交付范围 | 实施证据 |
 | --- | --- | --- |
@@ -252,7 +252,7 @@ Observation 只开放文档规定的语言模板。发布点和可证明稳定�
 
 这些记录验证协议、事务和恢复行为；合成输入不能代替真实对话 gold、抽取质量评测或生产验收。
 
-**完整目标方案是 [v7.0.0](docs/design/AGENT_MEMORY_DESIGN_V7.0.0.md)。** B0 提供严格协议/领域及全成本合同；[B1](docs/design/v7.0.0/batch-b1.md)提供索引失效；[B2 调度器](docs/design/v7.0.0/batch-b2.md)提供持久合并、固定覆盖目标、共享预算和宿主执行。[B3](docs/design/v7.0.0/batch-b3.md)在这些基础上闭合有限当前项目问题读取/页面生命周期。[本批验证记录](docs/design/v7.0.0/validation-b3.json)列出实际来源指纹与逐次运行结果；旧阶段成绩单独记录，不能累计为本轮通过数。
+**完整目标方案仍为 [v7.0.0](docs/design/AGENT_MEMORY_DESIGN_V7.0.0.md)，当前实施合同见 [v7.2](docs/design/AGENT_MEMORY_DESIGN_V7.2.0.md)。** B0 提供严格协议/领域及全成本合同；[B1](docs/design/v7.0.0/batch-b1.md)提供索引失效；[B2 调度器](docs/design/v7.0.0/batch-b2.md)提供持久合并、固定覆盖目标、共享预算和宿主执行。[B3](docs/design/v7.0.0/batch-b3.md)在这些基础上闭合有限当前项目问题读取/页面生命周期。[本批验证记录](docs/design/v7.0.0/validation-b3.json)列出实际来源指纹与逐次运行结果；旧阶段成绩单独记录，不能累计为本轮通过数。
 
 [ProjectAdmission](src/agent_memory/consolidation/project_admission.py)要求可信来源 authority、已审查成员关系及字段/时间支持。缺少完成证据仍为未知，互斥负责人保留争议，无风险命中仅代表已知获准范围内的完整空集。支持 admitted-L1 与明确闭合的有限 publication manifest；正文前和交付前均检查当前权限、上下文和时间。擦除与旧备份回放也覆盖未发布注册和页面路由。
 
