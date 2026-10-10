@@ -49,6 +49,18 @@ the first stable release.
   explicitly retaining read-phase CPU overhead and zero-model-call baseline.
   See [scope and evidence](docs/design/incremental/shared-question-inputs.md).
 
+- Default-off bounded source-level omission audits for exact host-selected
+  questions, predicates and source spans, including zero-candidate generation.
+  Recovered candidates remain pending explicit host verification; conflict and
+  unresolved coverage never prove recall or world-negative facts. Reuse and
+  durable publication recheck source/version/authorization/erasure/time fences.
+  Same-source audited-slot holds survive model withdrawal and regenerated
+  candidates without blocking unrelated subjects, predicates or independent sources.
+  Explicit contract-test mode and live configuration/report-bound host promotion
+  approval prevent unmeasured production enablement. No new table or dependency
+  on PR #18; real local Qwen model-gain remains
+  unmeasured. See [source omission audits](docs/source-omission-audits.md).
+
 - Incremental SQLite lexical locators with bounded pre-hydration ranking, exact
   long-source spans and legacy-write repair; PostgreSQL keeps native indexes.
   Add explicit host-only current retained-source embedding reuse with separate

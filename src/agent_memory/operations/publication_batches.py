@@ -167,6 +167,10 @@ async def initial(handler, task, source, prepared):
                 head["generation"] if head else 0,
             )
             await save(handler, uow, scope, row)
+            await handler.pipeline.validate_prepared_source(
+                source, prepared, authority=handler.authority, policy=handler.policy,
+                unit_of_work=uow,
+            )
     handler._check_config()
     async with queue.repository.unit_of_work() as uow:
         row = await queue.checked(uow, task.id, task.payload["fence"])
@@ -187,6 +191,10 @@ async def initial(handler, task, source, prepared):
         close_batches(row)
         row.pop("prepared", None)
         await save(handler, uow, scope, row)
+        await handler.pipeline.validate_prepared_source(
+            source, prepared, authority=handler.authority, policy=handler.policy,
+            unit_of_work=uow,
+        )
 
 
 async def atomic_manifest(uow, scope, row, receipt, interpretation, prepared, policy):

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from dataclasses import asdict
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -33,6 +34,7 @@ from ..lifecycle import capture_annotation, is_memory_context
 from ..ports import AdmissionRepository, AtomGenerator, AtomReviewer
 from .admission import AdmissionPolicy, authority_to_payload, draft_to_payload
 from .admission_runtime import AdmissionEngine
+from .source_audit import SourceAuditUnavailable, SourceOmissionAudit
 
 
 class _InvalidCandidate(ValueError):
@@ -174,6 +176,7 @@ def extraction_receipt(
         audit["generation_calls"],
         audit["review_calls"],
         audit["elapsed_ms"],
+        deepcopy(audit.get("source_audit")),
     )
 
 
@@ -195,6 +198,7 @@ class AtomExtractionPipeline:
         scope_level: ScopeLevel = ScopeLevel.SESSION,
         max_candidates: int = 32,
         timeout_seconds: float = 20.0,
+        source_audit: SourceOmissionAudit | None = None,
     ) -> None:
         for adapter in (generator, reviewer):
             if not isinstance(adapter.version, str) or not 1 <= len(adapter.version) <= 128:
@@ -207,6 +211,9 @@ class AtomExtractionPipeline:
             or not 0 < timeout_seconds <= 30
         ):
             raise ValueError("timeout_seconds must be finite and within (0, 30]")
+        if source_audit is not None and not isinstance(source_audit, SourceOmissionAudit):
+            raise TypeError("source_audit must be a SourceOmissionAudit")
+        self.source_audit = source_audit
         self.generator, self.reviewer = generator, reviewer
         self.scope_level = ScopeLevel(scope_level)
         self.max_candidates, self.timeout_seconds = max_candidates, timeout_seconds
@@ -219,6 +226,7 @@ class AtomExtractionPipeline:
             "scope_level": self.scope_level.value,
             "max_candidates": self.max_candidates,
             "timeout_seconds": self.timeout_seconds,
+            **({"source_audit": self.source_audit.config_payload()} if self.source_audit else {}),
         }
 
     def input_fingerprint(
@@ -260,16 +268,20 @@ class AtomExtractionPipeline:
         self, event: MemoryEvent, *, authority: SourceAuthority, policy: AdmissionPolicy
     ) -> dict[str, Any]:
         """Run generation/review outside storage transactions; return serializable data."""
+        event, authority, policy = deepcopy((event, authority, policy))
         config = self.config_payload()
         fingerprint = self.input_fingerprint(event, authority=authority, policy=policy)
         started = perf_counter()
+        source_audit = (
+            await self.source_audit.begin(event, authority, policy) if self.source_audit else None
+        )
         failures: list[str] = []
         reports: list[dict[str, Any]] = []
         candidates: list[ExtractedAtom] = []
         review_calls = 0
         try:
             async with asyncio.timeout(self.timeout_seconds):
-                raw = await self.generator.generate_atoms(event)
+                raw = await self.generator.generate_atoms(deepcopy(event))
             if (
                 not isinstance(raw, Sequence)
                 or isinstance(raw, (str, bytes))
@@ -308,12 +320,55 @@ class AtomExtractionPipeline:
             except _InvalidCandidate as error:
                 report["reasons"] = [str(error)]
             reports.append(report)
+        if source_audit is not None:
+            proposals, audit_failures = await self.source_audit.run(
+                event, authority, policy, source_audit, candidates,
+                timeout_seconds=self.timeout_seconds,
+            )
+            failures.extend(audit_failures)
+            for raw_proposal, target, observation in proposals:
+                index = len(reports)
+                report = dict(
+                    candidate_index=index, draft_index=None, action="REJECT", reasons=[],
+                    faithfulness="uncertain", retention="uncertain", source_start=None,
+                    source_end=None, source_audit_target=target.target_id,
+                )
+                observation["candidate_indexes"].append(index)
+                try:
+                    if len(candidates) >= self.max_candidates:
+                        raise _InvalidCandidate("source_audit_candidate_budget_exhausted")
+                    candidate = _parse(raw_proposal, event, self.scope_level)
+                    if (
+                        candidate.draft.predicate != observation["predicate"]
+                        or candidate.source_start is None
+                        or not target.source_start <= candidate.source_start
+                        < candidate.source_end <= target.source_end
+                        or event.content[candidate.source_start:candidate.source_end]
+                        != candidate.draft.source_quote
+                    ):
+                        raise _InvalidCandidate("source_audit_proposal_outside_target")
+                    report.update(
+                        draft_index=len(candidates), source_start=candidate.source_start,
+                        source_end=candidate.source_end,
+                    )
+                    candidates.append(candidate)
+                except _InvalidCandidate as error:
+                    report["reasons"] = [str(error)]
+                    observation["status"] = "unresolved"
+                    observation["reasons"] = list(dict.fromkeys((
+                        *observation["reasons"], str(error),
+                    )))
+                reports.append(report)
         reviews: Sequence[AtomReview] = ()
         if candidates:
+            if source_audit is not None:
+                await self.source_audit.validate(event, authority, policy, source_audit)
             review_calls = 1
             try:
                 async with asyncio.timeout(self.timeout_seconds):
-                    reviews = await self.reviewer.review_atoms(event, tuple(candidates))
+                    reviews = await self.reviewer.review_atoms(
+                        deepcopy(event), deepcopy(tuple(candidates))
+                    )
                 if (
                     not isinstance(reviews, Sequence)
                     or len(reviews) != len(candidates)
@@ -327,6 +382,8 @@ class AtomExtractionPipeline:
                 reviews = tuple(
                     AtomReview(i, "uncertain", "uncertain", (code,)) for i in range(len(candidates))
                 )
+        if source_audit is not None:
+            await self.source_audit.validate(event, authority, policy, source_audit)
         reviews_by_index = {review.candidate_index: review for review in reviews}
         gates = {}
         for report in reports:
@@ -335,6 +392,24 @@ class AtomExtractionPipeline:
                 continue
             candidate, review = candidates[index], reviews_by_index[index]
             action, reasons = _gate(event, candidate, review)
+            if source_audit is not None and action == "ACCEPT":
+                targets = {t["target_id"]: t for t in source_audit["targets"]}
+                if any(
+                    observation["finding_status"] == "conflict"
+                    and observation["predicate"] == candidate.draft.predicate
+                    and candidate.source_start < targets[observation["target_id"]]["source_end"]
+                    and candidate.source_end > targets[observation["target_id"]]["source_start"]
+                    for observation in source_audit["observations"]
+                ):
+                    action, reasons = "PENDING_VERIFICATION", ("source_audit_conflict", *reasons)
+            if (
+                action == "ACCEPT" and "source_audit_target" in report
+                and policy.evaluate(event, candidate.draft, authority)[0]
+                not in {"REJECT", "L0_ONLY"}
+            ):
+                action, reasons = "PENDING_VERIFICATION", (
+                    "source_audit_recovery_requires_host_verification", *reasons,
+                )
             report.update(
                 action=action,
                 reasons=list(reasons),
@@ -360,6 +435,7 @@ class AtomExtractionPipeline:
             "generation_calls": 1,
             "review_calls": review_calls,
             "elapsed_ms": round((perf_counter() - started) * 1000, 3),
+            **({"source_audit": source_audit} if source_audit is not None else {}),
         }
         return {
             "drafts": [draft_to_payload(c.draft) for c in candidates],
@@ -382,18 +458,36 @@ class AtomExtractionPipeline:
         """Publish saved stage data; caller may provide the transaction-B UoW."""
         from .admission import draft_from_payload
 
+        event, prepared, authority, policy = deepcopy((event, prepared, authority, policy))
         drafts = tuple(draft_from_payload(value) for value in prepared["drafts"])
         audit = prepared["audit"]
         if audit["input_fingerprint"] != self.input_fingerprint(
             event, authority=authority, policy=policy
         ):
             raise ValueError("prepared extraction input changed")
+        await self.validate_prepared_source(
+            event, prepared, authority=authority, policy=policy, unit_of_work=unit_of_work
+        )
+        guard = None
+        if self.source_audit is not None:
+            async def guard(uow, committed_audit=None):
+                checked = prepared if committed_audit is None else {
+                    **prepared, "audit": committed_audit,
+                }
+                await self.validate_prepared_source(
+                    event, checked, authority=authority, policy=policy, unit_of_work=uow
+                )
+
         reviewed = _ReviewedPolicy(
             policy,
             prepared["gates"],
             {
                 "generator_version": self.generator.version,
                 "reviewer_version": self.reviewer.version,
+                **(
+                    {"source_audit": self.source_audit.config_payload()}
+                    if self.source_audit else {}
+                ),
             },
         )
         return await AdmissionEngine(repository).admit(
@@ -405,6 +499,28 @@ class AtomExtractionPipeline:
             _unit_of_work=unit_of_work,
             _retained=retained,
             _publication_id=publication_id,
+            _extraction_guard=guard,
+        )
+
+    async def validate_prepared_source(
+        self, event, prepared, *, authority, policy, unit_of_work=None
+    ):
+        """Final host fence for callers that own a larger publication transaction.
+
+        Call after all awaited writes and immediately before leaving that UoW.
+        It does nothing for the unchanged baseline extraction pipeline.
+        """
+        if self.source_audit is None:
+            return
+        audit = prepared["audit"]
+        if "source_audit" not in audit:
+            raise SourceAuditUnavailable("source_audit_receipt_missing")
+        if audit["input_fingerprint"] != self.input_fingerprint(
+            event, authority=authority, policy=policy
+        ):
+            raise SourceAuditUnavailable("source_audit_input_changed")
+        await self.source_audit.validate(
+            event, authority, policy, audit["source_audit"], unit_of_work=unit_of_work
         )
 
     async def process(
@@ -415,16 +531,30 @@ class AtomExtractionPipeline:
         authority: SourceAuthority,
         policy: AdmissionPolicy,
     ) -> AtomExtractionReceipt:
+        event, authority, policy = deepcopy((event, authority, policy))
         fingerprint = self.input_fingerprint(event, authority=authority, policy=policy)
         key = event.idempotency_key or event.id
         engine = AdmissionEngine(repository)
+        async def reuse_guard(uow, stored, audit):
+            if self.source_audit is None:
+                return
+            if "source_audit" not in audit:
+                raise SourceAuditUnavailable("source_audit_receipt_missing")
+            await self.source_audit.validate(
+                event, authority, policy, audit["source_audit"], unit_of_work=uow
+            )
+
         cached = await engine.extraction_status(
             event.scope,
             key,
             input_fingerprint=fingerprint,
             duplicate=True,
+            _extraction_guard=reuse_guard,
         )
         if cached is not None:
+            if self.source_audit is not None:
+                self.source_audit.require_current_approval()
+                self.source_audit.check_expiry(cached[1]["source_audit"])
             return extraction_receipt(*cached)
         prepared = await self.prepare(event, authority=authority, policy=policy)
         admitted = await self.publish_prepared(
@@ -439,7 +569,11 @@ class AtomExtractionPipeline:
             key,
             input_fingerprint=fingerprint,
             duplicate=admitted.duplicate,
+            _extraction_guard=reuse_guard,
         )
         if stored is None:
             raise ValueError("extraction source was deleted before receipt delivery")
+        if self.source_audit is not None:
+            self.source_audit.require_current_approval()
+            self.source_audit.check_expiry(stored[1]["source_audit"])
         return extraction_receipt(*stored)

@@ -473,3 +473,6 @@ class DurableAtomHandler:
             # The stage is no longer needed. Identity-only provenance remains.
             row.pop("prepared", None)
             await uow.retention_update(task.scope, task.id, row)
+            await self.pipeline.validate_prepared_source(
+                source, prepared, authority=self.authority, policy=self.policy, unit_of_work=uow
+            )

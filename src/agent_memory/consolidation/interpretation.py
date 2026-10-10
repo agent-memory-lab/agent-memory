@@ -15,6 +15,7 @@ from ..serialization import to_jsonable
 from .admission import authority_to_payload, draft_from_payload, draft_to_payload, slot_key
 from .admission_runtime import AdmissionEngine
 from .atom_extraction import _gate
+from .source_audit import audit_review_required
 
 
 def signature(draft):
@@ -80,10 +81,18 @@ async def prepare_reconciliation(pipeline, source, prepared, records, contract, 
                     ("target_policy_disallows", *reasons, *gate_reasons),
                 )
             elif gate == "ACCEPT" and action == "ACCEPT":
-                disposition, why = (
-                    "retain",
-                    ("source_review_and_target_policy_passed", *review.reasons),
-                )
+                if audit_review_required(row["payload"]):
+                    if not contract["allow_pending"]:
+                        raise RetentionError("reprocessing_needs_resolution")
+                    disposition, why = (
+                        "qualification_pending",
+                        ("source_audit_recovery_requires_host_verification",),
+                    )
+                else:
+                    disposition, why = (
+                        "retain",
+                        ("source_review_and_target_policy_passed", *review.reasons),
+                    )
             elif contract["allow_pending"]:
                 disposition, why = "qualification_pending", (*reasons, *gate_reasons)
             else:
@@ -95,7 +104,12 @@ async def prepare_reconciliation(pipeline, source, prepared, records, contract, 
                     "reasons": list(dict.fromkeys(why)),
                 }
             )
-    kept = {d["candidate_id"] for d in dispositions if d["action"] in {"retain", "carry_forward"}}
+    held = {row["id"] for row in records if audit_review_required(row["payload"])}
+    kept = {
+        d["candidate_id"] for d in dispositions
+        if d["action"] in {"retain", "carry_forward"}
+        or (d["action"] == "qualification_pending" and d["candidate_id"] in held)
+    }
     keep_signatures = {
         signature(draft_from_payload(r["payload"]["draft"])) for r in records if r["id"] in kept
     }
