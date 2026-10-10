@@ -623,7 +623,14 @@ class RefreshDemandQueue:
             await uow.derived_put(processor.scope, "refresh_demand", row["id"], row)
             await self._admit(uow, processor, row)
             target = CoverageTarget(
-                instance_id=row["instance_key"],
+                # Some adapters schedule a physical facet (for example a page)
+                # under its existing quota identity but expose a typed question
+                # target. Keep those identities separate without moving leases.
+                instance_id=(
+                    processor.coverage_instance_id(definition)
+                    if callable(getattr(processor, "coverage_instance_id", None))
+                    else row["instance_key"]
+                ),
                 scope=processor.scope,
                 time=QuestionTime(TimeMode.CURRENT, None, None),
                 requested_at=now,
