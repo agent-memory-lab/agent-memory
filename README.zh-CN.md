@@ -122,18 +122,18 @@ source event: <event-id>
 ## 从原始证据到可用知识
 
 <p align="center">
-  <img src="docs/assets/agent-memory-overview.svg" alt="从 L0 来源证据到 L1 原子记忆和语言 Observation；支持有界历史与同 scope 当前语言 L2 页面，L3 仍为后续目标" width="100%">
+  <img src="docs/assets/agent-memory-overview.svg" alt="可信宿主原文、L0 来源与核验 L1 事实支持记忆包、注册 L2 场景和经独立复核的 L3 画像；依据、时间、当前权限与擦除约束每条路径" width="100%">
 </p>
 
-[v7 设计](docs/design/AGENT_MEMORY_DESIGN_V7.0.0.md) 分别组织原始来源、被接纳的解释和基于它们构建的视图：
+[v7.2 总体架构与数据流](docs/design/AGENT_MEMORY_DESIGN_V7.2.0.md) 分别组织原始来源、被接纳的解释和基于它们构建的视图：
 
 | 内容 | 回答的问题 | 当前实现 / 设计目标 |
 | --- | --- | --- |
 | **L0 · 来源证据** | 原话是什么？何时发生、何时收到？ | 已实现来源保存、幂等接收、修订与删除屏障。 |
 | **L1 · 原子记忆** | 当前适用什么？当时知道什么？ | 已实现声明与候选接纳、双时态查询，以及限定范围的条件、更正和撤回。 |
 | **Observation · 派生视图** | 同一主题的证据支持什么？ | 已实现同 scope 语言模板、有界历史读取、当前非条件父视图和版本化宿主权限。 |
-| **L2 · Scenario** | 如何组织版本化场景页面和块？ | 当前 `language-scenario/1` 页面支持基于固定的同 scope、非条件语言父完整重建；一般场景模板仍在路线图中。 |
-| **L3 · Core / Persona** | 哪些长期偏好或跨场景模式值得保留？ | 路线图：区分明确指令与推断画像，单独验证依据、稳定性和反例。 |
+| **L2 · Scenario** | 如何组织版本化场景页面和块？ | 已有语言页面；注册项目场景自动构建、随父问题变化刷新，并重建注册覆盖期内的历史。 |
+| **L3 · Core / Persona** | 哪些长期偏好或跨场景模式值得保留？ | 明确声明与推断假设分开；注册画像按完整依据、独立来源族、观察跨度和反例复核、刷新或撤回，保留不可变历史修订。 |
 
 Observation 是可供 L2/L3 使用的派生构件，L1 也直接参与检索。派生视图保留依赖与资格，其输出不会自动变成独立的 L1 事实；现有内容容器也不代表完整 L2/L3 生命周期已经交付。
 
@@ -218,6 +218,8 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 
 | 领域 | 已交付范围 | 实施证据 |
 | --- | --- | --- |
+| 原文项目闭环与业务政策 | 用户自述保持待决，宿主绑定成员和保存/核验政策，独立权威字段核验后自动刷新视图 | [v7.2](docs/design/AGENT_MEMORY_DESIGN_V7.2.0.md) · [示例](examples/project_memory_lifecycle.py) |
+| 场景/画像演化与项目历史 | 共享队列维护注册场景和画像；admitted_l1 注册覆盖期内按双时间重建，当前授权和擦除始终生效 | [v7.2 台账](docs/design/v7.2.0/task.md) |
 | 受治理抽取、领域核验与宿主 | 模型候选/审查、有限跨轮输入、持久权威核验及原生项目资格/刷新；真实本地模型验证使用作者编写的输入 | [v7.1](docs/design/AGENT_MEMORY_DESIGN_V7.1.0.md) · [宿主](examples/memory_host.py) · [模型宿主](examples/model_memory_host.py) |
 | 精确本地模型预算与 logits | 可选本地 Transformer 渲染/回执检查、真实 Qwen3 yes/no logits；核心零第三方依赖，生产晋升需要真实验收 | [本地适配器](packages/local-models/README.md) |
 | 可靠 L0 → L1 | 宿主持久待发队列、原子接收/发布、来源修订、显式重处理、同槽更正与双时态事实查询 | [持久交付](docs/design/v6.1.0/batch-03-05.md) · [贡献生命周期](docs/design/v6.1.0/stage-03.md) |
@@ -237,7 +239,7 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 
 Observation 只开放文档规定的语言模板。发布点和可证明稳定区间的历史保留冻结政策/上下文，并检查当前权限；覆盖缺口明确拒绝。当前 `locale-parents/1` 视图固定实际父版本及传递处理许可。当前 `language-scenario/1` 页面组合同一 exact scope 下 1–4 个非条件语言 Observation 父，要求主体、用途与 authority 兼容。
 
-显式启用 `qualified_current=True` 后，`locale-qualified-parents/1` 与 `language-qualified-scenario/1` 保留可信条件和例外。`QuestionService` 另支持有限当前项目问题、宿主触发的项目页面首次 full 发布、共享调度器后台重验证、证书复用及[有界确定性类型化块补丁](docs/design/v7.0.0/typed-page-patches.md)；向 SDK/MCP 适配器传入 `questions=service` 才开放该可选接口。[v7.1](docs/design/AGENT_MEMORY_DESIGN_V7.1.0.md)增加可选的问题/页面发布点历史、显式授权的同库当前跨 scope 问题组合、宿主审查的 L3 声明/假设和有界只读 Reflect。任意项目历史重建、页面作父、旧 facet/page 的 delta、自由部分编辑、通用场景、分布式组合和远端 ACL 同步仍不在这些合同内。有界页面交付不代表完整 L2/L3 生命周期完成。L1 已有的双时态查询可独立使用；`l1_decided` 只说明处理完成，不代表事实正确。
+显式启用 `qualified_current=True` 后，语言资格模板保留可信条件和例外。`QuestionService` 支持项目问题、页面维护、证明复用及[宿主类型化块补丁](docs/design/v7.0.0/typed-page-patches.md)；向 SDK/MCP 适配器传入 `questions=service` 开放可选接口。[v7.2](docs/design/AGENT_MEMORY_DESIGN_V7.2.0.md)补齐原文项目自动交接、保存/独立核验业务政策、注册场景与画像演化，以及 `history_rebuild=True` 的双时态问题/场景重建。覆盖从启用后的注册时间开始，当前支持 admitted_l1；历史请求状态缺失的 publication_manifest、覆盖前数据、页面作父、旧 facet/page delta、跨数据库组合和远端 ACL 同步保持明确边界。L1 双时态可独立使用；`l1_decided` 表示处理完成，事实支持由接纳与核验合同另行判断。真实业务质量和完整成本验收仍需要获准语料、独立 gold 与费率。
 
 工程证据按被测版本和范围分别记录，不累计跨阶段测试成绩：
 

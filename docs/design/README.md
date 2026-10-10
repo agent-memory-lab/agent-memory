@@ -1,7 +1,7 @@
 # Agent Memory 设计版本索引
 
 当前完整目标设计为 **[v7.0.0 统一架构与算法实施设计](AGENT_MEMORY_DESIGN_V7.0.0.md)**；
-最新加性运行合同为 **[v7.1.0 抽取、核验与宿主](AGENT_MEMORY_DESIGN_V7.1.0.md)**，包含总体算法架构和数据流图。
+最新加性运行合同为 **[v7.2.0 原文闭环、业务政策与高层演化](AGENT_MEMORY_DESIGN_V7.2.0.md)**，包含总体算法架构和数据流图。
 状态为 `PROPOSED_BASELINE`：设计正文冻结；B0–B6 的有界工程能力已交付，真实领域质量与全成本验收仍开放。
 
 v7 保留事实抽取/接纳、完整双时态、Hindsight 生命周期借鉴、L0–L3、可靠任务、权限删除与评测，
@@ -14,6 +14,8 @@ v7 保留事实抽取/接纳、完整双时态、Hindsight 生命周期借鉴、
 采用设计 MAJOR 是因为问题身份、内容/证书和有限覆盖目标的合同重组；既有来源/事实/时间/权限和已发布接口保持原义，新增合同 opt-in。
 
 ## 当前实施入口
+
+- [v7.2 plan](v7.2.0/plan.md)、[task](v7.2.0/task.md)、[validation](v7.2.0/validation.md)：自动原文项目接纳、明确保存/核验业务政策、场景/画像演化、双时态历史重建和 A9 原文执行；真实业务验收仍等待外部输入。
 
 - [v7.1 plan](v7.1.0/plan.md)、[task](v7.1.0/task.md)和[验证](v7.1.0/validation.md)：七项代码能力及实际模型运行；真实业务效果待输入，高层能力范围单独声明。
 
@@ -37,6 +39,7 @@ M0/M1/M2 尚未整体验收；新版本不重置历史状态。v7 台账后续�
 
 | 版本 | 日期 | 状态 | 说明 |
 | --- | --- | --- | --- |
+| [7.2.0](AGENT_MEMORY_DESIGN_V7.2.0.md) | 2026-10-10 | IMPLEMENTED_SLICES_VALIDATION_OPEN | 生命周期与历史加性合同；真实业务效果验收待输入 |
 | [7.1.0](AGENT_MEMORY_DESIGN_V7.1.0.md) | 2026-10-10 | IMPLEMENTED_SLICES_VALIDATION_OPEN | 加性运行合同；真实业务效果与扩展历史目标仍开放 |
 | [7.0.0](AGENT_MEMORY_DESIGN_V7.0.0.md) | 2026-10-08 | PROPOSED_BASELINE | 当前完整方案；正文冻结基线 `583e20d`，执行进度见 revision 12 |
 | [6.1.0](AGENT_MEMORY_DESIGN_V6.1.0.md) | 2026-10-06 | PROPOSED_BASELINE | 前序方案；纳入 N01–N08 与 R05–R13；正文冻结时基线 `5cff9f4` |

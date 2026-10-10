@@ -122,18 +122,18 @@ This example supplies the structured claim from host code. It demonstrates persi
 ## From source evidence to usable knowledge
 
 <p align="center">
-  <img src="docs/assets/agent-memory-overview.svg" alt="Agent Memory: host events flow through L0 source evidence, typed admission, and L1 versioned facts to a bounded MemoryBundle. Optional language Observations support bounded history and current same-scope L2 language pages. L3 remains planned. Evidence, time, scope, and erasure govern the flow." width="100%">
+  <img src="docs/assets/agent-memory-overview.svg" alt="Agent Memory: trusted host events, L0 sources and verified L1 facts feed a bounded MemoryBundle, registered L2 scenarios and reviewed L3 Persona hypotheses. Evidence, time, current permissions and erasure govern every path." width="100%">
 </p>
 
-The [v7 design](docs/design/AGENT_MEMORY_DESIGN_V7.0.0.md) separates the source, the accepted interpretation, and the views built from it:
+The [v7.2 architecture and data flow](docs/design/AGENT_MEMORY_DESIGN_V7.2.0.md) separate the source, the accepted interpretation, and the views built from it:
 
 | Component | Responsibility | Available scope |
 | --- | --- | --- |
 | **L0 · Source evidence** | Preserve captured content, source identity, revisions, and processing requests | Durable receive, deduplication, explicit source revisions, and replay |
 | **L1 · Atomic memory** | Decide what can be used, with evidence, conditions, and time | Typed admission; accepted, pending, or contested outcomes; supported corrections and dual-time queries |
 | **Observation · Derived views** | Organize a facet across sources and rebuild when its inputs change | Same-scope language templates, bounded historical reads, current non-conditional parent views, and versioned host permissions |
-| **L2 · Scenario** | Organize versioned scenario pages and blocks | Current `language-scenario/1` pages support full rebuild from fixed same-scope, non-conditional language parents; general scenario templates remain planned |
-| **L3 · Core / Persona** | Organize explicit long-term preferences and carefully evaluated patterns | Planned under the unified contract; inferred profiles require separate acceptance |
+| **L2 · Scenario** | Organize versioned scenario pages and blocks | Language pages plus automatically maintained registered project scenes and dual-time reconstruction within registered coverage |
+| **L3 · Core / Persona** | Organize explicit long-term preferences and carefully evaluated patterns | Separate declarations and hypotheses; complete evidence, independent families, observation spans and reviewed counterexamples drive refresh, withdrawal and immutable history |
 
 Observation is a derived building block that can support L2 or L3. L1 also feeds retrieval directly. A summary's position in this structure never increases the authority of its evidence.
 
@@ -218,6 +218,8 @@ The current documented delivery baseline is **[V7-B6: integrated engineering ver
 
 | Capability | Current implementation | Evidence |
 | --- | --- | --- |
+| Raw-source project lifecycle and business policies | Host-bound membership, storage rules and independent authoritative field verification drive automatic views; user self-reports stay pending | [v7.2](docs/design/AGENT_MEMORY_DESIGN_V7.2.0.md) · [Example](examples/project_memory_lifecycle.py) |
+| Scene/persona evolution and project history | One shared scheduler; admitted-L1 dual-time rebuilding with frozen business state and current authorization/erasure | [v7.2 tasks](docs/design/v7.2.0/task.md) |
 | Governed extraction, domain verification and host | Model proposals/review, finite cross-turn inputs, durable authoritative verification and native project qualification/refresh; real local model probes use authored inputs | [v7.1](docs/design/AGENT_MEMORY_DESIGN_V7.1.0.md) · [Host](examples/memory_host.py) · [Model host](examples/model_memory_host.py) |
 | Exact local model budgets and logits | Optional local Transformer renderer/receipt checks and real Qwen3 yes/no logits; core remains dependency free; production promotion requires real acceptance | [Local adapters](packages/local-models/README.md) |
 | Reliable L0 → L1 | Host outbox, atomic receive/publish, source revisions, explicit reprocessing, same-slot corrections, and dual-time fact reads | [Delivery chain](docs/design/v6.1.0/batch-03-05.md) · [Contribution lifecycle](docs/design/v6.1.0/stage-03.md) |
@@ -237,7 +239,7 @@ The current documented delivery baseline is **[V7-B6: integrated engineering ver
 
 Observation remains limited to documented language templates. Published-point and certified-interval history preserve frozen policies/context and current access checks; gaps are rejected. Current `locale-parents/1` views bind fixed parent revisions and transitive processing permissions. Current `language-scenario/1` pages combine 1–4 non-conditional language Observation parents in the same exact scope, with compatible subject, purpose, and authority.
 
-With explicit `qualified_current=True`, `locale-qualified-parents/1` and `language-qualified-scenario/1` preserve trusted conditions and exceptions. `QuestionService` separately supports finite current project questions, host-triggered initial project-page publication, shared-scheduler background revalidation, validated reuse, and [bounded deterministic typed block patches](docs/design/v7.0.0/typed-page-patches.md). Pass `questions=service` to the SDK/MCP adapter to expose this optional surface. [v7.1](docs/design/AGENT_MEMORY_DESIGN_V7.1.0.md) adds opt-in published-point question/page history, explicitly authorized same-repository current question composition, host-reviewed L3 statements/hypotheses, and bounded read-only Reflect. Arbitrary historical project reconstruction, pages as parents, legacy facet/page delta, free-form partial edits, generic scenarios, distributed composition and remote ACL synchronization remain outside these contracts. The bounded page delivery does not complete the full L2/L3 lifecycle. L1's existing bitemporal queries remain independently available; `l1_decided` means processing completed, not that a fact is true.
+With explicit `qualified_current=True`, language templates preserve trusted conditions and exceptions. `QuestionService` supplies project questions, maintained pages, proof reuse and [host-only typed block patches](docs/design/v7.0.0/typed-page-patches.md); pass `questions=service` to the SDK/MCP adapter for the optional interface. [v7.2](docs/design/AGENT_MEMORY_DESIGN_V7.2.0.md) adds automatic raw-source project handoff, storage/independent-verification policies, registered scene/persona evolution and `history_rebuild=True` dual-time question/page rebuilding. Coverage begins at opt-in registration and supports admitted-L1 censuses; historical publication-manifest state, precoverage reconstruction, pages as parents, legacy facet/page delta, distributed composition and remote ACL synchronization retain explicit limits. L1 dual-time queries remain independent; `l1_decided` establishes processing completion while admission and qualification establish factual support. Real business quality and complete cost acceptance still require approved corpus, independent gold and tariffs.
 
 Validation records include SQLite and real PostgreSQL contracts, cross-connection races, process-kill recovery, and backup replay. The [stage 12 full-suite report](docs/design/v6.1.0/stage-12-full-test.md) is an older baseline; [stage 13](docs/design/v6.1.0/stage-13.md) and stage 14 [A](docs/design/v6.1.0/stage-14a.md)/[B.3](docs/design/v6.1.0/stage-14b3.md)/[C](docs/design/v6.1.0/stage-14c.md) record targeted and affected regression runs. [Stage 15](docs/design/v6.1.0/stage-15.md) records a full repository/package run and build/install verification, with [independent evidence](docs/design/v6.1.0/validation-stage-15.json). Each report applies to its recorded code baseline; counts are not cumulative. Production acceptance, real-domain extraction quality, and full M0/M1/M2 milestone acceptance remain open.
 

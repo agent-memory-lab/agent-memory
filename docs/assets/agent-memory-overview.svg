@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="660" viewBox="0 0 1280 660" role="img" aria-labelledby="title desc">
   <title id="title">Agent Memory: from source evidence to usable memory</title>
-  <desc id="desc">The implemented path runs from a trusted host through L0 source evidence and typed admission or review to L1 versioned facts. L1 supports direct current and historical fact reads into a bounded MemoryBundle. Optional same-scope language Observations support bounded historical reads and current non-conditional parent views. Current L2 language pages support full rebuild from fixed same-scope non-conditional language parents. General scenario templates and L3 Core or Persona remain planned. Evidence, time, scope and erasure govern these paths, supported by durable intake, replay, retries, staged readiness and restore controls. Conditional or historical parents, historical pages, delta and cross-scope composition are not enabled.</desc>
+  <desc id="desc">Trusted host bindings connect L0 sources, typed admission and independent project verification to versioned L1 facts. L1 supports current and historical fact reads into a bounded MemoryBundle. Optional Observations and QuestionViews feed registered L2 scenarios and independently reviewed L3 Persona hypotheses. Registered admitted_l1 project questions and scenarios can rebuild bitemporal history from their opt-in registration floor; Persona preserves immutable revisions. Evidence, current permissions, time and erasure govern every path. Publication-manifest continuous history and cross-scope composition remain outside this capability.</desc>
   <defs>
     <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
       <path d="M24 0H0V24" fill="none" stroke="#d9d2c5" stroke-width=".7"/>
@@ -87,17 +87,17 @@
   <path d="M788 370V397" class="connection"/>
   <g transform="translate(556 408)">
     <rect width="352" height="102" rx="12" fill="#fffdf8" stroke="#b9c4b8"/>
-    <text x="20" y="25" class="step">OBSERVATION / OPTIONAL</text>
-    <text x="20" y="55" class="card-title">Language preference</text>
-    <text x="20" y="80" class="small">Same scope · current + bounded history</text>
+    <text x="20" y="25" class="step">REGISTERED VIEWS / OPTIONAL</text>
+    <text x="20" y="55" class="card-title">Language + project views</text>
+    <text x="20" y="80" class="small">Same scope · explicit history coverage</text>
   </g>
 
-  <path d="M908 459H938" fill="none" stroke="#868a7d" stroke-width="1.7" stroke-dasharray="4 4" marker-end="url(#planned-arrow)"/>
+  <path d="M908 459H938" fill="none" stroke="#868a7d" stroke-width="1.7" marker-end="url(#planned-arrow)"/>
   <g transform="translate(950 408)">
-    <rect width="274" height="102" rx="12" fill="#eeece3" stroke="#9ba08f" stroke-dasharray="5 4"/>
+    <rect width="274" height="102" rx="12" fill="#eeece3" stroke="#9ba08f"/>
     <text x="20" y="25" class="step" style="fill:#6d745f">DERIVED KNOWLEDGE</text>
-    <text x="20" y="56" class="body" style="font-weight:700;fill:#485142">L2 current language pages</text>
-    <text x="20" y="81" class="body" style="font-weight:700;fill:#485142">L3 Core / Persona · planned</text>
+    <text x="20" y="56" class="body" style="font-weight:700;fill:#485142">Registered L2 scenarios</text>
+    <text x="20" y="81" class="body" style="font-weight:700;fill:#485142">L3 Persona · reviewed</text>
   </g>
 
   <g transform="translate(56 429)">
