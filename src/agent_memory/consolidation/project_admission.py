@@ -30,7 +30,7 @@ from ..evidence_support import evaluate_support
 from ..fact_qualification import FieldEvidence, SourceSpan
 from ..operations.publication_manifest import close, valid_manifest
 from ..operations.retention import DurableReceiver
-from ..operations.source_revisions import source_is_current
+from ..operations.source_revisions import source_available_at, source_is_current
 from ..serialization import to_jsonable
 from .admission import AdmissionPolicy, authority_to_payload, draft_from_payload, draft_to_payload
 from .qualification import ContextualMemory, target_fingerprint
@@ -141,9 +141,10 @@ class ProjectAdmission:
             _fail("project_registered_contract_required")
         authorities, memberships = tuple(authorities), tuple(memberships)
         if not 1 <= len(authorities) <= 64 or any(
-            type(a) is not SourceAuthority or a.kind not in {"document", "tool_observation"}
+            type(a) is not SourceAuthority
+            or a.kind not in {"self_report", "document", "tool_observation"}
             for a in authorities
-        ):
+        ) or not any(a.kind in {"document", "tool_observation"} for a in authorities):
             _fail("project_authoritative_source_required")
         if len({a.source_id for a in authorities}) != len(authorities):
             _fail("project_duplicate_source_authority")
@@ -358,7 +359,9 @@ class ProjectAdmission:
             origin = source.metadata.get("lifecycle", {}).get("origin")
             if (
                 origin is not None
-                and origin != {"document": "host", "tool_observation": "tool"}[authority.kind]
+                and origin != {
+                    "self_report": "user", "document": "host", "tool_observation": "tool"
+                }[authority.kind]
             ):
                 _fail("project_source_origin_mismatch")
             audit = {
@@ -547,6 +550,8 @@ class ProjectAdmission:
             if binding.get("review") is not None:
                 _fail("project_review_already_decided")
             for link in links:
+                if link.authority.kind not in {"document", "tool_observation"}:
+                    _fail("project_authoritative_evidence_required")
                 if link.authority != self._authority(link.authority.source_id):
                     _fail("project_source_authority_changed")
             await self._grants(
@@ -694,17 +699,19 @@ class ProjectAdmission:
 
     async def _snapshot(
         self, uow, context, *, at, source_basis="admitted_l1", publication_request_ids=(),
-        input_guard=None, candidate_headers=None,
+        input_guard=None, candidate_headers=None, historical=False,
     ):
         """Transaction-internal QuestionService bridge; lock held by the caller.
 
-        Both time coordinates must be the captured current time. This deliberately
-        does not call ContextualMemory.query or the latest-boundary atom projection:
-        every qualified overlapping fact survives for the full oracle to contest.
+        Ordinary captures require both coordinates at the current clock. The
+        opt-in historical adapter supplies an already guarded version census;
+        source visibility then follows known_at and support follows valid_at.
+        Neither path uses the latest-boundary projection: every qualified
+        overlapping fact survives for the full oracle to contest.
         """
         at = instant(at)
         registration = self.registration_fingerprint
-        security_at = at
+        security_at = instant(self.clock()) if historical else at
         if (
             type(context) is not QueryContext
             or context.scope != self.scope
@@ -712,8 +719,10 @@ class ProjectAdmission:
             or context.purpose != self.purpose
         ):
             _fail("project_snapshot_context_mismatch")
-        if context.valid_at != at or context.known_at != at:
+        if not historical and (context.valid_at != at or context.known_at != at):
             _fail("project_historical_snapshot_unsupported")
+        if historical and (context.valid_at != at or context.known_at > security_at):
+            _fail("project_history_context_invalid")
         reader = getattr(uow, "derived_project_candidates", None)
         if not callable(reader):
             _fail("project_census_backend_unsupported")
@@ -744,7 +753,7 @@ class ProjectAdmission:
         ids = sorted({key for h in relevant for key in h["source_ids"]})
         if len(ids) + len(headers) > MAX_INPUTS:
             _fail("project_input_capacity")
-        grants = await self._grants(uow, ids, at)
+        grants = await self._grants(uow, ids, security_at)
         sources, source_proofs = {}, []
         epoch = await uow.retention_epoch(self.scope)
         transitions = [
@@ -808,7 +817,10 @@ class ProjectAdmission:
         facts, unresolved, processing = [], [], set()
         for header in relevant:
             guard_inputs()
-            row = await uow.get_admission_record(self.scope, header["id"])
+            row = (
+                await uow.get_admission_record_at(self.scope, header["id"], context.known_at)
+                if historical else await uow.get_admission_record(self.scope, header["id"])
+            )
             if row is None or row["version"] != header["version"]:
                 _fail("project_candidate_version_changed")
             if project_header(row["payload"]) != header["project"]:
@@ -837,7 +849,10 @@ class ProjectAdmission:
             review = binding.get("review")
             if review:
                 self._review_valid(row)
-            current = await source_is_current(uow, source)
+            current = (
+                await source_available_at(uow, source, context.known_at)
+                if historical else await source_is_current(uow, source)
+            )
             if p["action"] == "WITHDRAWN" and not current:
                 # Source revision replacement is an independently persisted,
                 # atomic withdrawal, even if the old host review was qualified.
@@ -866,8 +881,13 @@ class ProjectAdmission:
             self._qualification_valid(qualification, draft, sources)
             for link in qualification["links"]:
                 source = sources[link["span"]["source_event_id"]]
-                if "_retention" in source.metadata and not await source_is_current(uow, source):
-                    _fail("project_evidence_superseded")
+                if "_retention" in source.metadata:
+                    available = (
+                        await source_available_at(uow, source, context.known_at)
+                        if historical else await source_is_current(uow, source)
+                    )
+                    if not available:
+                        _fail("project_evidence_superseded")
                 processing.add(SourceSpan(**link["span"]))
             ranges, _ = evaluate_support(qualification, sources)
             transitions.extend(
@@ -914,11 +934,13 @@ class ProjectAdmission:
                         review["id"],
                         review["policy_revision"],
                         fact.fingerprint,
-                        self._authority(binding["authority_id"]),
+                        self._authority(qualification["links"][0]["authority"]["source_id"]),
                         fields,
                     ),
                 )
             )
+        if historical and source_basis != "admitted_l1":
+            _fail("project_history_source_basis_unsupported")
         manifests = await self._publication(uow, source_basis, publication_request_ids, relevant)
         guard_inputs()
         coverage = ProjectSnapshotCoverage(
@@ -1022,7 +1044,8 @@ class ProjectAdmission:
             source = sources[span.source_event_id]
             authority = self._authority(link["authority"]["source_id"])
             if (
-                authority_to_payload(authority) != link["authority"]
+                authority.kind not in {"document", "tool_observation"}
+                or authority_to_payload(authority) != link["authority"]
                 or source.content_hash != link["source_sha256"]
                 or link["target_sha256"] != target_fingerprint(draft)
                 or draft.subject_id not in authority.subjects

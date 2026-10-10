@@ -763,6 +763,17 @@ class PostgresMemoryUnitOfWork:
         )
         return tuple(r for r in rows if "contribution_barrier" in r["payload"])
 
+    async def get_admission_record_at(self, scope, record_id, known_at, *, metadata_only=False):
+        from .project_history import record_at
+
+        return await record_at(self.connection, scope, record_id, known_at,
+                               metadata_only=metadata_only)
+
+    async def get_source_revision_metadata(self, scope, event_id):
+        from .project_history import source_revision_metadata
+
+        return await source_revision_metadata(self.connection, scope, event_id)
+
     async def save_admission_record(
         self, scope: MemoryScope, record_id: str, event_id: str, slot_key: str,
         payload: dict[str, Any], expected_version: int,

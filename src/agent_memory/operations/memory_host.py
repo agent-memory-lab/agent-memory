@@ -32,6 +32,8 @@ class MemoryHost:
         on_accept,
         verification=None,
         questions=None,
+        project_bridge=None,
+        evolutions=(),
         clock=utc_now,
         worker_id="memory-host",
         limits=None,
@@ -73,19 +75,57 @@ class MemoryHost:
             questions.repository is not repository or questions.scope != scope
         ):
             raise ValueError("question host scope/repository mismatch")
+        if project_bridge is not None and (
+            questions is None or project_bridge.admission is not questions.admission
+        ):
+            raise ValueError("project bridge requires the exact registered question admission")
+        if project_bridge is not None:
+            from ..consolidation.business_policy import BusinessAdmissionPolicy
+
+            if source_authority != project_bridge.admission._authority(
+                project_bridge.source_authority_id
+            ):
+                raise ValueError("project bridge requires the registered capture authority")
+            if isinstance(policy, BusinessAdmissionPolicy) and (
+                verification is None
+                or getattr(verification.publisher, "business_policy_sha256", None)
+                != policy.fingerprint
+            ):
+                raise ValueError("project verification requires the bound business policy guard")
+        self.project_bridge = project_bridge
+        self.evolutions = tuple(evolutions)
+        if len(self.evolutions) > 16:
+            raise ValueError("bounded evolution inventory required")
+        refresh_queue = questions.queue if questions else None
+        for evolution in self.evolutions:
+            if (
+                evolution.repository is not repository
+                or evolution.scope != scope
+                or not callable(getattr(evolution, "discover_changes", None))
+            ):
+                raise ValueError("evolution host scope/repository mismatch")
+            if refresh_queue is None:
+                refresh_queue = evolution.queue
+            if evolution.queue is not refresh_queue:
+                raise ValueError("evolution requires the shared refresh scheduler")
         self.configuration_sha256 = processing_configuration_sha256(
-            pipeline, policy, source_authority
+            pipeline, policy, source_authority, project_bridge=project_bridge
         )
         self.receiver = DurableReceiver(repository, clock=clock)
         self.queue = ExtractionQueue(repository, scope, self.configuration_sha256, clock=clock)
         handler = DurableAtomHandler(
-            self.queue, pipeline, policy, source_authority, local_only=True
+            self.queue,
+            pipeline,
+            policy,
+            source_authority,
+            local_only=True,
+            project_bridge=project_bridge,
         )
         self.worker = BoundedWorker(
             self.queue, {"memory.extract": handler}, worker_id=worker_id, limits=self.limits
         )
         self.refresh = (
-            RefreshHost(questions.queue, worker_id=worker_id + ":refresh") if questions else None
+            RefreshHost(refresh_queue, worker_id=worker_id + ":refresh") if refresh_queue else None
         )
         self._stop = asyncio.Event()
         self._initialized = False
@@ -174,6 +214,12 @@ class MemoryHost:
         count = 0
         for row in rows:
             try:
+                if (
+                    self.project_bridge is not None
+                    and not self.project_bridge.verification_eligible(row)
+                ):
+                    after = row["id"]
+                    continue
                 draft = row["payload"]["draft"]
                 matches = [
                     spec
@@ -184,7 +230,9 @@ class MemoryHost:
                 if len(matches) == 1:
                     spec = matches[0]
                     await self.verification.schedule(
-                        row["id"], row["version"], tool_id=spec.id,
+                        row["id"],
+                        row["version"],
+                        tool_id=spec.id,
                         request_id=f"auto:{row['id']}:{row['version']}:{spec.fingerprint}",
                     )
                     count += 1
@@ -206,7 +254,9 @@ class MemoryHost:
             if after and await uow.get_admission_record(self.scope, after) is None:
                 after = None
             await uow.derived_put(
-                self.scope, "verification_discovery", "scope",
+                self.scope,
+                "verification_discovery",
+                "scope",
                 {"after": after, "parents": ["atom:" + after] if after else []},
             )
         return count
@@ -242,8 +292,23 @@ class MemoryHost:
                 ),
                 "failed",
             )
-            if self.verification else "disabled"
+            if self.verification
+            else "disabled"
         )
+
+        async def discover_evolution():
+            total = 0
+            for evolution in self.evolutions:
+                if (
+                    evolution.repository is not self.repository
+                    or evolution.scope != self.scope
+                    or evolution.queue is not self.refresh.queue
+                ):
+                    raise ValueError("evolution registration changed")
+                total += len(await evolution.discover_changes())
+            return total
+
+        evolved = await stage("evolution", discover_evolution, 0) if self.evolutions else 0
         refresh = await stage("refresh", self.refresh.run_once) if self.refresh else None
         self._last_error = "memory_host_stage_failed" if self._stage_errors else None
         return {
@@ -251,6 +316,7 @@ class MemoryHost:
             "verification_scheduled": scheduled,
             "verification_backpressured": self._verification_backpressured,
             "verification": verification,
+            **({"evolution_discovered": evolved} if self.evolutions else {}),
             "refresh": asdict(refresh) if refresh else None,
             "stage_errors": dict(self._stage_errors),
         }
@@ -281,7 +347,7 @@ class MemoryHost:
         self._stop.clear()
         if self.refresh:
             # Restart the owned refresh host, preserving its durable queue.
-            self.refresh = RefreshHost(self.questions.queue, worker_id=self.worker_id + ":refresh")
+            self.refresh = RefreshHost(self.refresh.queue, worker_id=self.worker_id + ":refresh")
         try:
             while not self._stop.is_set():
                 try:

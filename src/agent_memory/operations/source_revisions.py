@@ -196,17 +196,24 @@ async def source_available_at(uow, source, known_at):
     _, head = await document_head(uow, source)
     identity = head["payload"]["event_id"]
     for _ in range(256):
-        revision = await uow.get_source_event(source.scope, identity)
-        if revision is None:
-            return False
-        metadata = revision.metadata["_retention"]
+        metadata_reader = getattr(uow, "get_source_revision_metadata", None)
+        if callable(metadata_reader):
+            metadata = await metadata_reader(source.scope, identity)
+            if metadata is None:
+                return False
+            revision_id = identity
+        else:
+            revision = await uow.get_source_event(source.scope, identity)
+            if revision is None:
+                return False
+            metadata, revision_id = revision.metadata["_retention"], revision.id
         request = await uow.retention_get(source.scope, "request", metadata["request_id"])
         if request is None:
             return False
         from datetime import datetime
 
         if datetime.fromisoformat(request["received_at"]) <= known_at:
-            return revision.id == source.id
+            return revision_id == source.id
         identity = metadata.get("parent_event_id")
         if identity is None:
             return False

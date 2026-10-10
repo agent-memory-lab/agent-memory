@@ -614,8 +614,10 @@ def engine_scope(candidate):
 def project_publisher(admission, *, accept_evidence):
     """Native project field qualification, with host evidence grants in the same UoW.
 
-    Conditions/exceptions require a specialized host publisher; this adapter only
-    handles unqualified assertions. Unknown never becomes a failed semantic review.
+    Typed tool findings bind every original condition/exception and every present
+    temporal field. The native qualifier validates those host semantic bindings;
+    neither missing qualifiers nor missing proofs become unconditional facts.
+    Unknown never becomes a failed semantic review.
     """
     from ..consolidation.qualification import target_fingerprint
     from ..evidence_support import EvidenceLink, FieldSupport, SupportRange
@@ -628,8 +630,6 @@ def project_publisher(admission, *, accept_evidence):
         draft = draft_from_payload(candidate["payload"]["draft"])
         if (
             not candidate["payload"].get("project_candidate")
-            or draft.conditions
-            or draft.exceptions
             or finding.support_from is None
         ):
             raise ModelError("verification_specialized_publisher_required")
@@ -638,7 +638,27 @@ def project_publisher(admission, *, accept_evidence):
         source = await uow.get_source_event(admission.scope, finding.event.id)
         if source is None or source.content_hash != finding.event.content_hash:
             raise ModelError("verification_evidence_unavailable")
+        required = {"subject_id", "predicate", "value", "valid_from"}
+        required.update(
+            field for field in ("valid_to", "conditions", "exceptions")
+            if getattr(draft, field)
+        )
+        if (
+            not required <= set(finding.supported_fields)
+            or len(finding.conditions) != len(draft.conditions)
+            or len(finding.exceptions) != len(draft.exceptions)
+        ):
+            raise ModelError("verification_project_qualifier_support_incomplete")
         if finding.disposition == "refuted":
+            # A witness that disagrees only today cannot erase the assertion's
+            # earlier valid interval. Partial refutation needs native revision.
+            if (
+                draft.valid_from is None or finding.support_from > draft.valid_from
+                or (finding.support_to is not None and (
+                    draft.valid_to is None or finding.support_to < draft.valid_to
+                ))
+            ):
+                raise ModelError("verification_project_refutation_interval_incomplete")
             await admission.reject(
                 candidate["id"],
                 expected_version=candidate["version"],
@@ -646,6 +666,28 @@ def project_publisher(admission, *, accept_evidence):
                 reasons=("authoritative_refutation",),
                 _unit_of_work=uow,
             )
+            from ..serialization import to_jsonable
+
+            row = await uow.get_admission_record(admission.scope, candidate["id"])
+            row["payload"]["source_event_ids"] = sorted(
+                set(row["payload"]["source_event_ids"]) | {source.id}
+            )
+            start = source.content.find(finding.quote)
+            row["payload"]["project_refutation"] = {
+                "schema": "project-domain-refutation/1",
+                "target_sha256": target_fingerprint(draft),
+                "tool_sha256": spec.fingerprint,
+                "source_sha256": source.content_hash,
+                "span": to_jsonable(SourceSpan(
+                    source.id, start, start + len(finding.quote), finding.quote
+                )),
+                "authority": to_jsonable(spec.authority),
+                "support": to_jsonable(SupportRange(finding.support_from, finding.support_to)),
+                "supported_fields": list(finding.supported_fields),
+                "conditions": to_jsonable(finding.conditions),
+                "exceptions": to_jsonable(finding.exceptions),
+            }
+            await admission._save(uow, row)
             return
         start = source.content.find(finding.quote)
         span = SourceSpan(source.id, start, start + len(finding.quote), finding.quote)
@@ -662,6 +704,8 @@ def project_publisher(admission, *, accept_evidence):
             expected_version=candidate["version"],
             review_id="domain-review:" + digest([candidate["id"], spec.fingerprint]),
             applicability_id="domain:" + spec.id,
+            conditions=finding.conditions,
+            exceptions=finding.exceptions,
             links=(link,),
             field_support=tuple(FieldSupport(f, ((link.id,),)) for f in finding.supported_fields),
             _unit_of_work=uow,

@@ -151,6 +151,12 @@ class AdmissionUnitOfWork(MemoryUnitOfWork, Protocol):
         self, scope: MemoryScope, slot_key: str,
     ) -> tuple[dict[str, Any], ...]: ...
 
+    async def get_admission_record_at(
+        self, scope: MemoryScope, record_id: str, known_at: datetime, *, metadata_only: bool = False,
+    ) -> dict[str, Any] | None:
+        """Retained exact-scope version at system time; tombstones never expose history."""
+        ...
+
     async def save_admission_record(
         self, scope: MemoryScope, record_id: str, event_id: str, slot_key: str,
         payload: dict[str, Any], expected_version: int,
