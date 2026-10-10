@@ -18,7 +18,11 @@ def to_jsonable(value: Any) -> Any:
     if isinstance(value, Path):
         return str(value)
     if is_dataclass(value) and not isinstance(value, type):
-        return {field.name: to_jsonable(getattr(value, field.name)) for field in fields(value)}
+        return {
+            field.name: to_jsonable(getattr(value, field.name))
+            for field in fields(value)
+            if not field.metadata.get("omit_if_empty") or getattr(value, field.name)
+        }
     if isinstance(value, Mapping):
         return {str(key): to_jsonable(item) for key, item in value.items()}
     if isinstance(value, (list, tuple, set, frozenset)):
