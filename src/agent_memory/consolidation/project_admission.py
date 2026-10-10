@@ -7,6 +7,7 @@ quote matching alone never promotes a candidate. Runtime reads use this persiste
 review and enumerate every candidate before deciding applicability or disposition.
 """
 
+from contextlib import nullcontext
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -250,6 +251,7 @@ class ProjectAdmission:
         membership_ids=None,
         base_event_id=None,
         expected_revision=None,
+        _unit_of_work=None,
     ):
         """Atomically retain a source and its complete, always-pending candidates."""
         event, drafts = deepcopy((event, tuple(drafts)))
@@ -288,7 +290,12 @@ class ProjectAdmission:
                 "configuration": configuration,
             }
         )
-        async with self.repository.unit_of_work() as uow:
+        transaction = (
+            nullcontext(_unit_of_work)
+            if _unit_of_work is not None
+            else self.repository.unit_of_work()
+        )
+        async with transaction as uow:
             await uow.lock_admission_scope(self.scope)
             previous = await uow.retention_get(self.scope, "request", request_id)
             if (
@@ -503,12 +510,18 @@ class ProjectAdmission:
         exceptions=(),
         links=(),
         field_support=(),
+        _unit_of_work=None,
     ):
         """Persist the host's actual semantic review and field proofs in one transaction."""
         conditions, exceptions, links, field_support = deepcopy(
             tuple(map(tuple, (conditions, exceptions, links, field_support)))
         )
-        async with self.repository.unit_of_work() as uow:
+        transaction = (
+            nullcontext(_unit_of_work)
+            if _unit_of_work is not None
+            else self.repository.unit_of_work()
+        )
+        async with transaction as uow:
             await uow.lock_admission_scope(self.scope)
             row = await self._row(uow, candidate_id, expected_version)
             binding = self._binding(row)
@@ -548,13 +561,16 @@ class ProjectAdmission:
             )
             return await self._save(uow, row)
 
-    async def reject(self, candidate_id, *, expected_version, review_id, reasons):
+    async def reject(
+        self, candidate_id, *, expected_version, review_id, reasons, _unit_of_work=None
+    ):
         return await self._dispose(
             candidate_id,
             expected_version=expected_version,
             review_id=review_id,
             reasons=reasons,
             disposition="rejected",
+            _unit_of_work=_unit_of_work,
         )
 
     async def withdraw(self, candidate_id, *, expected_version, review_id, reasons):
@@ -566,13 +582,20 @@ class ProjectAdmission:
             disposition="withdrawn",
         )
 
-    async def _dispose(self, candidate_id, *, expected_version, review_id, reasons, disposition):
+    async def _dispose(
+        self, candidate_id, *, expected_version, review_id, reasons, disposition, _unit_of_work=None
+    ):
         reasons = tuple(reasons)
         if not 1 <= len(reasons) <= 16:
             _fail("project_review_reason_required")
         for reason in reasons:
             identifier(reason)
-        async with self.repository.unit_of_work() as uow:
+        transaction = (
+            nullcontext(_unit_of_work)
+            if _unit_of_work is not None
+            else self.repository.unit_of_work()
+        )
+        async with transaction as uow:
             await uow.lock_admission_scope(self.scope)
             row = await self._row(uow, candidate_id, expected_version)
             row["payload"].update(
@@ -659,7 +682,13 @@ class ProjectAdmission:
             )
 
     async def _snapshot(
-        self, uow, context, *, at, source_basis="admitted_l1", publication_request_ids=(),
+        self,
+        uow,
+        context,
+        *,
+        at,
+        source_basis="admitted_l1",
+        publication_request_ids=(),
         input_guard=None,
     ):
         """Transaction-internal QuestionService bridge; lock held by the caller.
@@ -714,6 +743,7 @@ class ProjectAdmission:
         authority = await self.registry.authority(uow, self.authority_id)
         if authority:
             transitions.append(datetime.fromisoformat(authority["spec"]["expires_at"]))
+
         def guard_inputs():
             nonlocal security_at
             now = instant(self.clock())
@@ -727,8 +757,10 @@ class ProjectAdmission:
                 if instant(datetime.fromisoformat(authority["spec"]["expires_at"])) <= now:
                     _fail("derived_authority_expired")
             for grant in grants.values():
-                if (grant.get("expires_at")
-                        and instant(datetime.fromisoformat(grant["expires_at"])) <= now):
+                if (
+                    grant.get("expires_at")
+                    and instant(datetime.fromisoformat(grant["expires_at"])) <= now
+                ):
                     _fail("project_processing_grant_expired")
             if input_guard is not None:
                 input_guard()

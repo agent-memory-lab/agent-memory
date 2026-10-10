@@ -198,6 +198,8 @@ def forget(connection, request):
         "model_cache_header", "model_cache_body", "model_flight",
         "model_authorization", "model_processing_grant",
         "source_embedding_header", "source_embedding_body", "source_embedding_grant",
+        "domain_verification_task", "question_history_header", "question_history_body",
+        "persona_header", "persona_body",
         *QUESTION_KINDS,
     ):
         # Scheduler records are scrubbed by the outer B2 scope hook. Do not

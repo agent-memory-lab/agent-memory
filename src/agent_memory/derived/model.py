@@ -457,6 +457,8 @@ def erase_rows(rows, parents, all_in_scope, slots=()):
         if kind in embedding_kinds and key in embedding_slots:
             result.append((kind, key, {"state": "erased"}))
         elif kind in {
+            "domain_verification_task", "question_history_header", "question_history_body",
+            "persona_header", "persona_body",
             "model_cache_header",
             "model_cache_body",
             "model_flight",
