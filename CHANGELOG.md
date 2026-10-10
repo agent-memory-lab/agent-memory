@@ -38,6 +38,17 @@ the first stable release.
 
 ### Added
 
+- Transaction-local shared qualified inputs for bounded batches of already-leased
+  project QuestionViews, preserving fresh source, permission, erasure, time and
+  original-lineage checks. Add versioned semantic readsets/field effects and
+  separate semantic-versus-proof invalidation diagnostics; complete-project
+  coverage and certificate invalidation remain unchanged. Batch commit revalidates
+  durable job/execution leases, including heartbeat renewal and final expiry, rather
+  than trusting caller task timestamps. Frozen SQLite evidence
+  reports fewer repeated qualification reads and full workflow SQL SELECTs, while
+  explicitly retaining read-phase CPU overhead and zero-model-call baseline.
+  See [scope and evidence](docs/design/incremental/shared-question-inputs.md).
+
 - Incremental SQLite lexical locators with bounded pre-hydration ranking, exact
   long-source spans and legacy-write repair; PostgreSQL keeps native indexes.
   Add explicit host-only current retained-source embedding reuse with separate

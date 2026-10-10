@@ -127,7 +127,7 @@ def header(connection, scope, record_id, event_id, slot_key, payload, version, *
         if routes:
             edges(connection, scope, candidate_owner(record_id), ())
         return
-    data = header_data(record_id, event_id, slot_key, payload, version)
+    data = header_data(record_id, event_id, slot_key, payload, version, scope=scope)
     if routes:
         sqlite_project_index.replace(connection, scope, record_id, data)
     connection.execute(

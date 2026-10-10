@@ -660,7 +660,7 @@ class ProjectAdmission:
 
     async def _snapshot(
         self, uow, context, *, at, source_basis="admitted_l1", publication_request_ids=(),
-        input_guard=None,
+        input_guard=None, candidate_headers=None,
     ):
         """Transaction-internal QuestionService bridge; lock held by the caller.
 
@@ -683,7 +683,12 @@ class ProjectAdmission:
         reader = getattr(uow, "derived_project_candidates", None)
         if not callable(reader):
             _fail("project_census_backend_unsupported")
-        headers = await reader(self.scope, self.contract.fingerprint, context.subject_id)
+        if candidate_headers is None:
+            headers = await reader(self.scope, self.contract.fingerprint, context.subject_id)
+        else:
+            from ..derived.project_index import checked_headers
+
+            headers = checked_headers(candidate_headers, self.contract.fingerprint, context.subject_id)
         if len(headers) > MAX_CANDIDATES:
             _fail("project_candidate_capacity")
         if len({h["id"] for h in headers}) != len(headers):

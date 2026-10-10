@@ -1,0 +1,1347 @@
+{
+  "answer_contract": [
+    {
+      "answer_status": "resolved",
+      "citations": [
+        {
+          "end": 73,
+          "quote": "private-project-marker project-a project.owner Alice; effective October 1",
+          "source_event_id": "source-0",
+          "start": 0
+        }
+      ],
+      "contract_fingerprint": "17fd2a60a5c1bb65a2aeed271a3319e8d9e1fa5ccb9aef1f06aea524b0012dc9",
+      "matched_ids": [
+        "project-a"
+      ],
+      "model_calls": 0,
+      "question": "owner",
+      "reasons": [],
+      "result_schema": "project-question-result/1",
+      "rows": [
+        {
+          "fields": [
+            {
+              "candidates": [
+                {
+                  "fact": {
+                    "conditions": [],
+                    "entity_id": "project-a",
+                    "exceptions": [],
+                    "id": "candidate:ae97f6b56cad93fac209668c0b400cfacd3b8046b97d0dadd1cf3abadbd44700",
+                    "known_from": "2026-10-01T00:00:00.000001+00:00",
+                    "known_to": null,
+                    "origin": "observed",
+                    "predicate": "project.owner",
+                    "project_id": "project-a",
+                    "valid_from": "2026-10-01T00:00:00+00:00",
+                    "valid_to": null,
+                    "value": "Alice"
+                  },
+                  "qualification": {
+                    "authority": {
+                      "kind": "tool_observation",
+                      "predicates": [
+                        "commitment.action",
+                        "commitment.deadline",
+                        "commitment.promisor",
+                        "commitment.state",
+                        "project.owner",
+                        "project.phase",
+                        "project.status",
+                        "risk.label",
+                        "risk.state"
+                      ],
+                      "source_id": "project-system",
+                      "subjects": [
+                        "project-a",
+                        "project-b",
+                        "promise-1"
+                      ]
+                    },
+                    "field_evidence": [
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 73,
+                              "quote": "private-project-marker project-a project.owner Alice; effective October 1",
+                              "source_event_id": "source-0",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "predicate"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 73,
+                              "quote": "private-project-marker project-a project.owner Alice; effective October 1",
+                              "source_event_id": "source-0",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "subject_id"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 73,
+                              "quote": "private-project-marker project-a project.owner Alice; effective October 1",
+                              "source_event_id": "source-0",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "valid_from"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 73,
+                              "quote": "private-project-marker project-a project.owner Alice; effective October 1",
+                              "source_event_id": "source-0",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "value"
+                      }
+                    ],
+                    "policy_revision": "review/1",
+                    "review_id": "review:source-0",
+                    "target_sha256": "00b3c54a06ef0579c12aa237e0a73abfc538dd1a72ba8899697b61116a7efc2b"
+                  }
+                }
+              ],
+              "known_values": [
+                "Alice"
+              ],
+              "name": "project.owner",
+              "reasons": [],
+              "status": "resolved"
+            }
+          ],
+          "id": "project-a",
+          "matches": true,
+          "origin": "observed",
+          "rule": null,
+          "status": "resolved"
+        }
+      ],
+      "schema": "question-answer/1",
+      "source_basis": "admitted_l1",
+      "value_digest": "0a3c764ada8052692f87a5501c25fb931f97fe141b5f3869ad1960917ba4e377"
+    },
+    {
+      "answer_status": "resolved",
+      "citations": [
+        {
+          "end": 75,
+          "quote": "private-project-marker project-a project.status active; effective October 1",
+          "source_event_id": "source-1",
+          "start": 0
+        }
+      ],
+      "contract_fingerprint": "17fd2a60a5c1bb65a2aeed271a3319e8d9e1fa5ccb9aef1f06aea524b0012dc9",
+      "matched_ids": [
+        "project-a"
+      ],
+      "model_calls": 0,
+      "question": "status",
+      "reasons": [],
+      "result_schema": "project-question-result/1",
+      "rows": [
+        {
+          "fields": [
+            {
+              "candidates": [
+                {
+                  "fact": {
+                    "conditions": [],
+                    "entity_id": "project-a",
+                    "exceptions": [],
+                    "id": "candidate:58bc5651a15d85522a6f6943f8c7342bff69655085d647ed1f5a6f73fc4a2759",
+                    "known_from": "2026-10-01T00:00:00.000003+00:00",
+                    "known_to": null,
+                    "origin": "observed",
+                    "predicate": "project.status",
+                    "project_id": "project-a",
+                    "valid_from": "2026-10-01T00:00:00+00:00",
+                    "valid_to": null,
+                    "value": "active"
+                  },
+                  "qualification": {
+                    "authority": {
+                      "kind": "tool_observation",
+                      "predicates": [
+                        "commitment.action",
+                        "commitment.deadline",
+                        "commitment.promisor",
+                        "commitment.state",
+                        "project.owner",
+                        "project.phase",
+                        "project.status",
+                        "risk.label",
+                        "risk.state"
+                      ],
+                      "source_id": "project-system",
+                      "subjects": [
+                        "project-a",
+                        "project-b",
+                        "promise-1"
+                      ]
+                    },
+                    "field_evidence": [
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 75,
+                              "quote": "private-project-marker project-a project.status active; effective October 1",
+                              "source_event_id": "source-1",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "predicate"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 75,
+                              "quote": "private-project-marker project-a project.status active; effective October 1",
+                              "source_event_id": "source-1",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "subject_id"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 75,
+                              "quote": "private-project-marker project-a project.status active; effective October 1",
+                              "source_event_id": "source-1",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "valid_from"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 75,
+                              "quote": "private-project-marker project-a project.status active; effective October 1",
+                              "source_event_id": "source-1",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "value"
+                      }
+                    ],
+                    "policy_revision": "review/1",
+                    "review_id": "review:source-1",
+                    "target_sha256": "e4f65cd6510ff65ac87b07627046d182183aa945908edc2bc8d29f80e70b7751"
+                  }
+                }
+              ],
+              "known_values": [
+                "active"
+              ],
+              "name": "project.status",
+              "reasons": [],
+              "status": "resolved"
+            }
+          ],
+          "id": "project-a",
+          "matches": true,
+          "origin": "observed",
+          "rule": null,
+          "status": "resolved"
+        }
+      ],
+      "schema": "question-answer/1",
+      "source_basis": "admitted_l1",
+      "value_digest": "fc5081911d682ae7652a83a297ff7b3b7b1524367f372ea0728dc05346af8f0b"
+    },
+    {
+      "answer_status": "resolved",
+      "citations": [
+        {
+          "end": 79,
+          "quote": "private-project-marker promise-1 commitment.promisor Alice; effective October 1",
+          "source_event_id": "source-2",
+          "start": 0
+        },
+        {
+          "end": 76,
+          "quote": "private-project-marker promise-1 commitment.action ship; effective October 1",
+          "source_event_id": "source-3",
+          "start": 0
+        },
+        {
+          "end": 75,
+          "quote": "private-project-marker promise-1 commitment.state open; effective October 1",
+          "source_event_id": "source-4",
+          "start": 0
+        },
+        {
+          "end": 99,
+          "quote": "private-project-marker promise-1 commitment.deadline 2026-10-05T00:00:00+00:00; effective October 1",
+          "source_event_id": "source-5",
+          "start": 0
+        }
+      ],
+      "contract_fingerprint": "17fd2a60a5c1bb65a2aeed271a3319e8d9e1fa5ccb9aef1f06aea524b0012dc9",
+      "matched_ids": [
+        "promise-1"
+      ],
+      "model_calls": 0,
+      "question": "commitments",
+      "reasons": [],
+      "result_schema": "project-question-result/1",
+      "rows": [
+        {
+          "fields": [
+            {
+              "candidates": [
+                {
+                  "fact": {
+                    "conditions": [],
+                    "entity_id": "promise-1",
+                    "exceptions": [],
+                    "id": "candidate:4ba0807ea745f4db1c911167b02e0e84e7f94ee9fbd9c05d7fbca820fbcc5cc1",
+                    "known_from": "2026-10-01T00:00:00.000005+00:00",
+                    "known_to": null,
+                    "origin": "observed",
+                    "predicate": "commitment.promisor",
+                    "project_id": "project-a",
+                    "valid_from": "2026-10-01T00:00:00+00:00",
+                    "valid_to": null,
+                    "value": "Alice"
+                  },
+                  "qualification": {
+                    "authority": {
+                      "kind": "tool_observation",
+                      "predicates": [
+                        "commitment.action",
+                        "commitment.deadline",
+                        "commitment.promisor",
+                        "commitment.state",
+                        "project.owner",
+                        "project.phase",
+                        "project.status",
+                        "risk.label",
+                        "risk.state"
+                      ],
+                      "source_id": "project-system",
+                      "subjects": [
+                        "project-a",
+                        "project-b",
+                        "promise-1"
+                      ]
+                    },
+                    "field_evidence": [
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 79,
+                              "quote": "private-project-marker promise-1 commitment.promisor Alice; effective October 1",
+                              "source_event_id": "source-2",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "predicate"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 79,
+                              "quote": "private-project-marker promise-1 commitment.promisor Alice; effective October 1",
+                              "source_event_id": "source-2",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "subject_id"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 79,
+                              "quote": "private-project-marker promise-1 commitment.promisor Alice; effective October 1",
+                              "source_event_id": "source-2",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "valid_from"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 79,
+                              "quote": "private-project-marker promise-1 commitment.promisor Alice; effective October 1",
+                              "source_event_id": "source-2",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "value"
+                      }
+                    ],
+                    "policy_revision": "review/1",
+                    "review_id": "review:source-2",
+                    "target_sha256": "2edb25acb0039b25d655ce69db3062e5ae0f40f0ffffa0ef64bde166b6f7c34e"
+                  }
+                }
+              ],
+              "known_values": [
+                "Alice"
+              ],
+              "name": "commitment.promisor",
+              "reasons": [],
+              "status": "resolved"
+            },
+            {
+              "candidates": [
+                {
+                  "fact": {
+                    "conditions": [],
+                    "entity_id": "promise-1",
+                    "exceptions": [],
+                    "id": "candidate:3b06c7a802521f48aa79f27729067bd0929724664242e3de3ccedab9b0ac80e8",
+                    "known_from": "2026-10-01T00:00:00.000007+00:00",
+                    "known_to": null,
+                    "origin": "observed",
+                    "predicate": "commitment.action",
+                    "project_id": "project-a",
+                    "valid_from": "2026-10-01T00:00:00+00:00",
+                    "valid_to": null,
+                    "value": "ship"
+                  },
+                  "qualification": {
+                    "authority": {
+                      "kind": "tool_observation",
+                      "predicates": [
+                        "commitment.action",
+                        "commitment.deadline",
+                        "commitment.promisor",
+                        "commitment.state",
+                        "project.owner",
+                        "project.phase",
+                        "project.status",
+                        "risk.label",
+                        "risk.state"
+                      ],
+                      "source_id": "project-system",
+                      "subjects": [
+                        "project-a",
+                        "project-b",
+                        "promise-1"
+                      ]
+                    },
+                    "field_evidence": [
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 76,
+                              "quote": "private-project-marker promise-1 commitment.action ship; effective October 1",
+                              "source_event_id": "source-3",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "predicate"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 76,
+                              "quote": "private-project-marker promise-1 commitment.action ship; effective October 1",
+                              "source_event_id": "source-3",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "subject_id"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 76,
+                              "quote": "private-project-marker promise-1 commitment.action ship; effective October 1",
+                              "source_event_id": "source-3",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "valid_from"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 76,
+                              "quote": "private-project-marker promise-1 commitment.action ship; effective October 1",
+                              "source_event_id": "source-3",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "value"
+                      }
+                    ],
+                    "policy_revision": "review/1",
+                    "review_id": "review:source-3",
+                    "target_sha256": "719d287acb46325d87778ff36d19b5e6b528279f91da6977985470898130005f"
+                  }
+                }
+              ],
+              "known_values": [
+                "ship"
+              ],
+              "name": "commitment.action",
+              "reasons": [],
+              "status": "resolved"
+            },
+            {
+              "candidates": [
+                {
+                  "fact": {
+                    "conditions": [],
+                    "entity_id": "promise-1",
+                    "exceptions": [],
+                    "id": "candidate:6e22ffc356ffce8e1673a6ae55094d1dc8420053db1178c67a62725ab9ddede6",
+                    "known_from": "2026-10-01T00:00:00.000009+00:00",
+                    "known_to": null,
+                    "origin": "observed",
+                    "predicate": "commitment.state",
+                    "project_id": "project-a",
+                    "valid_from": "2026-10-01T00:00:00+00:00",
+                    "valid_to": null,
+                    "value": "open"
+                  },
+                  "qualification": {
+                    "authority": {
+                      "kind": "tool_observation",
+                      "predicates": [
+                        "commitment.action",
+                        "commitment.deadline",
+                        "commitment.promisor",
+                        "commitment.state",
+                        "project.owner",
+                        "project.phase",
+                        "project.status",
+                        "risk.label",
+                        "risk.state"
+                      ],
+                      "source_id": "project-system",
+                      "subjects": [
+                        "project-a",
+                        "project-b",
+                        "promise-1"
+                      ]
+                    },
+                    "field_evidence": [
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 75,
+                              "quote": "private-project-marker promise-1 commitment.state open; effective October 1",
+                              "source_event_id": "source-4",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "predicate"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 75,
+                              "quote": "private-project-marker promise-1 commitment.state open; effective October 1",
+                              "source_event_id": "source-4",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "subject_id"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 75,
+                              "quote": "private-project-marker promise-1 commitment.state open; effective October 1",
+                              "source_event_id": "source-4",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "valid_from"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 75,
+                              "quote": "private-project-marker promise-1 commitment.state open; effective October 1",
+                              "source_event_id": "source-4",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "value"
+                      }
+                    ],
+                    "policy_revision": "review/1",
+                    "review_id": "review:source-4",
+                    "target_sha256": "ca90ba2409f814d84d098a1d55a54bc3bec37cb41a7aba874e54db2070e3883a"
+                  }
+                }
+              ],
+              "known_values": [
+                "open"
+              ],
+              "name": "commitment.state",
+              "reasons": [],
+              "status": "resolved"
+            },
+            {
+              "candidates": [
+                {
+                  "fact": {
+                    "conditions": [],
+                    "entity_id": "promise-1",
+                    "exceptions": [],
+                    "id": "candidate:d5f7859136b78f88eb6c6b6dfbe387a010752e6e8d164ff8994651d6c24b1206",
+                    "known_from": "2026-10-01T00:00:00.000011+00:00",
+                    "known_to": null,
+                    "origin": "observed",
+                    "predicate": "commitment.deadline",
+                    "project_id": "project-a",
+                    "valid_from": "2026-10-01T00:00:00+00:00",
+                    "valid_to": null,
+                    "value": "2026-10-05T00:00:00+00:00"
+                  },
+                  "qualification": {
+                    "authority": {
+                      "kind": "tool_observation",
+                      "predicates": [
+                        "commitment.action",
+                        "commitment.deadline",
+                        "commitment.promisor",
+                        "commitment.state",
+                        "project.owner",
+                        "project.phase",
+                        "project.status",
+                        "risk.label",
+                        "risk.state"
+                      ],
+                      "source_id": "project-system",
+                      "subjects": [
+                        "project-a",
+                        "project-b",
+                        "promise-1"
+                      ]
+                    },
+                    "field_evidence": [
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 99,
+                              "quote": "private-project-marker promise-1 commitment.deadline 2026-10-05T00:00:00+00:00; effective October 1",
+                              "source_event_id": "source-5",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "predicate"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 99,
+                              "quote": "private-project-marker promise-1 commitment.deadline 2026-10-05T00:00:00+00:00; effective October 1",
+                              "source_event_id": "source-5",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "subject_id"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 99,
+                              "quote": "private-project-marker promise-1 commitment.deadline 2026-10-05T00:00:00+00:00; effective October 1",
+                              "source_event_id": "source-5",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "valid_from"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 99,
+                              "quote": "private-project-marker promise-1 commitment.deadline 2026-10-05T00:00:00+00:00; effective October 1",
+                              "source_event_id": "source-5",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "value"
+                      }
+                    ],
+                    "policy_revision": "review/1",
+                    "review_id": "review:source-5",
+                    "target_sha256": "82e28bad627da6a1891f3967b52b9cdba11aa71a1996f3a52fbf678e707b823f"
+                  }
+                }
+              ],
+              "known_values": [
+                "2026-10-05T00:00:00+00:00"
+              ],
+              "name": "commitment.deadline",
+              "reasons": [],
+              "status": "resolved"
+            }
+          ],
+          "id": "promise-1",
+          "matches": true,
+          "origin": "observed",
+          "rule": null,
+          "status": "resolved"
+        }
+      ],
+      "schema": "question-answer/1",
+      "source_basis": "admitted_l1",
+      "value_digest": "caadb358b3a2fed765e5769ca2398b13834fb6328c18a4f934bec87da5f2fc01"
+    },
+    {
+      "answer_status": "resolved",
+      "citations": [
+        {
+          "end": 73,
+          "quote": "private-project-marker project-a risk.label supplier; effective October 1",
+          "source_event_id": "source-6",
+          "start": 0
+        },
+        {
+          "end": 69,
+          "quote": "private-project-marker project-a risk.state open; effective October 1",
+          "source_event_id": "source-7",
+          "start": 0
+        }
+      ],
+      "contract_fingerprint": "17fd2a60a5c1bb65a2aeed271a3319e8d9e1fa5ccb9aef1f06aea524b0012dc9",
+      "matched_ids": [
+        "project-a"
+      ],
+      "model_calls": 0,
+      "question": "risks",
+      "reasons": [],
+      "result_schema": "project-question-result/1",
+      "rows": [
+        {
+          "fields": [
+            {
+              "candidates": [
+                {
+                  "fact": {
+                    "conditions": [],
+                    "entity_id": "project-a",
+                    "exceptions": [],
+                    "id": "candidate:da62a5d9a7abc36e375ed425259a6ab50480bda72136335c789dc232736be4fe",
+                    "known_from": "2026-10-01T00:00:00.000013+00:00",
+                    "known_to": null,
+                    "origin": "observed",
+                    "predicate": "risk.label",
+                    "project_id": "project-a",
+                    "valid_from": "2026-10-01T00:00:00+00:00",
+                    "valid_to": null,
+                    "value": "supplier"
+                  },
+                  "qualification": {
+                    "authority": {
+                      "kind": "tool_observation",
+                      "predicates": [
+                        "commitment.action",
+                        "commitment.deadline",
+                        "commitment.promisor",
+                        "commitment.state",
+                        "project.owner",
+                        "project.phase",
+                        "project.status",
+                        "risk.label",
+                        "risk.state"
+                      ],
+                      "source_id": "project-system",
+                      "subjects": [
+                        "project-a",
+                        "project-b",
+                        "promise-1"
+                      ]
+                    },
+                    "field_evidence": [
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 73,
+                              "quote": "private-project-marker project-a risk.label supplier; effective October 1",
+                              "source_event_id": "source-6",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "predicate"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 73,
+                              "quote": "private-project-marker project-a risk.label supplier; effective October 1",
+                              "source_event_id": "source-6",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "subject_id"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 73,
+                              "quote": "private-project-marker project-a risk.label supplier; effective October 1",
+                              "source_event_id": "source-6",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "valid_from"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 73,
+                              "quote": "private-project-marker project-a risk.label supplier; effective October 1",
+                              "source_event_id": "source-6",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "value"
+                      }
+                    ],
+                    "policy_revision": "review/1",
+                    "review_id": "review:source-6",
+                    "target_sha256": "b3e4662b44c817ad8e68825e14a0f999618df3131d6c1e4744fed2ac6c077efa"
+                  }
+                }
+              ],
+              "known_values": [
+                "supplier"
+              ],
+              "name": "risk.label",
+              "reasons": [],
+              "status": "resolved"
+            },
+            {
+              "candidates": [
+                {
+                  "fact": {
+                    "conditions": [],
+                    "entity_id": "project-a",
+                    "exceptions": [],
+                    "id": "candidate:f3d5a26a4a0383d1fc578b8236251991ac6c6bcd1bf9aa8efd9b46d8240e11b8",
+                    "known_from": "2026-10-01T00:00:00.000015+00:00",
+                    "known_to": null,
+                    "origin": "observed",
+                    "predicate": "risk.state",
+                    "project_id": "project-a",
+                    "valid_from": "2026-10-01T00:00:00+00:00",
+                    "valid_to": null,
+                    "value": "open"
+                  },
+                  "qualification": {
+                    "authority": {
+                      "kind": "tool_observation",
+                      "predicates": [
+                        "commitment.action",
+                        "commitment.deadline",
+                        "commitment.promisor",
+                        "commitment.state",
+                        "project.owner",
+                        "project.phase",
+                        "project.status",
+                        "risk.label",
+                        "risk.state"
+                      ],
+                      "source_id": "project-system",
+                      "subjects": [
+                        "project-a",
+                        "project-b",
+                        "promise-1"
+                      ]
+                    },
+                    "field_evidence": [
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 69,
+                              "quote": "private-project-marker project-a risk.state open; effective October 1",
+                              "source_event_id": "source-7",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "predicate"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 69,
+                              "quote": "private-project-marker project-a risk.state open; effective October 1",
+                              "source_event_id": "source-7",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "subject_id"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 69,
+                              "quote": "private-project-marker project-a risk.state open; effective October 1",
+                              "source_event_id": "source-7",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "valid_from"
+                      },
+                      {
+                        "alternatives": [
+                          [
+                            {
+                              "end": 69,
+                              "quote": "private-project-marker project-a risk.state open; effective October 1",
+                              "source_event_id": "source-7",
+                              "start": 0
+                            }
+                          ]
+                        ],
+                        "field": "value"
+                      }
+                    ],
+                    "policy_revision": "review/1",
+                    "review_id": "review:source-7",
+                    "target_sha256": "e842756f70f40caaba2ebd7efa7a1a390b9d596fa734dda0af4a7174b6a4c298"
+                  }
+                }
+              ],
+              "known_values": [
+                "open"
+              ],
+              "name": "risk.state",
+              "reasons": [],
+              "status": "resolved"
+            }
+          ],
+          "id": "project-a",
+          "matches": true,
+          "origin": "observed",
+          "rule": null,
+          "status": "resolved"
+        }
+      ],
+      "schema": "question-answer/1",
+      "source_basis": "admitted_l1",
+      "value_digest": "45bcd29db1f3708a34eccd413a0ca057d2f0e91a924ae53dbea67f903753bd05"
+    }
+  ],
+  "answer_contract_parity": true,
+  "baseline": {
+    "local_commit": "04c7e1d002568925edfbf8e7335774c57756ca21",
+    "remote_main": "c5424dc",
+    "stages": {
+      "complete": {
+        "counts": {
+          "derived_get:job": 8,
+          "derived_get:project_index": 4,
+          "derived_get:question_certificate": 4,
+          "derived_get:refresh_execution": 4,
+          "derived_get:refresh_publication": 4,
+          "derived_get:subscription_index": 4,
+          "retention_epoch": 8,
+          "sql:COMMIT": 4,
+          "sql:INSERT": 8,
+          "sql:SELECT": 44
+        },
+        "cpu_seconds": 0.01499684900000009,
+        "primitive_calls": 26772,
+        "python_calls": 30376,
+        "support_range_evaluations": 0
+      },
+      "prepare": {
+        "counts": {},
+        "cpu_seconds": 0.08831159699999991,
+        "primitive_calls": 239859,
+        "python_calls": 282867,
+        "support_range_evaluations": 0
+      },
+      "publish": {
+        "counts": {
+          "derived_get:barrier": 16,
+          "derived_get:definition": 4,
+          "derived_get:grant": 96,
+          "derived_get:job": 4,
+          "derived_get:project_index": 24,
+          "derived_get:question_head": 8,
+          "derived_get:question_registration": 4,
+          "derived_get:refresh_demand": 4,
+          "derived_get:refresh_execution": 8,
+          "derived_get:refresh_policy": 4,
+          "derived_get:subscription": 8,
+          "derived_get:subscription_index": 16,
+          "derived_project_candidates": 8,
+          "derived_project_source_proof": 64,
+          "get_admission_record": 32,
+          "get_source_event": 32,
+          "retention_epoch": 92,
+          "semantic_review_validation": 32,
+          "sql:COMMIT": 8,
+          "sql:DELETE": 16,
+          "sql:INSERT": 432,
+          "sql:SELECT": 660,
+          "sql:UPDATE": 16
+        },
+        "cpu_seconds": 0.40226483199999996,
+        "primitive_calls": 882649,
+        "python_calls": 1040961,
+        "support_range_evaluations": 32
+      },
+      "read_advancing_clock": {
+        "counts": {
+          "derived_get:barrier": 96,
+          "derived_get:definition": 28,
+          "derived_get:grant": 384,
+          "derived_get:project_index": 84,
+          "derived_get:question_certificate": 4,
+          "derived_get:question_content": 4,
+          "derived_get:question_head": 28,
+          "derived_get:question_registration": 32,
+          "derived_get:refresh_demand": 4,
+          "derived_get:refresh_policy": 4,
+          "derived_get:subscription": 52,
+          "derived_get:subscription_index": 60,
+          "derived_project_candidates": 24,
+          "derived_project_source_proof": 384,
+          "retention_epoch": 84,
+          "sql:COMMIT": 8,
+          "sql:INSERT": 88,
+          "sql:SELECT": 1828,
+          "sql:UPDATE": 56
+        },
+        "cpu_seconds": 0.27436403099999995,
+        "primitive_calls": 466085,
+        "python_calls": 533369,
+        "support_range_evaluations": 0
+      },
+      "setup": {
+        "counts": {
+          "derived_get:barrier": 161,
+          "derived_get:coverage_request": 8,
+          "derived_get:definition": 16,
+          "derived_get:grant": 40,
+          "derived_get:job": 4,
+          "derived_get:project_index": 297,
+          "derived_get:question_change_log": 105,
+          "derived_get:question_registration": 24,
+          "derived_get:refresh_demand": 16,
+          "derived_get:refresh_execution": 4,
+          "derived_get:refresh_policy": 12,
+          "derived_get:subscription": 24,
+          "derived_get:subscription_index": 214,
+          "derived_project_candidates": 4,
+          "derived_project_source_proof": 32,
+          "get_admission_record": 32,
+          "get_source_event": 32,
+          "retention_epoch": 92,
+          "sql:COMMIT": 48,
+          "sql:DELETE": 85,
+          "sql:INSERT": 726,
+          "sql:PRAGMA": 8,
+          "sql:SELECT": 2058,
+          "sql:UPDATE": 57,
+          "sql:WITH": 4
+        },
+        "cpu_seconds": 0.36068134399999996,
+        "primitive_calls": 580025,
+        "python_calls": 678531,
+        "support_range_evaluations": 8
+      },
+      "snapshot": {
+        "counts": {
+          "derived_get:barrier": 32,
+          "derived_get:definition": 4,
+          "derived_get:grant": 96,
+          "derived_get:job": 4,
+          "derived_get:project_index": 32,
+          "derived_get:question_head": 4,
+          "derived_get:question_registration": 4,
+          "derived_get:refresh_execution": 4,
+          "derived_get:subscription": 12,
+          "derived_get:subscription_index": 20,
+          "derived_project_candidates": 12,
+          "derived_project_source_proof": 64,
+          "get_admission_record": 32,
+          "get_source_event": 32,
+          "retention_epoch": 92,
+          "semantic_review_validation": 32,
+          "sql:COMMIT": 8,
+          "sql:INSERT": 96,
+          "sql:SELECT": 668,
+          "sql:UPDATE": 12
+        },
+        "cpu_seconds": 0.156698985,
+        "primitive_calls": 311862,
+        "python_calls": 357950,
+        "support_range_evaluations": 32
+      }
+    },
+    "totals": {
+      "python_calls": 2924054,
+      "sql_selects": 5258,
+      "support_range_evaluations": 72
+    },
+    "tree": "ddf0a97d0c7cf2934c31f2043d577ef02a726a09"
+  },
+  "comparison_notes": [
+    "Answer schema, registered domain fingerprint, rows, matched IDs, status, reasons, source basis, exact citations and value digests compare equal.",
+    "Certificate and support digests may change because source-routing proof metadata and per-job provenance tokens bind the new implementation. They are not semantic-equivalence checks.",
+    "CPU seconds are one instrumented sample, not statistically established latency or speedup.",
+    "Read-phase Python calls increase; setup has additional field-effect proof work. Complete per-phase and summed counts are retained."
+  ],
+  "date": "2026-10-10",
+  "implementation": {
+    "contract": "question-shared-inputs/1",
+    "stages": {
+      "complete": {
+        "counts": {
+          "derived_get:job": 8,
+          "derived_get:project_index": 4,
+          "derived_get:question_certificate": 4,
+          "derived_get:refresh_execution": 4,
+          "derived_get:refresh_publication": 4,
+          "derived_get:subscription_index": 4,
+          "retention_epoch": 8,
+          "sql:COMMIT": 4,
+          "sql:INSERT": 8,
+          "sql:SELECT": 44
+        },
+        "cpu_seconds": 0.014982027000000064,
+        "primitive_calls": 26772,
+        "python_calls": 30376,
+        "support_range_evaluations": 0
+      },
+      "prepare": {
+        "counts": {},
+        "cpu_seconds": 0.0949769920000001,
+        "primitive_calls": 248031,
+        "python_calls": 293139,
+        "support_range_evaluations": 0
+      },
+      "publish": {
+        "counts": {
+          "derived_get:barrier": 20,
+          "derived_get:definition": 9,
+          "derived_get:grant": 88,
+          "derived_get:job": 8,
+          "derived_get:project_index": 20,
+          "derived_get:question_head": 13,
+          "derived_get:question_registration": 9,
+          "derived_get:refresh_demand": 4,
+          "derived_get:refresh_execution": 12,
+          "derived_get:refresh_policy": 4,
+          "derived_get:subscription": 18,
+          "derived_get:subscription_index": 19,
+          "derived_project_candidates": 1,
+          "derived_project_source_proof": 80,
+          "get_admission_record": 8,
+          "get_source_event": 8,
+          "retention_epoch": 49,
+          "semantic_review_validation": 8,
+          "sql:COMMIT": 2,
+          "sql:DELETE": 16,
+          "sql:INSERT": 393,
+          "sql:SELECT": 533,
+          "sql:UPDATE": 16
+        },
+        "cpu_seconds": 0.38151156399999997,
+        "primitive_calls": 852157,
+        "python_calls": 1012848,
+        "support_range_evaluations": 8
+      },
+      "read_advancing_clock": {
+        "counts": {
+          "derived_get:barrier": 100,
+          "derived_get:definition": 33,
+          "derived_get:grant": 400,
+          "derived_get:project_index": 61,
+          "derived_get:question_certificate": 4,
+          "derived_get:question_content": 4,
+          "derived_get:question_head": 33,
+          "derived_get:question_registration": 37,
+          "derived_get:refresh_demand": 4,
+          "derived_get:refresh_policy": 4,
+          "derived_get:subscription": 62,
+          "derived_get:subscription_index": 60,
+          "derived_project_candidates": 1,
+          "derived_project_source_proof": 400,
+          "retention_epoch": 85,
+          "sql:COMMIT": 2,
+          "sql:INSERT": 89,
+          "sql:SELECT": 1807,
+          "sql:UPDATE": 55
+        },
+        "cpu_seconds": 0.2769965959999998,
+        "primitive_calls": 515491,
+        "python_calls": 594351,
+        "support_range_evaluations": 0
+      },
+      "setup": {
+        "counts": {
+          "derived_get:barrier": 161,
+          "derived_get:coverage_request": 8,
+          "derived_get:definition": 16,
+          "derived_get:grant": 40,
+          "derived_get:job": 4,
+          "derived_get:project_index": 297,
+          "derived_get:question_change_log": 105,
+          "derived_get:question_registration": 24,
+          "derived_get:refresh_demand": 16,
+          "derived_get:refresh_execution": 4,
+          "derived_get:refresh_policy": 12,
+          "derived_get:subscription": 24,
+          "derived_get:subscription_index": 214,
+          "derived_project_candidates": 4,
+          "derived_project_source_proof": 32,
+          "get_admission_record": 32,
+          "get_source_event": 32,
+          "retention_epoch": 92,
+          "sql:COMMIT": 48,
+          "sql:DELETE": 85,
+          "sql:INSERT": 726,
+          "sql:PRAGMA": 8,
+          "sql:SELECT": 2058,
+          "sql:UPDATE": 57,
+          "sql:WITH": 4
+        },
+        "cpu_seconds": 0.38356941599999994,
+        "primitive_calls": 591344,
+        "python_calls": 691806,
+        "support_range_evaluations": 16
+      },
+      "snapshot": {
+        "counts": {
+          "derived_get:barrier": 48,
+          "derived_get:definition": 4,
+          "derived_get:grant": 104,
+          "derived_get:job": 4,
+          "derived_get:project_index": 23,
+          "derived_get:question_head": 4,
+          "derived_get:question_registration": 4,
+          "derived_get:refresh_execution": 4,
+          "derived_get:subscription": 16,
+          "derived_get:subscription_index": 22,
+          "derived_project_candidates": 1,
+          "derived_project_source_proof": 96,
+          "get_admission_record": 8,
+          "get_source_event": 8,
+          "retention_epoch": 43,
+          "semantic_review_validation": 8,
+          "sql:COMMIT": 2,
+          "sql:INSERT": 47,
+          "sql:SELECT": 548,
+          "sql:UPDATE": 13
+        },
+        "cpu_seconds": 0.11564090399999993,
+        "primitive_calls": 241251,
+        "python_calls": 282254,
+        "support_range_evaluations": 8
+      }
+    },
+    "totals": {
+      "python_calls": 2904774,
+      "sql_selects": 4990,
+      "support_range_evaluations": 32
+    }
+  },
+  "schema": "question-shared-inputs-evidence/1",
+  "verification": {
+    "architecture_pages_resources_models_gc": "284 passed, 63 skipped at c04176d, before the batch-only durable lease correction",
+    "batch_durable_lease_regressions": "24 passed, 24 skipped (unconfigured PostgreSQL cases)",
+    "focused_runtime_and_safety": "153 passed, 96 skipped (includes the 24 lease regressions; unconfigured PostgreSQL cases skipped)",
+    "frozen_baseline_workload": "1 passed, 1 PostgreSQL parameterization deselected",
+    "full_suite": "not run",
+    "independent_lease_reproductions": "4 passed, 4 PostgreSQL parameterizations deselected",
+    "live_postgresql": "not configured; not claimed",
+    "shared_workload": "1 passed, 1 PostgreSQL parameterization deselected",
+    "sqlite_process_recovery_and_scheduler": "15 passed, 15 PostgreSQL parameterizations deselected at c04176d"
+  },
+  "workload": {
+    "excluded": "Common kernel initialization and teardown; test harness construction; no latency or workload-generalized claims.",
+    "models": 0,
+    "phases": [
+      "setup",
+      "snapshot",
+      "prepare",
+      "publish",
+      "complete",
+      "read_advancing_clock"
+    ],
+    "provider": "SQLite",
+    "python": "3.13",
+    "qualified_inputs": 8,
+    "setup_includes": "Stage, qualify and grant eight sources; register four views; request and claim their ordinary leases.",
+    "views": 4
+  }
+}

@@ -49,11 +49,16 @@ def parent_key(key):
     return "route:parent:" + key
 
 
-def header_data(record_id, event_id, slot, payload, version):
+def header_data(record_id, event_id, slot, payload, version, *, scope=None):
     from .project_index import routing
+    from .question_dependencies import candidate_effect
 
+    project = routing(payload)
     return dict(
-        project=routing(payload),
+        project=project,
+        # Optional v1 extension: old /3 headers remain valid but cannot narrow
+        # semantic invalidation until a scoped writer derives a reviewed effect.
+        field_effect=candidate_effect(payload, record_id, version, scope=scope, project=project),
         schema=HEADER_SCHEMA,
         generation=version,
         id=record_id,
@@ -115,6 +120,8 @@ async def install(uow, scope, definition):
         keys=keys,
         generation=(old or {}).get("generation", 0) + 1,
     )
+    if definition["spec"].get("semantic_readset") is not None:
+        row["semantic_readset_sha256"] = digest(definition["spec"]["semantic_readset"])
     row["sha256"] = digest(row)
     await uow.derived_put(scope, "subscription", facet_id, row)
     await uow.derived_edges(scope, subscription_owner(facet_id), [("query", key) for key in keys])
@@ -191,6 +198,10 @@ async def subscription(uow, scope, definition):
         or row.get("definition_generation") != definition["generation"]
         or row.get("definition_sha256") != definition["fingerprint"]
         or row.get("keys") != keys_for(definition)
+        or row.get("semantic_readset_sha256") != (
+            digest(definition["spec"]["semantic_readset"])
+            if definition["spec"].get("semantic_readset") is not None else None
+        )
         or digest({key: value for key, value in row.items() if key != "sha256"})
         != row.get("sha256")
     ):
@@ -221,7 +232,9 @@ async def consumers(uow, scope, keys):
     return rows
 
 
-async def invalidate(uow, scope, keys, *, at=None, reason="candidate", safety=False):
+async def invalidate(
+    uow, scope, keys, *, at=None, reason="candidate", safety=False, candidate_change=None
+):
     await ensure_index(uow, scope)
     rows = await consumers(uow, scope, keys)
     affected = set()
@@ -233,6 +246,14 @@ async def invalidate(uow, scope, keys, *, at=None, reason="candidate", safety=Fa
             affected.add(facet_id)
             if not safety:
                 await close_coverage(uow, scope, facet_id, at=at or utc_now(), reason=reason)
+            if definition["spec"].get("schema") in {
+                "question-instance-registration/1", "question-instance-registration/2"
+            }:
+                from .question_dependencies import record_invalidation
+
+                record_invalidation(
+                    definition, scope, candidate_change=candidate_change, safety=safety
+                )
             definition["dirty"] = True
             if safety:
                 definition["safety_generation"] += 1
@@ -241,6 +262,9 @@ async def invalidate(uow, scope, keys, *, at=None, reason="candidate", safety=Fa
 
             await record_dirty(uow, scope, definition, at=at, reason=reason)
             next_keys.append(parent_key(facet_id))
+        # A downstream parent has a different semantic contract. Field-level
+        # knowledge of the initial candidate never suppresses parent propagation.
+        candidate_change = None
         rows = await consumers(uow, scope, next_keys) if next_keys else {}
     return affected
 
