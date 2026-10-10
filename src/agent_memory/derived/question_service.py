@@ -69,7 +69,7 @@ class QuestionService:
 
         return await call(self, operation, payload, context)
 
-    def __init__(self, admission, context, *, limits=None):
+    def __init__(self, admission, context, *, limits=None, history_points=False):
         if type(admission) is not ProjectAdmission or type(context) is not QuestionContext:
             _fail("question_trusted_registration_required")
         # Context attributes must match the supported deterministic evaluator;
@@ -82,6 +82,12 @@ class QuestionService:
             admission.scope,
             admission.clock,
         )
+        if type(history_points) is not bool:
+            _fail("question_history_option_invalid")
+        self.history_points = history_points
+        from .question_history import QuestionHistory
+
+        self.history = QuestionHistory(self)
         self.registry = admission.registry
         from ..operations.refresh_demand import RefreshDemandQueue
         from .question_refresh import QuestionPageRefreshProcessor, QuestionRefreshProcessor
@@ -851,6 +857,8 @@ class QuestionService:
                 },
                 now=now,
             )
+            if self.history_points:
+                await self.history.capture(definition["spec"]["question_id"], actor=self.admission.principal, unit_of_work=uow)
             # Final clock/context/lease safety check while the same publication
             # transaction still owns all compare-and-swap coordinates.
             await self._generation_guard(uow, definition, header["generation_proof"])
@@ -920,7 +928,11 @@ class QuestionService:
 
     async def read(self, question_id, *, actor, valid_at=None, known_at=None):
         if valid_at is not None or known_at is not None:
-            _fail("question_historical_unsupported")
+            if not self.history_points:
+                _fail("question_historical_unsupported")
+            if valid_at is None or known_at is None:
+                _fail("question_history_both_times_required")
+            return await self.history.read(question_id, actor=actor, valid_at=valid_at, known_at=known_at)
         identity(question_id)
         identity(actor)
         observed = await self._clock_barrier()
@@ -942,7 +954,7 @@ class QuestionService:
             await self._open(uow)
             return await self._read_in_uow(uow, question_id, actor=actor)
 
-    async def _read_in_uow(self, uow, question_id, *, actor):
+    async def _read_in_uow(self, uow, question_id, *, actor, record_usage=True):
         definition = await self._registration(uow, question_id, actor)
         header = await uow.derived_get(self.scope, "question_head", definition["facet_id"])
         if header is None:
@@ -992,7 +1004,8 @@ class QuestionService:
         await self._guard(uow, definition, header, actor=actor)
         from ..operations.refresh_demand import observed_clock, record_guarded_read
 
-        await record_guarded_read(uow, self.scope, definition, {"state": "ready"}, at=self.clock())
+        if record_usage:
+            await record_guarded_read(uow, self.scope, definition, {"state": "ready"}, at=self.clock())
         observed = await observed_clock(uow, self.scope, self.clock)
         now = instant(self.clock())
         if now < observed:

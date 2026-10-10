@@ -398,10 +398,11 @@ class _Operations(RecoveryClientOperations):
             "target_id": target_id,
         }})
 
-    async def question_page_read(self, page_id: str):
-        return await self._call("memory_question", {"operation": "page_read", "payload": {
-            "page_id": page_id,
-        }})
+    async def question_page_read(self, page_id: str, *, valid_at=None, known_at=None):
+        payload = {"page_id": page_id}
+        if valid_at is not None or known_at is not None:
+            payload.update(valid_at=valid_at, known_at=known_at)
+        return await self._call("memory_question", {"operation": "page_read", "payload": payload})
 
     async def page_capabilities(self) -> dict[str, Any]:
         return await self._call("memory_derived", {"operation": "page_capabilities", "payload": {}})

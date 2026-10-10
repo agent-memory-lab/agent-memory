@@ -28,7 +28,8 @@ KNOWN_KINDS = frozenset(
     (
         *COLLECTIBLE_KINDS,
         *PAGE_KINDS,
-        "authority",
+        "authority", "domain_verification_task", "question_history_header", "question_history_body",
+        "persona_header", "persona_body",
         "barrier",
         "coverage_request",
         "definition",
