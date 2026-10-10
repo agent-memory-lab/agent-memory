@@ -61,6 +61,14 @@ the first stable release.
   on PR #18; real local Qwen model-gain remains
   unmeasured. See [source omission audits](docs/source-omission-audits.md).
 
+- Host-registered bounded dependency/date joins in maintained project risk views,
+  reusing typed ontology relation rules and full-census QuestionView guards.
+  Preserve inferred candidate lineage, validity intersections, exact/unknown
+  aggregates, new-premise invalidation and clock-boundary refresh; bounded
+  truncation remains incomplete. Includes coordinated relation-predicate index
+  migration and dual-provider adversarial contracts. See
+  [maintained relation views](docs/design/incremental/relation-views.md).
+
 - Incremental SQLite lexical locators with bounded pre-hydration ranking, exact
   long-source spans and legacy-write repair; PostgreSQL keeps native indexes.
   Add explicit host-only current retained-source embedding reuse with separate

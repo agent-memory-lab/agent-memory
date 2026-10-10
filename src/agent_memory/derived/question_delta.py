@@ -169,6 +169,8 @@ def _groups(contract, census, question):
     if question == "risks":
         for rule in contract.risk_rules:
             groups["rule:" + rule.id] = [f for f in facts if f.fact.predicate == rule.predicate]
+        for plan in contract.relation_plans:
+            groups["rule:" + plan.id] = [f for f in facts if f.fact.predicate in plan.predicates]
     return {key: tuple(values) for key, values in groups.items()}
 
 
@@ -212,6 +214,11 @@ def _group(contract, census, question, key, items, overdue):
         return ProjectRowResult(
             key, state, True if state == AnswerStatus.RESOLVED else None, fields
         )
+    if question == "risks" and key in {"rule:" + p.id for p in contract.relation_plans}:
+        from .relation_questions import evaluate_dependency_plan
+
+        plan = next(p for p in contract.relation_plans if key == "rule:" + p.id)
+        return evaluate_dependency_plan(plan, census, items)
     if question == "risks" and key.startswith("rule:"):
         rule = next(r for r in contract.risk_rules if key == "rule:" + r.id)
         source = field(rule.predicate)
@@ -266,7 +273,7 @@ def _metadata(contract, census, question, rows, overdue):
         ):
             transitions.update(t for t in (f.valid_from, f.valid_to) if t and t > context.valid_at)
     if any(i.fact.conditions or i.fact.exceptions for i in active) or any(
-        r.impact_conditions for r in contract.risk_rules
+        r.impact_conditions for r in (*contract.risk_rules, *contract.relation_plans)
     ):
         local = context.valid_at.astimezone(ZoneInfo(contract.timezone))
         transitions.add(
@@ -287,6 +294,9 @@ def _metadata(contract, census, question, rows, overdue):
     if any({"subject_id", "predicate"} & set(i.missing_support) for i in active):
         reasons.add("candidate_membership_unproved")
     relevant = [r for r in rows if r["matches"] is not False]
+    for row in rows:
+        if row["status"] == "incomplete":
+            reasons.update(row.get("reasons", ("relation_frontier_incomplete",)))
     if reasons:
         status = "incomplete"
     elif any(r["status"] == "contested" for r in relevant):
@@ -354,9 +364,15 @@ def evaluate(contract, snapshot):
     elif not snapshot.get("generation_safe", False):
         reason = "original_generation_unsafe"
     groups = _groups(contract, census, question)
-    rules = {"rule:" + r.id: r for r in contract.risk_rules}
+    rules = {"rule:" + r.id: r for r in (*contract.risk_rules, *contract.relation_plans)}
+    from .relation_questions import incomplete_frontier
+
+    relation_keys = {"rule:" + p.id for p in contract.relation_plans}
     signatures = {
-        key: _signature(items, census.context, rules.get(key), overdue)
+        key: digest([_signature(items, census.context, rules.get(key), overdue),
+                     incomplete_frontier(census)])
+        if key in relation_keys
+        else _signature(items, census.context, rules.get(key), overdue)
         for key, items in groups.items()
     }
     if reason:

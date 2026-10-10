@@ -123,3 +123,13 @@ python -m build --wheel
 补提候选只进入既有待核验接纳流程，持久任务与批次收尾沿用同一事务的授权检查。
 现有元数据承载版本化范围记录，不增加表或调度器；参见
 [来源遗漏审计 B2](source-omission-audits.md)。
+
+
+## 有限关系维护补充
+
+`derived/relation_questions.py` 将宿主注册的有限依赖边/日期连接接入现有项目风险
+QuestionView。它复用 `ontology/rules.py` 的类型检查与有界关系链内核；输入仍是同一事务
+授权、语义核验的完整项目 census，不另建图数据库或授权路径。候选推论保留前提血缘、
+有效时间交集、未知/冲突与聚合资格，沿用完整查询前沿、逆依赖、删除屏障及
+`next_transition_at` 调度。范围、上界和协调索引升级见
+[关系视图维护](design/incremental/relation-views.md)。
