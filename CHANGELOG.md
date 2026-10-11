@@ -7,6 +7,17 @@ the first stable release.
 
 ### Added
 
+- Add repeated local Agent Memory/Mem0 OSS/Graphiti comparisons with shared
+  answering, rotated arm order, immutable source/model manifests and transport
+  token accounting. Isolate Mem0 history as well as vector storage. This is an
+  authored diagnostic, not a LongMemEval leaderboard or business acceptance.
+  See [the controlled local protocol](docs/UNIFIED_LOCAL_BENCHMARK.md).
+- Add a durable full 500-question LongMemEval-S worker for all three local
+  backends, with exclusive process ownership, frozen package/script/model
+  hashes, bounded retries, interruption recovery and explicit unknown usage
+  after incomplete log writes. Local Qwen judging is separate from official
+  scores. See [the full-run protocol](docs/FULL_LONGMEMEVAL_LOCAL_RUN.md).
+
 - Add host-bound automatic raw-source project extraction, explicit storage and
   independent-verification policies, typed qualifier verification and complete
   refutation provenance. Registered scenes/personas share the existing refresh
@@ -18,6 +29,14 @@ the first stable release.
   See [v7.2 architecture and limits](docs/design/AGENT_MEMORY_DESIGN_V7.2.0.md).
 
 ### Fixed
+
+- Persist generic consolidation handoffs transactionally in SQLite/PostgreSQL,
+  retry queue failures after commit, and expose delivery status. Distinguish empty,
+  rejected and failed extraction, propagate strict mode through the public builder,
+  and preserve bounded multiple source spans through native SQLite reranking and
+  packing. Repair the LongMemEval confidence contract and record extraction
+  diagnostics without rewriting stopped runs. See
+  [ingestion reliability and compatibility](docs/INGESTION_RELIABILITY.md).
 
 - Keep core imports and SQLite operations available without Unix `resource`;
   unavailable peak RSS raises explicitly instead of fabricating a measurement.

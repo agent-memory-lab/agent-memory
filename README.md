@@ -186,6 +186,9 @@ October 6: unknown
 
 The [capture integration recipe](examples/capture_harness.py) shows how to connect lifecycle hooks, a host provider, authenticated context, and a queue. It requires the Python SDK and host setup.
 
+[Ingestion reliability](docs/INGESTION_RELIABILITY.md) documents extraction diagnostics,
+strict failure handling, transactional consolidation retries and bounded long-source recall.
+
 </details>
 
 ## Integrations
@@ -270,7 +273,7 @@ Explicit model explanations are available through the host-bound [B5 runtime](do
 | Read historical views or compose current pages | [Bounded history](docs/design/v6.1.0/stage-14b3.md) · [Parent inputs](docs/design/v6.1.0/stage-14c.md) · [Current L2 pages](docs/design/v6.1.0/stage-15.md) |
 | Connect feedback and evolution | [Feedback contract](docs/FEEDBACK_CONTRACT.md) · [Evolution package](packages/evolution/README.md) |
 | Deploy and recover | [Single-host deployment](docs/single-host-deployment.md) · [Recovery operations](docs/recovery-operations.md) |
-| Inspect evaluation evidence | [Evaluation methodology](docs/LOCAL_MEMORY_COMPARISON_EVAL.md) · [Resource baseline](docs/RESOURCE_BASELINE.md) |
+| Inspect evaluation evidence | [Unified local comparison](docs/UNIFIED_LOCAL_BENCHMARK.md) · [Evaluation methodology](docs/LOCAL_MEMORY_COMPARISON_EVAL.md) · [Resource baseline](docs/RESOURCE_BASELINE.md) |
 | Follow or contribute to development | [v7 plan](docs/design/v7.0.0/plan.md) · [v7 tasks](docs/design/v7.0.0/task.md) · [Design versions](docs/design/README.md) |
 
 ## Contributing

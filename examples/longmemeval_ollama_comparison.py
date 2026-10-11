@@ -17,6 +17,8 @@ os.environ["GRAPHITI_TELEMETRY_ENABLED"] = "false"
 
 import ollama
 
+from longmemeval_claim_extraction import BenchmarkClaimGenerator, record_extraction
+
 from agent_memory import MemoryScope
 from agent_memory.evaluation.comparison import (
     AgentMemoryComparisonAdapter,
@@ -38,58 +40,6 @@ from ollama_memory_comparison import (
     _stop_falkordblite,
 )
 
-
-CLAIM_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "claims": {
-            "type": "array",
-            "maxItems": 8,
-            "items": {
-                "type": "object",
-                "properties": {
-                    "key": {"type": "string"},
-                    "value": {"type": "string"},
-                    "text": {"type": "string"},
-                },
-                "required": ["key", "value", "text"],
-                "additionalProperties": False,
-            },
-        }
-    },
-    "required": ["claims"],
-    "additionalProperties": False,
-}
-
-
-class BenchmarkClaimGenerator:
-    """Bound extraction output so long benchmark sessions produce complete JSON."""
-
-    def __init__(self, client: ollama.AsyncClient, calls: dict[str, int]):
-        self.client = client
-        self.calls = calls
-
-    async def generate_claims(self, event):
-        self.calls["agent-memory"] += 1
-        prompt = (
-            "Extract at most eight concise facts useful to answer future questions from this conversation "
-            "segment. Include user or assistant facts, named entities, dates, preferences, plans, and explicit "
-            "corrections. Skip general advice and filler. Use stable keys for facts that may be corrected later. "
-            "Each fact needs key, value, and one short factual text. Return an empty claims array if there are "
-            "no useful facts. Do not invent anything.\n\nConversation segment:\n"
-            f"{event.content}"
-        )
-        response = await self.client.chat(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            format=CLAIM_SCHEMA,
-            think=False,
-            options={"temperature": 0, "num_predict": 1536, "num_ctx": 32768},
-        )
-        claims = json.loads(response.message.content)["claims"]
-        if not isinstance(claims, list):
-            raise ValueError("Qwen claim output must contain a claims array")
-        return claims
 
 
 def _judge_prompt(question_type: str, question: str, answer: str, hypothesis: str, abstention: bool) -> str:
@@ -295,7 +245,7 @@ async def run(data_path: Path, output_dir: Path, work_dir: Path, offset: int = 0
                             build_local_kernel(
                                 local_path,
                                 extractor=GeneratedTrajectoryClaimExtractor(
-                                    BenchmarkClaimGenerator(client, call_counts),
+                                    BenchmarkClaimGenerator(client, call_counts, model=MODEL),
                                     provider="ollama",
                                     model=MODEL,
                                     event_types=("user.message", "agent.model.completed", "agent.tool.completed"),
@@ -332,11 +282,14 @@ async def run(data_path: Path, output_dir: Path, work_dir: Path, offset: int = 0
                         # benchmark level. Clear a partial prior attempt before replaying it.
                         await adapter.clear()
                         ingested_events = 0
+                        extraction = {} if arm_name == "agent-memory" else None
                         for session_index, (session, timestamp) in enumerate(
                             zip(item["haystack_sessions"], item["haystack_dates"], strict=True)
                         ):
                             for event in _session_event(question_id, session_index, session, timestamp):
-                                await adapter.add(event)
+                                submission = await adapter.add(event)
+                                if extraction is not None:
+                                    record_extraction(extraction, submission)
                                 ingested_events += 1
                             if (session_index + 1) % 5 == 0:
                                 print(
@@ -365,6 +318,7 @@ async def run(data_path: Path, output_dir: Path, work_dir: Path, offset: int = 0
                             "judge_label": correct,
                             "judge_output": judge_text,
                             "retrieved_count": len(memories),
+                            "extraction": extraction,
                             "answer_seconds": answer_seconds,
                             "total_question_seconds": perf_counter() - start,
                             "memory_model_calls": call_counts[arm_name] - calls_before,
@@ -444,6 +398,7 @@ async def run(data_path: Path, output_dir: Path, work_dir: Path, offset: int = 0
             qdrant = getattr(getattr(mem0, "vector_store", None), "client", None)
             if qdrant is not None:
                 qdrant.close()
+            mem0.close()
         await client._client.aclose()
 
 

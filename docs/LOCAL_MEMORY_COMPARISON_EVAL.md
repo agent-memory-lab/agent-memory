@@ -1,5 +1,10 @@
 # Local Memory Comparison Pilot
 
+For the repeated local experiment with rotated arm order, shared evidence bounds,
+server-reported token accounting and an immutable execution manifest, see the
+[unified local comparison protocol](UNIFIED_LOCAL_BENCHMARK.md). The original
+four-question pilot below remains a separate historical protocol.
+
 ## Objective
 
 Compare the local Agent Memory project, Mem0 OSS, and Zep's open-source Graphiti on the same synthetic Chinese interactions, using Ollama `qwen3.5:9b` for memory extraction and answer generation. Use `nomic-embed-text` for embedding-based retrieval in each arm that supports it.

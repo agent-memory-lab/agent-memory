@@ -1,0 +1,27 @@
+{
+  "dataset_id": "synthetic-chinese-memory-pilot-v2",
+  "description": "Authored engineering diagnostic; no production data or held-out benchmark claim.",
+  "initial": [
+    {"event_id": "residence-v1", "role": "user", "content": "用户周宁目前常住南京。", "occurred_at": "2026-10-08T00:00:00+00:00"},
+    {"event_id": "cat-preference", "role": "user", "content": "周宁的猫叫豆包，最喜欢吃金枪鱼。", "occurred_at": "2026-10-08T00:00:00+00:00"},
+    {"event_id": "project-v1", "role": "user", "content": "周宁项目环境使用 Python 3.13，数据库是 MongoDB。", "occurred_at": "2026-10-08T00:00:00+00:00"},
+    {"event_id": "planned-meeting", "role": "user", "content": "周宁计划于2026年10月21日10:30在上海浦东与陈雨见面。", "occurred_at": "2026-10-08T00:00:00+00:00"}
+  ],
+  "updates": [
+    {"event_id": "residence-v2", "role": "user", "content": "更正居住地：周宁当前住在成都；南京是此前的居住地。", "occurred_at": "2026-10-09T00:00:00+00:00"},
+    {"event_id": "project-v2", "role": "user", "content": "周宁项目数据库已从 MongoDB 切换为 PostgreSQL；Python 版本保持 3.13。", "occurred_at": "2026-10-09T00:00:00+00:00"}
+  ],
+  "cases": [
+    {"id": "initial-residence", "phase": "initial", "query": "周宁现在住在哪个城市？只回答当前城市。", "required_aliases": [["南京", "Nanjing"]], "forbidden_aliases": ["成都", "Chengdu"]},
+    {"id": "initial-cat", "phase": "initial", "query": "周宁的猫叫什么、最喜欢吃什么？", "required_aliases": [["豆包", "Doubao", "Dou Bao"], ["金枪鱼", "tuna"]]},
+    {"id": "initial-project", "phase": "initial", "query": "周宁项目当前的数据库和 Python 版本是什么？只回答当前配置。", "required_aliases": [["MongoDB", "mongo"], ["3.13"]], "forbidden_aliases": ["PostgreSQL", "postgres"]},
+    {"id": "initial-meeting", "phase": "initial", "query": "周宁计划什么时候、在哪里和谁见面？", "required_aliases": [["陈雨", "Chen Yu"], ["2026-10-21", "2026年10月21日", "October 21", "2026/10/21", "10月21日"], ["10:30", "十点半", "10点30"], ["浦东", "Pudong"]]},
+    {"id": "initial-unknown", "phase": "initial", "query": "周宁的护照号码是什么？", "unanswerable": true},
+    {"id": "updated-residence", "phase": "updated", "query": "周宁现在住在哪个城市？只回答当前城市。", "required_aliases": [["成都", "Chengdu"]], "forbidden_aliases": ["南京", "Nanjing"]},
+    {"id": "updated-cat", "phase": "updated", "query": "周宁的猫叫什么、最喜欢吃什么？", "required_aliases": [["豆包", "Doubao", "Dou Bao"], ["金枪鱼", "tuna"]]},
+    {"id": "updated-project", "phase": "updated", "query": "周宁项目当前的数据库和 Python 版本是什么？只回答当前配置。", "required_aliases": [["PostgreSQL", "postgres"], ["3.13"]], "forbidden_aliases": ["MongoDB", "mongo"]},
+    {"id": "updated-meeting", "phase": "updated", "query": "周宁计划什么时候、在哪里和谁见面？", "required_aliases": [["陈雨", "Chen Yu"], ["2026-10-21", "2026年10月21日", "October 21", "2026/10/21", "10月21日"], ["10:30", "十点半", "10点30"], ["浦东", "Pudong"]]},
+    {"id": "updated-past", "phase": "updated", "query": "周宁搬到成都之前住在哪个城市？只回答之前的城市。", "required_aliases": [["南京", "Nanjing"]]},
+    {"id": "updated-unknown", "phase": "updated", "query": "周宁的护照号码是什么？", "unanswerable": true}
+  ]
+}
