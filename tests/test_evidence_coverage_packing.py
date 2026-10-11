@@ -271,3 +271,75 @@ def test_one_legacy_excerpt_can_be_skipped_later_while_smaller_evidence_fits(mon
     assert packed.state == (state,)
     assert [value.id for value in packed.items] == ["small"]
     assert packed.tokens <= 256
+
+
+def test_semantic_fact_precedes_word_rich_noise_and_keeps_exact_negation():
+    query = MemoryQuery(
+        SCOPE, "Where did I recharge the electric car?", limit=1, token_budget=256,
+        include_current_state=False,
+    )
+    fact = item(
+        "fact", "The vehicle battery was replenished at Haven Garage, not at home.",
+        kind=MemoryKind.CLAIM, score=0.94, sources=("trip",),
+    )
+    noise = item(
+        "noise", ("Where did I recharge the electric car? No answer is known. " * 18),
+        score=0.50, sources=("unrelated",),
+    )
+    packed = pack_native_evidence(query, (), (fact, noise))
+    assert packed.items == (fact,)
+    assert packed.citations[0].source_event_ids == ("trip",)
+    assert packed.metadata["strategy"] == "relevance_bounded_diversity_v2"
+    trace = packed.metadata["packing_selection_trace"][0]
+    assert trace["input_rank"] == 1
+    assert trace["relevance"] == 1.0
+    assert 0 <= trace["selection_score"] - trace["relevance"] <= 0.025
+
+
+def test_distinct_claims_from_one_source_retain_negation_numbers_and_symbols():
+    positive = item(
+        "accepted", "The accepted invoice total is €30.75.", kind=MemoryKind.CLAIM,
+    )
+    rejected = item(
+        "rejected", "The invoice total is not $25.50.", kind=MemoryKind.CLAIM,
+    )
+    packed = pack_native_evidence(
+        MemoryQuery(SCOPE, "invoice total", limit=2, token_budget=64),
+        (), (positive, rejected),
+    )
+    assert packed.items == (positive, rejected)
+    assert len(packed.citations) == 2
+    assert all(row["event_redundancy"] == 0 for row in packed.metadata["packing_selection_trace"])
+
+
+def test_provider_order_breaks_equal_relevance_ties_without_resorting_ids():
+    first = item("z", "color blue", kind=MemoryKind.CLAIM)
+    second = item("a", "color red", kind=MemoryKind.CLAIM)
+    packed = pack_native_evidence(
+        MemoryQuery(SCOPE, "color", limit=1), (), (first, second),
+    )
+    assert packed.items == (first,)
+
+
+def test_frequent_early_terms_do_not_exhaust_excerpt_search_for_rare_late_terms():
+    text = "I was on a trip. " * 200 + "I stored the cobalt key in the cabinet, not the drawer."
+    excerpt, start, end = contiguous_excerpt(text, "Where did I store the cobalt key?", 120)
+    assert "cobalt key in the cabinet, not the drawer" in excerpt
+    assert excerpt == text[start:end]
+
+
+def test_small_rrf_scores_preserve_relevance_without_treating_them_as_probabilities():
+    fact = item(
+        "fact", "The vehicle battery was replenished at Haven Garage.",
+        kind=MemoryKind.CLAIM, score=0.016,
+    )
+    noise = item(
+        "noise", "Where did I recharge the electric car? Nobody answered that question.",
+        score=0.013,
+    )
+    packed = pack_native_evidence(
+        MemoryQuery(SCOPE, "Where did I recharge the electric car?", limit=1),
+        (), (fact, noise),
+    )
+    assert packed.items == (fact,)
+    assert packed.metadata["packing_selection_trace"][0]["relevance"] == 1.0

@@ -390,6 +390,20 @@ class EmbeddingProvider(Protocol):
     async def embed(self, texts: Sequence[str]) -> Sequence[Sequence[float]]: ...
 
 
+class RetrievalEmbeddingProvider(EmbeddingProvider, Protocol):
+    """Optional asymmetric retrieval input capability owned by the host provider.
+
+    Return one ordered batch: the query vector first, then one vector per input
+    document in unchanged order. The provider owns model-specific task prefixes
+    or input types; the kernel never infers document/query roles from the text.
+    Existing providers implementing only ``embed`` remain supported.
+    """
+
+    async def embed_for_retrieval(
+        self, query: str, documents: Sequence[str],
+    ) -> Sequence[Sequence[float]]: ...
+
+
 class GraphProvider(Protocol):
     async def expand(
         self, query: MemoryQuery, seeds: Sequence[MemoryItem]

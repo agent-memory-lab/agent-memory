@@ -78,7 +78,9 @@ def test_high_ranked_long_event_is_excerpted_and_keeps_citation(tmp_path) -> Non
                 )
                 assert "antique music box" in retrieved_event.text
                 assert retrieved_event.metadata["excerpt"] is True
-                assert len(retrieved_event.text) <= 1200
+                # Native retrieval now expands a bounded parent window before
+                # packing; the token budget still bounds the exact excerpt.
+                assert len(retrieved_event.text) <= min(4096, token_budget * 4)
                 assert bundle.token_estimate <= token_budget
                 assert any(
                     citation.memory_id == event.id and event.id in citation.source_event_ids

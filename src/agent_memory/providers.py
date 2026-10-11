@@ -386,17 +386,23 @@ class ReciprocalRankFusionReranker:
     async def rerank(
         self, query: MemoryQuery, candidates: Sequence[MemoryItem]
     ) -> Sequence[MemoryItem]:
+        from .retrieval.candidate_identity import candidate_identity
+
         by_channel: dict[str, list[MemoryItem]] = defaultdict(list)
         for candidate in candidates:
-            by_channel[str(candidate.metadata.get("channel", "semantic"))].append(candidate)
+            branch = candidate.metadata.get("retrieval_branch") or candidate.metadata.get(
+                "channel", "semantic"
+            )
+            by_channel[str(branch)].append(candidate)
 
         fused: dict[str, float] = defaultdict(float)
         canonical: dict[str, MemoryItem] = {}
         for channel_candidates in by_channel.values():
             ranked = sorted(channel_candidates, key=lambda item: item.score, reverse=True)
             for rank, candidate in enumerate(ranked, start=1):
-                fused[candidate.id] += 1.0 / (self._k + rank)
-                canonical[candidate.id] = candidate
+                identity = candidate_identity(candidate)
+                fused[identity] += 1.0 / (self._k + rank)
+                canonical[identity] = candidate
 
         return tuple(
             MemoryItem(
@@ -449,21 +455,36 @@ class EmbeddingReranker:
             return baseline
 
         try:
-            vectors = await self._embedding_provider.embed(
-                (query.text, *(candidate.text for candidate in selected))
+            documents = tuple(candidate.text for candidate in selected)
+            retrieval_embed = getattr(self._embedding_provider, "embed_for_retrieval", None)
+            vectors = (
+                await retrieval_embed(query.text, documents)
+                if callable(retrieval_embed)
+                else await self._embedding_provider.embed((query.text, *documents))
             )
             if len(vectors) != len(selected) + 1:
                 raise ValueError("embedding provider returned an unexpected vector count")
             query_vector = vectors[0]
             reranked: list[MemoryItem] = []
-            denominator = max(1, len(selected) - 1)
             total_weight = self._lexical_weight + self._semantic_weight
-            for index, (candidate, vector) in enumerate(zip(selected, vectors[1:], strict=True)):
-                lexical_score = 1.0 - (index / denominator)
-                semantic_score = (self._cosine_similarity(query_vector, vector) + 1.0) / 2.0
+            similarities = tuple(
+                self._cosine_similarity(query_vector, vector) for vector in vectors[1:]
+            )
+            # Fuse ranks, not uncalibrated cosine values and a linear rank scale.
+            # Equal similarities share a rank and do not acquire arbitrary gaps.
+            semantic_ranks = {}
+            for rank, value in enumerate(sorted(similarities, reverse=True), 1):
+                semantic_ranks.setdefault(value, rank)
+            lexical_ranks = {}
+            for rank, candidate in enumerate(selected, 1):
+                lexical_ranks.setdefault(candidate.score, rank)
+            for candidate, similarity in zip(selected, similarities, strict=True):
+                lexical_rank = lexical_ranks[candidate.score]
+                semantic_rank = semantic_ranks[similarity]
+                semantic_score = (similarity + 1.0) / 2.0
                 score = (
-                    self._lexical_weight * lexical_score
-                    + self._semantic_weight * semantic_score
+                    self._lexical_weight / (60 + lexical_rank)
+                    + self._semantic_weight / (60 + semantic_rank)
                 ) / total_weight
                 reranked.append(
                     MemoryItem(
@@ -477,12 +498,20 @@ class EmbeddingReranker:
                             "semantic_score": semantic_score,
                             "semantic_dimensions": len(query_vector),
                             "semantic_reranker": type(self).__name__,
+                            "semantic_rank": semantic_rank,
+                            "lexical_fusion_rank": lexical_rank,
+                            "reranking_method": "weighted-rank-fusion/1",
                         },
                     )
                 )
-            return tuple(sorted(reranked, key=lambda item: item.score, reverse=True)) + baseline[
-                self._max_candidates :
-            ]
+            tail = baseline[self._max_candidates :]
+            floor = min(item.score for item in reranked) * 0.99
+            maximum = max((item.score for item in tail), default=1.0) or 1.0
+            return tuple(sorted(reranked, key=lambda item: item.score, reverse=True)) + tuple(
+                replace(item, score=floor * max(0.0, item.score) / maximum,
+                        metadata={**item.metadata, "semantic_reranker_status": "budget_excluded"})
+                for item in tail
+            )
         except (TypeError, ValueError, ArithmeticError):
             if self._fail_open:
                 return baseline

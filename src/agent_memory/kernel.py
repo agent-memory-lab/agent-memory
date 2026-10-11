@@ -587,7 +587,35 @@ class MemoryKernel:
             )
         ranked = await self._reranker.rerank(query, candidates)
 
-        packed = pack_native_evidence(query, current, ranked)
+        from .retrieval.candidate_selection import stage_summary
+        from .retrieval.source_context import (
+            CONTEXT_POLICY,
+            MAX_CONTEXT_CANDIDATES,
+            context_anchors,
+        )
+
+        # Optional small-to-big context reads happen after the fixed embedding
+        # batch. Added windows carry inherited relevance, never semantic scores.
+        expansion = getattr(self._repository, "expand_source_context", None)
+        context = ()
+        anchors = ()
+        context_status = "unsupported"
+        if historical_state is not None:
+            context_status = "disabled_historical"
+        elif MemoryChannel.SEMANTIC not in query.channels:
+            context_status = "disabled_channel"
+        elif callable(expansion):
+            anchors = context_anchors(query, ranked)
+            context = tuple(await expansion(query, ranked, MAX_CONTEXT_CANDIDATES))[
+                :MAX_CONTEXT_CANDIDATES
+            ]
+            context_status = "applied"
+        # Existing ranked atoms came from AdmissionEngine's governed temporal
+        # path. Applying the legacy-source guard to them again would erase valid
+        # atoms; only newly read raw context needs this additional source gate.
+        context = await self._guard_atom_candidates(query.scope, context) if context else ()
+        packing_input = (*ranked, *context)
+        packed = pack_native_evidence(query, current, packing_input)
         selected_state = packed.state
         selected = packed.items
         citations = packed.citations
@@ -610,6 +638,18 @@ class MemoryKernel:
                 "candidate_count": len(candidates),
                 "selected_count": len(selected),
                 "state_count": len(selected_state),
+                "source_context_expansion": {
+                    "policy": CONTEXT_POLICY, "status": context_status,
+                    "anchor_count": len(anchors), "candidate_count": len(context),
+                    "semantic_scoring": False,
+                },
+                "retrieval_stages": {
+                    "candidate_recall": stage_summary(candidates),
+                    "reranked": stage_summary(ranked),
+                    "source_context": stage_summary(context),
+                    "packing_input": stage_summary(packing_input),
+                    "packed": stage_summary(selected),
+                } if query.trace_enabled else {},
                 **packed.metadata,
                 "protocol_version": PROTOCOL_VERSION,
                 **atom_info,

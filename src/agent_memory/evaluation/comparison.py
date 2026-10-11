@@ -11,6 +11,8 @@ import json
 from time import perf_counter
 from uuid import uuid4
 
+from ..retrieval.packing import ordered_bundle_evidence
+
 
 @dataclass(frozen=True)
 class RawInteraction:
@@ -46,8 +48,7 @@ class AgentMemoryComparisonAdapter:
         bundle = await self.memory.recall(
             query, limit=limit, token_budget=2048, include_current_state=False
         )
-        items = (*bundle.relevant_memories, *bundle.episodes, *bundle.procedures)
-        ranked = sorted(items, key=lambda item: (-item.score, item.id))
+        ranked = ordered_bundle_evidence(bundle)
         return [
             dict(id=item.id, text=item.text, kind=item.kind.value)
             for item in ranked[:limit]
