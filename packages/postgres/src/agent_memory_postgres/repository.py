@@ -339,6 +339,11 @@ class PostgresMemoryUnitOfWork:
             ),
         )
 
+    async def save_consolidation_intent(self, event, result):
+        from . import consolidation_outbox
+
+        await consolidation_outbox.save(self.connection, event, result)
+
     model_budget_contract = "model-budget/1"
 
     async def model_budget_lock(self):
@@ -1154,6 +1159,70 @@ class PostgresMemoryRepository:
     async def close(self) -> None:
         await self.pool.close()
 
+    async def claim_consolidation_intent(self, *, scope=None, event_id=None, lease_seconds=60):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.claim(
+                uow.connection, self, scope=scope, event_id=event_id, lease_seconds=lease_seconds
+            )
+
+    async def consolidation_source_is_live(self, delivery):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.source_is_live(uow.connection, delivery)
+
+    async def consolidation_delivery_is_current(self, delivery):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.delivery_is_current(uow.connection, delivery)
+
+    async def complete_consolidation_intent(self, delivery):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.complete(uow.connection, delivery)
+
+    async def fail_consolidation_intent(self, delivery, error_code):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.fail(uow.connection, delivery, error_code)
+
+    async def consolidation_outbox_status(self, scope=None):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.status(uow.connection, scope)
+
+    async def consolidation_intent_state(self, scope, event_id):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.intent_state(uow.connection, scope, event_id)
+
+    async def pending_consolidation_cancellations(self, *, scope=None, limit=64):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.pending_cancellations(
+                uow.connection, scope=scope, limit=limit
+            )
+
+    async def request_consolidation_cancellation(self, scope, event_id):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.request_cancellation(uow.connection, scope, event_id)
+
+    async def ack_consolidation_cancellation(self, cancellation):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.ack_cancellation(uow.connection, cancellation)
+
     def unit_of_work(self) -> PostgresMemoryUnitOfWork:
         return PostgresMemoryUnitOfWork(self)
 
@@ -1582,8 +1651,9 @@ class PostgresMemoryRepository:
             "agent_memory_events", "agent_memory_claims", "agent_memory_artifacts",
         )
         await admission.lock_scope(connection, request.scope)
-        from . import derived
+        from . import consolidation_outbox, derived
 
+        await consolidation_outbox.forget(connection, request)
         checkpoint = await derived.admission_checkpoint(connection, request.scope)
         await derived.forget(connection, request)
         await retention.forget(connection, request, journal=not replay)
@@ -2053,6 +2123,7 @@ class PostgresMemoryRepository:
             title=str(payload["title"]),
             content=str(payload["content"]),
             event_ids=tuple(payload.get("event_ids", provenance.source_event_ids)),
+            source_claim_ids=tuple(payload.get("source_claim_ids", ())),
             channel=MemoryChannel(payload.get("channel", MemoryChannel.SEMANTIC)),
             token_budget=int(payload.get("token_budget", 256)),
             status=ArtifactStatus(row["status"]),

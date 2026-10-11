@@ -7,6 +7,14 @@ from datetime import datetime
 from math import isfinite, sqrt
 
 from .domain import ClaimDraft, MemoryEvent, MemoryItem, MemoryQuery, Provenance, ScopeLevel
+from .extraction_result import (
+    ExtractionDiagnostic,
+    ExtractionError,
+    ExtractionFormatError,
+    ExtractionProviderError,
+    ExtractionRejection,
+    ExtractionReport,
+)
 from .ports import ClaimExtractor, ClaimGenerator, EmbeddingProvider, Reranker
 
 
@@ -20,39 +28,118 @@ def _claim_time(value: object, fallback=None):
     return value
 
 
+_CLAIM_FIELDS = frozenset(
+    {
+        "key",
+        "value",
+        "text",
+        "confidence",
+        "importance",
+        "scope",
+        "scope_level",
+        "valid_from",
+        "valid_to",
+        "corrects_id",
+    }
+)
+
+
+def _parse_claim(raw, *, generated):
+    if not isinstance(raw, Mapping):
+        return None, "invalid_candidate"
+    # Conditions and provenance quotations require a typed, evidence-bound
+    # admission path. A flat claim must never drop them and become unconditional.
+    if set(raw) - _CLAIM_FIELDS:
+        return None, "unsupported_fields"
+    if not isinstance(raw.get("key"), str) or not isinstance(raw.get("text"), str):
+        return None, "invalid_candidate"
+    if "scope" in raw and "scope_level" in raw and str(raw["scope"]) != str(raw["scope_level"]):
+        return None, "conflicting_scope"
+    if generated:
+        if "value" not in raw:
+            return None, "missing_value"
+        if "confidence" not in raw:
+            return None, "missing_confidence"
+        if type(raw["confidence"]) not in (int, float) or not 0 <= raw["confidence"] <= 1:
+            return None, "invalid_confidence"
+    try:
+        draft = ClaimDraft(
+            key=raw["key"],
+            value=raw.get("value"),
+            text=raw["text"],
+            confidence=float(raw.get("confidence", 1.0)),
+            importance=float(raw.get("importance", 0.5)),
+            scope_level=ScopeLevel(
+                str(raw.get("scope", raw.get("scope_level", ScopeLevel.SESSION)))
+            ),
+            valid_from=_claim_time(raw.get("valid_from")),
+            valid_to=_claim_time(raw.get("valid_to")),
+            corrects_id=raw.get("corrects_id"),
+        )
+    except (TypeError, ValueError, OverflowError):
+        return None, "invalid_candidate"
+    return draft, None
+
+
+def _aborted_diagnostic(diagnostic, *, prior=(), prior_drafts=0):
+    """A strict batch admits nothing, even if individual rows validated."""
+    rejected = tuple(item for component in prior for item in component.rejections)
+    rejected += diagnostic.rejections
+    aborted = prior_drafts + diagnostic.accepted_count
+    if aborted:
+        rejected += (ExtractionRejection(None, "batch_aborted", aborted),)
+    components = (*prior, diagnostic) if prior else diagnostic.components
+    counts = [component.candidate_count for component in (*prior, diagnostic)]
+    return ExtractionDiagnostic(
+        "error",
+        sum(counts) if all(count is not None for count in counts) else None,
+        0,
+        rejected,
+        diagnostic.error_type,
+        tuple(components),
+    )
+
+
 class MetadataClaimExtractor:
     """Trusted deterministic extractor for SDK and adapter integrations."""
 
     async def extract(self, event: MemoryEvent) -> Sequence[ClaimDraft]:
+        return (await self.extract_with_report(event)).drafts
+
+    async def extract_with_report(self, event: MemoryEvent) -> ExtractionReport:
+        if "claims" not in event.metadata:
+            return ExtractionReport((), ExtractionDiagnostic("skipped", candidate_count=0))
         raw_claims = event.metadata.get("claims", ())
         if not isinstance(raw_claims, Sequence) or isinstance(raw_claims, (str, bytes)):
-            return ()
-
+            return ExtractionReport(
+                (),
+                ExtractionDiagnostic(
+                    "error",
+                    rejections=(ExtractionRejection(None, "invalid_output"),),
+                    error_type="ExtractionFormatError",
+                ),
+            )
         claims: list[ClaimDraft] = []
-        for raw in raw_claims:
-            if not isinstance(raw, Mapping):
-                continue
-            key = raw.get("key")
-            text = raw.get("text")
-            if not isinstance(key, str) or not isinstance(text, str):
-                continue
-            try:
-                claims.append(
-                    ClaimDraft(
-                        key=key,
-                        value=raw.get("value"),
-                        text=text,
-                        confidence=float(raw.get("confidence", 1.0)),
-                        importance=float(raw.get("importance", 0.5)),
-                        scope_level=ScopeLevel(str(raw.get("scope", ScopeLevel.SESSION))),
-                        valid_from=_claim_time(raw.get("valid_from")),
-                        valid_to=_claim_time(raw.get("valid_to")),
-                        corrects_id=raw.get("corrects_id"),
-                    )
-                )
-            except (TypeError, ValueError):
-                continue
-        return tuple(claims)
+        rejected = []
+        for index, raw in enumerate(raw_claims):
+            draft, reason = _parse_claim(raw, generated=False)
+            if reason is not None:
+                rejected.append(ExtractionRejection(index, reason))
+            else:
+                claims.append(draft)
+        status = (
+            ("degraded" if claims else "error") if rejected else "completed" if claims else "empty"
+        )
+        return ExtractionReport(
+            tuple(claims),
+            ExtractionDiagnostic(
+                status,
+                len(raw_claims),
+                len(claims),
+                tuple(rejected),
+                "ExtractionFormatError" if rejected else None,
+            ),
+        )
 
 
 class CompositeClaimExtractor:
@@ -65,14 +152,94 @@ class CompositeClaimExtractor:
         self._fail_open = fail_open
 
     async def extract(self, event: MemoryEvent) -> Sequence[ClaimDraft]:
+        return (await self.extract_with_report(event)).drafts
+
+    async def extract_with_report(self, event: MemoryEvent) -> ExtractionReport:
         drafts: list[ClaimDraft] = []
+        components = []
         for extractor in self._extractors:
             try:
-                drafts.extend(await extractor.extract(event))
-            except Exception:
+                with_report = getattr(extractor, "extract_with_report", None)
+                if callable(with_report):
+                    report = await with_report(event)
+                    if not isinstance(report, ExtractionReport):
+                        raise ExtractionFormatError(
+                            ExtractionDiagnostic("error", error_type="ExtractionFormatError")
+                        )
+                else:
+                    values = await extractor.extract(event)
+                    if (
+                        not isinstance(values, Sequence)
+                        or isinstance(values, (str, bytes))
+                        or not all(isinstance(value, ClaimDraft) for value in values)
+                    ):
+                        raise ExtractionFormatError(
+                            ExtractionDiagnostic("error", error_type="ExtractionFormatError")
+                        )
+                    report = ExtractionReport(
+                        tuple(values),
+                        ExtractionDiagnostic(
+                            "completed" if values else "empty",
+                            len(values),
+                            len(values),
+                        ),
+                    )
+                if not self._fail_open and report.diagnostic.status in ("error", "degraded"):
+                    raise ExtractionFormatError(report.diagnostic)
+                drafts.extend(report.drafts)
+                components.append(report.diagnostic)
+            except Exception as error:
                 if not self._fail_open:
-                    raise
-        return tuple(drafts)
+                    diagnostic = (
+                        error.diagnostic
+                        if isinstance(error, ExtractionError)
+                        else ExtractionDiagnostic("error", error_type=type(error).__name__)
+                    )
+                    aborted = _aborted_diagnostic(
+                        diagnostic, prior=components, prior_drafts=len(drafts)
+                    )
+                    failure = (
+                        ExtractionFormatError
+                        if isinstance(error, ExtractionFormatError)
+                        else ExtractionProviderError
+                    )
+                    raise failure(aborted) from error
+                components.append(
+                    error.diagnostic
+                    if isinstance(error, ExtractionError)
+                    else ExtractionDiagnostic("error", error_type=type(error).__name__)
+                )
+        rejected = tuple(item for component in components for item in component.rejections)
+        degraded = any(component.status in ("error", "degraded") for component in components)
+        count = (
+            sum(component.candidate_count for component in components)
+            if all(component.candidate_count is not None for component in components)
+            else None
+        )
+        status = (
+            ("degraded" if drafts else "error")
+            if degraded
+            else "completed"
+            if drafts
+            else "rejected"
+            if rejected
+            else "skipped"
+            if all(component.status == "skipped" for component in components)
+            else "empty"
+        )
+        return ExtractionReport(
+            tuple(drafts),
+            ExtractionDiagnostic(
+                status,
+                count,
+                len(drafts),
+                rejected,
+                next(
+                    (component.error_type for component in components if component.error_type), None
+                ),
+                tuple(components),
+            ),
+        )
 
 
 class GeneratedTrajectoryClaimExtractor:
@@ -98,9 +265,9 @@ class GeneratedTrajectoryClaimExtractor:
         event_types: Sequence[str] | None = None,
         fail_open: bool = True,
     ) -> None:
-        if not 0.0 <= minimum_confidence <= 1.0:
+        if type(minimum_confidence) not in (int, float) or not 0.0 <= minimum_confidence <= 1.0:
             raise ValueError("minimum_confidence must be between 0 and 1")
-        if max_claims < 1:
+        if type(max_claims) is not int or max_claims < 1:
             raise ValueError("max_claims must be positive")
         self._generator = generator
         self._provider = provider
@@ -108,39 +275,49 @@ class GeneratedTrajectoryClaimExtractor:
         self._prompt_version = prompt_version
         self._minimum_confidence = minimum_confidence
         self._max_claims = max_claims
-        self._event_types = frozenset(event_types or self.DEFAULT_EVENT_TYPES)
+        self._event_types = frozenset(
+            self.DEFAULT_EVENT_TYPES if event_types is None else event_types
+        )
         self._fail_open = fail_open
 
     async def extract(self, event: MemoryEvent) -> Sequence[ClaimDraft]:
+        return (await self.extract_with_report(event)).drafts
+
+    async def extract_with_report(self, event: MemoryEvent) -> ExtractionReport:
         if event.event_type not in self._event_types:
-            return ()
+            return ExtractionReport((), ExtractionDiagnostic("skipped", candidate_count=0))
         try:
             generated = await self._generator.generate_claims(event)
-        except Exception:
+        except Exception as error:
+            diagnostic = ExtractionDiagnostic("error", error_type=type(error).__name__)
             if self._fail_open:
-                return ()
-            raise
+                return ExtractionReport((), diagnostic)
+            raise ExtractionProviderError(diagnostic) from error
         if not isinstance(generated, Sequence) or isinstance(generated, (str, bytes)):
-            return ()
-
-        # Model output must supply its score explicitly. The metadata extractor's
-        # default remains reserved for the existing explicit SDK input contract.
-        scored = [
-            raw
-            for raw in generated[: self._max_claims]
-            if isinstance(raw, Mapping)
-            and type(raw.get("confidence")) in (int, float)
-            and 0.0 <= raw["confidence"] <= 1.0
-        ]
-        generated_event = replace(event, metadata={"claims": scored})
-        parsed = await MetadataClaimExtractor().extract(generated_event)
+            diagnostic = ExtractionDiagnostic(
+                "error",
+                rejections=(ExtractionRejection(None, "invalid_output"),),
+                error_type="ExtractionFormatError",
+            )
+            if not self._fail_open:
+                raise ExtractionFormatError(diagnostic)
+            return ExtractionReport((), diagnostic)
         accepted: list[ClaimDraft] = []
-        for draft in parsed:
+        rejected = []
+        malformed = False
+        for index, raw in enumerate(generated[: self._max_claims]):
+            draft, reason = _parse_claim(raw, generated=True)
+            if reason is not None:
+                rejected.append(ExtractionRejection(index, reason))
+                malformed = True
+                continue
             if draft.confidence < self._minimum_confidence:
+                rejected.append(ExtractionRejection(index, "low_confidence"))
                 continue
             try:
                 event.scope.project(draft.scope_level)
             except ValueError:
+                rejected.append(ExtractionRejection(index, "scope_unavailable"))
                 continue
             accepted.append(
                 replace(
@@ -155,7 +332,28 @@ class GeneratedTrajectoryClaimExtractor:
                     ),
                 )
             )
-        return tuple(accepted)
+        if len(generated) > self._max_claims:
+            rejected.append(
+                ExtractionRejection(
+                    self._max_claims, "candidate_limit", len(generated) - self._max_claims
+                )
+            )
+        diagnostic = ExtractionDiagnostic(
+            ("degraded" if accepted else "error")
+            if malformed
+            else "completed"
+            if accepted
+            else "rejected"
+            if rejected
+            else "empty",
+            len(generated),
+            len(accepted),
+            tuple(rejected),
+            "ExtractionFormatError" if malformed else None,
+        )
+        if malformed and not self._fail_open:
+            raise ExtractionFormatError(_aborted_diagnostic(diagnostic))
+        return ExtractionReport(tuple(accepted), diagnostic)
 
 
 def build_trajectory_extractor(
@@ -167,6 +365,7 @@ def build_trajectory_extractor(
     return CompositeClaimExtractor(
         MetadataClaimExtractor(),
         GeneratedTrajectoryClaimExtractor(generator, **config),
+        fail_open=config.get("fail_open", True),
     )
 
 

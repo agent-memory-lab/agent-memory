@@ -7,10 +7,10 @@ from datetime import datetime
 from typing import Protocol
 
 from ..capture.policy import DefaultCaptureRedactor
-from ..capture.sink import CaptureSubmission
+from ..capture.sink import CaptureError, CaptureSubmission
 from ..domain import ForgetMode, ForgetRequest
+from ..extraction_result import ExtractionDiagnostic, ExtractionError
 from .store import RecoveryConflict, RecoveryStore, _refs
-
 
 _extracted_event = ContextVar("recovery_extracted_event", default=None)
 
@@ -108,6 +108,12 @@ class CaptureReceipt:
     queue_status: str = "none"
     attempts: int = 0
     error_code: str | None = None
+    extraction: ExtractionDiagnostic | None = None
+    consolidation_status: str | None = None
+
+    def __post_init__(self):
+        if self.extraction is not None:
+            object.__setattr__(self, "extraction", ExtractionDiagnostic.from_dict(self.extraction))
 
     @property
     def stage(self):
@@ -176,7 +182,8 @@ class RecoveryMemory:
         await self.store.write(self.scope, "receipt", safe.event_id, asdict(receipt), (), expected_revision=0)
         return await self.store.read(self.scope, "receipt", safe.event_id)
 
-    async def finish(self, old, provider_event_id, *, extracted):
+    async def finish(self, old, provider_event_id, *, extracted, extraction=None,
+                     consolidation_status=None):
         from dataclasses import replace
         ids = (provider_event_id,)
         if not await self.evidence.exists(self.scope, ids):
@@ -186,11 +193,26 @@ class RecoveryMemory:
             raise RecoveryConflict("capture provider identity changed")
         # A successful synchronous extraction can be recorded even if it
         # produced no claims. It does not imply successful semantic recall.
+        diagnostic = extraction if extraction is not None else receipt.extraction
         current = replace(receipt, provider_event_id=provider_event_id,
-                          persisted=True, extracted=receipt.extracted or extracted,
-                          retrievable=False, raw_readable=True, facts_retrievable=False)
+                          persisted=True,
+                          extracted=diagnostic.successful if diagnostic is not None
+                          else receipt.extracted or extracted,
+                          retrievable=False, raw_readable=True, facts_retrievable=False,
+                          extraction=diagnostic,
+                          consolidation_status=consolidation_status or receipt.consolidation_status,
+                          error_code=None)
         await self.store.write(self.scope, "receipt", receipt.event_id,
             asdict(current), ids, expected_revision=old.revision)
+
+    async def record_extraction_failure(self, old, diagnostic):
+        from dataclasses import replace
+        receipt = CaptureReceipt(**old.payload)
+        current = replace(receipt, extracted=False, extraction=diagnostic,
+                          error_code="capture_extraction_failed")
+        ids = (receipt.provider_event_id,) if receipt.persisted else ()
+        await self.store.write(self.scope, "receipt", receipt.event_id, asdict(current), ids,
+                               expected_revision=old.revision)
 
     async def receipt(self, event_id):
         old = await self.store.read(self.scope, "receipt", event_id)
@@ -274,8 +296,16 @@ class RecoveryCaptureSink:
         try:
             result = await self.provider.ingest_event(safe.to_memory_event())
             await self.recovery.finish(old, result.event_id,
-                extracted=_extracted_event.get() == result.event_id)
+                extracted=_extracted_event.get() == result.event_id,
+                extraction=getattr(result, "extraction", None),
+                consolidation_status=getattr(result, "consolidation_status", None))
+        except ExtractionError as error:
+            await self.recovery.record_extraction_failure(old, error.diagnostic)
+            raise CaptureError("capture extraction failed", code="capture_extraction_failed",
+                               extraction=error.diagnostic) from error
         finally:
             _extracted_event.reset(token)
         return CaptureSubmission(event_id=safe.event_id, status="done",
-            duplicate=result.duplicate, provider_event_id=result.event_id)
+            duplicate=result.duplicate, provider_event_id=result.event_id,
+            extraction=getattr(result, "extraction", None),
+            consolidation_status=getattr(result, "consolidation_status", None))

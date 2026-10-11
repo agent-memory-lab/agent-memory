@@ -5,17 +5,26 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from .policy import CapturePolicyError, CaptureSanitizer
-from .queue import CaptureQueueError, SQLiteCaptureQueue
+from ..extraction_result import ExtractionDiagnostic, ExtractionError
 from ..lifecycle import LifecycleEvent
 from ..ports import MemoryProvider
+from .policy import CapturePolicyError, CaptureSanitizer
+from .queue import CaptureQueueError, SQLiteCaptureQueue
 
 
 class CaptureError(ValueError):
-    def __init__(self, message: str, *, code: str, field: str | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str,
+        field: str | None = None,
+        extraction: ExtractionDiagnostic | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.field = field
+        self.extraction = extraction
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +34,8 @@ class CaptureSubmission:
     duplicate: bool = False
     queue_id: int | None = None
     provider_event_id: str | None = None
+    extraction: ExtractionDiagnostic | None = None
+    consolidation_status: str | None = None
 
 
 class CaptureSink(Protocol):
@@ -73,6 +84,12 @@ class DirectCaptureSink:
             result = await self.sanitizer.ingest(event, self.provider)
         except CapturePolicyError as error:
             raise CaptureError(str(error), code="capture_rejected", field=error.field) from error
+        except ExtractionError as error:
+            raise CaptureError(
+                "capture extraction failed",
+                code="capture_extraction_failed",
+                extraction=error.diagnostic,
+            ) from error
         except Exception as error:
             raise CaptureError("capture storage failed", code="capture_storage_failed") from error
         return CaptureSubmission(
@@ -80,4 +97,6 @@ class DirectCaptureSink:
             status="done",
             duplicate=result.duplicate,
             provider_event_id=result.event_id,
+            extraction=getattr(result, "extraction", None),
+            consolidation_status=getattr(result, "consolidation_status", None),
         )

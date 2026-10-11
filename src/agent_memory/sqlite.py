@@ -338,6 +338,12 @@ class SQLiteMemoryUnitOfWork:
             ),
         )
 
+    async def save_consolidation_intent(self, event, result):
+        """Persist the scheduler handoff in the source/claim write transaction."""
+        from .operations import sqlite_consolidation_outbox
+
+        sqlite_consolidation_outbox.save(self.connection, event, result)
+
     model_budget_contract = "model-budget/1"
 
     async def model_budget_lock(self):
@@ -1420,6 +1426,9 @@ class SQLiteMemoryRepository:
             from .operations import sqlite_verification
 
             connection.executescript(sqlite_verification.SCHEMA)
+            from .operations import sqlite_consolidation_outbox
+
+            sqlite_consolidation_outbox.initialize(connection)
             self._migrate_claim_sources(connection)
             self._migrate_evolution_records(connection)
             self._ensure_current_claim_index(connection)
@@ -1629,6 +1638,70 @@ class SQLiteMemoryRepository:
             "UPDATE claims SET provenance_json = ? WHERE id = ?",
             (_provenance_json(updated), claim_id),
         )
+
+    async def claim_consolidation_intent(self, *, scope=None, event_id=None, lease_seconds=60):
+        from .operations import sqlite_consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return sqlite_consolidation_outbox.claim(
+                uow.connection, self, scope=scope, event_id=event_id, lease_seconds=lease_seconds
+            )
+
+    async def consolidation_source_is_live(self, delivery):
+        from .operations import sqlite_consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return sqlite_consolidation_outbox.source_is_live(uow.connection, delivery)
+
+    async def consolidation_delivery_is_current(self, delivery):
+        from .operations import sqlite_consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return sqlite_consolidation_outbox.delivery_is_current(uow.connection, delivery)
+
+    async def complete_consolidation_intent(self, delivery):
+        from .operations import sqlite_consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return sqlite_consolidation_outbox.complete(uow.connection, delivery)
+
+    async def fail_consolidation_intent(self, delivery, error_code):
+        from .operations import sqlite_consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return sqlite_consolidation_outbox.fail(uow.connection, delivery, error_code)
+
+    async def consolidation_outbox_status(self, scope=None):
+        from .operations import sqlite_consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return sqlite_consolidation_outbox.status(uow.connection, scope)
+
+    async def consolidation_intent_state(self, scope, event_id):
+        from .operations import sqlite_consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return sqlite_consolidation_outbox.intent_state(uow.connection, scope, event_id)
+
+    async def pending_consolidation_cancellations(self, *, scope=None, limit=64):
+        from .operations import sqlite_consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return sqlite_consolidation_outbox.pending_cancellations(
+                uow.connection, scope=scope, limit=limit
+            )
+
+    async def request_consolidation_cancellation(self, scope, event_id):
+        from .operations import sqlite_consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return sqlite_consolidation_outbox.request_cancellation(uow.connection, scope, event_id)
+
+    async def ack_consolidation_cancellation(self, cancellation):
+        from .operations import sqlite_consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return sqlite_consolidation_outbox.ack_cancellation(uow.connection, cancellation)
 
     def unit_of_work(self) -> SQLiteMemoryUnitOfWork:
         return SQLiteMemoryUnitOfWork(self)
@@ -2396,7 +2469,7 @@ class SQLiteMemoryRepository:
                 # These are the typed dependency/lineage fields consumed by
                 # ArtifactValidity, never body/content/summary evidence fields.
                 fields = (
-                    "event_ids", "source_event_ids", "source_episode_ids",
+                    "event_ids", "source_event_ids", "source_claim_ids", "source_episode_ids",
                     "counterexample_episode_ids", "decision_ids", "outcome_ids",
                     "retrieval_trace_ids", "used_memory_ids", "memory_ids",
                     "returned_memory_ids", "procedure_ids", "bundle_id", "decision_id",
@@ -2404,7 +2477,12 @@ class SQLiteMemoryRepository:
                 )
                 projection = (
                     "CASE WHEN json_type(payload_json)='object' THEN json_object(" + ",".join(
-                        f"'{field}',json_extract(payload_json,'$.{field}')" for field in fields
+                        f"'{field}'," + (
+                            "CASE WHEN json_type(payload_json,'$.source_claim_ids') IS NULL "
+                            "THEN json('[]') ELSE json_extract(payload_json,'$.source_claim_ids') END"
+                            if field == "source_claim_ids"
+                            else f"json_extract(payload_json,'$.{field}')"
+                        ) for field in fields
                     ) + ") ELSE payload_json END AS payload_json"
                 )
                 columns = columns.replace("payload_json", projection)
@@ -2520,8 +2598,9 @@ class SQLiteMemoryRepository:
         return len(dependent)
 
     def _forget_on_connection(self, connection, request, *, replay=False):
-        from .operations import sqlite_derived
+        from .operations import sqlite_consolidation_outbox, sqlite_derived
 
+        sqlite_consolidation_outbox.forget(connection, request)
         checkpoint = sqlite_derived.admission_checkpoint(connection, request.scope)
         sqlite_derived.forget(connection, request)
         sqlite_retention.forget(connection, request, journal=not replay)
@@ -2960,6 +3039,7 @@ class SQLiteMemoryRepository:
             title=str(payload["title"]),
             content=str(payload["content"]),
             event_ids=tuple(payload.get("event_ids", provenance.source_event_ids)),
+            source_claim_ids=tuple(payload.get("source_claim_ids", ())),
             channel=MemoryChannel(payload.get("channel", MemoryChannel.SEMANTIC)),
             token_budget=int(payload.get("token_budget", 256)),
             status=ArtifactStatus(row["status"]),

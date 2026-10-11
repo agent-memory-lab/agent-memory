@@ -312,6 +312,14 @@ from .providers import (
     MetadataClaimExtractor,
     build_trajectory_extractor,
 )
+from .extraction_result import (
+    ExtractionDiagnostic,
+    ExtractionError,
+    ExtractionFormatError,
+    ExtractionProviderError,
+    ExtractionRejection,
+    ExtractionReport,
+)
 from .runtime import AgentMemory, MemoryLimits
 from .evaluation.resources import (
     ProcessResourceProbe,
@@ -592,6 +600,12 @@ __all__ = [
     "EvaluatorPlugin",
     "EvolutionProvider",
     "ExtractionResult",
+    "ExtractionDiagnostic",
+    "ExtractionError",
+    "ExtractionFormatError",
+    "ExtractionProviderError",
+    "ExtractionRejection",
+    "ExtractionReport",
     "ExtractorPlugin",
     "ForgetMode",
     "FileCaptureArtifactStore",
