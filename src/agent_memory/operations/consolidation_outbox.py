@@ -19,6 +19,7 @@ class ConsolidationDelivery:
     result: IngestResult
     token: str
     lease_expires_at: datetime
+    attempts: int = 1
 
     @property
     def idempotency_key(self):
@@ -30,6 +31,11 @@ class ConsolidationCancellation:
     scope: MemoryScope
     event_id: str
     generation: int
+
+
+def retry_delay_seconds(attempts: int) -> int:
+    """Bound exponential backoff; keep failed intents available for repair/retry."""
+    return min(300, 2 ** min(9, max(0, attempts - 1)))
 
 
 def restore_ingest_result(payload):
@@ -86,6 +92,9 @@ async def drain_consolidation_outbox(
     No scheduler exception turns committed ingestion into a misleading failed
     write. Cancellation remains cancellation; its lease expires for recovery.
     Sources are hydrated only after claiming and checked again at delivery.
+    A failing intent is delayed without blocking unrelated scopes. Each intent
+    is attempted at most once per batch, even when processing outlasts backoff.
+    An explicit event_id is an immediate retry, still bounded to one attempt.
     """
     if type(limit) is not int or not 1 <= limit <= 256:
         raise ValueError("outbox batch limit must be between 1 and 256")
@@ -99,13 +108,16 @@ async def drain_consolidation_outbox(
     if not all(callable(getattr(repository, name, None)) for name in required):
         raise NotImplementedError("repository lacks transactional consolidation outbox")
     totals = dict(claimed=0, delivered=0, failed=0, skipped=0)
+    attempted = []
     for _ in range(limit):
         delivery = await repository.claim_consolidation_intent(
-            scope=scope, event_id=event_id, lease_seconds=lease_seconds
+            scope=scope, event_id=event_id, lease_seconds=lease_seconds,
+            exclude_event_ids=tuple(attempted),
         )
         if delivery is None:
             break
         totals["claimed"] += 1
+        attempted.append(delivery.event.id)
         try:
             if not await repository.consolidation_delivery_is_current(delivery):
                 totals["skipped"] += 1
@@ -124,9 +136,7 @@ async def drain_consolidation_outbox(
                 # The primary failure is already counted; live-evidence guards
                 # still prevent publication if queue cancellation also fails.
                 pass
-            # A failed queue should not receive an unbounded stream of retries
-            # within this batch. Later calls retry without losing the intent.
-            break
+            continue
         if completed:
             totals["delivered"] += 1
         else:

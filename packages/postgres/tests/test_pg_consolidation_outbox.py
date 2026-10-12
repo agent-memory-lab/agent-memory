@@ -3,6 +3,7 @@
 import asyncio
 import inspect
 import re
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import uuid4
@@ -72,8 +73,10 @@ def test_pg_handoff_restore_keeps_nested_diagnostic_types():
 
 
 @pytest.mark.parametrize("mode", [ForgetMode.ARCHIVE, ForgetMode.ERASE])
-def test_live_postgres_pending_retry_typed_receipt_and_forget(mode):
+def test_live_postgres_pending_retry_typed_receipt_and_forget(mode, monkeypatch):
     async def scenario():
+        clock = [datetime(2026, 10, 12, tzinfo=UTC)]
+        monkeypatch.setattr(storage, "utc_now", lambda: clock[0])
         dsn = _test_dsn()
         schema = "consolidation_outbox_" + uuid4().hex
         async with await AsyncConnection.connect(dsn, autocommit=True) as admin:
@@ -114,6 +117,8 @@ def test_live_postgres_pending_retry_typed_receipt_and_forget(mode):
                 )
                 assert await repository.fail_consolidation_intent(delivery, "retry")
                 kernel._consolidation_scheduler = queue
+                assert (await kernel.retry_consolidation())["claimed"] == 0
+                clock[0] += timedelta(seconds=2)
                 assert (await asyncio.wait_for(kernel.retry_consolidation(), 5))["delivered"] == 1
                 assert await repository.consolidation_intent_state(source.scope, source.id) == (
                     "delivered"

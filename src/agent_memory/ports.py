@@ -437,7 +437,7 @@ class ConsolidationOutboxRepository(MemoryRepository, Protocol):
 
     async def claim_consolidation_intent(
         self, *, scope: MemoryScope | None = None, event_id: str | None = None,
-        lease_seconds: int = 60,
+        lease_seconds: int = 60, exclude_event_ids: tuple[str, ...] = (),
     ) -> Any: ...
 
     async def consolidation_delivery_is_current(self, delivery: Any) -> bool: ...

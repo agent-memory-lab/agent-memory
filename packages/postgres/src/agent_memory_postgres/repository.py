@@ -1166,12 +1166,15 @@ class PostgresMemoryRepository:
     async def close(self) -> None:
         await self.pool.close()
 
-    async def claim_consolidation_intent(self, *, scope=None, event_id=None, lease_seconds=60):
+    async def claim_consolidation_intent(
+        self, *, scope=None, event_id=None, lease_seconds=60, exclude_event_ids=(),
+    ):
         from . import consolidation_outbox
 
         async with self.unit_of_work() as uow:
             return await consolidation_outbox.claim(
-                uow.connection, self, scope=scope, event_id=event_id, lease_seconds=lease_seconds
+                uow.connection, self, scope=scope, event_id=event_id, lease_seconds=lease_seconds,
+                exclude_event_ids=exclude_event_ids,
             )
 
     async def consolidation_source_is_live(self, delivery):

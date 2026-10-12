@@ -10,6 +10,7 @@ from agent_memory.operations.consolidation_outbox import (
     ConsolidationCancellation,
     ConsolidationDelivery,
     restore_ingest_result,
+    retry_delay_seconds,
 )
 
 
@@ -38,12 +39,23 @@ async def save(connection, event, result):
     )
 
 
-async def claim(connection, repository, *, scope=None, event_id=None, lease_seconds=60):
+async def claim(
+    connection, repository, *, scope=None, event_id=None, lease_seconds=60,
+    exclude_event_ids=(),
+):
     if type(lease_seconds) is not int or not 5 <= lease_seconds <= 3600:
         raise ValueError("outbox lease must be between 5 and 3600 seconds")
     now = utc_now().astimezone(UTC)
     where = "(o.status='pending' OR (o.status='delivering' AND o.lease_expires_at<=%s))"
     params = [now]
+    if event_id is None:
+        where += (
+            " AND (o.status='delivering' OR o.next_attempt_at IS NULL OR o.next_attempt_at<=%s)"
+        )
+        params.append(now)
+    if exclude_event_ids:
+        where += " AND NOT (o.event_id=ANY(%s))"
+        params.append(list(exclude_event_ids))
     if scope is not None:
         where += " AND o.partition_key=%s"
         params.append(scope.partition_key())
@@ -56,7 +68,8 @@ async def claim(connection, repository, *, scope=None, event_id=None, lease_seco
         "SELECT o.* FROM agent_memory_consolidation_outbox o "
         "JOIN agent_memory_events e ON e.id=o.event_id AND e.partition_key=o.partition_key "
         "AND e.archived_at IS NULL AND e.content_hash=o.source_hash "
-        f"WHERE {where} ORDER BY o.created_at, o.event_id LIMIT 1 "
+        f"WHERE {where} ORDER BY COALESCE(o.next_attempt_at, o.created_at), "
+        "o.created_at, o.event_id LIMIT 1 "
         "FOR UPDATE OF o SKIP LOCKED",
         tuple(params),
     )
@@ -83,7 +96,9 @@ async def claim(connection, repository, *, scope=None, event_id=None, lease_seco
         "WHERE event_id=%s",
         (token, expires, row["event_id"]),
     )
-    return ConsolidationDelivery(repository._event_from_row(event), result, token, expires)
+    return ConsolidationDelivery(
+        repository._event_from_row(event), result, token, expires, row["attempts"] + 1
+    )
 
 
 async def source_is_live(connection, delivery):
@@ -125,7 +140,7 @@ async def complete(connection, delivery):
         "UPDATE agent_memory_consolidation_outbox o SET status='delivered', "
         "result_json=jsonb_build_object('claim_ids',"
         "COALESCE(o.result_json->'claim_ids','[]'::jsonb)), "
-        "lease_token=NULL, lease_expires_at=NULL, "
+        "lease_token=NULL, lease_expires_at=NULL, next_attempt_at=NULL, "
         "last_error_code=NULL, delivered_at=%s WHERE o.event_id=%s AND o.partition_key=%s "
         "AND o.source_hash=%s AND o.status='delivering' AND o.lease_token=%s "
         "AND o.lease_expires_at>%s "
@@ -147,11 +162,16 @@ async def complete(connection, delivery):
 async def fail(connection, delivery, error_code):
     if not isinstance(error_code, str) or not 1 <= len(error_code) <= 128:
         raise ValueError("bounded outbox error code required")
+    retry_at = utc_now().astimezone(UTC) + timedelta(seconds=retry_delay_seconds(delivery.attempts))
     cursor = await connection.execute(
         "UPDATE agent_memory_consolidation_outbox SET status='pending', lease_token=NULL, "
-        "lease_expires_at=NULL, last_error_code=%s WHERE event_id=%s AND partition_key=%s "
+        "lease_expires_at=NULL, last_error_code=%s, next_attempt_at=%s "
+        "WHERE event_id=%s AND partition_key=%s "
         "AND status='delivering' AND lease_token=%s",
-        (error_code, delivery.event.id, delivery.event.scope.partition_key(), delivery.token),
+        (
+            error_code, retry_at, delivery.event.id,
+            delivery.event.scope.partition_key(), delivery.token,
+        ),
     )
     return cursor.rowcount == 1
 

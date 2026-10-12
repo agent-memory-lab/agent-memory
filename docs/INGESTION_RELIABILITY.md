@@ -62,6 +62,17 @@ its own intent. A long-running host should call the bounded drain periodically:
 await kernel.retry_consolidation(scope=scope, limit=64, lease_seconds=60)
 ```
 
+Failed deliveries persist `next_attempt_at` with exponential backoff (1, 2, 4,
+… seconds, capped at 300 seconds). A global or scoped drain skips intents that
+are not due and continues after a failure, so one failing source or tenant cannot
+block other ready intents. Each intent is attempted at most once per batch even
+if the batch outlasts its backoff. Ready work is ordered by its next eligible time,
+so retries also yield to older untried work when the batch limit is one.
+Explicit event-ID retries, including duplicate
+ingestion, can retry immediately; lease tokens still fence stale acknowledgements.
+Attempts and bounded error codes survive restarts. Failed work stays pending for
+repair and eventual retry; it is not silently discarded or marked delivered.
+
 Delivery uses leases and token-checked acknowledgements. A crash after enqueue
 and before acknowledgement can redeliver, so scheduler implementations must
 deduplicate `event:{event.id}:consolidate`. Existing local and PostgreSQL queues
@@ -100,7 +111,9 @@ contract](MEMORY_BLOCKS.md) documents Python, SDK, MCP and HTTP compatibility.
 Custom repositories with a configured scheduler must implement the transactional
 outbox extension in `ports.py`; unsupported combinations fail at initialization.
 Repositories without a scheduler retain the existing repository contract.
-PostgreSQL migration `021_consolidation_outbox.sql` adds the corresponding table.
+PostgreSQL migration `021_consolidation_outbox.sql` adds the corresponding table;
+`022_consolidation_outbox_retry.sql` adds retry scheduling. Existing pending rows
+remain immediately eligible. SQLite upgrades the existing table additively.
 
 ## Long-source retrieval
 

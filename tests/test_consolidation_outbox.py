@@ -69,8 +69,32 @@ def test_intent_commits_with_event_and_rollback_keeps_neither(tmp_path):
     asyncio.run(scenario())
 
 
-def test_failure_retains_intent_and_restart_delivers_without_payload_duplication(tmp_path):
+def test_existing_outbox_upgrades_without_losing_pending_intents(tmp_path):
     async def scenario():
+        path = tmp_path / "memory.db"
+        repository = SQLiteMemoryRepository(path)
+        await repository.initialize()
+        event = MemoryEvent(SCOPE, "event", "source", id="upgrade")
+        await store(repository, event)
+        with closing(sqlite3.connect(path)) as db, db:
+            db.execute("DROP INDEX consolidation_outbox_retry_idx")
+            db.execute("ALTER TABLE consolidation_outbox DROP COLUMN next_attempt_at")
+        restarted = SQLiteMemoryRepository(path)
+        await restarted.initialize()
+        await restarted.initialize()
+        delivery = await restarted.claim_consolidation_intent()
+        assert delivery.event.id == event.id
+        assert delivery.attempts == 1
+
+    asyncio.run(scenario())
+
+
+def test_failure_retains_intent_and_restart_delivers_without_payload_duplication(
+    tmp_path, monkeypatch,
+):
+    async def scenario():
+        clock = [datetime(2026, 10, 12, tzinfo=UTC)]
+        monkeypatch.setattr(storage, "utc_now", lambda: clock[0])
         path = tmp_path / "memory.db"
         repository = SQLiteMemoryRepository(path)
         await repository.initialize()
@@ -87,6 +111,8 @@ def test_failure_retains_intent_and_restart_delivers_without_payload_duplication
         restarted = SQLiteMemoryRepository(path)
         await restarted.initialize()
         scheduler = Scheduler()
+        assert (await drain_consolidation_outbox(restarted, scheduler))["claimed"] == 0
+        clock[0] += timedelta(seconds=1)
         result = await drain_consolidation_outbox(restarted, scheduler)
         assert result["delivered"] == 1
         assert scheduler.events[0][0].content == event.content
@@ -245,14 +271,17 @@ def test_kernel_enqueue_failure_returns_committed_pending_and_duplicate_retries(
     asyncio.run(scenario())
 
 
-def test_kernel_restart_drains_committed_intent_and_keeps_typed_diagnostic(tmp_path):
+def test_kernel_restart_drains_committed_intent_and_keeps_typed_diagnostic(tmp_path, monkeypatch):
     async def scenario():
+        clock = [datetime(2026, 10, 12, tzinfo=UTC)]
+        monkeypatch.setattr(storage, "utc_now", lambda: clock[0])
         path = tmp_path / "memory.db"
         kernel = build_local_kernel(path, consolidation_scheduler=Scheduler(failing=True))
         await kernel.initialize()
         first = await kernel.ingest_event(MemoryEvent(SCOPE, "event", "source", id="source"))
         assert first.consolidation_status == "pending"
         assert first.extraction.status == "skipped"
+        clock[0] += timedelta(seconds=1)
         scheduler = Scheduler()
         restarted = build_local_kernel(path, consolidation_scheduler=scheduler)
         await restarted.initialize()
@@ -294,6 +323,8 @@ def test_nested_extraction_diagnostic_round_trips_in_intent(tmp_path):
 )
 def test_validation_or_ack_failure_keeps_retryable_intent(tmp_path, monkeypatch, failure_method):
     async def scenario():
+        clock = [datetime(2026, 10, 12, tzinfo=UTC)]
+        monkeypatch.setattr(storage, "utc_now", lambda: clock[0])
         repository = SQLiteMemoryRepository(tmp_path / "memory.db")
         await repository.initialize()
         source = MemoryEvent(SCOPE, "event", "source", id="source")
@@ -309,6 +340,7 @@ def test_validation_or_ack_failure_keeps_retryable_intent(tmp_path, monkeypatch,
         assert (await drain_consolidation_outbox(repository, queue))["failed"] == 1
         assert await repository.consolidation_intent_state(SCOPE, source.id) == "pending"
         monkeypatch.setattr(repository, failure_method, original)
+        clock[0] += timedelta(seconds=1)
         assert (await drain_consolidation_outbox(repository, queue))["delivered"] == 1
         assert (await queue.stats()).pending == 1
 

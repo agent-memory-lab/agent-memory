@@ -10,6 +10,7 @@ from .consolidation_outbox import (
     ConsolidationCancellation,
     ConsolidationDelivery,
     restore_ingest_result,
+    retry_delay_seconds,
 )
 
 SCHEMA = """
@@ -43,6 +44,12 @@ def initialize(connection):
             connection.execute(
                 f"ALTER TABLE consolidation_outbox ADD COLUMN {name} INTEGER NOT NULL DEFAULT 0"
             )
+    if "next_attempt_at" not in columns:
+        connection.execute("ALTER TABLE consolidation_outbox ADD COLUMN next_attempt_at TEXT")
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS consolidation_outbox_retry_idx "
+        "ON consolidation_outbox(next_attempt_at, created_at, event_id) WHERE status='pending'"
+    )
     connection.execute(
         "CREATE INDEX IF NOT EXISTS consolidation_outbox_cancel_idx "
         "ON consolidation_outbox(created_at,event_id) WHERE status='cancelled' AND cancel_pending=1"
@@ -72,12 +79,21 @@ def save(connection, event, result):
     )
 
 
-def claim(connection, repository, *, scope=None, event_id=None, lease_seconds=60):
+def claim(
+    connection, repository, *, scope=None, event_id=None, lease_seconds=60,
+    exclude_event_ids=(),
+):
     if type(lease_seconds) is not int or not 5 <= lease_seconds <= 3600:
         raise ValueError("outbox lease must be between 5 and 3600 seconds")
     now = utc_now().astimezone(UTC)
     where = "(o.status='pending' OR (o.status='delivering' AND o.lease_expires_at<=?))"
     params = [now.isoformat()]
+    if event_id is None:
+        where += " AND (o.status='delivering' OR o.next_attempt_at IS NULL OR o.next_attempt_at<=?)"
+        params.append(now.isoformat())
+    if exclude_event_ids:
+        where += " AND o.event_id NOT IN (" + ",".join("?" for _ in exclude_event_ids) + ")"
+        params.extend(exclude_event_ids)
     if scope is not None:
         where += " AND o.partition_key=?"
         params.append(scope.partition_key())
@@ -88,7 +104,7 @@ def claim(connection, repository, *, scope=None, event_id=None, lease_seconds=60
         "SELECT o.* FROM consolidation_outbox o JOIN events e ON e.id=o.event_id "
         "AND e.partition_key=o.partition_key AND e.archived_at IS NULL "
         f"AND e.content_hash=o.source_hash WHERE {where} "
-        "ORDER BY o.created_at, o.event_id LIMIT 1",
+        "ORDER BY COALESCE(o.next_attempt_at, o.created_at), o.created_at, o.event_id LIMIT 1",
         params,
     ).fetchone()
     if row is None:
@@ -105,7 +121,9 @@ def claim(connection, repository, *, scope=None, event_id=None, lease_seconds=60
         "lease_token=?, lease_expires_at=?, last_error_code=NULL WHERE event_id=?",
         (token, expires.isoformat(), row["event_id"]),
     )
-    return ConsolidationDelivery(repository._event_from_row(event_row), result, token, expires)
+    return ConsolidationDelivery(
+        repository._event_from_row(event_row), result, token, expires, row["attempts"] + 1
+    )
 
 
 def source_is_live(connection, delivery):
@@ -148,7 +166,8 @@ def complete(connection, delivery):
         "UPDATE consolidation_outbox SET status='delivered', "
         "result_json=json_object('claim_ids',json(COALESCE("
         "json_extract(result_json, '$.claim_ids'),'[]'))), "
-        "lease_token=NULL, lease_expires_at=NULL, last_error_code=NULL, delivered_at=? "
+        "lease_token=NULL, lease_expires_at=NULL, next_attempt_at=NULL, "
+        "last_error_code=NULL, delivered_at=? "
         "WHERE event_id=? AND lease_token=?",
         (utc_now().astimezone(UTC).isoformat(), delivery.event.id, delivery.token),
     )
@@ -159,13 +178,15 @@ def fail(connection, delivery, error_code):
     if not isinstance(error_code, str) or not 1 <= len(error_code) <= 128:
         raise ValueError("bounded outbox error code required")
     # Fenced failure cannot release a newer delivery after lease takeover.
+    retry_at = utc_now().astimezone(UTC) + timedelta(seconds=retry_delay_seconds(delivery.attempts))
     return (
         connection.execute(
             "UPDATE consolidation_outbox SET status='pending', lease_token=NULL, "
-            "lease_expires_at=NULL, last_error_code=? WHERE event_id=? "
+            "lease_expires_at=NULL, last_error_code=?, next_attempt_at=? WHERE event_id=? "
             "AND partition_key=? AND status='delivering' AND lease_token=?",
             (
                 error_code,
+                retry_at.isoformat(),
                 delivery.event.id,
                 delivery.event.scope.partition_key(),
                 delivery.token,

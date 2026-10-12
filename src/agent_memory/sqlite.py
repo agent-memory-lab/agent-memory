@@ -1644,12 +1644,15 @@ class SQLiteMemoryRepository:
             (_provenance_json(updated), claim_id),
         )
 
-    async def claim_consolidation_intent(self, *, scope=None, event_id=None, lease_seconds=60):
+    async def claim_consolidation_intent(
+        self, *, scope=None, event_id=None, lease_seconds=60, exclude_event_ids=(),
+    ):
         from .operations import sqlite_consolidation_outbox
 
         async with self.unit_of_work() as uow:
             return sqlite_consolidation_outbox.claim(
-                uow.connection, self, scope=scope, event_id=event_id, lease_seconds=lease_seconds
+                uow.connection, self, scope=scope, event_id=event_id, lease_seconds=lease_seconds,
+                exclude_event_ids=exclude_event_ids,
             )
 
     async def consolidation_source_is_live(self, delivery):
