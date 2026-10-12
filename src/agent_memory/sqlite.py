@@ -53,6 +53,8 @@ from .operations.artifact_dependencies import (
     affected_memory_keys,
     dependency_ids,
 )
+from .operations.artifact_temporal import sqlite_current_claim_ids
+from .operations.block_updates import resolve_block_dependencies
 from .retrieval.analyzer import lexical_terms
 from .retrieval.temporal_history import SQLiteClaimHistory, temporal_candidates
 
@@ -1027,7 +1029,6 @@ class SQLiteMemoryUnitOfWork:
         )
 
     async def save_block(self, block: MemoryBlock, expected_version: int) -> MemoryBlock:
-        self._repository._validate_artifact_write(self.connection, block)
         row = self.connection.execute(
             "SELECT * FROM artifacts WHERE id = ?", (block.id,)
         ).fetchone()
@@ -1037,6 +1038,8 @@ class SQLiteMemoryUnitOfWork:
                 raise RuntimeError(
                     f"memory block version conflict: expected {expected_version}, current 0"
                 )
+            block = resolve_block_dependencies(block, None)
+            self._repository._validate_artifact_write(self.connection, block)
             stored = replace(block, version=1, created_at=now, updated_at=now)
             self._repository._insert_artifact(
                 self.connection,
@@ -1065,6 +1068,8 @@ class SQLiteMemoryUnitOfWork:
                 f"memory block version conflict: expected {expected_version}, "
                 f"current {current.version}"
             )
+        block = resolve_block_dependencies(block, current)
+        self._repository._validate_artifact_write(self.connection, block)
         stored = replace(
             block,
             version=current.version + 1,
@@ -2225,6 +2230,7 @@ class SQLiteMemoryRepository:
         if not kinds:
             return ()
         locators = []
+        as_of = utc_now()
         offset = 0
         while len(locators) < limit and offset < index.MAX_CANDIDATES:
             page_size = min(limit - len(locators), index.MAX_CANDIDATES - offset)
@@ -2235,7 +2241,9 @@ class SQLiteMemoryRepository:
             )
             # Validate dependency headers before the evidence hydration limit.
             # Rejected legacy rows do not consume the accepted candidate budget.
-            live = self._live_artifact_ids(connection, scope, [row["owner_id"] for row in page])
+            live = self._live_artifact_ids(
+                connection, scope, [row["owner_id"] for row in page], as_of=as_of
+            )
             locators.extend(row for row in page if row["owner_id"] in live)
             offset += len(page)
             if len(page) < page_size:
@@ -2263,8 +2271,9 @@ class SQLiteMemoryRepository:
                 }))
         return tuple(rows)
 
-    def _live_artifact_ids(self, connection, scope, identities):
+    def _live_artifact_ids(self, connection, scope, identities, *, as_of=None):
         """Resolve the dependency graph without loading candidate evidence bodies."""
+        now = as_of or utc_now()
         graph = []
         pending, seen = set(identities), set()
         while pending:
@@ -2277,7 +2286,10 @@ class SQLiteMemoryRepository:
             graph.extend(rows)
             for row in rows:
                 pending.update(dependency_ids(row) - seen)
-        validity = ArtifactValidity(graph)
+        current = sqlite_current_claim_ids(
+            connection, graph, valid_at=now, known_at=now
+        )
+        validity = ArtifactValidity(graph, current_claim_ids=current)
         return {row["id"] for row in graph if row["table"] == "artifacts"
                 and row["id"] in identities and validity.accepts(row)}
 
@@ -2318,6 +2330,7 @@ class SQLiteMemoryRepository:
     def _read_block_sync(self, scope: MemoryScope, block_id: str) -> MemoryBlock | None:
         where, params = self._visible_scope_clause(scope)
         with self._connection() as connection:
+            connection.execute("BEGIN")
             row = connection.execute(
                 f"SELECT * FROM artifacts WHERE {where} AND id = ? AND kind = ? "
                 f"AND {self._artifact_validity_sql()}",
@@ -2567,6 +2580,7 @@ class SQLiteMemoryRepository:
                 if validity.accepts(candidate)]
 
     def _artifact_validity(self, connection, scope, candidates):
+        now = utc_now()
         graph = []
         pending = {row["id"] for row in candidates}
         for row in candidates:
@@ -2581,7 +2595,10 @@ class SQLiteMemoryRepository:
             for row in rows:
                 pending.update(dependency_ids(row) - seen)
         graph.extend(candidates)
-        return ArtifactValidity(graph)
+        current = sqlite_current_claim_ids(
+            connection, graph, valid_at=now, known_at=now
+        )
+        return ArtifactValidity(graph, current_claim_ids=current)
 
     def _validate_artifact_write(self, connection, item):
         payload = asdict(item)

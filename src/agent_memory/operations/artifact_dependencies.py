@@ -157,7 +157,8 @@ def _visible(source, target):
 class ArtifactValidity:
     """Validate hydrated local dependencies, preserving unknown external IDs."""
 
-    def __init__(self, rows):
+    def __init__(self, rows, *, current_claim_ids=()):
+        self.current_claim_ids = frozenset(current_claim_ids)
         self.rows = {
             (row["table"], row["id"]): row for row in rows if row["table"] != "memory_tombstones"
         }
@@ -247,7 +248,7 @@ class ArtifactValidity:
                     return False
                 for identity in claims:
                     claim = self.rows.get(("claims", identity))
-                    if claim is None or claim.get("status") != "active":
+                    if claim is None or identity not in self.current_claim_ids:
                         return False
         for tables, identity, required in _dependency_references(row):
             if any(

@@ -21,7 +21,10 @@ if __name__ == '__main__':
     scope = MemoryScope('http-acceptance', session_id='session')
     memory = UnifiedMemory.local(path / 'memory.db', scope, recovery_path=path / 'recovery.db')
     asyncio.run(memory.initialize())
-    server = create_server(memory.provider, GatewayHeaderIdentityResolver(SECRET), recovery_tools=RecoveryTransport(memory, Policy()))
+    server = create_server(
+        memory.provider, GatewayHeaderIdentityResolver(SECRET),
+        recovery_tools=None if sys.argv[3] == "blocks" else RecoveryTransport(memory, Policy()),
+    )
     try:
         server.run(transport='streamable-http', host='127.0.0.1', port=int(sys.argv[2]), stateless_http=True, json_response=True)
     finally:

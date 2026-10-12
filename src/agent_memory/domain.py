@@ -351,7 +351,8 @@ class MemoryBlock:
     version: int = 1
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
-    source_claim_ids: tuple[str, ...] = ()
+    # None is an update command omission; stored blocks always contain a tuple.
+    source_claim_ids: tuple[str, ...] | None = None
 
     def __post_init__(self) -> None:
         if not self.title.strip() or not self.content.strip():
@@ -362,6 +363,8 @@ class MemoryBlock:
             raise ValueError("memory block token_budget must be between 16 and 4096")
         if self.version < 1:
             raise ValueError("memory block version must be positive")
+        if self.source_claim_ids is None:
+            return
         if (
             not isinstance(self.source_claim_ids, (tuple, list))
             or len(self.source_claim_ids) > 256

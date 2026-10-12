@@ -87,10 +87,15 @@ JSON payload. Required typed claim dependencies are validated in the artifact
 write transaction (SQLite's `BEGIN IMMEDIATE`; PostgreSQL's namespace advisory
 lock shared with deletion). If claim deletion wins the race, publication fails;
 if publication wins, deletion withdraws the dependent block. Read validation also
-rejects blocks whose referenced claim is no longer active. Cancelling a queue job
+rejects blocks whose referenced claim is outside the current bitemporal valid/known
+intervals, even when the legacy claim head remains active. Future replacements
+and temporary overrides use the same interval materialization as current state. Cancelling a queue job
 alone is insufficient to stop a handler that already captured claim text.
 Older block payloads without claim dependencies retain their existing event-only
 contract; this change does not infer or backfill unknown historical claim lineage.
+Regular updates preserve omitted claim dependencies inside the CAS transaction;
+explicit empty arrays cannot clear an existing dependency set. The [block
+contract](MEMORY_BLOCKS.md) documents Python, SDK, MCP and HTTP compatibility.
 
 Custom repositories with a configured scheduler must implement the transactional
 outbox extension in `ports.py`; unsupported combinations fail at initialization.

@@ -47,10 +47,12 @@ from agent_memory.operations.artifact_dependencies import (
     affected_memory_keys,
     dependency_ids,
 )
+from agent_memory.operations.block_updates import resolve_block_dependencies
 from agent_memory.retrieval.temporal_history import temporal_candidates
 from agent_memory.serialization import to_jsonable
 
 from . import admission, retention
+from .artifact_temporal import postgres_current_claim_ids
 from .temporal_history import PostgresClaimHistory
 
 
@@ -953,7 +955,8 @@ class PostgresMemoryUnitOfWork:
         )
 
     async def save_block(self, block: MemoryBlock, expected_version: int) -> MemoryBlock:
-        await self._repository._validate_artifact_write(self.connection, block)
+        # Keep scope-before-row lock ordering consistent with withdrawal.
+        await admission.lock_scope(self.connection, block.scope)
         cursor = await self.connection.execute(
             "SELECT * FROM agent_memory_artifacts WHERE id = %s FOR UPDATE",
             (block.id,),
@@ -965,6 +968,8 @@ class PostgresMemoryUnitOfWork:
                 raise RuntimeError(
                     f"memory block version conflict: expected {expected_version}, current 0"
                 )
+            block = resolve_block_dependencies(block, None)
+            await self._repository._validate_artifact_write(self.connection, block)
             stored = replace(block, version=1, created_at=now, updated_at=now)
             await self._repository._insert_artifact(
                 self.connection,
@@ -993,6 +998,8 @@ class PostgresMemoryUnitOfWork:
                 f"memory block version conflict: expected {expected_version}, "
                 f"current {current.version}"
             )
+        block = resolve_block_dependencies(block, current)
+        await self._repository._validate_artifact_write(self.connection, block)
         stored = replace(
             block,
             version=current.version + 1,
@@ -1530,6 +1537,7 @@ class PostgresMemoryRepository:
 
     async def _search_live_artifacts(self, connection, scope, where, params, text, limit):
         """Hydrate bounded matching pages; revoked entries never consume the limit."""
+        as_of = utc_now()
         accepted, seen = [], set()
         batch_size = min(max(limit, 32), 256)
         while len(accepted) < limit:
@@ -1540,21 +1548,24 @@ class PostgresMemoryRepository:
             if not rows:
                 break
             seen.update(row["id"] for row in rows)
-            accepted.extend(await self._live_artifact_rows(connection, scope, rows))
+            accepted.extend(await self._live_artifact_rows(
+                connection, scope, rows, as_of=as_of
+            ))
             if len(rows) < batch_size:
                 break
         return accepted[:limit]
 
-    async def _live_artifact_rows(self, connection, scope, rows):
+    async def _live_artifact_rows(self, connection, scope, rows, *, as_of=None):
         candidates = [dict(
             row, table="artifacts", payload=_object(row["payload_json"]),
             provenance=_object(row["provenance_json"]),
         ) for row in rows]
-        validity = await self._artifact_validity(connection, scope, candidates)
+        validity = await self._artifact_validity(connection, scope, candidates, as_of=as_of)
         return [row for row, candidate in zip(rows, candidates, strict=True)
                 if validity.accepts(candidate)]
 
-    async def _artifact_validity(self, connection, scope, candidates):
+    async def _artifact_validity(self, connection, scope, candidates, *, as_of=None):
+        now = as_of or utc_now()
         graph = []
         pending = {row["id"] for row in candidates}
         for row in candidates:
@@ -1571,7 +1582,10 @@ class PostgresMemoryRepository:
             for row in rows:
                 pending.update(dependency_ids(row) - seen)
         graph.extend(candidates)
-        return ArtifactValidity(graph)
+        current = await postgres_current_claim_ids(
+            connection, graph, valid_at=now, known_at=now
+        )
+        return ArtifactValidity(graph, current_claim_ids=current)
 
     async def _validate_artifact_write(self, connection, item):
         await admission.lock_scope(connection, item.scope)

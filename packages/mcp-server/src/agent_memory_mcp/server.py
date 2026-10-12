@@ -222,13 +222,17 @@ def create_server(
             expected_version: int = 0,
             status: str = "active",
             metadata: dict[str, Any] | None = None,
+            source_claim_ids: list[str] | None = None,
         ) -> dict[str, Any]:
-            return await call(ctx, "memory_block_write", {
+            arguments: dict[str, Any] = {
                 "title": title, "content": content, "event_ids": event_ids,
                 "block_id": block_id, "channel": channel, "scope_level": scope_level,
                 "token_budget": token_budget, "expected_version": expected_version,
                 "status": status, "metadata": metadata or {},
-            })
+            }
+            if source_claim_ids is not None:
+                arguments["source_claim_ids"] = source_claim_ids
+            return await call(ctx, "memory_block_write", arguments)
 
         @register_tool()
         async def memory_block_search(
