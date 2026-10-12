@@ -315,8 +315,16 @@ class RunLedger:
                 SUM(status='completed' AND judge_label=1) AS correct
                 FROM tasks GROUP BY arm""").fetchall()
             by_arm = {row["arm"]: dict(row) for row in rows}
-            for metrics in by_arm.values():
+            attempt_rows = self._connection.execute("""SELECT arm,
+                SUM(status='abandoned') AS abandoned_attempts,
+                SUM(error_type='IncompleteModelAccounting') AS incomplete_accounting_attempts
+                FROM attempts GROUP BY arm""").fetchall()
+            attempt_counts = {row["arm"]: row for row in attempt_rows}
+            for arm, metrics in by_arm.items():
                 metrics.pop("arm")
+                counts = attempt_counts.get(arm)
+                for name in ("abandoned_attempts", "incomplete_accounting_attempts"):
+                    metrics[name] = (counts[name] or 0) if counts is not None else 0
                 metrics["correct"] = metrics["correct"] or 0
                 metrics["accuracy_all_planned"] = metrics["correct"] / metrics["planned"]
                 metrics["unscored_completed"] = metrics["completed"] - metrics["scored"]
@@ -333,6 +341,8 @@ class RunLedger:
                     "started",
                     "attempts",
                     "unscored_completed",
+                    "abandoned_attempts",
+                    "incomplete_accounting_attempts",
                 )
             }
             totals["accuracy_all_planned"] = totals["correct"] / totals["planned"]

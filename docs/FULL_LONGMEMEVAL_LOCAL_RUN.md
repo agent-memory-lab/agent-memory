@@ -123,7 +123,11 @@ PY
 
 命令以 `>>` 追加日志，也可为每个执行进程使用独立日志文件；这不影响协议参数。恢复计时来自execution.json中的首次started_at，包含停止期间，因此累计elapsed_seconds是含中断的日历wall，不应冒称模型持续计算时间。
 
-若进程硬退出时某次代理请求还没写入JSONL，它的用量不能仅靠恢复后的账本推定完整。恢复会在execution.json累计abandoned_attempts；末尾破损的JSONL行会隔离备份，并记入accounting_gaps.json；非末尾格式损坏则拒绝静默恢复。progress.json的accounting_integrity及报告限制明确标注中断用量可能未知。已保存记录全部入账，但未记录请求仍属未知，不能把未知调用或token补零。
+若进程硬退出时某次代理请求还没写入JSONL，它的用量不能仅靠恢复后的账本推定完整。累计 `abandoned_attempts` 直接查询 SQLite attempts 表；`execution.json` 中的同名字段只是展示快照，不是报告来源。即使恢复事务提交后、JSON 写入前再次崩溃，重复恢复也不会漏掉已记录的中断尝试。末尾破损的JSONL行会隔离备份，并记入accounting_gaps.json；非末尾格式损坏则拒绝静默恢复。
+
+调用日志追加、flush 或 fsync 失败后，代理锁存计量错误：`drain/close` 返回失败，退出代理上下文抛出 `ModelAccountingError`，后续请求返回503且不再转发上游。原请求可能已收到答案，但不能据此完成任务或继续下一题。代理尽力保存不含正文的 `calls/*.accounting-error.json`；重启后仍保留未知状态，不因路径恢复可写而自动清除。若磁盘故障连该标记也无法保存，不能承诺已持久记录错误；已提交的 running attempt 保持未完成，恢复后成为 abandoned，避免虚报完整计量。
+
+`progress.json.accounting_integrity` 从 SQLite 派生 abandoned、running 和显式计量失败尝试数，同时列出持久化失败标记及隔离残尾。存在任一项时，用量可能未知；进行中报告也不宣告成本完整。已保存记录全部入账，但未记录请求仍属未知，不能把未知调用或token补零。上述行为只适用于采用新脚本的新运行，不修改历史冻结脚本或既有实验成绩。
 
 ## 分母、成本与终态验收
 
@@ -153,6 +157,7 @@ RunLedger的SQL摘要是任务统计来源。每个框架分母固定500，总�
 | current_task.json | 当前框架×题目、尝试及每会话进度，不替代全局任务统计 |
 | execution.json | 首次启动时间及含中断wall的口径 |
 | accounting_gaps.json、隔离的账本残尾 | 硬退出/日志破损导致的未知用量与原字节证据，若发生才存在 |
+| calls/*.accounting-error.json | 计量持久化失败的未知标记，仅保存错误类型；整盘写入失败时可能无法产生，任务账本仍不能完成当前尝试 |
 | runner_snapshot/ | 执行脚本字节快照；恢复还需要对应核心包和依赖环境 |
 | .venv/、artifacts/、requirements.lock.txt | 非editable环境、构建wheel与实际依赖；恢复使用该环境 |
 | environment_validation.json、执行日志、数据SOURCE.md | 环境校验、异常与数据来源；归档时一并保存 |

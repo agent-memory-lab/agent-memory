@@ -21,6 +21,7 @@ _MODULE = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_MODULE)
 ModelCallLedger = _MODULE.ModelCallLedger
 OllamaAccountingProxy = _MODULE.OllamaAccountingProxy
+ModelAccountingError = _MODULE.ModelAccountingError
 
 
 @contextmanager
@@ -341,3 +342,110 @@ def test_valid_request_budget_bounds_do_not_change_default(budget):
         assert proxy.drain(timeout=0)
     with OllamaAccountingProxy() as proxy:
         assert proxy.max_requests == 1000
+
+
+def test_append_failure_latches_gap_and_stops_upstream_requests_after_path_is_repaired(tmp_path):
+    path = tmp_path / "calls.jsonl"
+    ledger = ModelCallLedger(path).start_phase(1, "agent-memory", "answer.question")
+    # A real filesystem error, not a mocked append result.
+    path.mkdir()
+    with upstream(payload={"prompt_eval_count": 7, "eval_count": 3}) as (origin, received):
+        proxy = OllamaAccountingProxy(origin, ledger)
+        try:
+            assert request(proxy.url, "/api/chat", {"stream": False})[0] == 200
+            assert not proxy.drain(2)
+            assert proxy.pending_requests == 0 and ledger.calls == 0
+            assert ledger.accounting_error == {
+                "error_type": "IsADirectoryError", "marker_persisted": True,
+            }
+            path.rmdir()
+            assert request(proxy.url, "/api/chat", {"stream": False})[0] == 503
+            assert len(received) == 1
+            assert not proxy.close()
+            with pytest.raises(ModelAccountingError, match="unrecorded"):
+                proxy.__exit__(None, None, None)
+        finally:
+            proxy.close()
+    marker = path.with_name(path.name + ".accounting-error.json")
+    assert json.loads(marker.read_text()) == {
+        "accounting_status": "unknown", "error_type": "IsADirectoryError",
+    }
+    # Restart must preserve the unknown marker, even after the log path recovers.
+    reopened = ModelCallLedger(path)
+    assert not reopened.summary()["accounting_complete"]
+    with pytest.raises(ModelAccountingError, match="already failed"):
+        reopened.append({})
+
+
+def test_total_storage_failure_keeps_durable_attempt_unfinished_and_unknown(tmp_path, monkeypatch):
+    spec = importlib.util.spec_from_file_location(
+        "accounting_test_run_ledger",
+        Path(__file__).parents[1] / "examples" / "longmemeval_run_ledger.py",
+    )
+    run_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(run_module)
+    run_path = tmp_path / "run.sqlite3"
+    log_path = tmp_path / "calls.jsonl"
+    original_open = Path.open
+
+    def unwritable(path, *args, **kwargs):
+        if path.name.startswith("calls.jsonl"):
+            raise OSError("private disk failure details")
+        return original_open(path, *args, **kwargs)
+
+    with run_module.RunLedger(run_path, {"protocol": "fixture"}, ["q1"], ["agent-memory"]) as run:
+        task = run.next_task()
+        ledger = ModelCallLedger(log_path)
+        monkeypatch.setattr(Path, "open", unwritable)
+        with upstream(payload={"prompt_eval_count": 4, "eval_count": 2}) as (origin, received):
+            with pytest.raises(ModelAccountingError):
+                with OllamaAccountingProxy(origin, ledger) as proxy:
+                    assert request(proxy.url, "/api/chat", {"stream": False})[0] == 200
+                    assert not proxy.drain(2)
+                    assert not ledger.accounting_error["marker_persisted"]
+                    assert "private" not in json.dumps(ledger.summary())
+                    assert request(proxy.url, "/api/chat", {"stream": False})[0] == 503
+                    assert len(received) == 1
+                # A failed proxy close cannot permit a successful task commit.
+                run.complete(task["question_id"], task["arm"], {"judge_label": True})
+        assert run.summary()["running"] == 1
+        assert run.summary()["completed"] == 0
+    assert not log_path.with_name(log_path.name + ".accounting-error.json").exists()
+    with run_module.RunLedger(run_path, {"protocol": "fixture"}, ["q1"], ["agent-memory"]) as run:
+        assert run.recover() == 1
+        assert run.summary()["abandoned_attempts"] == 1
+
+
+def test_custom_append_failure_is_latched_without_thread_exception_or_sensitive_details():
+    class BrokenLedger(ModelCallLedger):
+        def append(self, record):
+            raise OSError("private user prompt must not be persisted")
+
+    ledger = BrokenLedger()
+    with upstream() as (origin, _):
+        with pytest.raises(ModelAccountingError):
+            with OllamaAccountingProxy(origin, ledger) as proxy:
+                assert request(proxy.url, "/api/embed", {})[0] == 200
+                assert not proxy.drain(2)
+                assert proxy.pending_requests == 0
+                assert not ledger.summary()["accounting_complete"]
+                assert "private" not in json.dumps(ledger.summary())
+
+
+def test_fsync_failure_never_treats_visible_json_as_durable_accounting(tmp_path, monkeypatch):
+    def fail_sync(_descriptor):
+        raise OSError("private filesystem detail")
+
+    monkeypatch.setattr(_MODULE.os, "fsync", fail_sync)
+    path = tmp_path / "calls.jsonl"
+    ledger = ModelCallLedger(path)
+    with upstream(payload={"prompt_eval_count": 3, "eval_count": 2}) as (origin, _):
+        with pytest.raises(ModelAccountingError):
+            with OllamaAccountingProxy(origin, ledger) as proxy:
+                assert request(proxy.url, "/api/embed", {})[0] == 200
+                assert not proxy.drain(2)
+                assert ledger.calls == 0
+                assert not ledger.accounting_error["marker_persisted"]
+    # Bytes visible in this process do not imply a successful durability barrier.
+    assert json.loads(path.read_text())["input_tokens"] == 3
+    assert not ModelCallLedger(path).summary()["accounting_complete"]

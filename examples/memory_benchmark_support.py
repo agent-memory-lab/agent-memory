@@ -7,6 +7,7 @@ payloads. Missing usage is unknown, and these measurements are not dollar costs.
 from __future__ import annotations
 
 import json
+import os
 from collections import defaultdict
 from copy import deepcopy
 from http.client import HTTPConnection, HTTPSConnection
@@ -31,6 +32,10 @@ _HOP_HEADERS = {
 }
 _CHAT_PATHS = {"/api/chat", "/api/generate", "/v1/chat/completions", "/v1/completions"}
 _EMBED_PATHS = {"/api/embed", "/api/embeddings", "/v1/embeddings"}
+
+
+class ModelAccountingError(RuntimeError):
+    """A model request could not be durably accounted for; stop this run."""
 
 
 def _count(value):
@@ -87,6 +92,18 @@ class ModelCallLedger:
         self._lock = Lock()
         self._records = []
         self._phase = {"trial": None, "arm": "unassigned", "operation": "unassigned"}
+        self._error_marker = (
+            self.path.with_name(self.path.name + ".accounting-error.json")
+            if self.path is not None
+            else None
+        )
+        # Presence alone is sufficient: even a torn marker means accounting is
+        # unknown. Never clear it merely because the original path is writable.
+        self._accounting_error = (
+            {"error_type": "PreviousAccountingFailure", "marker_persisted": True}
+            if self._error_marker is not None and self._error_marker.exists()
+            else None
+        )
 
     def start_phase(self, trial: int, arm: str, operation: str):
         if isinstance(trial, bool) or not isinstance(trial, int) or trial < 0:
@@ -105,11 +122,63 @@ class ModelCallLedger:
 
     def append(self, record):
         with self._lock:
+            if self._accounting_error is not None:
+                raise ModelAccountingError("model accounting has already failed")
             value = {**deepcopy(record), "request_id": len(self._records) + 1}
-            if self.path is not None:
-                with self.path.open("a", encoding="utf-8") as output:
-                    output.write(json.dumps(value, ensure_ascii=False) + "\n")
+            try:
+                if self.path is not None:
+                    with self.path.open("a", encoding="utf-8") as output:
+                        output.write(json.dumps(value, ensure_ascii=False) + "\n")
+                        output.flush()
+                        os.fsync(output.fileno())
+                    descriptor = os.open(self.path.parent, os.O_RDONLY)
+                    try:
+                        os.fsync(descriptor)
+                    finally:
+                        os.close(descriptor)
+            except Exception as error:
+                self._latch_accounting_error(error)
+                raise ModelAccountingError("model call ledger persistence failed") from error
             self._records.append(value)
+
+    def _latch_accounting_error(self, error):
+        """Called under _lock; persistence is best effort, the latch is not."""
+        if self._accounting_error is not None:
+            return
+        self._accounting_error = {
+            "error_type": type(error).__name__,
+            "marker_persisted": False,
+        }
+        if self._error_marker is None:
+            return
+        try:
+            with self._error_marker.open("w", encoding="utf-8") as output:
+                json.dump(
+                    {"accounting_status": "unknown", "error_type": type(error).__name__},
+                    output,
+                )
+                output.flush()
+                os.fsync(output.fileno())
+            descriptor = os.open(self._error_marker.parent, os.O_RDONLY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+            self._accounting_error["marker_persisted"] = True
+        except Exception:
+            # A full/unwritable filesystem cannot promise a durable gap marker.
+            # Durable workers keep the already-claimed attempt running instead
+            # of recording successful completion, so recovery marks it unknown.
+            pass
+
+    def record_accounting_error(self, error):
+        with self._lock:
+            self._latch_accounting_error(error)
+
+    @property
+    def accounting_error(self):
+        with self._lock:
+            return deepcopy(self._accounting_error)
 
     @property
     def records(self):
@@ -141,6 +210,8 @@ class ModelCallLedger:
                 for key, values in phases.items()
             ],
             "cost_status": "not_priced",
+            "accounting_complete": self.accounting_error is None,
+            "accounting_error": self.accounting_error,
         }
 
 
@@ -246,6 +317,11 @@ class OllamaAccountingProxy:
                 }
                 connection = None
                 try:
+                    if proxy.ledger.accounting_error is not None:
+                        record["http_status"] = 503
+                        record["error_type"] = "ModelAccountingError"
+                        self._respond(503, b'{"error":"ModelAccountingError"}')
+                        return
                     with proxy._lock:
                         proxy._requests += 1
                         allowed = proxy._requests <= proxy.max_requests
@@ -320,6 +396,11 @@ class OllamaAccountingProxy:
                     record["elapsed_seconds"] = perf_counter() - started
                     try:
                         proxy.ledger.append(record)
+                    except Exception as error:
+                        # Includes custom ledger failures before its own append
+                        # implementation can latch the error. Do not rely on a
+                        # server-thread traceback to stop foreground scheduling.
+                        proxy.ledger.record_accounting_error(error)
                     finally:
                         with proxy._condition:
                             proxy._pending_requests -= 1
@@ -348,7 +429,10 @@ class OllamaAccountingProxy:
         if timeout < 0:
             raise ValueError("drain timeout must be nonnegative")
         with self._condition:
-            return self._condition.wait_for(lambda: self._pending_requests == 0, timeout=timeout)
+            settled = self._condition.wait_for(
+                lambda: self._pending_requests == 0, timeout=timeout
+            )
+        return settled and self.ledger.accounting_error is None
 
     def close(self):
         with self._lock:
@@ -362,4 +446,6 @@ class OllamaAccountingProxy:
 
     def __exit__(self, *_args):
         if not self.close():
+            if self.ledger.accounting_error is not None:
+                raise ModelAccountingError("accounting gateway has unrecorded model usage")
             raise TimeoutError("accounting gateway closed with requests still pending")

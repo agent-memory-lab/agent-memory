@@ -182,23 +182,34 @@ def all_records(output):
 
 
 def publish_progress(output, manifest, tasks, status, started):
+    task_summary = tasks.summary()
     report = build_report(
         manifest,
-        tasks.summary(),
+        task_summary,
         all_records(output),
         (datetime.now(UTC) - started).total_seconds(),
         status,
     )
-    execution = json.loads((output / "execution.json").read_text())
     gaps = (
         json.loads((output / "accounting_gaps.json").read_text())
         if (output / "accounting_gaps.json").exists()
         else []
     )
+    persistence_errors = sorted(
+        path.name for path in (output / "calls").glob("*.accounting-error.json")
+    )
+    abandoned = task_summary["abandoned_attempts"]
+    incomplete = task_summary["incomplete_accounting_attempts"]
+    running = task_summary["running"]
     report["accounting_integrity"] = {
         "quarantined_log_tails": gaps,
-        "abandoned_attempts": execution.get("abandoned_attempts", 0),
-        "interrupted_usage_may_be_unknown": bool(gaps or execution.get("abandoned_attempts")),
+        "persistence_error_logs": persistence_errors,
+        "abandoned_attempts": abandoned,
+        "incomplete_accounting_attempts": incomplete,
+        "running_attempts": running,
+        "interrupted_usage_may_be_unknown": bool(
+            gaps or persistence_errors or abandoned or incomplete or running
+        ),
     }
     report["generated_at"] = datetime.now(UTC).isoformat()
     if manifest.get("ingestion_mode") == "snapshot_replay":
@@ -208,7 +219,8 @@ def publish_progress(output, manifest, tasks, status, started):
         )
     if report["accounting_integrity"]["interrupted_usage_may_be_unknown"]:
         report["limitations"].append(
-            "Interrupted attempts or quarantined log tails may have unrecorded model usage; "
+            "Unsettled/interrupted attempts, persistence errors or quarantined log tails "
+            "may have unrecorded model usage; "
             "recorded totals cannot be treated as the complete experiment cost."
         )
     write_json(output / "progress.json", report)
@@ -620,7 +632,7 @@ async def run(args):
         manifest["arms"],
         max_attempts=args.max_attempts,
     ) as tasks:
-        recovered = tasks.recover()
+        tasks.recover()
         write_json(args.output_dir / "manifest.json", manifest)
         snapshot = args.output_dir / "runner_snapshot"
         snapshot.mkdir(exist_ok=True)
@@ -637,7 +649,9 @@ async def run(args):
                 "started_at": started.isoformat(),
                 "elapsed_semantics": "wall time including interruptions",
             }
-        execution["abandoned_attempts"] = execution.get("abandoned_attempts", 0) + recovered
+        # A display snapshot only; reports always derive this from SQLite. A
+        # crash after recover commits cannot erase abandoned attempt history.
+        execution["abandoned_attempts"] = tasks.summary()["abandoned_attempts"]
         write_json(execution_path, execution)
         publish_progress(args.output_dir, manifest, tasks, "running", started)
         try:
@@ -675,7 +689,7 @@ async def run(args):
                     tasks.fail(
                         task["question_id"], task["arm"], "IncompleteModelAccounting", result
                     )
-                    raise RuntimeError("cannot continue with in-flight model requests")
+                    raise RuntimeError("cannot continue with incomplete model accounting")
                 if result["status"] == "completed":
                     tasks.complete(task["question_id"], task["arm"], result)
                 else:
