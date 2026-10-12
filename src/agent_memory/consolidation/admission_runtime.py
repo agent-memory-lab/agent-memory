@@ -112,35 +112,9 @@ class AdmissionEngine:
             return ()
         self._require_support()
         rows = await self.repository.admission_snapshot(scope)
-        selected = []
-        for row in rows:
-            if "contribution_barrier" in row["payload"]:
-                selected.append(row)
-                continue
-            versions = row["versions"]
-            visible = [v for v in versions if _time(v["recorded_at"]) <= known_at]
-            future = [v["recorded_at"] for v in versions if _time(v["recorded_at"]) > known_at]
-            next_time = min(future, key=_time) if future else None
-            if visible:
-                version = max(visible, key=lambda v: v["version"])
-                selected.append(
-                    {
-                        **row,
-                        **version,
-                        "_next_recorded_at": next_time,
-                        "_snapshot_version": row["version"],
-                    }
-                )
-            elif future:
-                selected.append(
-                    {
-                        **row,
-                        "payload": {"action": "UNOBSERVED"},
-                        "recorded_at": None,
-                        "_next_recorded_at": next_time,
-                    }
-                )
-        return tuple(selected)
+        from ..retrieval.atom_state import select_record_snapshots
+
+        return select_record_snapshots(rows, known_at)
 
     async def state(
         self,

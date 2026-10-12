@@ -1320,6 +1320,12 @@ class PostgresMemoryRepository:
             rows = await cursor.fetchall()
         return tuple(self._feedback_from_row(row) for row in rows)
 
+    async def guard_retrieval_delivery(self, query, bundle, *, pipeline=False):
+        """Authorize final delivery after every external await, including tracing."""
+        from .delivery_guard import guard_delivery
+
+        return await guard_delivery(self, query, bundle, pipeline=pipeline)
+
     async def search(self, query: MemoryQuery, limit: int) -> Sequence[MemoryItem]:
         if query.valid_at is not None or query.known_at is not None:
             now = utc_now()

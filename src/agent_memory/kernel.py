@@ -549,6 +549,23 @@ class MemoryKernel:
         legacy = await reader(scope, valid_at=valid_at, known_at=known_at)
         return (await self._legacy_state(scope, legacy)) + atoms
 
+    async def guard_pipeline_delivery(
+        self, query: MemoryQuery, bundle: MemoryBundle,
+    ) -> MemoryBundle:
+        """Final local authority check while retaining configured external resolvers."""
+        from .retrieval.pipeline_delivery import normalize_pipeline_bundle
+
+        bundle = normalize_pipeline_bundle(bundle)
+        delivery_guard = getattr(self._repository, "guard_retrieval_delivery", None)
+        if callable(delivery_guard):
+            return await delivery_guard(query, bundle, pipeline=True)
+        bundle = await self.guard_admission_bundle(query.scope, bundle)
+        return replace(bundle, retrieval_metadata={
+            **bundle.retrieval_metadata,
+            "delivery_guard": {"status": "unsupported",
+                               "external_content_authority": "configured_pipeline_resolver"},
+        })
+
     async def retrieve(self, query: MemoryQuery) -> MemoryBundle:
         now = utc_now()
         atoms, atom_info = await AdmissionEngine(self._repository).state(
@@ -696,10 +713,21 @@ class MemoryKernel:
                 ),
                 run_id=query.run_id,
                 idempotency_key=query.request_id,
+                delivery_stage="pre_delivery",
             )
             async with self._repository.unit_of_work() as uow:
                 await uow.save_retrieval_trace(trace)
-        return bundle
+        # This is deliberately the last awaited boundary. Reranking, context
+        # expansion and even trace persistence can yield to a completed erase.
+        # Native adapters authorize all selected evidence in one new snapshot;
+        # do not perform more I/O after it or reuse the pre-guard Python objects.
+        delivery_guard = getattr(self._repository, "guard_retrieval_delivery", None)
+        if callable(delivery_guard):
+            return await delivery_guard(query, bundle)
+        return replace(bundle, retrieval_metadata={
+            **bundle.retrieval_metadata,
+            "delivery_guard": {"status": "unsupported"},
+        })
 
     async def propose(self, proposal: MemoryProposal) -> ProposalResult:
         async with self._repository.unit_of_work() as uow:

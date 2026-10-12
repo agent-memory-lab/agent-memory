@@ -704,6 +704,9 @@ class RetrievalTrace:
     feedback_status: FeedbackStatus = FeedbackStatus.ACCEPTED
     created_at: datetime = field(default_factory=utc_now)
 
+    # Older/plugin traces need not claim they describe final authorized delivery.
+    delivery_stage: str = "unspecified"
+
     @property
     def id(self) -> str:
         return self.bundle_id

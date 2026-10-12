@@ -1825,24 +1825,27 @@ class SQLiteMemoryRepository:
         def read():
             with self._connection() as connection:
                 connection.execute("BEGIN")
-                records = self._read_admission_records(connection, scope, barriers=True)
-                if not records:
-                    return ()
-                ids = tuple(record["id"] for record in records)
-                placeholders = ",".join("?" for _ in ids)
-                versions = connection.execute(
-                    "SELECT record_id, version, payload_json, recorded_at FROM admission_versions "
-                    f"WHERE record_id IN ({placeholders}) ORDER BY record_id, version", ids,
-                ).fetchall()
-                by_id: dict[str, list[dict[str, Any]]] = {identity: [] for identity in ids}
-                for version in versions:
-                    by_id[version["record_id"]].append({
-                        "version": version["version"],
-                        "payload": json.loads(version["payload_json"]),
-                        "recorded_at": version["recorded_at"],
-                    })
-                return tuple({**record, "versions": by_id[record["id"]]} for record in records)
+                return self._admission_snapshot(connection, scope)
         return await asyncio.to_thread(read)
+
+    def _admission_snapshot(self, connection, scope):
+        records = self._read_admission_records(connection, scope, barriers=True)
+        if not records:
+            return ()
+        ids = tuple(record["id"] for record in records)
+        placeholders = ",".join("?" for _ in ids)
+        versions = connection.execute(
+            "SELECT record_id, version, payload_json, recorded_at FROM admission_versions "
+            f"WHERE record_id IN ({placeholders}) ORDER BY record_id, version", ids,
+        ).fetchall()
+        by_id: dict[str, list[dict[str, Any]]] = {identity: [] for identity in ids}
+        for version in versions:
+            by_id[version["record_id"]].append({
+                "version": version["version"],
+                "payload": json.loads(version["payload_json"]),
+                "recorded_at": version["recorded_at"],
+            })
+        return tuple({**record, "versions": by_id[record["id"]]} for record in records)
 
     async def admission_record(
         self, scope: MemoryScope, record_id: str
@@ -1883,11 +1886,14 @@ class SQLiteMemoryRepository:
         return await asyncio.to_thread(read)
 
     async def admission_protected_sources(self, scope: MemoryScope) -> tuple[str, ...]:
-        """Return all governed source IDs, including terminal records and erased events.
+        """Return all governed source IDs, including terminal and erased sources."""
+        def read():
+            with self._connection() as connection:
+                connection.execute("BEGIN")
+                return self._admission_protected_sources(connection, scope)
+        return await asyncio.to_thread(read)
 
-        No content leaves this boundary, and no limit may silently omit IDs from
-        the final retrieval guard. Ancestor partitions follow ordinary visibility.
-        """
+    def _admission_protected_sources(self, connection, scope):
         choices = [(None,) if value is None else (None, value) for value in (
             scope.user_id, scope.agent_id, scope.workspace_id, scope.session_id
         )]
@@ -1896,46 +1902,42 @@ class SQLiteMemoryRepository:
             for values in product(*choices)
         }))
 
-        def read():
-            placeholders = ",".join("?" for _ in partitions)
-            with self._connection() as connection:
-                connection.execute("BEGIN")
-                rows = connection.execute(
-                    "SELECT id FROM events "
-                    f"WHERE partition_key IN ({placeholders}) "
-                    "AND event_type IN ('memory.atom', 'memory.atom.verification') "
-                    "UNION SELECT event_id AS id FROM admission_tombstones "
-                    f"WHERE partition_key IN ({placeholders}) "
-                    "UNION SELECT event_id AS id FROM admission_records "
-                    f"WHERE partition_key IN ({placeholders})",
-                    (*partitions, *partitions, *partitions),
-                ).fetchall()
-                protected = {row["id"] for row in rows}
-                records = connection.execute(
-                    "SELECT payload_json FROM admission_records "
-                    f"WHERE partition_key IN ({placeholders})", partitions,
-                ).fetchall()
-                for record in records:
-                    protected.update(self._admission_source_ids(json.loads(record["payload_json"])))
-                references = connection.execute(
-                    "SELECT id, metadata_json FROM events "
-                    f"WHERE partition_key IN ({placeholders}) "
-                    "AND json_type(metadata_json, '$.source_event_ids') = 'array'",
-                    partitions,
-                ).fetchall()
-                dependents: dict[str, set[str]] = {}
-                for reference in references:
-                    for source_id in json.loads(reference["metadata_json"])["source_event_ids"]:
-                        if isinstance(source_id, str):
-                            dependents.setdefault(source_id, set()).add(reference["id"])
-                pending = deque(protected)
-                while pending:
-                    for dependent in dependents.get(pending.popleft(), ()):
-                        if dependent not in protected:
-                            protected.add(dependent)
-                            pending.append(dependent)
-                return tuple(sorted(protected))
-        return await asyncio.to_thread(read)
+        placeholders = ",".join("?" for _ in partitions)
+        rows = connection.execute(
+            "SELECT id FROM events "
+            f"WHERE partition_key IN ({placeholders}) "
+            "AND event_type IN ('memory.atom', 'memory.atom.verification') "
+            "UNION SELECT event_id AS id FROM admission_tombstones "
+            f"WHERE partition_key IN ({placeholders}) "
+            "UNION SELECT event_id AS id FROM admission_records "
+            f"WHERE partition_key IN ({placeholders})",
+            (*partitions, *partitions, *partitions),
+        ).fetchall()
+        protected = {row["id"] for row in rows}
+        records = connection.execute(
+            "SELECT payload_json FROM admission_records "
+            f"WHERE partition_key IN ({placeholders})", partitions,
+        ).fetchall()
+        for record in records:
+            protected.update(self._admission_source_ids(json.loads(record["payload_json"])))
+        references = connection.execute(
+            "SELECT id, metadata_json FROM events "
+            f"WHERE partition_key IN ({placeholders}) "
+            "AND json_type(metadata_json, '$.source_event_ids') = 'array'",
+            partitions,
+        ).fetchall()
+        dependents: dict[str, set[str]] = {}
+        for reference in references:
+            for source_id in json.loads(reference["metadata_json"])["source_event_ids"]:
+                if isinstance(source_id, str):
+                    dependents.setdefault(source_id, set()).add(reference["id"])
+        pending = deque(protected)
+        while pending:
+            for dependent in dependents.get(pending.popleft(), ()):
+                if dependent not in protected:
+                    protected.add(dependent)
+                    pending.append(dependent)
+        return tuple(sorted(protected))
 
     def load_recent_event_evidence(self, scope: MemoryScope, *, limit: int):
         """Compatibility browse API, preserving newest-first exact-scope ordering."""
@@ -2048,6 +2050,12 @@ class SQLiteMemoryRepository:
 
     async def search(self, query: MemoryQuery, limit: int) -> Sequence[MemoryItem]:
         return await asyncio.to_thread(self._search_sync, query, limit)
+
+    async def guard_retrieval_delivery(self, query, bundle, *, pipeline=False):
+        """Authorize the final packed response in a fresh, single read snapshot."""
+        from .retrieval.sqlite_delivery_guard import guard_delivery
+
+        return await asyncio.to_thread(guard_delivery, self, query, bundle, pipeline=pipeline)
 
     async def expand_source_context(
         self, query: MemoryQuery, ranked_events: Sequence[MemoryItem], limit: int,
