@@ -1,0 +1,40 @@
+{
+  "protocol": "longmemeval-s-cleaned/all-role-session-retrieval/1",
+  "evidence_class": "public_benchmark",
+  "official_score_equivalent": false,
+  "dataset": "LongMemEval-S cleaned",
+  "dataset_revision": "98d7416c24c778c2fee6e6f3006e7a073259d48f",
+  "dataset_sha256": "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442",
+  "dataset_bytes": 277383467,
+  "dataset_license": "MIT",
+  "dataset_license_source": "https://huggingface.co/datasets/xiaowu0162/longmemeval-cleaned/blob/98d7416c24c778c2fee6e6f3006e7a073259d48f/README.md",
+  "upstream_metrics_revision": "9e0b455f4ef0e2ab8f2e582289761153549043fc",
+  "cases": 500,
+  "development_cases": 50,
+  "held_out_cases": 450,
+  "smoke_cases": 10,
+  "statistics": {
+    "duplicate_session_id_occurrences": 13,
+    "turns": 246750,
+    "utf8_content_bytes": 244779063,
+    "sessions": 23867
+  },
+  "artifacts": {
+    "corpus.jsonl": "082290d41f9618bb029573eecbe7d30c744b698835fbe717f762d70c0762baeb",
+    "development.case-ids.json": "d2c0f15a9381d65109e52aae871adc518b48e5e3dddec0e972a56881f3245107",
+    "gold.evaluator-only.jsonl": "4516898e19887ad03d9e077b631cc86b5ad70572b7e389c1a07e4427c3704078",
+    "holdout.case-ids.json": "4f8b71d5d5ca6cd742e370af5c6813310cccb72b2f8951f7cf8b5a80c5674c4b",
+    "queries.jsonl": "86e692380528865f7e2c130b9f9e1151d8ca39a932e9f91adff31458166c1093",
+    "smoke.case-ids.json": "fd53e9b721c80e5f4c8fe4f81972c8a2d28764e2a28c9b8a13084a9423a77333",
+    "split.json": "5a63faf24d061723da5de5945e31e3764db5b3d83dd74164704e025c7b189ff0"
+  },
+  "notes": [
+    "Gold answer, type, answer flags and original IDs are evaluator-only.",
+    "All-role histories differ from upstream user-only BM25 preprocessing.",
+    "Official timestamps have no timezone; UTC is a serialization assumption only.",
+    "Official histories are preserved without a question-date cutoff; this is not a causal/as-of-time test.",
+    "Development/holdout partition is not an upstream official split.",
+    "No QA accuracy, production acceptance or model cost conclusion is implied."
+  ],
+  "code_provenance": "Runners record hashes of current repository src/agent_memory Python files."
+}
