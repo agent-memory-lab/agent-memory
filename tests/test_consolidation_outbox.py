@@ -582,8 +582,10 @@ def test_delivered_wider_claim_forget_cancels_real_narrow_scope_queue_task(
     asyncio.run(scenario())
 
 
-def test_failed_queue_cancellation_restarts_without_reenqueuing_claim_source(tmp_path):
+def test_failed_queue_cancellation_restarts_without_reenqueuing_claim_source(tmp_path, monkeypatch):
     async def scenario():
+        clock = [datetime(2026, 10, 12, tzinfo=UTC)]
+        monkeypatch.setattr(storage, "utc_now", lambda: clock[0])
         queue = SQLiteWorkerQueue(tmp_path / "queue.db")
         await queue.initialize()
 
@@ -612,6 +614,8 @@ def test_failed_queue_cancellation_restarts_without_reenqueuing_claim_source(tmp
         claim = (await kernel.get_state(source.scope))[0]
         await kernel.forget(ForgetRequest(claim.scope, (claim.id,), mode=ForgetMode.ERASE))
         assert (await queue.stats()).pending == 1
+        assert not await kernel._repository.pending_consolidation_cancellations()
+        clock[0] += timedelta(seconds=1)
         pending = await kernel._repository.pending_consolidation_cancellations()
         assert len(pending) == 1 and pending[0].scope == source.scope
         restarted = build_local_kernel(path, consolidation_scheduler=queue)
@@ -662,4 +666,26 @@ def test_cancellation_drain_is_bounded_exact_scope_and_does_not_read_body(tmp_pa
         assert len(pending) == 1 and pending[0].scope == other_scope
         assert not hasattr(pending[0], "content")
 
+    asyncio.run(scenario())
+
+
+def test_cancellation_retry_upgrade_preserves_existing_pending_marker(tmp_path):
+    async def scenario():
+        path = tmp_path / "memory.db"
+        repository = SQLiteMemoryRepository(path)
+        await repository.initialize()
+        source = MemoryEvent(SCOPE, "event", "source", id="upgrade-cancellation")
+        await store(repository, source, result=IngestResult(source.id, ("claim",), (), False, ()))
+        await repository.forget(ForgetRequest(SCOPE, ("claim",), mode=ForgetMode.ERASE))
+        with closing(sqlite3.connect(path)) as db, db:
+            db.execute("DROP INDEX consolidation_outbox_cancel_retry_idx")
+            db.execute("ALTER TABLE consolidation_outbox DROP COLUMN cancel_attempts")
+            db.execute("ALTER TABLE consolidation_outbox DROP COLUMN cancel_next_attempt_at")
+        restarted = SQLiteMemoryRepository(path)
+        await restarted.initialize()
+        await restarted.initialize()
+        marker = (await restarted.pending_consolidation_cancellations())[0]
+        assert marker.event_id == source.id and marker.attempts == 0 and marker.generation == 1
+        assert await restarted.ack_consolidation_cancellation(marker)
+        assert not await restarted.pending_consolidation_cancellations()
     asyncio.run(scenario())

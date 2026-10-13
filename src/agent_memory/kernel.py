@@ -157,6 +157,7 @@ class MemoryKernel:
             "consolidation_intent_state",
             "pending_consolidation_cancellations",
             "ack_consolidation_cancellation",
+            "fail_consolidation_cancellation",
             "request_consolidation_cancellation",
         )
         if not all(callable(getattr(self._repository, name, None)) for name in methods):

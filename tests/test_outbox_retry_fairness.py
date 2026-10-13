@@ -145,3 +145,106 @@ def test_backoff_survives_restart_and_manual_retry_remains_fenced(backend, tmp_p
 
 def test_backoff_grows_to_bounded_five_minutes():
     assert [retry_delay_seconds(n) for n in (1, 2, 3, 9, 10, 1000000)] == [1, 2, 4, 256, 300, 300]
+
+
+@pytest.mark.parametrize("backend", ["sqlite", "postgres"])
+@pytest.mark.parametrize("limit", [1, 64])
+def test_failed_cancellation_does_not_starve_other_tenants(backend, tmp_path, monkeypatch, limit):
+    from agent_memory import ForgetMode, ForgetRequest
+    from agent_memory.operations.consolidation_outbox import drain_consolidation_cancellations
+
+    async def scenario():
+        async with isolated_repository(backend, tmp_path) as (factory, storage):
+            clock = [datetime(2026, 10, 12, tzinfo=UTC)]
+            monkeypatch.setattr(storage, "utc_now", lambda: clock[0])
+            repository = factory()
+            await repository.initialize()
+            attempts = []
+            try:
+                for name in ("bad", "good"):
+                    event = MemoryEvent(MemoryScope(name), "event", "source", id=name)
+                    async with repository.unit_of_work() as uow:
+                        await uow.append_event(event)
+                        await uow.save_consolidation_intent(
+                            event, IngestResult(name, ("claim-" + name,), (), False, ())
+                        )
+                    await repository.forget(ForgetRequest(
+                        event.scope, ("claim-" + name,), mode=ForgetMode.ERASE,
+                    ))
+                    clock[0] += timedelta(seconds=1)
+
+                class Scheduler:
+                    async def cancel_forget(self, request):
+                        identity = request.memory_ids[0]
+                        attempts.append(identity)
+                        if identity == "bad":
+                            raise RuntimeError("poison cancellation")
+
+                result = await drain_consolidation_cancellations(
+                    repository, Scheduler(), limit=limit,
+                )
+                assert result["failed"] == 1
+                if limit == 1:
+                    # Even when the failed marker is due again, untried work is
+                    # older than its next eligible time and gets the next slot.
+                    clock[0] += timedelta(seconds=2)
+                    result = await drain_consolidation_cancellations(
+                        repository, Scheduler(), limit=1,
+                    )
+                assert result["cancelled"] == 1
+                assert attempts == ["bad", "good"]
+                await close(repository)
+                repository = factory()
+                await repository.initialize()
+                clock[0] += timedelta(seconds=2)
+                remaining = await repository.pending_consolidation_cancellations()
+                assert len(remaining) == 1 and remaining[0].event_id == "bad"
+                assert remaining[0].attempts == 1
+            finally:
+                await close(repository)
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("backend", ["sqlite", "postgres"])
+def test_cancellation_failure_backoff_is_durable_and_generation_fenced(
+    backend, tmp_path, monkeypatch,
+):
+    from agent_memory import ForgetMode, ForgetRequest
+
+    async def scenario():
+        async with isolated_repository(backend, tmp_path) as (factory, storage):
+            clock = [datetime(2026, 10, 12, tzinfo=UTC)]
+            monkeypatch.setattr(storage, "utc_now", lambda: clock[0])
+            repository = factory()
+            await repository.initialize()
+            event = MemoryEvent(MemoryScope("scope"), "event", "source", id="source")
+            try:
+                async with repository.unit_of_work() as uow:
+                    await uow.append_event(event)
+                    await uow.save_consolidation_intent(
+                        event, IngestResult(event.id, ("claim",), (), False, ()),
+                    )
+                await repository.forget(ForgetRequest(
+                    event.scope, ("claim",), mode=ForgetMode.ERASE,
+                ))
+                original = (await repository.pending_consolidation_cancellations())[0]
+                assert await repository.fail_consolidation_cancellation(original)
+                # Concurrent reports of the same attempt cannot increase/delay it twice.
+                assert not await repository.fail_consolidation_cancellation(original)
+                await close(repository)
+                repository = factory()
+                await repository.initialize()
+                assert await repository.pending_consolidation_cancellations() == ()
+                clock[0] += timedelta(seconds=1)
+                failed = (await repository.pending_consolidation_cancellations())[0]
+                assert failed.attempts == 1
+                newer = await repository.request_consolidation_cancellation(event.scope, event.id)
+                assert newer.generation > failed.generation and newer.attempts == 0
+                assert not await repository.fail_consolidation_cancellation(failed)
+                assert not await repository.ack_consolidation_cancellation(failed)
+                assert await repository.pending_consolidation_cancellations() == (newer,)
+                assert await repository.ack_consolidation_cancellation(newer)
+                assert await repository.pending_consolidation_cancellations() == ()
+            finally:
+                await close(repository)
+    asyncio.run(scenario())

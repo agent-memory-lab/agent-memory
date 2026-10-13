@@ -183,7 +183,8 @@ async def forget(connection, request):
         claim_params.append(list(request.memory_ids))
     await connection.execute(
         "UPDATE agent_memory_consolidation_outbox SET status='cancelled', result_json='{}'::jsonb, "
-        "cancel_pending=TRUE,cancel_generation=cancel_generation+1,lease_token=NULL, "
+        "cancel_pending=TRUE,cancel_generation=cancel_generation+1,"
+        "cancel_attempts=0,cancel_next_attempt_at=NULL,lease_token=NULL, "
         "lease_expires_at=NULL,last_error_code=NULL WHERE status IN "
         "('pending','delivering','delivered') AND event_id IN (SELECT sources.value "
         "FROM agent_memory_claims c CROSS JOIN LATERAL jsonb_array_elements_text("
@@ -199,7 +200,8 @@ async def forget(connection, request):
         await connection.execute(
             "UPDATE agent_memory_consolidation_outbox o SET status='cancelled', "
             "result_json='{}'::jsonb, lease_token=NULL, lease_expires_at=NULL, "
-            "cancel_pending=TRUE,cancel_generation=cancel_generation+1, "
+            "cancel_pending=TRUE,cancel_generation=cancel_generation+1,"
+            "cancel_attempts=0,cancel_next_attempt_at=NULL, "
             "last_error_code=NULL WHERE o.status IN ('pending','delivering') AND EXISTS "
             "(SELECT 1 FROM jsonb_array_elements_text("
             "COALESCE(o.result_json->'claim_ids','[]'::jsonb)) AS ids(value) "
@@ -215,7 +217,8 @@ async def forget(connection, request):
         await connection.execute(
             "UPDATE agent_memory_consolidation_outbox o SET status='cancelled', "
             "result_json='{}'::jsonb, lease_token=NULL, lease_expires_at=NULL, "
-            "cancel_pending=TRUE,cancel_generation=cancel_generation+1, "
+            "cancel_pending=TRUE,cancel_generation=cancel_generation+1,"
+            "cancel_attempts=0,cancel_next_attempt_at=NULL, "
             "last_error_code=NULL WHERE o.status IN ('pending','delivering') AND EXISTS "
             "(SELECT 1 FROM jsonb_array_elements_text("
             "COALESCE(o.result_json->'claim_ids','[]'::jsonb)) AS ids(value) "
@@ -258,13 +261,16 @@ async def pending_cancellations(connection, *, scope=None, limit=64):
         raise ValueError("outbox cancellation batch limit must be between 1 and 256")
     where, params = (" AND o.partition_key=%s", (scope.partition_key(),)) if scope else ("", ())
     cursor = await connection.execute(
-        "SELECT o.event_id,o.cancel_generation,e.tenant_id,e.namespace,e.user_id, "
+        "SELECT o.event_id,o.cancel_generation,o.cancel_attempts,"
+        "e.tenant_id,e.namespace,e.user_id, "
         "e.agent_id,e.workspace_id,e.session_id FROM agent_memory_consolidation_outbox o "
         "JOIN agent_memory_events e ON e.id=o.event_id AND e.partition_key=o.partition_key "
         "WHERE o.status='cancelled' AND o.cancel_pending "
+        "AND (o.cancel_next_attempt_at IS NULL OR o.cancel_next_attempt_at<=%s) "
         + where
-        + " ORDER BY o.created_at,o.event_id LIMIT %s",
-        (*params, limit),
+        + " ORDER BY COALESCE(o.cancel_next_attempt_at,o.created_at)"
+        ",o.created_at,o.event_id LIMIT %s",
+        (utc_now().astimezone(UTC), *params, limit),
     )
     rows = await cursor.fetchall()
     return tuple(
@@ -284,6 +290,7 @@ async def pending_cancellations(connection, *, scope=None, limit=64):
             ),
             row["event_id"],
             row["cancel_generation"],
+            row["cancel_attempts"],
         )
         for row in rows
     )
@@ -292,7 +299,8 @@ async def pending_cancellations(connection, *, scope=None, limit=64):
 async def request_cancellation(connection, scope, event_id):
     cursor = await connection.execute(
         "UPDATE agent_memory_consolidation_outbox SET cancel_pending=TRUE, "
-        "cancel_generation=cancel_generation+1 WHERE event_id=%s AND partition_key=%s "
+        "cancel_generation=cancel_generation+1,cancel_attempts=0,cancel_next_attempt_at=NULL "
+        "WHERE event_id=%s AND partition_key=%s "
         "AND status='cancelled' RETURNING cancel_generation",
         (event_id, scope.partition_key()),
     )
@@ -305,5 +313,21 @@ async def ack_cancellation(connection, cancellation):
         "UPDATE agent_memory_consolidation_outbox SET cancel_pending=FALSE WHERE event_id=%s "
         "AND partition_key=%s AND status='cancelled' AND cancel_pending AND cancel_generation=%s",
         (cancellation.event_id, cancellation.scope.partition_key(), cancellation.generation),
+    )
+    return cursor.rowcount == 1
+
+
+async def fail_cancellation(connection, cancellation):
+    """Back off one observed failure without delaying a newer cancellation."""
+    retry_at = utc_now().astimezone(UTC) + timedelta(
+        seconds=retry_delay_seconds(cancellation.attempts + 1)
+    )
+    cursor = await connection.execute(
+        "UPDATE agent_memory_consolidation_outbox SET cancel_attempts=cancel_attempts+1, "
+        "cancel_next_attempt_at=%s WHERE event_id=%s AND partition_key=%s "
+        "AND status='cancelled' AND cancel_pending AND cancel_generation=%s "
+        "AND cancel_attempts=%s",
+        (retry_at, cancellation.event_id, cancellation.scope.partition_key(),
+         cancellation.generation, cancellation.attempts),
     )
     return cursor.rowcount == 1

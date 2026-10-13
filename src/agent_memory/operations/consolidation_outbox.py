@@ -31,6 +31,7 @@ class ConsolidationCancellation:
     scope: MemoryScope
     event_id: str
     generation: int
+    attempts: int = 0
 
 
 def retry_delay_seconds(attempts: int) -> int:
@@ -78,6 +79,7 @@ async def drain_consolidation_cancellations(repository, scheduler, *, scope=None
             )
             acknowledged = await repository.ack_consolidation_cancellation(record)
         except Exception:
+            await repository.fail_consolidation_cancellation(record)
             totals["failed"] += 1
             continue
         totals["cancelled" if acknowledged else "skipped"] += 1

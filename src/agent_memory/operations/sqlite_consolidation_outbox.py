@@ -39,13 +39,19 @@ ON consolidation_outbox(partition_key, status);
 def initialize(connection):
     connection.executescript(SCHEMA)
     columns = {row["name"] for row in connection.execute("PRAGMA table_info(consolidation_outbox)")}
-    for name in ("cancel_pending", "cancel_generation"):
+    for name in ("cancel_pending", "cancel_generation", "cancel_attempts"):
         if name not in columns:
             connection.execute(
                 f"ALTER TABLE consolidation_outbox ADD COLUMN {name} INTEGER NOT NULL DEFAULT 0"
             )
-    if "next_attempt_at" not in columns:
-        connection.execute("ALTER TABLE consolidation_outbox ADD COLUMN next_attempt_at TEXT")
+    for name in ("next_attempt_at", "cancel_next_attempt_at"):
+        if name not in columns:
+            connection.execute(f"ALTER TABLE consolidation_outbox ADD COLUMN {name} TEXT")
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS consolidation_outbox_cancel_retry_idx "
+        "ON consolidation_outbox(cancel_next_attempt_at,created_at,event_id) "
+        "WHERE status='cancelled' AND cancel_pending=1"
+    )
     connection.execute(
         "CREATE INDEX IF NOT EXISTS consolidation_outbox_retry_idx "
         "ON consolidation_outbox(next_attempt_at, created_at, event_id) WHERE status='pending'"
@@ -206,7 +212,8 @@ def forget(connection, request):
     # handoffs too. Read it before Claim erasure removes these associations.
     connection.execute(
         "UPDATE consolidation_outbox SET status='cancelled', result_json='{}', "
-        "cancel_pending=1, cancel_generation=cancel_generation+1, lease_token=NULL, "
+        "cancel_pending=1, cancel_generation=cancel_generation+1, "
+        "cancel_attempts=0, cancel_next_attempt_at=NULL, lease_token=NULL, "
         "lease_expires_at=NULL, last_error_code=NULL WHERE status IN "
         "('pending','delivering','delivered') AND event_id IN (SELECT cs.event_id "
         "FROM claim_sources cs JOIN claims c ON c.id=cs.claim_id WHERE " + claim_where + ")",
@@ -220,6 +227,7 @@ def forget(connection, request):
         connection.execute(
             "UPDATE consolidation_outbox SET status='cancelled', result_json='{}', "
             "cancel_pending=1, cancel_generation=cancel_generation+1, "
+            "cancel_attempts=0, cancel_next_attempt_at=NULL, "
             "lease_token=NULL, lease_expires_at=NULL, last_error_code=NULL "
             "WHERE status IN ('pending','delivering') AND EXISTS "
             "(SELECT 1 FROM json_each(result_json, '$.claim_ids') ids WHERE ids.value IN "
@@ -239,6 +247,7 @@ def forget(connection, request):
         connection.execute(
             "UPDATE consolidation_outbox SET status='cancelled', result_json='{}', "
             "cancel_pending=1, cancel_generation=cancel_generation+1, "
+            "cancel_attempts=0, cancel_next_attempt_at=NULL, "
             "lease_token=NULL, lease_expires_at=NULL, last_error_code=NULL "
             "WHERE status IN ('pending','delivering') AND EXISTS "
             "(SELECT 1 FROM json_each(result_json, '$.claim_ids') ids WHERE "
@@ -279,13 +288,16 @@ def pending_cancellations(connection, *, scope=None, limit=64):
         raise ValueError("outbox cancellation batch limit must be between 1 and 256")
     where, params = (" AND o.partition_key=?", (scope.partition_key(),)) if scope else ("", ())
     rows = connection.execute(
-        "SELECT o.event_id, o.cancel_generation, e.tenant_id, e.namespace, e.user_id, "
+        "SELECT o.event_id, o.cancel_generation, o.cancel_attempts, "
+        "e.tenant_id, e.namespace, e.user_id, "
         "e.agent_id, e.workspace_id, e.session_id FROM consolidation_outbox o "
         "JOIN events e ON e.id=o.event_id AND e.partition_key=o.partition_key "
         "WHERE o.status='cancelled' AND o.cancel_pending=1 "
+        "AND (o.cancel_next_attempt_at IS NULL OR o.cancel_next_attempt_at<=?) "
         + where
-        + " ORDER BY o.created_at,o.event_id LIMIT ?",
-        (*params, limit),
+        + " ORDER BY COALESCE(o.cancel_next_attempt_at,o.created_at)"
+        ",o.created_at,o.event_id LIMIT ?",
+        (utc_now().astimezone(UTC).isoformat(), *params, limit),
     ).fetchall()
     return tuple(
         ConsolidationCancellation(
@@ -304,6 +316,7 @@ def pending_cancellations(connection, *, scope=None, limit=64):
             ),
             row["event_id"],
             row["cancel_generation"],
+            row["cancel_attempts"],
         )
         for row in rows
     )
@@ -312,7 +325,8 @@ def pending_cancellations(connection, *, scope=None, limit=64):
 def request_cancellation(connection, scope, event_id):
     row = connection.execute(
         "UPDATE consolidation_outbox SET cancel_pending=1, "
-        "cancel_generation=cancel_generation+1 WHERE event_id=? AND partition_key=? "
+        "cancel_generation=cancel_generation+1,cancel_attempts=0,cancel_next_attempt_at=NULL "
+        "WHERE event_id=? AND partition_key=? "
         "AND status='cancelled' RETURNING cancel_generation",
         (event_id, scope.partition_key()),
     ).fetchone()
@@ -329,3 +343,18 @@ def ack_cancellation(connection, cancellation):
         ).rowcount
         == 1
     )
+
+
+def fail_cancellation(connection, cancellation):
+    """Back off one observed failure without delaying a newer cancellation."""
+    retry_at = utc_now().astimezone(UTC) + timedelta(
+        seconds=retry_delay_seconds(cancellation.attempts + 1)
+    )
+    return connection.execute(
+        "UPDATE consolidation_outbox SET cancel_attempts=cancel_attempts+1, "
+        "cancel_next_attempt_at=? WHERE event_id=? AND partition_key=? "
+        "AND status='cancelled' AND cancel_pending=1 AND cancel_generation=? "
+        "AND cancel_attempts=?",
+        (retry_at.isoformat(), cancellation.event_id, cancellation.scope.partition_key(),
+         cancellation.generation, cancellation.attempts),
+    ).rowcount == 1

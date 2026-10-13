@@ -1233,6 +1233,12 @@ class PostgresMemoryRepository:
         async with self.unit_of_work() as uow:
             return await consolidation_outbox.ack_cancellation(uow.connection, cancellation)
 
+    async def fail_consolidation_cancellation(self, cancellation):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.fail_cancellation(uow.connection, cancellation)
+
     def unit_of_work(self) -> PostgresMemoryUnitOfWork:
         return PostgresMemoryUnitOfWork(self)
 

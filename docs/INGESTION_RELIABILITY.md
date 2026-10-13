@@ -88,6 +88,11 @@ an ID-only cancellation marker keeps duplicate ingestion from recreating the
 handoff while the original source remains live. Pending cancellation requests
 survive queue failures and are retried at initialization or through
 `retry_consolidation`; its `cancellation_*` counters report that work separately.
+Cancellation failures persist their own exponential backoff (1 second up to
+300 seconds). Due cancellations are ordered by next eligible time, so a failing
+source or tenant cannot starve older untried cancellations, even with a batch
+limit of one. Failure recording is fenced by both generation and observed attempt;
+concurrent reports cannot delay a newer cancellation or count one attempt twice.
 Generation checks prevent an old cancellation acknowledgement from clearing a
 new request caused by a late enqueue. Source erasure removes the intent with the
 source; publication must still reject erased evidence even if remote queue
@@ -112,7 +117,9 @@ Custom repositories with a configured scheduler must implement the transactional
 outbox extension in `ports.py`; unsupported combinations fail at initialization.
 Repositories without a scheduler retain the existing repository contract.
 PostgreSQL migration `021_consolidation_outbox.sql` adds the corresponding table;
-`022_consolidation_outbox_retry.sql` adds retry scheduling. Existing pending rows
+`022_consolidation_outbox_retry.sql` adds retry scheduling.
+`023_consolidation_cancellation_retry.sql` adds independent cancellation attempts
+and retry scheduling without rewriting or duplicating source content. Existing pending rows
 remain immediately eligible. SQLite upgrades the existing table additively.
 
 ## Long-source retrieval

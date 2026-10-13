@@ -1711,6 +1711,12 @@ class SQLiteMemoryRepository:
         async with self.unit_of_work() as uow:
             return sqlite_consolidation_outbox.ack_cancellation(uow.connection, cancellation)
 
+    async def fail_consolidation_cancellation(self, cancellation):
+        from .operations import sqlite_consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return sqlite_consolidation_outbox.fail_cancellation(uow.connection, cancellation)
+
     def unit_of_work(self) -> SQLiteMemoryUnitOfWork:
         return SQLiteMemoryUnitOfWork(self)
 
