@@ -23,6 +23,7 @@ def affected_memory_keys(
     list_fields = {
         "event_ids": ("events",),
         "source_event_ids": ("events",),
+        "source_claim_ids": ("claims",),
         "source_episode_ids": ("artifacts",),
         "counterexample_episode_ids": ("artifacts",),
         "procedure_ids": ("artifacts",),
@@ -104,6 +105,7 @@ def _dependency_references(row):
     fields = {
         "event_ids": (("events",), True),
         "source_event_ids": (("events",), True),
+        "source_claim_ids": (("claims",), True),
         "source_episode_ids": (("artifacts",), True),
         "counterexample_episode_ids": (("artifacts",), True),
         "decision_ids": (("feedback",), True),
@@ -155,7 +157,8 @@ def _visible(source, target):
 class ArtifactValidity:
     """Validate hydrated local dependencies, preserving unknown external IDs."""
 
-    def __init__(self, rows):
+    def __init__(self, rows, *, current_claim_ids=()):
+        self.current_claim_ids = frozenset(current_claim_ids)
         self.rows = {
             (row["table"], row["id"]): row for row in rows if row["table"] != "memory_tombstones"
         }
@@ -235,6 +238,18 @@ class ArtifactValidity:
                     or not payload["event_ids"]
                 ):
                     return False
+                # A trajectory block describes the selected current claims.
+                # Persist their identities so deletion/replacement can invalidate
+                # it, and validate them under the artifact publication lock.
+                claims = payload.get("source_claim_ids", ())
+                if not isinstance(claims, (list, tuple)) or any(
+                    not isinstance(identity, str) for identity in claims
+                ):
+                    return False
+                for identity in claims:
+                    claim = self.rows.get(("claims", identity))
+                    if claim is None or identity not in self.current_claim_ids:
+                        return False
         for tables, identity, required in _dependency_references(row):
             if any(
                 t["memory_table"] in tables and t["id"] == identity and _visible(t, row)

@@ -9,7 +9,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
-from agent_memory import IngestResult, MemoryEvent, MemoryScope
+from agent_memory import ForgetRequest, IngestResult, MemoryEvent, MemoryScope
 from agent_memory.serialization import to_jsonable
 
 
@@ -159,6 +159,41 @@ class PostgresConsolidationQueue:
                 row = await cursor.fetchone()
                 return self._job_from_row(row) if row else None
 
+    async def cancel_forget(self, request: ForgetRequest) -> int:
+        """Cancel active jobs idempotently; dead is the existing terminal state."""
+        condition = "partition_key = %s"
+        params = [request.scope.partition_key()]
+        if not request.all_in_scope:
+            condition += (
+                " AND (payload_json->>'event_id' = ANY(%s) OR EXISTS ("
+                "SELECT 1 FROM jsonb_array_elements_text(CASE "
+                "WHEN jsonb_typeof(payload_json->'claim_ids') = 'array' "
+                "THEN payload_json->'claim_ids' ELSE '[]'::jsonb END) ids(value) "
+                "WHERE ids.value = ANY(%s)))"
+            )
+            params.extend((list(request.memory_ids), list(request.memory_ids)))
+        async with self._pool.connection() as connection:
+            cursor = await connection.execute(
+                """UPDATE agent_memory_consolidation_jobs
+                   SET status = 'dead', leased_by = NULL, lease_expires_at = NULL,
+                       payload_json = '{}'::jsonb, last_error = 'cancelled_by_forget',
+                       updated_at = now()
+                   WHERE """
+                + condition
+                + " AND status IN ('pending', 'running')",
+                tuple(params),
+            )
+            return cursor.rowcount
+
+    @staticmethod
+    async def _cancelled_by_forget(connection: Any, job_id: str) -> bool:
+        cursor = await connection.execute(
+            """SELECT 1 FROM agent_memory_consolidation_jobs
+               WHERE id = %s AND status = 'dead' AND last_error = 'cancelled_by_forget'""",
+            (job_id,),
+        )
+        return await cursor.fetchone() is not None
+
     async def complete(self, job: ConsolidationJob, worker_id: str) -> None:
         async with self._pool.connection() as connection:
             cursor = await connection.execute(
@@ -170,7 +205,7 @@ class PostgresConsolidationQueue:
                 """,
                 (job.id, worker_id),
             )
-            if cursor.rowcount != 1:
+            if cursor.rowcount != 1 and not await self._cancelled_by_forget(connection, job.id):
                 raise RuntimeError("job lease was lost before completion")
 
     async def fail(self, job: ConsolidationJob, worker_id: str, error: BaseException) -> None:
@@ -190,7 +225,7 @@ class PostgresConsolidationQueue:
                 """,
                 (str(error)[:4000], job.id, worker_id),
             )
-            if cursor.rowcount != 1:
+            if cursor.rowcount != 1 and not await self._cancelled_by_forget(connection, job.id):
                 raise RuntimeError("job lease was lost before failure recording")
 
     @staticmethod

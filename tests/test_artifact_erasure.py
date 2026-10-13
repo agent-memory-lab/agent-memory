@@ -6,8 +6,9 @@ import os
 import re
 from contextlib import asynccontextmanager
 from dataclasses import replace
+from types import SimpleNamespace
 from urllib.parse import urlsplit
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import pytest
 
@@ -1069,5 +1070,184 @@ def test_late_feedback_correction_cannot_revive_revoked_predecessor(artifact_sto
                 await kernel.record_episode(replace(episode, id=str(uuid4())))
             results = await kernel._repository.search(MemoryQuery(scope, "BANANA729"), 100)
             assert episode.id not in {item.id for item in results}
+
+    asyncio.run(scenario())
+
+
+async def claim_backed_source(kernel, scope):
+    source = MemoryEvent(
+        scope, "user.message", "Use Chinese. Private BANANA729.",
+        metadata={"claims": [
+            {"key": "language", "value": "Chinese", "text": "Use Chinese.", "scope": "user"},
+            {"key": "private", "value": "BANANA729", "text": "Private BANANA729.",
+             "scope": "user"},
+        ]},
+    )
+    result = await kernel.ingest_event(source)
+    return source, result
+
+
+@pytest.mark.parametrize("missing", [True, False])
+def test_legacy_block_missing_claim_lineage_is_readable_but_explicit_null_is_not(
+    artifact_store, missing,
+):
+    async def scenario():
+        async with artifact_store() as (kernel, scope, execute):
+            source = MemoryEvent(scope, "user.message", "Private BANANA729.")
+            await kernel.ingest_event(source)
+            block = await kernel.write_block(MemoryBlock(
+                scope, "Summary", "Private BANANA729.", (source.id,),
+            ))
+            row = (await execute("SELECT payload_json FROM artifacts WHERE id=?", (block.id,)))[0]
+            payload = row["payload_json"]
+            payload = json.loads(payload) if isinstance(payload, str) else payload
+            if missing:
+                payload.pop("source_claim_ids", None)
+            else:
+                payload["source_claim_ids"] = None
+            await execute(
+                "UPDATE artifacts SET payload_json=? WHERE id=?", (json.dumps(payload), block.id),
+            )
+            direct = await kernel.read_block(scope, block.id)
+            blocks = await kernel.search_blocks(scope, "BANANA729")
+            native = await kernel._repository.search(MemoryQuery(scope, "BANANA729"), 100)
+            assert (direct is not None) is missing
+            assert (block.id in {item.id for item in blocks}) is missing
+            assert (block.id in {item.id for item in native}) is missing
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("mode", [ForgetMode.ARCHIVE, ForgetMode.ERASE])
+def test_claim_backed_block_is_withdrawn_even_when_source_remains_live(artifact_store, mode):
+    async def scenario():
+        async with artifact_store() as (kernel, scope, execute):
+            source, result = await claim_backed_source(kernel, scope)
+            block = await kernel.write_block(MemoryBlock(
+                scope, "Summary", "Private BANANA729.", (source.id,),
+                source_claim_ids=result.claim_ids,
+            ))
+            restored = await kernel.read_block(scope, block.id)
+            assert restored.source_claim_ids == result.claim_ids
+            forgotten = await kernel.forget(ForgetRequest(scope, (result.claim_ids[1],), mode=mode))
+            assert forgotten.affected_artifacts == 1
+            async with kernel._repository.unit_of_work() as uow:
+                assert await uow.events_exist(scope, (source.id,))
+            await assert_unreadable(kernel, scope, (block.id,))
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("mode", [ForgetMode.ARCHIVE, ForgetMode.ERASE])
+def test_running_consolidator_cannot_publish_a_forgotten_claim(artifact_store, mode):
+    module = pytest.importorskip("agent_memory_postgres.consolidation")
+
+    async def scenario():
+        async with artifact_store() as (kernel, scope, execute):
+            source, result = await claim_backed_source(kernel, scope)
+            selected, release = asyncio.Event(), asyncio.Event()
+
+            class PausedProvider:
+                async def get_state(self, target):
+                    return await kernel.get_state(target)
+
+                async def read_block(self, target, identity):
+                    selected.set()
+                    await release.wait()
+                    return await kernel.read_block(target, identity)
+
+                async def write_block(self, block, expected_version):
+                    return await kernel.write_block(block, expected_version)
+
+            job_id = str(uuid4())
+            job = SimpleNamespace(
+                id=job_id, scope=scope, job_type="memory.consolidate",
+                payload={"event_id": source.id, "claim_ids": result.claim_ids},
+            )
+            running = asyncio.create_task(
+                module.TrajectoryBlockConsolidator(PausedProvider()).handle(job)
+            )
+            try:
+                await asyncio.wait_for(selected.wait(), 5)
+                await kernel.forget(ForgetRequest(scope, (result.claim_ids[1],), mode=mode))
+                release.set()
+                with pytest.raises(ValueError, match="dependencies"):
+                    await asyncio.wait_for(running, 5)
+                assert await kernel.read_block(
+                    scope, str(uuid5(NAMESPACE_URL, f"memory-block:{job_id}"))
+                ) is None
+            finally:
+                release.set()
+                if not running.done():
+                    running.cancel()
+                    await asyncio.gather(running, return_exceptions=True)
+
+    asyncio.run(scenario())
+
+
+def test_claim_backed_block_rejects_missing_or_superseded_claims(artifact_store):
+    async def scenario():
+        async with artifact_store() as (kernel, scope, execute):
+            source, result = await claim_backed_source(kernel, scope)
+            block = MemoryBlock(scope, "Summary", "Private BANANA729.", (source.id,),
+                                source_claim_ids=result.claim_ids)
+            with pytest.raises(ValueError, match="dependencies"):
+                await kernel.write_block(replace(block, source_claim_ids=(str(uuid4()),)))
+            await kernel.write_block(block)
+            await kernel.ingest_event(MemoryEvent(
+                scope, "user.message", "Private value updated.", metadata={"claims": [
+                    {"key": "private", "value": "updated", "text": "Private value updated.",
+                     "scope": "user"},
+                ]},
+            ))
+            await assert_unreadable(kernel, scope, (block.id,))
+            with pytest.raises(ValueError, match="dependencies"):
+                await kernel.write_block(replace(block, id=str(uuid4())))
+
+    asyncio.run(scenario())
+
+
+def test_postgres_claim_publication_lock_fences_concurrent_forget(artifact_store, monkeypatch):
+    async def scenario():
+        async with artifact_store() as (kernel, scope, execute):
+            repository = kernel._repository
+            if not hasattr(repository, "pool"):
+                pytest.skip("PostgreSQL advisory-lock interleaving; SQLite uses BEGIN IMMEDIATE")
+            source, result = await claim_backed_source(kernel, scope)
+            block = MemoryBlock(scope, "Summary", "Private BANANA729.", (source.id,),
+                                source_claim_ids=result.claim_ids)
+            validated, release = asyncio.Event(), asyncio.Event()
+            original = repository._validate_artifact_write
+
+            async def pause_after_validation(connection, item):
+                await original(connection, item)
+                validated.set()
+                await release.wait()
+
+            monkeypatch.setattr(repository, "_validate_artifact_write", pause_after_validation)
+            publishing = asyncio.create_task(kernel.write_block(block))
+            forgetting = None
+            try:
+                await asyncio.wait_for(validated.wait(), 5)
+                forgetting = asyncio.create_task(kernel.forget(
+                    ForgetRequest(scope, (result.claim_ids[1],), mode=ForgetMode.ERASE)
+                ))
+                # Publication holds the same namespace lock as forget, including
+                # the interval between dependency validation and the INSERT.
+                with pytest.raises(TimeoutError):
+                    await asyncio.wait_for(asyncio.shield(forgetting), 0.1)
+                release.set()
+                await asyncio.wait_for(publishing, 5)
+                await asyncio.wait_for(forgetting, 5)
+                assert await kernel.read_block(scope, block.id) is None
+                rows = await execute("SELECT id FROM artifacts WHERE id=?", (block.id,))
+                assert rows == []
+            finally:
+                release.set()
+                tasks = [task for task in (publishing, forgetting) if task is not None]
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
 
     asyncio.run(scenario())

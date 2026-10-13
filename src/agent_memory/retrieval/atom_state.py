@@ -33,6 +33,38 @@ def _claim(payload: dict[str, Any]) -> Claim:
     return Claim(**values)
 
 
+def select_record_snapshots(records, known_at):
+    """Select system snapshots without I/O, including current deletion barriers."""
+    selected = []
+    for row in records:
+        if "contribution_barrier" in row["payload"]:
+            selected.append(row)
+            continue
+        versions = row["versions"]
+        visible = [v for v in versions if _time(v["recorded_at"]) <= known_at]
+        future = [v["recorded_at"] for v in versions if _time(v["recorded_at"]) > known_at]
+        next_time = min(future, key=_time) if future else None
+        if visible:
+            version = max(visible, key=lambda v: v["version"])
+            selected.append(
+                {
+                    **row,
+                    **version,
+                    "_next_recorded_at": next_time,
+                    "_snapshot_version": row["version"],
+                }
+            )
+        elif future:
+            selected.append(
+                {
+                    **row,
+                    "payload": {"action": "UNOBSERVED"},
+                    "recorded_at": None,
+                    "_next_recorded_at": next_time,
+                }
+            )
+    return tuple(selected)
+
 def project_records(
     records: Sequence[dict[str, Any]],
     at: datetime,

@@ -17,6 +17,31 @@ do not need a parallel database model.
 - Reads and searches apply the same scope, active-status, and live-evidence checks.
 - Archive is the default forget operation; legal erase remains separately authorized.
 
+## Claim dependency updates and current time
+
+`source_claim_ids` optionally binds a block to the facts it describes. Python's
+`MemoryBlock` uses `None` to represent an omitted update field; MCP/HTTP callers
+omit the field and the Python SDK accepts `source_claim_ids=None`. On creation,
+omission produces an empty stored tuple/JSON array. On update, omission preserves
+the previous dependency set inside the same optimistic-version transaction.
+Stored and returned blocks always carry an array, including legacy event-only blocks.
+
+A supplied nonempty array explicitly replaces the dependency set and is validated
+against authorized current facts. An explicit `[]` cannot clear existing claim
+provenance: that update fails without changing the stored version. To publish
+unrelated event-only content, create a new block identity with its own evidence.
+Renaming or editing a claim-backed block therefore does not detach it from later
+claim deletion, even when the caller is an older SDK that omits this field.
+
+SQLite and PostgreSQL read, search and publication guards query `claim_versions`
+in the same database transaction as their dependency graph, fixing both effective
+and knowledge time for the check. They use half-open intervals, not the legacy
+`claims.status` ingestion head. Consequently a future replacement does not hide
+an otherwise current block; an expired fact cannot support a current block; and
+a temporary override ending can restore visibility of the earlier supported block.
+These checks do not delete the block or its claim history. The block API describes
+current views; historical facts use the explicit bitemporal Claim API.
+
 ## Existing data after upgrading
 
 Initialization adds an typed identity-only local-memory tombstone table to fence erased local

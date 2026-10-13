@@ -390,6 +390,20 @@ class EmbeddingProvider(Protocol):
     async def embed(self, texts: Sequence[str]) -> Sequence[Sequence[float]]: ...
 
 
+class RetrievalEmbeddingProvider(EmbeddingProvider, Protocol):
+    """Optional asymmetric retrieval input capability owned by the host provider.
+
+    Return one ordered batch: the query vector first, then one vector per input
+    document in unchanged order. The provider owns model-specific task prefixes
+    or input types; the kernel never infers document/query roles from the text.
+    Existing providers implementing only ``embed`` remain supported.
+    """
+
+    async def embed_for_retrieval(
+        self, query: str, documents: Sequence[str],
+    ) -> Sequence[Sequence[float]]: ...
+
+
 class GraphProvider(Protocol):
     async def expand(
         self, query: MemoryQuery, seeds: Sequence[MemoryItem]
@@ -403,9 +417,52 @@ class EvolutionProvider(Protocol):
 
 
 class ConsolidationScheduler(Protocol):
+    # enqueue_event must deduplicate the stable event:{event.id}:consolidate key.
+    # Delivery from the source transaction's optional outbox is at least once.
     async def enqueue_event(self, event: MemoryEvent, result: IngestResult) -> str: ...
 
     async def cancel_forget(self, request: ForgetRequest) -> int: ...
+
+
+class ConsolidationOutboxUnitOfWork(MemoryUnitOfWork, Protocol):
+    """Optional durable generic-ingestion handoff; typed Atom queues stay separate."""
+
+    async def save_consolidation_intent(self, event: MemoryEvent, result: IngestResult) -> None: ...
+
+
+class ConsolidationOutboxRepository(MemoryRepository, Protocol):
+    """Source and intent writes commit together; deliveries carry fenced leases."""
+
+    def unit_of_work(self) -> ConsolidationOutboxUnitOfWork: ...
+
+    async def claim_consolidation_intent(
+        self, *, scope: MemoryScope | None = None, event_id: str | None = None,
+        lease_seconds: int = 60, exclude_event_ids: tuple[str, ...] = (),
+    ) -> Any: ...
+
+    async def consolidation_delivery_is_current(self, delivery: Any) -> bool: ...
+
+    async def consolidation_source_is_live(self, delivery: Any) -> bool: ...
+
+    async def complete_consolidation_intent(self, delivery: Any) -> bool: ...
+
+    async def fail_consolidation_intent(self, delivery: Any, error_code: str) -> bool: ...
+
+    async def consolidation_intent_state(self, scope: MemoryScope, event_id: str) -> str | None: ...
+
+    async def consolidation_outbox_status(self, scope: MemoryScope | None = None) -> Mapping: ...
+
+    async def pending_consolidation_cancellations(
+        self, *, scope: MemoryScope | None = None, limit: int = 64,
+    ) -> Sequence[Any]: ...
+
+    async def request_consolidation_cancellation(
+        self, scope: MemoryScope, event_id: str,
+    ) -> Any: ...
+
+    async def ack_consolidation_cancellation(self, cancellation: Any) -> bool: ...
+
+    async def fail_consolidation_cancellation(self, cancellation: Any) -> bool: ...
 
 
 class MemoryProvider(Protocol):

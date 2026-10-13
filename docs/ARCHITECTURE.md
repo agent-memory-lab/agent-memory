@@ -20,6 +20,9 @@
 | `evaluation/` | 基准测试、后端比较、回放、资源与发布评测 | 生产运行路径中的决策逻辑 |
 | `packages/` | PostgreSQL、MCP Server、SDK、LangGraph、Evolution | 核心包必须安装的第三方依赖 |
 
+`extraction_result.py` 是共享领域契约：仅定义不可变抽取诊断、拒绝原因、报告和类型化异常，
+不依赖 Provider、存储或抽取实现；与 `domain.py` 一起受领域依赖边界检查保护。
+
 `serialization.py` 和 `token_budget.py` 是具有明确用途的小型共享工具，保留在根目录。
 功能包的 `__init__.py` 仅说明职责，不递归导出全部实现。
 

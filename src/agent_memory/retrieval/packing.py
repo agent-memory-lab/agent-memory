@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import re
+from bisect import bisect_right
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from json import dumps
+from math import isfinite, log1p
 
 from ..domain import Citation, Claim, MemoryItem, MemoryKind, MemoryQuery
 from .analyzer import lexical_terms
+from .candidate_identity import MAX_SOURCE_WINDOW_CHARS, candidate_identity
 
 
 def token_estimate(text: str) -> int:
@@ -28,6 +32,30 @@ def source_ids(value: Claim | MemoryItem) -> tuple[str, ...]:
     return tuple(dict.fromkeys(source for source in sources if isinstance(source, str) and source))
 
 
+def ordered_bundle_evidence(bundle) -> tuple[MemoryItem, ...]:
+    """Restore the packer's cross-kind order without re-ranking its selections.
+
+    Bundle fields group evidence by kind; citation spans retain the selection
+    order and disambiguate multiple windows of one public source ID. Providers
+    without this native contract keep the legacy score ordering. References
+    can order returned evidence only, never add evidence to the bundle.
+    """
+    items = (*bundle.relevant_memories, *bundle.episodes, *bundle.procedures)
+    proofs = bundle.retrieval_metadata.get("citation_spans", ())
+    if not isinstance(proofs, (list, tuple)) or not proofs:
+        return tuple(sorted(items, key=lambda item: (-item.score, item.id)))
+    positions = {}
+    for proof in proofs:
+        if isinstance(proof, Mapping):
+            key = proof.get("candidate_id")
+            if isinstance(key, str) and key not in positions:
+                positions[key] = len(positions)
+    # Unknown/unreturned references confer no inclusion or permissions.
+    return tuple(sorted(items, key=lambda item: positions.get(
+        candidate_identity(item), len(positions)
+    )))
+
+
 def contiguous_excerpt(text: str, query: str, max_characters: int) -> tuple[str, int, int]:
     """Return one exact substring; offsets always refer to the supplied text."""
     size = max(0, min(len(text), max_characters))
@@ -37,18 +65,30 @@ def contiguous_excerpt(text: str, query: str, max_characters: int) -> tuple[str,
         return text, 0, len(text)
     terms = set(lexical_terms(query))
     starts = {0}
-    # Bounded candidate windows. Regex offsets are in the original string, even
-    # when Unicode casefold changes length (e.g. sharp s).
-    if terms:
-        pattern = "|".join(re.escape(term) for term in sorted(terms, key=lambda x: (-len(x), x)))
+    # Give each query term its own bounded match budget. A shared first-32-match
+    # budget lets frequent words exhaust the search before a rare late hit.
+    # Regex offsets refer to original text even if casefold changes its length.
+    for term in sorted(terms, key=lambda value: (-len(value), value))[:64]:
+        pattern = re.escape(term)
+        if term.isascii():
+            pattern = rf"(?<![a-z0-9]){pattern}(?![a-z0-9])"
         for index, match in enumerate(re.finditer(pattern, text, re.IGNORECASE)):
-            if index >= 32:
+            if index >= 8:
                 break
             starts.add(min(max(0, match.start() - size // 3), len(text) - size))
+    window_terms = {
+        offset: terms.intersection(lexical_terms(text[offset : offset + size]))
+        for offset in starts
+    }
+    frequencies = Counter(term for found in window_terms.values() for term in found)
+    weights = {
+        term: log1p((len(starts) + 0.5) / (frequency + 0.5))
+        for term, frequency in frequencies.items()
+    }
     start = max(
         starts,
         key=lambda offset: (
-            len(terms.intersection(lexical_terms(text[offset : offset + size]))),
+            sum(weights[term] for term in sorted(window_terms[offset])),
             -offset,
         ),
     )
@@ -74,7 +114,7 @@ def _indexed_event_span(item: MemoryItem) -> dict | None:
         or type(source_chars) is not int
         or not 0 <= start < end <= source_chars
         or end - start != len(item.text)
-        or len(item.text) > 1024
+        or len(item.text) > MAX_SOURCE_WINDOW_CHARS
     ):
         return None
     if (
@@ -95,21 +135,187 @@ def _indexed_event_span(item: MemoryItem) -> dict | None:
     return {"start": start, "end": end, "unit": "characters"}
 
 
+_MIN_UNBROKEN_PASSAGE_CHARS = 64
+_TURN_HEADER = re.compile(
+    r"^[ \t]*(?:\[[^\]\n]{1,64}\][ \t]+)?(?:user|assistant|tool):[ \t]*",
+    re.MULTILINE | re.IGNORECASE,
+)
+_SENTENCE_END = re.compile(r"[。！？!?]+[\"'”’）)\]]*|\.[\"'”’）)\]]*(?=\s|$)")
+_ABBREVIATIONS = frozenset({"mr", "mrs", "ms", "dr", "prof", "sr", "jr", "st", "vs", "etc"})
+
+
+def _passage_boundaries(
+    text: str, *, source_start: bool, source_end: bool,
+) -> tuple[list[int], list[int], bool]:
+    """Conservative sentence/line boundaries, not a linguistic sentence parser.
+
+    A located parent's cut edges are not complete sentence boundaries. Decimals,
+    initials and common abbreviations do not create artificial sentence ends.
+    Newlines also retain list items and speaker-labelled conversation turns.
+    """
+    ends = {match.start() for match in re.finditer(r"\n+", text)}
+    for match in _SENTENCE_END.finditer(text):
+        if text[match.start()] == ".":
+            line_start = text.rfind("\n", 0, match.start()) + 1
+            if re.fullmatch(r"[ \t]*[0-9]+", text[line_start:match.start()]):
+                # A line-leading enumerator belongs to the following list item.
+                continue
+            word = re.search(r"([\w.]+)$", text[:match.start()])
+            prefix = word.group(1).casefold() if word else ""
+            if (
+                prefix in _ABBREVIATIONS
+                or (len(prefix) == 1 and prefix.isalpha())
+                or re.fullmatch(r"(?:[a-z]\.)+[a-z]", prefix)
+            ):
+                continue
+        ends.add(match.end())
+    structural = bool(ends)
+    starts = {0} if source_start else set()
+    for end in ends:
+        start = end
+        while start < len(text) and text[start].isspace():
+            start += 1
+        if start < len(text):
+            starts.add(start)
+    if source_end:
+        ends.add(len(text))
+    trimmed_ends = set()
+    for end in ends:
+        while end and text[end - 1].isspace():
+            end -= 1
+        if end:
+            trimmed_ends.add(end)
+    return sorted(starts), sorted(trimmed_ends), structural
+
+
+def _passage_excerpt(
+    text: str, query: str, width: int | None, starts: list[int], ends: list[int],
+) -> tuple[str, int, int]:
+    """Select a query-centred, exact span between known passage boundaries."""
+    if not starts or not ends:
+        return "", 0, 0
+    terms = set(lexical_terms(query))
+    proposed = {starts[0]}
+    for term in sorted(terms, key=lambda value: (-len(value), value))[:64]:
+        pattern = re.escape(term)
+        if term.isascii():
+            pattern = rf"(?<![a-z0-9]){pattern}(?![a-z0-9])"
+        for index, match in enumerate(re.finditer(pattern, text, re.IGNORECASE)):
+            if index >= 8:
+                break
+            for anchor in (match.start() - (width or 0) // 3, match.start()):
+                position = bisect_right(starts, max(0, anchor)) - 1
+                if position >= 0:
+                    proposed.add(starts[position])
+    spans = {}
+    for start in proposed:
+        position = (
+            bisect_right(ends, start)
+            if width is None else bisect_right(ends, start + width) - 1
+        )
+        if 0 <= position < len(ends) and ends[position] > start:
+            end = ends[position]
+            spans[(start, end)] = terms.intersection(lexical_terms(text[start:end]))
+    frequencies = Counter(term for found in spans.values() for term in found)
+    weights = {
+        term: log1p((len(spans) + 0.5) / (frequency + 0.5))
+        for term, frequency in frequencies.items()
+    }
+    if not spans:
+        return "", 0, 0
+    start, end = max(spans, key=lambda span: (
+        sum(weights[term] for term in sorted(spans[span])), span[1] - span[0], -span[0],
+    ))
+    return text[start:end], start, end
+
+
+def _unbroken_excerpt(text: str, query: str, width: int) -> tuple[str, int, int]:
+    """Explicit fallback for unpunctuated text; never emit small budget scraps.
+
+    Latin words/numeric literals stay intact. Han writing has no word separator,
+    so a >=64-character exact window is retained without claiming sentence
+    completeness. An overlong unbroken Latin identifier cannot be split.
+    """
+    if width < _MIN_UNBROKEN_PASSAGE_CHARS:
+        return "", 0, 0
+    _, start, end = contiguous_excerpt(text, query, width)
+
+    def word_character(char: str) -> bool:
+        return char.isascii() and (char.isalnum() or char in "_.$%+-")
+
+    # Expand to whole lexical tokens instead of dropping the matched suffix or
+    # trimming below the minimum. The packer rechecks the resulting token cost;
+    # an overlong identifier stays infeasible rather than becoming a fragment.
+    while start and word_character(text[start - 1]) and word_character(text[start]):
+        start -= 1
+    while end < len(text) and word_character(text[end - 1]) and word_character(text[end]):
+        end += 1
+    return text[start:end], start, end
+
+
 def _indexed_event_variants(item: MemoryItem, query: str) -> tuple[MemoryItem, ...]:
-    """At most eleven exact contiguous variants of one <=1024-character chunk."""
+    """At most thirteen exact, boundary-aware variants of a <=4096-char window.
+
+    Tiny fragments do not become valid evidence just because they fit remaining
+    tokens. Whole short sources remain valid; only narrowed unpunctuated windows
+    require the explicit minimum-length fallback.
+    """
     original_span = _indexed_event_span(item)
     if original_span is None:
         return ()
     result = [item]
+    seen = {(0, len(item.text))}
+    starts, ends, structural = _passage_boundaries(
+        item.text, source_start=original_span["start"] == 0,
+        source_end=original_span["end"] == item.metadata["source_chars"],
+    )
+    # Keep literal speaker headers and all preceding qualifications inside a
+    # visible turn. This preserves source context; it does not authenticate the
+    # speaker asserted by text. A parent already cut mid-turn remains a known
+    # limitation when no subsequent explicit turn header is visible.
+    turn_starts = [
+        match.start() for match in _TURN_HEADER.finditer(item.text)
+        if match.start() > 0 or original_span["start"] == 0
+    ]
+    if turn_starts:
+        starts, structural = turn_starts, True
     chunk_text_hash = sha256(item.text.encode("utf-8")).hexdigest()
+    widths = []
     width = len(item.text) // 2
     while width:
-        text, start, end = contiguous_excerpt(item.text, query, width)
+        widths.append(width)
+        width //= 2
+    if not structural:
+        widths = sorted({
+            width for width in (*widths, _MIN_UNBROKEN_PASSAGE_CHARS)
+            if _MIN_UNBROKEN_PASSAGE_CHARS <= width < len(item.text)
+        }, reverse=True)
+    # Reserve one slot for the smallest complete query-bearing unit. Geometric
+    # widths otherwise can jump past a sentence that fits the remaining budget.
+    variant_widths = (*widths[:11], None) if structural else widths[:12]
+    for width in variant_widths:
+        if structural:
+            text, start, end = _passage_excerpt(item.text, query, width, starts, ends)
+        else:
+            text, start, end = _unbroken_excerpt(item.text, query, width)
+        if (
+            not text or (start, end) in seen
+            or re.fullmatch(r"\s*[0-9]+[.)、]\s*", text)
+            or (turn_starts and _TURN_HEADER.fullmatch(text))
+        ):
+            # Only narrowed variants reject bare list markers. A complete short
+            # source remains valid as the original representation above.
+            continue
+        seen.add((start, end))
         metadata = dict(item.metadata)
         chunk_id = metadata.pop("lexical_chunk_id")
         metadata.update(
             {
                 "excerpt": True,
+                "passage_boundary": (
+                    "dialogue_turn_prefix" if turn_starts else
+                    "sentence_or_line" if structural else "unbroken_min64"
+                ),
                 "retrieved_lexical_chunk_id": chunk_id,
                 "retrieved_source_span": original_span,
                 "retrieved_chunk_text_sha256": chunk_text_hash,
@@ -121,7 +327,6 @@ def _indexed_event_variants(item: MemoryItem, query: str) -> tuple[MemoryItem, .
             }
         )
         result.append(replace(item, text=text, metadata=metadata))
-        width //= 2
     return tuple(result)
 
 
@@ -138,14 +343,27 @@ def fit_event(item: MemoryItem, query: str, available: int) -> MemoryItem | None
         return item
     if available < 64:
         return None
-    excerpt, start, end = contiguous_excerpt(item.text, query, min(1200, available))
-    if not excerpt or token_estimate(excerpt) > available:
+    turn_starts = [match.start() for match in _TURN_HEADER.finditer(item.text)]
+    boundary_metadata = {}
+    if turn_starts:
+        _, ends, _ = _passage_boundaries(item.text, source_start=True, source_end=True)
+        excerpt, start, end = _passage_excerpt(
+            item.text, query, min(1200, available), turn_starts, ends,
+        )
+        boundary_metadata["passage_boundary"] = "dialogue_turn_prefix"
+    else:
+        excerpt, start, end = contiguous_excerpt(item.text, query, min(1200, available))
+    if (
+        not excerpt or token_estimate(excerpt) > available
+        or (turn_starts and _TURN_HEADER.fullmatch(excerpt))
+    ):
         return None
     return replace(
         item,
         text=excerpt,
         metadata={
             **item.metadata,
+            **boundary_metadata,
             "excerpt": True,
             "source_revision": sha256(item.text.encode("utf-8")).hexdigest(),
             "source_chars": len(item.text),
@@ -170,6 +388,88 @@ class _PreparedEvidence:
     terms: frozenset[str]
     sources: tuple[str, ...]
     event_signature: tuple | None
+    relevance: float
+
+
+def _event_interval(entry: _PreparedEvidence) -> tuple[int, int] | None:
+    """Validate local interval geometry; this is never source authorization."""
+    if (
+        entry.event_signature is None or not isinstance(entry.value, MemoryItem)
+        or entry.value.kind != MemoryKind.EVENT
+    ):
+        return None
+    metadata = entry.value.metadata
+    span = metadata.get("source_span")
+    total = metadata.get("source_chars")
+    revision = metadata.get("source_revision")
+    if not isinstance(span, Mapping) or span.get("unit") != "characters":
+        return None
+    start, end = span.get("start"), span.get("end")
+    if (
+        type(start) is not int or type(end) is not int or type(total) is not int
+        or not 0 <= start < end <= total
+        or end - start != len(entry.value.text)
+        or end - start > MAX_SOURCE_WINDOW_CHARS
+        or not isinstance(revision, str) or not re.fullmatch(r"[0-9a-f]{64}", revision)
+    ):
+        return None
+    return start, end
+
+
+def _event_redundancy(entry: _PreparedEvidence, selected: _PreparedEvidence) -> float:
+    """Softly discount repeated EVENT coverage; claims are never truth-deduped.
+
+    Adjacent, non-overlapping passages from one source have zero redundancy.
+    Shared provenance alone does not imply that evidence repeats the same fact.
+    """
+    if entry.event_signature is None or selected.event_signature is None:
+        return 0.0
+    if entry.value.text == selected.value.text:
+        return 1.0
+    if entry.sources != selected.sources:
+        return 0.0
+    left, right = entry.value.metadata, selected.value.metadata
+    if left.get("source_revision") != right.get("source_revision"):
+        return 0.0
+    a, b = _event_interval(entry), _event_interval(selected)
+    if a is None or b is None:
+        return 0.0
+    overlap = max(0, min(a[1], b[1]) - max(a[0], b[0]))
+    return overlap / min(a[1] - a[0], b[1] - b[0])
+
+
+def _event_fully_covered(entry: _PreparedEvidence, selected: Sequence[_PreparedEvidence]) -> bool:
+    """Only exact same-source/revision interval coverage can prove zero new text.
+
+    Pairwise overlap penalties miss a window covered by several selected windows.
+    Claims and different source revisions never share this deduplication rule.
+    """
+    if entry.event_signature is None:
+        return False
+    metadata = entry.value.metadata
+    target = _event_interval(entry)
+    revision = metadata.get("source_revision")
+    if target is None:
+        return False
+    intervals = []
+    for previous in selected:
+        if (
+            previous.event_signature is None or previous.sources != entry.sources
+            or previous.value.id != entry.value.id
+            or previous.value.metadata.get("source_revision") != revision
+        ):
+            continue
+        span = _event_interval(previous)
+        if span is not None:
+            intervals.append(span)
+    cursor = target[0]
+    for start, end in sorted(intervals):
+        if start > cursor:
+            break
+        cursor = max(cursor, end)
+        if cursor >= target[1]:
+            return True
+    return False
 
 
 def pack_native_evidence(
@@ -177,17 +477,35 @@ def pack_native_evidence(
     current: Sequence[Claim],
     ranked: Sequence[MemoryItem],
 ) -> NativePackingResult:
-    """Greedy feasible term/source coverage, with one-time text analysis.
+    """Relevance-led feasible packing with bounded coverage and redundancy.
 
     Sources are not truth units: different claims from the same source are never
     collapsed. The full input pool is analyzed once without pre-truncating
     conflicts; selection rescans cached sets for at most 64 + query.limit rounds.
-    Coverage is only a heuristic over retrieved evidence, not a corpus proof.
+    Reranker score gaps are preserved on a request-local [0, 1] scale. Coverage
+    contributes at most 0.02, provenance diversity at most 0.005, and overlapping
+    EVENT evidence receives at most a 0.03 penalty. These bounded adjustments
+    cannot promote an irrelevant word-rich passage over a substantially more
+    relevant semantic match. Coverage remains a heuristic, not a corpus proof.
     """
     terms = set(lexical_terms(query.text))
+    finite_scores = [item.score for item in ranked if isfinite(item.score)]
+    floor = min(0.0, min(finite_scores, default=0.0))
+    ceiling = max(finite_scores, default=0.0)
+    span = ceiling - floor
+    relevance_by_id = {
+        candidate_identity(item): (
+            (item.score - floor) / span if span and isfinite(item.score) else 0.0
+        )
+        for item in ranked
+    }
+
+    def identity(value):
+        return candidate_identity(value) if isinstance(value, MemoryItem) else value.id
 
     def prepare(value: Claim | MemoryItem) -> _PreparedEvidence:
         sources = source_ids(value)
+        matches = frozenset(terms.intersection(lexical_terms(value.text)))
         signature = None
         if isinstance(value, MemoryItem) and value.kind == MemoryKind.EVENT and sources:
             signature = (
@@ -199,9 +517,14 @@ def pack_native_evidence(
         return _PreparedEvidence(
             value,
             token_estimate(value.text),
-            frozenset(terms.intersection(lexical_terms(value.text))),
+            matches,
             sources,
             signature,
+            (
+                relevance_by_id.get(identity(value), 0.0)
+                if isinstance(value, MemoryItem)
+                else len(matches) / max(1, len(terms))
+            ),
         )
 
     prepared_state = [prepare(claim) for claim in current] if query.include_current_state else []
@@ -214,13 +537,20 @@ def pack_native_evidence(
             entry.value.id,
         ),
     )
-    ordered_items = sorted(ranked, key=lambda item: (-item.score, item.id))
+    # Provider ordering is the deterministic tie-breaker, including fallback
+    # tails. Do not run another lexical sort after semantic reranking.
+    ordered_items = ranked
     prepared_items = []
     item_variants: dict[str, tuple[_PreparedEvidence, ...]] = {}
     infeasible = 0
 
-    def feasible_variant(identity: str, available: int) -> _PreparedEvidence | None:
-        variants = item_variants.get(identity, ())
+    def feasible_variant(
+        identity: str, available: int, *, exclude_covered: bool = False,
+    ) -> _PreparedEvidence | None:
+        variants = tuple(
+            entry for entry in item_variants.get(identity, ())
+            if not exclude_covered or not _event_fully_covered(entry, selected_entries)
+        )
         # Preserve full context whenever it fits. A slice can accidentally turn
         # a word prefix into a query token; that is never a reason to discard
         # an otherwise feasible original chunk.
@@ -230,7 +560,8 @@ def pack_native_evidence(
         return max(fitting, key=lambda entry: (len(entry.terms), entry.cost), default=None)
 
     for item in ordered_items:
-        if item.id in item_variants:
+        key = identity(item)
+        if key in item_variants:
             continue
         located = any(key in item.metadata for key in ("source_span", "lexical_chunk_id"))
         if item.kind == MemoryKind.EVENT and located:
@@ -240,8 +571,8 @@ def pack_native_evidence(
             # bounded indexed chunks get multiple precomputed variants.
             fitted = fit_event(item, query.text, query.token_budget)
             variants = () if fitted is None else (fitted,)
-        item_variants[item.id] = tuple(prepare(variant) for variant in variants)
-        primary = feasible_variant(item.id, query.token_budget)
+        item_variants[key] = tuple(prepare(variant) for variant in variants)
+        primary = feasible_variant(key, query.token_budget)
         if primary is None:
             infeasible += 1
         else:
@@ -250,17 +581,26 @@ def pack_native_evidence(
     entries: list[tuple[_PreparedEvidence, int]] = []
     seen_ids: set[str] = set()
     for rank, entry in enumerate([*prepared_items, *ordered_state], 1):
-        if entry.value.id in seen_ids:
+        key = identity(entry.value)
+        if key in seen_ids:
             continue
-        seen_ids.add(entry.value.id)
-        entries.append((state_by_id.get(entry.value.id, entry), rank))
+        seen_ids.add(key)
+        state_entry = state_by_id.get(entry.value.id)
+        entries.append((
+            replace(state_entry, relevance=entry.relevance)
+            if state_entry is not None and isinstance(entry.value, MemoryItem)
+            else entry,
+            rank,
+        ))
     covered_terms: set[str] = set()
     covered_sources: set[str] = set()
-    claim_sources: set[str] = set()
     event_signatures: set[tuple] = set()
     state: list[Claim] = []
     selected: list[MemoryItem] = []
     citations: list[Citation] = []
+    citation_spans: list[dict] = []
+    selected_entries: list[_PreparedEvidence] = []
+    selection_trace: list[dict] = []
     used_tokens = duplicate_sources = 0
     while entries and used_tokens < query.token_budget:
         feasible = []
@@ -272,10 +612,10 @@ def pack_native_evidence(
             if is_state and (len(state) >= 64 or entry.cost > available):
                 # Preserve a feasible, already indexed representation of a
                 # full state claim under its same original memory ID.
-                entry = feasible_variant(entry.value.id, available)
+                entry = feasible_variant(identity(entry.value), available)
                 is_state = False
             elif not is_state and entry.cost > available:
-                entry = feasible_variant(entry.value.id, available)
+                entry = feasible_variant(identity(entry.value), available)
             if entry is None:
                 infeasible += 1
                 continue
@@ -287,39 +627,67 @@ def pack_native_evidence(
             if entry.event_signature is not None and entry.event_signature in event_signatures:
                 duplicate_sources += 1
                 continue
-            score = (
-                len(entry.terms - covered_terms) / max(1, len(terms))
-                + len(entry.terms) / max(1, len(terms))
-                + (
-                    0.15
-                    if entry.event_signature is not None
-                    and claim_sources.intersection(entry.sources)
-                    else 0
-                )
-                + (0.1 if set(entry.sources) - covered_sources else 0)
-                + 1 / (60 + rank)
+            if _event_fully_covered(entry, selected_entries):
+                entry = feasible_variant(identity(entry.value), available, exclude_covered=True)
+                if entry is None:
+                    duplicate_sources += 1
+                    continue
+            coverage = len(entry.terms) / max(1, len(terms))
+            novelty = len(entry.terms - covered_terms) / max(1, len(terms))
+            redundancy = max(
+                (_event_redundancy(entry, previous) for previous in selected_entries),
+                default=0.0,
             )
-            feasible.append((score, -rank, entry))
+            score = (
+                entry.relevance
+                + 0.01 * coverage
+                + 0.01 * novelty
+                + (0.005 if set(entry.sources) - covered_sources else 0.0)
+                - 0.03 * redundancy
+            )
+            feasible.append((score, -rank, entry, coverage, novelty, redundancy))
             remaining.append((original, rank))
         if not feasible:
             break
-        _, _, entry = max(feasible, key=lambda row: (row[0], row[1]))
+        score, negative_rank, entry, coverage, novelty, redundancy = max(
+            feasible, key=lambda row: (row[0], row[1])
+        )
         value = entry.value
         if isinstance(value, Claim):
             state.append(value)
-            claim_sources.update(entry.sources)
         else:
             selected.append(value)
-            if value.kind == MemoryKind.CLAIM:
-                claim_sources.update(entry.sources)
+        selected_entries.append(entry)
+        selection_trace.append({
+            "memory_id": value.id,
+            "candidate_id": identity(value),
+            "kind": value.kind.value if isinstance(value, MemoryItem) else MemoryKind.CLAIM.value,
+            "input_rank": -negative_rank,
+            "relevance": entry.relevance,
+            "selection_score": score,
+            "query_coverage": coverage,
+            "new_query_coverage": novelty,
+            "event_redundancy": redundancy,
+            "tokens": entry.cost,
+        })
         if entry.event_signature is not None:
             event_signatures.add(entry.event_signature)
         citations.append(Citation(value.id, entry.sources))
+        proof = {
+            "memory_id": value.id, "candidate_id": identity(value),
+            "source_event_ids": entry.sources,
+        }
+        if isinstance(value, MemoryItem):
+            proof.update({key: value.metadata[key] for key in (
+                "source_span", "source_revision", "source_chars",
+            ) if key in value.metadata})
+        citation_spans.append(proof)
         covered_terms.update(entry.terms)
         covered_sources.update(entry.sources)
         used_tokens += entry.cost
         entries = [
-            (candidate, rank) for candidate, rank in remaining if candidate.value.id != value.id
+            (candidate, rank) for candidate, rank in remaining
+            if identity(candidate.value) != identity(value)
         ]
     return NativePackingResult(
         tuple(state),
@@ -327,7 +695,7 @@ def pack_native_evidence(
         tuple(citations),
         used_tokens,
         {
-            "strategy": "feasible_evidence_coverage_v1",
+            "strategy": "relevance_bounded_diversity_v2",
             "coverage": "partial",
             "world_negative": False,
             "packing_query_terms_covered": len(covered_terms),
@@ -337,5 +705,7 @@ def pack_native_evidence(
             "packing_infeasible": infeasible,
             "packing_analyzed_state": len(prepared_state),
             "packing_analyzed_items": len(prepared_items),
+            "citation_spans": tuple(citation_spans),
+            "packing_selection_trace": tuple(selection_trace),
         },
     )

@@ -321,6 +321,7 @@ class _Operations(RecoveryClientOperations):
         expected_version: int = 0,
         status: str = "active",
         metadata: Mapping[str, Any] | None = None,
+        source_claim_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         arguments: dict[str, Any] = {
             "title": title,
@@ -333,6 +334,8 @@ class _Operations(RecoveryClientOperations):
             "status": status,
             "metadata": dict(metadata or {}),
         }
+        if source_claim_ids is not None:
+            arguments["source_claim_ids"] = source_claim_ids
         if block_id is not None:
             arguments["block_id"] = block_id
         return await self._call("memory_block_write", arguments)

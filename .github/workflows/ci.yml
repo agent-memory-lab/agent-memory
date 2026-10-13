@@ -200,3 +200,26 @@ jobs:
         run: |
           python -m experiments.public_longmemeval.run_experiment --help
           python -m experiments.public_longmemeval.prepare_smoke --help
+
+  unified-benchmark-offline:
+    # The optional worker uses POSIX process locks; native Windows is unsupported.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -e '.[dev]'
+      - name: Synthetic extraction, ledger, accounting, and cleanup contracts only
+        # No model SDKs, credentials, weights, dataset downloads, or inference calls.
+        run: >-
+          python -m pytest -q
+          tests/test_longmemeval_*.py
+          tests/test_memory_benchmark_*.py
+          tests/test_memory_evidence_reader.py
+          tests/test_unified_memory_benchmark_lifecycle.py
+          tests/test_typed_retrieval_embeddings.py

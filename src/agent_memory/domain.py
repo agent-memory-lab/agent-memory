@@ -9,6 +9,7 @@ from json import dumps
 from typing import Any
 from uuid import uuid4
 
+from .extraction_result import ExtractionDiagnostic
 from .fact_qualification import EVIDENCE_FIELDS, FieldEvidence, normalize_qualifiers
 
 PROTOCOL_VERSION = "0.1"
@@ -350,6 +351,8 @@ class MemoryBlock:
     version: int = 1
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
+    # None is an update command omission; stored blocks always contain a tuple.
+    source_claim_ids: tuple[str, ...] | None = None
 
     def __post_init__(self) -> None:
         if not self.title.strip() or not self.content.strip():
@@ -360,6 +363,16 @@ class MemoryBlock:
             raise ValueError("memory block token_budget must be between 16 and 4096")
         if self.version < 1:
             raise ValueError("memory block version must be positive")
+        if self.source_claim_ids is None:
+            return
+        if (
+            not isinstance(self.source_claim_ids, (tuple, list))
+            or len(self.source_claim_ids) > 256
+            or any(not isinstance(identity, str) or not 1 <= len(identity) <= 128
+                   for identity in self.source_claim_ids)
+        ):
+            raise ValueError("memory block source_claim_ids must be bounded claim IDs")
+        object.__setattr__(self, "source_claim_ids", tuple(dict.fromkeys(self.source_claim_ids)))
 
 
 @dataclass(frozen=True, slots=True)
@@ -691,6 +704,9 @@ class RetrievalTrace:
     feedback_status: FeedbackStatus = FeedbackStatus.ACCEPTED
     created_at: datetime = field(default_factory=utc_now)
 
+    # Older/plugin traces need not claim they describe final authorized delivery.
+    delivery_stage: str = "unspecified"
+
     @property
     def id(self) -> str:
         return self.bundle_id
@@ -703,6 +719,8 @@ class IngestResult:
     state_delta_ids: tuple[str, ...]
     duplicate: bool
     superseded_claim_ids: tuple[str, ...]
+    extraction: ExtractionDiagnostic | None = None
+    consolidation_status: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

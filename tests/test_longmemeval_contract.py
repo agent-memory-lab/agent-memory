@@ -230,9 +230,130 @@ def test_offline_runner_persists_diagnostics_and_same_input_for_each_arm(tmp_pat
     assert diagnostic["stored_current_claims"] == 1
     assert diagnostic["zero_current_claims"] is False
     assert rows[0]["retrieved_count"] > 0
+    assert rows[0]["extraction"]["status_counts"] == {"completed": 1}
+    assert rows[0]["extraction"]["candidate_count"] == 1
+    assert rows[0]["extraction"]["accepted_count"] == 1
+    assert rows[1]["extraction"] is None
     assert len(rows[0]["model_usage_receipts"]) == 3
     assert rows[1]["extraction_diagnostics"] is None
     assert summary["official_score_equivalent"] is False
     # Idempotent resume is permitted only for this frozen implementation/input.
     again = asyncio.run(benchmark.run(data, output, tmp_path / "work"))
     assert again["metrics"] == summary["metrics"]
+
+    # Strict generation failures retain usage and body-free status in the real runner.
+    async def malformed_chat(self, **request):
+        assert "format" in request
+        malformed = fact()
+        malformed.pop("confidence")
+        return SimpleNamespace(
+            message=SimpleNamespace(content=json.dumps({"claims": [malformed]})),
+            prompt_eval_count=123, eval_count=41,
+        )
+
+    from agent_memory.capture.sink import CaptureError
+
+    monkeypatch.setattr(Client, "chat", malformed_chat)
+    failure_output = tmp_path / "failure-out"
+    with pytest.raises(CaptureError, match="capture extraction failed"):
+        asyncio.run(benchmark.run(data, failure_output, tmp_path / "failure-work"))
+    failure = json.loads((failure_output / "failures.jsonl").read_text())
+    assert failure["generated_claims"] == failure["validated_claims"] == 0
+    assert failure["ingested_events"] == 0
+    assert failure["extraction"]["status_counts"] == {"error": 1}
+    assert failure["extraction"]["candidate_count"] == 1
+    assert failure["extraction"]["accepted_count"] == 0
+    assert failure["extraction"]["rejection_counts"] == {"missing_confidence": 1}
+    assert failure["model_usage_receipts"] == [{
+        "phase": "extraction", "prompt_eval_count": 123,
+        "eval_count": 41, "total_duration": None,
+    }]
+    assert "tea" not in json.dumps(failure)
+    assert not (failure_output / "agent-memory.jsonl").read_text()
+
+
+def test_frozen_manifest_matches_shared_generator_request_and_hash(tmp_path):
+    """The displayed prompt/options must describe the real dispatched request."""
+    import hashlib
+
+    data = tmp_path / "data.json"
+    selected = [{"question_id": "q1"}]
+    data.write_text(json.dumps(selected))
+    output = tmp_path / "out"
+    output.mkdir()
+    benchmark._freeze_run(data, selected, output, 0, 1)
+    manifest = json.loads((output / "run-manifest.json").read_text())["manifest"]
+    client = ScriptedClient([])
+    generator = benchmark.BenchmarkClaimGenerator(client, {"agent-memory": 0})
+    asyncio.run(generator.generate_claims(SimpleNamespace(content="source-only")))
+    request = client.requests[0]
+    assert request["messages"] == [{
+        "role": "user", "content": manifest["extraction_prompt"] + "source-only",
+    }]
+    assert request["format"] == manifest["claim_schema"]
+    assert request["model"] == manifest["model"]
+    assert request["options"] == manifest["extraction_options"]
+    assert request["think"] == manifest["extraction_think"]
+    assert manifest["claim_extraction_sha256"] == hashlib.sha256(
+        Path(benchmark.claim_extraction.__file__).read_bytes()
+    ).hexdigest()
+    assert benchmark.BenchmarkClaimGenerator is benchmark.claim_extraction.BenchmarkClaimGenerator
+
+
+def test_changed_shared_generator_invalidates_resume(tmp_path, monkeypatch):
+    data = tmp_path / "data.json"
+    selected = [{"question_id": "q1"}]
+    data.write_text(json.dumps(selected))
+    output = tmp_path / "out"
+    output.mkdir()
+    benchmark._freeze_run(data, selected, output, 0, 1)
+    original_hash = benchmark._file_sha256
+    helper = Path(benchmark.claim_extraction.__file__).resolve()
+
+    def changed_hash(path):
+        return "changed-helper" if Path(path).resolve() == helper else original_hash(path)
+
+    monkeypatch.setattr(benchmark, "_file_sha256", changed_hash)
+    with pytest.raises(ValueError, match="configuration changed"):
+        benchmark._freeze_run(data, selected, output, 0, 1)
+
+
+def test_contract_import_does_not_load_optional_clients():
+    import subprocess
+    import sys
+
+    program = '''
+import importlib.abc
+import importlib.util
+import sys
+
+class NoOptionalClients(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split(".")[0] in {"ollama", "mem0", "graphiti_core"}:
+            raise AssertionError("optional client imported: " + fullname)
+
+sys.meta_path.insert(0, NoOptionalClients())
+spec = importlib.util.spec_from_file_location("offline_legacy_contract", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+assert module.BenchmarkClaimGenerator
+'''
+    result = subprocess.run(
+        [sys.executable, "-c", program, str(PATH.resolve())],
+        cwd=PATH.parents[1], capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_invalid_batch_does_not_increment_generated_count_but_keeps_receipt():
+    generator = benchmark.BenchmarkClaimGenerator(
+        ScriptedClient([fact(), fact(confidence=True)]), {"agent-memory": 0},
+    )
+    with pytest.raises(ValueError, match="scored-claim schema"):
+        asyncio.run(generator.generate_claims(SimpleNamespace(content="I prefer tea")))
+    assert generator.generated_claims == 0
+    assert generator.calls == {"agent-memory": 1}
+    assert generator.receipts == [{
+        "phase": "extraction", "prompt_eval_count": 123,
+        "eval_count": 41, "total_duration": None,
+    }]

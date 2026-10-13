@@ -201,3 +201,47 @@ def test_full_fitting_chunk_is_preserved_even_if_a_slice_creates_a_query_token(s
     packed = pack_native_evidence(MemoryQuery(SCOPE, query, token_budget=64), (), (original,))
     assert packed.items == (original,)
     assert "retrieved_source_span" not in packed.items[0].metadata
+
+
+def test_distinct_adjacent_source_context_beats_near_duplicate_overlap():
+    source = "owner " * 233 + "end"
+    first = indexed_item(source, 0, 800)
+    overlap = replace(indexed_item(source, 400, 1200), score=0.999)
+    adjacent = replace(indexed_item(source, 800, len(source)), score=0.998)
+    packed = pack_native_evidence(
+        MemoryQuery(SCOPE, "owner", limit=2, token_budget=512),
+        (), (first, overlap, adjacent),
+    )
+    assert packed.items == (first, adjacent)
+    assert len(packed.metadata["citation_spans"]) == 2
+    assert len({row["candidate_id"] for row in packed.metadata["citation_spans"]}) == 2
+    assert packed.tokens <= 512
+
+
+def test_bounded_parent_context_fits_without_rewriting_or_dropping_currency():
+    source = (
+        "Routine notes. " * 100
+        + "The launch price is not $25.50; it is €30.75. "
+        + "Routine notes. " * 100
+    )
+    parent = indexed_item(source, 0, len(source))
+    packed = pack_native_evidence(
+        MemoryQuery(SCOPE, "launch price", limit=1, token_budget=1024), (), (parent,),
+    )
+    assert packed.items == (parent,)
+    assert packed.items[0].text == source
+    assert packed.tokens <= 1024
+    narrowed = pack_native_evidence(
+        MemoryQuery(SCOPE, "launch price", limit=1, token_budget=128), (), (parent,),
+    )
+    assert "not $25.50; it is €30.75" in narrowed.items[0].text
+    assert_source_lineage(narrowed.items[0], parent, source)
+    assert narrowed.tokens <= 128
+
+
+def test_oversized_parent_window_remains_rejected():
+    original = indexed_item("x" * 4097, 0, 4097)
+    packed = pack_native_evidence(
+        MemoryQuery(SCOPE, "x", token_budget=2048), (), (original,),
+    )
+    assert packed.items == ()
