@@ -154,3 +154,29 @@ jobs:
       - run: >-
           python -m pytest -q packages/local-models/tests
           -k 'not actual_final and not exact_local'
+
+  evidence-experiment-offline:
+    # POSIX flock is intentional; native Windows is unsupported for this harness.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install -e '.[dev]'
+      - name: Synthetic experiment contracts only; no model credentials or calls
+        run: >-
+          python -m pytest -q
+          tests/test_evidence_checkpointed_runner.py
+          tests/test_evidence_model_client.py
+          tests/test_evidence_obligation_evaluate.py
+          tests/test_evidence_obligation_runner.py
+          tests/test_evidence_obligations_dataset.py
+          tests/test_evidence_publication_contract.py
+          tests/test_evidence_quote_store.py
+          tests/test_evidence_response_checkpoints.py
+          tests/test_evidence_run_binding.py
