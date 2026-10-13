@@ -286,7 +286,7 @@ def filter_delivery(bundle, *, query, valid_at, known_at, claims, atoms, atom_in
     return replace(bundle, current_state=current, relevant_memories=relevant,
                    episodes=episodes, procedures=procedures,
                    citations=tuple(c for c in bundle.citations if any(
-                       c.memory_id == value.id and tuple(c.source_event_ids) == source_ids(value)
+                       c.memory_id == value.id and set(c.source_event_ids) == set(source_ids(value))
                        for value in values)),
                    token_estimate=sum(token_estimate(value.text) for value in values),
                    retrieval_metadata=metadata)

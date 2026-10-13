@@ -10,6 +10,7 @@ from test_atom_admission import at
 from test_atom_admission import store as store
 
 from agent_memory.domain import (
+    Citation,
     ForgetMode,
     ForgetRequest,
     MemoryBundle,
@@ -35,7 +36,9 @@ def bundle(kernel, items):
 def test_native_event_proof_is_bound_to_exact_sibling_text(store, shape, pipeline):
     async def run():
         async with store() as (_, kernel, scope, clock):
-            event = MemoryEvent(scope, "message", "Archive meeting at Harbor Hall.", occurred_at=at(1))
+            event = MemoryEvent(
+                scope, "message", "Archive meeting at Harbor Hall.", occurred_at=at(1),
+            )
             await kernel.ingest_event(event)
             clock[0] = at(2)
             query = MemoryQuery(scope, "archive meeting", include_current_state=False,
@@ -47,7 +50,9 @@ def test_native_event_proof_is_bound_to_exact_sibling_text(store, shape, pipelin
             if shape != "full":
                 revision = sha256(text.encode()).hexdigest()
                 original_span = {"start": 0, "end": len(text), "unit": "characters"}
-                locator = sha256(dumps(["events", event.id, revision, 0, len(text)]).encode()).hexdigest()
+                locator = sha256(
+                    dumps(["events", event.id, revision, 0, len(text)]).encode()
+                ).hexdigest()
                 metadata.update(source_revision=revision, source_chars=len(text),
                                 source_span=original_span, lexical_chunk_id=locator)
                 if shape == "narrowed":
@@ -172,4 +177,21 @@ def test_external_metadata_mutation_during_ownership_lookup_cannot_add_unchecked
             assert metadata["source_event_ids"] == [foreign.id]
             assert foreign.id not in dumps(to_jsonable(result))
             assert result.relevant_memories[0].metadata["source_event_ids"] == ["external-source"]
+    asyncio.run(run())
+
+
+def test_citations_use_surviving_provenance_without_requiring_source_order(store):
+    async def run():
+        async with store() as (_, kernel, scope, _):
+            good = MemoryItem("external", MemoryKind.EPISODE, "External assertion.",
+                              1.0, at(1), {"source_event_ids": ("source-a", "source-b")})
+            proposed = replace(bundle(kernel, (good,)), citations=(
+                Citation(good.id, ("source-b", "source-a")),
+                Citation(good.id, ("withdrawn-source",)),
+            ))
+            result = await kernel._repository.guard_retrieval_delivery(
+                MemoryQuery(scope, "assertion"), proposed, pipeline=True,
+            )
+            assert result.citations == (proposed.citations[0],)
+            assert "withdrawn-source" not in dumps(to_jsonable(result))
     asyncio.run(run())
