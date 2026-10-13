@@ -361,3 +361,33 @@ def test_untyped_generator_failures_keep_unknown_counts_and_no_private_body(fail
     assert result.candidate_count is None and result.accepted_count == 0
     assert not result.rejections
     assert "private" not in json.dumps(asdict(result))
+
+
+@pytest.mark.parametrize("fail_open", [True, False])
+def test_typed_generator_partial_validation_never_counts_unreturned_drafts(fail_open):
+    from agent_memory.extraction_result import ExtractionRejection
+
+    class PartialValidationError(ExtractionFormatError):
+        pass
+
+    failure = PartialValidationError(ExtractionDiagnostic(
+        "degraded", candidate_count=2, accepted_count=1,
+        rejections=(ExtractionRejection(1, "invalid_candidate"),),
+        error_type="PartialValidationError",
+    ))
+    if fail_open:
+        report = reported(failure, fail_open=True)
+        assert report.drafts == ()
+        diagnostic = report.diagnostic
+    else:
+        with pytest.raises(PartialValidationError) as error:
+            reported(failure, fail_open=False)
+        assert error.value is failure
+        diagnostic = error.value.diagnostic
+    assert diagnostic.status == "error"
+    assert diagnostic.candidate_count == 2 and diagnostic.accepted_count == 0
+    assert diagnostic.rejections == (
+        ExtractionRejection(1, "invalid_candidate"),
+        ExtractionRejection(None, "batch_aborted"),
+    )
+    assert diagnostic.error_type == "PartialValidationError"

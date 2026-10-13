@@ -348,7 +348,7 @@ def test_shared_evidence_byte_accounting_detects_downstream_truncation(text, bud
     assert text not in json.dumps(result)
 
 
-@pytest.mark.parametrize("mode", ["replay", "retention_failure"])
+@pytest.mark.parametrize("mode", ["replay", "retention_failure", "factory_cleanup_failure"])
 def test_worker_replay_skips_extraction_and_snapshot_failure_still_cleans_up(tmp_path, mode):
     source = ast.parse((EXAMPLES / "longmemeval_full_comparison.py").read_text())
     function = next(
@@ -408,6 +408,12 @@ def test_worker_replay_skips_extraction_and_snapshot_failure_still_cleans_up(tmp
 
     async def make_clients(*args, **kwargs):
         assert kwargs["selected_arm"] == "agent-memory"
+        if mode == "factory_cleanup_failure":
+            error = OSError("PRIVATE setup failure")
+            error.comparison_cleanup_errors = (
+                {"resource": "graphiti", "error_type": "RuntimeError"},
+            )
+            raise error
         return None, None, None
 
     async def close_resources(*args):
@@ -497,6 +503,14 @@ def test_worker_replay_skips_extraction_and_snapshot_failure_still_cleans_up(tmp
     row = asyncio.run(
         namespace["execute_task"](item, {"arm": "agent-memory", "attempt": 1}, 1, tmp_path, args)
     )
+    if mode == "factory_cleanup_failure":
+        assert operations == ["resource-close", "client-close"]
+        assert row["status"] == "failed" and row["error_type"] == "ResourceCleanupFailure"
+        assert row["original_error_type"] == "OSError"
+        assert row["cleanup_errors"] == [{"resource": "graphiti", "error_type": "RuntimeError"}]
+        assert row["accounting_complete"] is True
+        assert "PRIVATE" not in json.dumps(row)
+        return
     assert operations[-3:] == ["clear", "resource-close", "client-close"]
     if mode == "replay":
         assert row["status"] == "completed" and row["ingested_events"] == 0

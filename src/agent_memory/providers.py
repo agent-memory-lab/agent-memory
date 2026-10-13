@@ -291,9 +291,12 @@ class GeneratedTrajectoryClaimExtractor:
         except ExtractionError as error:
             # A validating generator can already provide a body-free report.
             # Preserve its reason/counts instead of relabeling it provider failure.
-            if not self._fail_open:
-                raise
             diagnostic = _aborted_diagnostic(error.diagnostic)
+            if not self._fail_open:
+                # No drafts were returned. Even a provider's partial-validation
+                # diagnostic cannot claim that this strict batch admitted any.
+                error.diagnostic = diagnostic
+                raise
             return ExtractionReport((), diagnostic)
         except Exception as error:
             diagnostic = ExtractionDiagnostic("error", error_type=type(error).__name__)

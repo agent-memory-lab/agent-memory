@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from contextlib import suppress
 from copy import deepcopy
 from datetime import UTC, datetime
 import importlib.metadata
+import inspect
 import json
 import os
 from pathlib import Path
@@ -211,88 +211,112 @@ async def _make_arm_clients(
     if selected_arm not in (None, "agent-memory", "mem0-oss", "graphiti"):
         raise ValueError("unknown comparison arm")
     mem0 = graphiti = lite_db = None
-    if selected_arm in (None, "graphiti"):
-        llm_config = LLMConfig(
-            api_key="ollama",
-            model=MODEL,
-            small_model=MODEL,
-            base_url=OLLAMA_URL + "/v1",
-            temperature=0,
-            max_tokens=8192,
-        )
-        graphiti_http = NativeOllamaCompletionClient(
-            client, calls, max_extraction_items=graphiti_max_extraction_items
-        )
-        graphiti_llm = OpenAIGenericClient(
-            config=llm_config,
-            client=graphiti_http,
-            max_tokens=8192,
-            structured_output_mode="json_schema",
-        )
-        graph_embedder = OpenAIEmbedder(
-            config=OpenAIEmbedderConfig(
+    owned = []
+    try:
+        if selected_arm in (None, "graphiti"):
+            llm_config = LLMConfig(
                 api_key="ollama",
-                embedding_model=EMBED_MODEL,
-                embedding_dim=768,
+                model=MODEL,
+                small_model=MODEL,
                 base_url=OLLAMA_URL + "/v1",
+                temperature=0,
+                max_tokens=8192,
             )
-        )
-        lite_db = AsyncFalkorDB(dbfilename=str(run_dir / "graphiti.db"))
-        graph_driver = FalkorDriver(falkor_db=lite_db)
-        graphiti = Graphiti(
-            graph_driver=graph_driver,
-            llm_client=graphiti_llm,
-            embedder=graph_embedder,
-            cross_encoder=OpenAIRerankerClient(client=graphiti_llm, config=llm_config),
-            max_coroutines=1,
-        )
-        try:
+            graphiti_http = NativeOllamaCompletionClient(
+                client, calls, max_extraction_items=graphiti_max_extraction_items
+            )
+            graphiti_llm = OpenAIGenericClient(
+                config=llm_config,
+                client=graphiti_http,
+                max_tokens=8192,
+                structured_output_mode="json_schema",
+            )
+            graph_embedder = OpenAIEmbedder(
+                config=OpenAIEmbedderConfig(
+                    api_key="ollama",
+                    embedding_model=EMBED_MODEL,
+                    embedding_dim=768,
+                    base_url=OLLAMA_URL + "/v1",
+                )
+            )
+            owned.append(("graphiti-embedding", graph_embedder.client.close))
+            lite_db = AsyncFalkorDB(dbfilename=str(run_dir / "graphiti.db"))
+            pid = getattr(getattr(lite_db, "client", None), "pid", None)
+            owned.append(("falkor-process", lambda: _stop_falkordblite(pid)))
+            owned.append(("falkor", lite_db.close))
+            graph_driver = FalkorDriver(falkor_db=lite_db)
+            graphiti = Graphiti(
+                graph_driver=graph_driver,
+                llm_client=graphiti_llm,
+                embedder=graph_embedder,
+                cross_encoder=OpenAIRerankerClient(client=graphiti_llm, config=llm_config),
+                max_coroutines=1,
+            )
+            owned.append(("graphiti", graphiti.close))
             await graphiti.build_indices_and_constraints()
-        except BaseException:
-            # Construction can fail before the caller receives any handles.
-            for close in (graphiti.close, graph_embedder.client.close, lite_db.close):
-                with suppress(Exception):
-                    await close()
-            await _stop_falkordblite(getattr(getattr(lite_db, "client", None), "pid", None))
-            raise
 
-    if selected_arm in (None, "mem0-oss"):
-        mem0 = Memory.from_config(
-            {
-                "history_db_path": str(run_dir / "mem0-history.sqlite3"),
-                "vector_store": {
-                    "provider": "qdrant",
-                    "config": {
-                        "path": str(run_dir / "qdrant"),
-                        "collection_name": (
-                            mem0_collection_name or "memory_comparison_" + uuid4().hex
-                        ),
-                        "embedding_model_dims": 768,
+        if selected_arm in (None, "mem0-oss"):
+            mem0 = Memory.from_config(
+                {
+                    "history_db_path": str(run_dir / "mem0-history.sqlite3"),
+                    "vector_store": {
+                        "provider": "qdrant",
+                        "config": {
+                            "path": str(run_dir / "qdrant"),
+                            "collection_name": (
+                                mem0_collection_name or "memory_comparison_" + uuid4().hex
+                            ),
+                            "embedding_model_dims": 768,
+                        },
                     },
-                },
-                "llm": {
-                    "provider": "ollama",
-                    "config": {
-                        "model": MODEL,
-                        "temperature": 0,
-                        "max_tokens": 2048,
-                        "ollama_base_url": OLLAMA_URL,
+                    "llm": {
+                        "provider": "ollama",
+                        "config": {
+                            "model": MODEL,
+                            "temperature": 0,
+                            "max_tokens": 2048,
+                            "ollama_base_url": OLLAMA_URL,
+                        },
                     },
-                },
-                "embedder": {
-                    "provider": "ollama",
-                    "config": {"model": EMBED_MODEL, "ollama_base_url": OLLAMA_URL},
-                },
-            }
-        )
-        original_mem0_chat = mem0.llm.client.chat
+                    "embedder": {
+                        "provider": "ollama",
+                        "config": {"model": EMBED_MODEL, "ollama_base_url": OLLAMA_URL},
+                    },
+                }
+            )
+            owned.append(("mem0-history", mem0.close))
+            for label, resource in (
+                ("qdrant", getattr(getattr(mem0, "vector_store", None), "client", None)),
+                ("mem0-llm", getattr(getattr(getattr(mem0, "llm", None), "client", None),
+                                     "_client", None)),
+                ("mem0-embedding", getattr(getattr(getattr(mem0, "embedding_model", None),
+                                                  "client", None), "_client", None)),
+            ):
+                if resource is not None:
+                    owned.append((label, resource.close))
+            original_mem0_chat = mem0.llm.client.chat
 
-        def mem0_chat_without_thinking(**kwargs):
-            calls["mem0-oss"] += 1
-            kwargs["options"] = {**kwargs.get("options", {}), "num_ctx": 32768}
-            return original_mem0_chat(think=False, **kwargs)
+            def mem0_chat_without_thinking(**kwargs):
+                calls["mem0-oss"] += 1
+                kwargs["options"] = {**kwargs.get("options", {}), "num_ctx": 32768}
+                return original_mem0_chat(think=False, **kwargs)
 
-        mem0.llm.client.chat = mem0_chat_without_thinking
+            mem0.llm.client.chat = mem0_chat_without_thinking
+    except BaseException as error:
+        # Ownership transfers only after the whole factory returns. Keep the
+        # original setup failure, and account for every failed cleanup by type.
+        cleanup_errors = []
+        for label, close in reversed(owned):
+            try:
+                result = close()
+                if inspect.isawaitable(result):
+                    await result
+            except (Exception, asyncio.CancelledError) as cleanup_error:
+                cleanup_errors.append({"resource": label,
+                                       "error_type": type(cleanup_error).__name__})
+        if cleanup_errors:
+            error.comparison_cleanup_errors = tuple(cleanup_errors)
+        raise
     return mem0, graphiti, lite_db
 
 

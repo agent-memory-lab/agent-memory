@@ -174,8 +174,13 @@ def test_local_only_and_partial_mem0_resources_close_without_other_frameworks():
     assert errors == [] and effects == ["local", "mem0", "qdrant"]
 
 
-def test_resource_cleanup_failure_stops_trials_and_persists_failed_report(tmp_path):
-    """Run the real orchestration with offline clients and a failed resource close."""
+@pytest.mark.parametrize("failure", [
+    "cleanup", "local-construction", "configuration", "client-close",
+    "local-construction-client-close", "client-close-cancel", "final-accounting",
+    "final-accounting-timeout", "client-construction", "factory-cleanup",
+])
+def test_setup_and_cleanup_failures_stop_trials_and_persist_failed_report(tmp_path, failure):
+    """Run real orchestration with offline clients and setup/cleanup failures."""
     import importlib.metadata
     import platform
     import statistics
@@ -192,15 +197,21 @@ def test_resource_cleanup_failure_stops_trials_and_persists_failed_report(tmp_pa
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         and node.name in ("run", "write_json", "aggregate")
     ], type_ignores=[])
-    setups, cleanup_calls, client_closes = [], [], []
+    setups, cleanup_calls, client_closes, accounting_calls = [], [], [], []
     cleanup_error = {"resource": "falkor", "error_type": "RuntimeError"}
 
     class Client:
         def __init__(self, **_kwargs):
+            if failure == "client-construction":
+                raise OSError("offline client construction failure")
             self._client = self
 
         async def aclose(self):
             client_closes.append(True)
+            if failure == "client-close-cancel":
+                raise asyncio.CancelledError()
+            if "client-close" in failure:
+                raise RuntimeError("offline client close failure")
 
         async def list(self):
             return SimpleNamespace(models=[SimpleNamespace(
@@ -238,7 +249,8 @@ def test_resource_cleanup_failure_stops_trials_and_persists_failed_report(tmp_pa
 
     class Local:
         def __init__(self, *_args, **_kwargs):
-            pass
+            if failure.startswith("local-construction"):
+                raise OSError("offline local construction failure")
 
         async def initialize(self):
             pass
@@ -252,16 +264,20 @@ def test_resource_cleanup_failure_stops_trials_and_persists_failed_report(tmp_pa
 
     async def make_clients(*_args, **_kwargs):
         setups.append(True)
+        if failure == "factory-cleanup":
+            error = OSError("offline factory setup failure")
+            error.comparison_cleanup_errors = (cleanup_error,)
+            raise error
         mem0 = SimpleNamespace(
             llm=SimpleNamespace(client=SimpleNamespace(
                 chat=lambda **_kwargs: None, _client=SimpleNamespace(timeout=0),
             )),
             embedding_model=SimpleNamespace(client=SimpleNamespace(
-                _client=SimpleNamespace(timeout=0),
+                _client=None if failure == "configuration" else SimpleNamespace(timeout=0),
             )),
         )
         graph = SimpleNamespace(embedder=SimpleNamespace(client=SimpleNamespace(timeout=0)))
-        return mem0, graph, SimpleNamespace(client=SimpleNamespace(pid=None))
+        return mem0, graph, SimpleNamespace(client=SimpleNamespace(pid=314))
 
     async def run_arm(_client, adapter, _ledger, _fixture, trial, output, _timeout):
         row = {"trial": trial, "name": adapter.name, "status": "completed",
@@ -269,11 +285,16 @@ def test_resource_cleanup_failure_stops_trials_and_persists_failed_report(tmp_pa
         output["arms"].append(row)
         return row
 
-    async def close_resources(*_args):
-        cleanup_calls.append(True)
-        return [cleanup_error]
+    async def close_resources(*resources):
+        cleanup_calls.append(resources)
+        return [cleanup_error] if failure == "cleanup" else []
 
     async def settled(*_args):
+        accounting_calls.append(True)
+        if failure == "final-accounting" and _args[1].get("schema_version") == 2:
+            raise OSError("offline accounting failure")
+        if failure == "final-accounting-timeout" and _args[1].get("schema_version") == 2:
+            raise _PROTOCOL.BenchmarkTimeout("unfinished_model_accounting")
         return True
 
     def embeddings(*_args):
@@ -309,13 +330,141 @@ def test_resource_cleanup_failure_stops_trials_and_persists_failed_report(tmp_pa
     output = tmp_path / "output"
     args = SimpleNamespace(fixture=fixture, output_dir=output, repeats=2,
                            operation_timeout=1, upstream="offline")
-    with pytest.raises(RuntimeError, match="resource cleanup failed"):
+    expected_error = {"cleanup": RuntimeError, "local-construction": OSError,
+                      "configuration": AttributeError, "client-close": RuntimeError,
+                      "local-construction-client-close": RuntimeError,
+                      "client-close-cancel": asyncio.CancelledError,
+                      "final-accounting": OSError,
+                      "final-accounting-timeout": _PROTOCOL.BenchmarkTimeout,
+                      "client-construction": OSError, "factory-cleanup": OSError}[failure]
+    with pytest.raises(expected_error):
         asyncio.run(namespace["run"](args))
     report = json.loads((output / "report.json").read_text())
-    assert len(setups) == len(cleanup_calls) == len(client_closes) == 1
-    assert report["status"] == "failed"
-    assert report["error_type"] == "RuntimeError"
-    assert report["resource_cleanup_errors"] == [cleanup_error]
-    assert len(report["arms"]) == 3 and all(row["trial"] == 1 for row in report["arms"])
-    assert all(row["planned_trials"] == 2 and row["completed_trials"] == 1
+    completed_run = failure in {
+        "client-close", "client-close-cancel", "final-accounting", "final-accounting-timeout",
+    }
+    client_created = failure != "client-construction"
+    assert len(setups) == len(cleanup_calls) == (2 if completed_run else int(client_created))
+    assert len(client_closes) == int(client_created)
+    assert report["status"] == (
+        "aborted" if failure in {
+            "client-close-cancel", "final-accounting", "final-accounting-timeout",
+        } else "failed"
+    )
+    assert report["error_type"] == (
+        "IncompleteModelAccounting" if failure == "final-accounting-timeout"
+        else expected_error.__name__
+    )
+    expected_cleanup = [cleanup_error] if failure in {"cleanup", "factory-cleanup"} else []
+    if "client-close" in failure:
+        expected_cleanup.append({"resource": "shared-model-client",
+                                 "error_type": expected_error.__name__})
+    assert report.get("resource_cleanup_errors", []) == expected_cleanup
+    if failure == "local-construction-client-close":
+        assert report["original_error_type"] == "OSError"
+    if failure.startswith("final-accounting"):
+        assert report["accounting_complete"] is False
+    if failure == "factory-cleanup":
+        assert cleanup_calls[0] == (None, None, None, None, None)
+    elif client_created:
+        closed_local, *other_resources = cleanup_calls[0]
+        assert (closed_local is not None) == (failure == "cleanup" or completed_run)
+        assert all(resource is not None for resource in other_resources)
+        assert other_resources[-1] == 314
+    expected_trials = 2 if completed_run else int(failure == "cleanup")
+    assert len(report["arms"]) == 3 * expected_trials
+    assert all(1 <= row["trial"] <= expected_trials for row in report["arms"])
+    assert len(accounting_calls) == 3 * expected_trials + 1
+    assert report["model_usage"] == {"calls": 0}
+    assert all(row["planned_trials"] == 2 and row["completed_trials"] == expected_trials
                for row in report["summary"])
+
+
+@pytest.mark.parametrize("failure", ["driver", "graph-indices", "mem0", "mem0-configure"])
+@pytest.mark.parametrize("cleanup_failure", [False, True])
+def test_partial_factory_closes_owned_handles_before_reraising_original(
+    tmp_path, failure, cleanup_failure,
+):
+    path = _EXAMPLES / "ollama_memory_comparison.py"
+    tree = ast.parse(path.read_text())
+    selected = ast.Module(body=[node for node in tree.body
+                               if isinstance(node, ast.AsyncFunctionDef)
+                               and node.name == "_make_arm_clients"], type_ignores=[])
+    effects = []
+    original = OSError("private setup details")
+
+    def resource(label):
+        async def close():
+            effects.append(label)
+            if label == "graphiti-embedding" and cleanup_failure:
+                raise RuntimeError("private cleanup details")
+        return SimpleNamespace(close=close)
+
+    async def indices():
+        if failure == "graph-indices":
+            raise original
+
+    def driver(**_kwargs):
+        if failure == "driver":
+            raise original
+        return object()
+
+    class Mem0Client:
+        def __init__(self):
+            self._client = resource("mem0-llm")
+
+        @property
+        def chat(self):
+            raise original
+
+    def mem0_factory(_config):
+        if failure == "mem0":
+            raise original
+        return SimpleNamespace(
+            close=resource("mem0-history").close,
+            llm=SimpleNamespace(client=Mem0Client()),
+            vector_store=SimpleNamespace(client=resource("qdrant")),
+            embedding_model=SimpleNamespace(client=SimpleNamespace(
+                _client=resource("mem0-embedding"),
+            )),
+        )
+
+    async def stop(pid):
+        assert pid == 314
+        effects.append("falkor-process")
+
+    def graph(**_kwargs):
+        return SimpleNamespace(close=resource("graphiti").close,
+                               build_indices_and_constraints=indices)
+
+    namespace = {
+        "Path": Path, "ollama": SimpleNamespace(AsyncClient=object),
+        "asyncio": asyncio, "inspect": inspect, "MODEL": "offline",
+        "EMBED_MODEL": "offline", "OLLAMA_URL": "offline-no-network",
+        "LLMConfig": lambda **_kwargs: None,
+        "NativeOllamaCompletionClient": lambda *_args, **_kwargs: None,
+        "OpenAIGenericClient": lambda **_kwargs: None,
+        "OpenAIEmbedderConfig": lambda **_kwargs: None,
+        "OpenAIEmbedder": lambda **_kwargs: SimpleNamespace(client=resource("graphiti-embedding")),
+        "AsyncFalkorDB": lambda **_kwargs: SimpleNamespace(
+            close=resource("falkor").close, client=SimpleNamespace(pid=314),
+        ),
+        "FalkorDriver": driver, "Graphiti": graph,
+        "OpenAIRerankerClient": lambda **_kwargs: None,
+        "Memory": SimpleNamespace(from_config=mem0_factory), "_stop_falkordblite": stop,
+        "uuid4": lambda: SimpleNamespace(hex="offline"),
+    }
+    exec(compile(selected, str(path), "exec"), namespace)
+    with pytest.raises(OSError) as error:
+        asyncio.run(namespace["_make_arm_clients"](tmp_path, object(), {}))
+    assert error.value is original
+    expected = {"graphiti-embedding", "falkor", "falkor-process"}
+    if failure != "driver":
+        expected.add("graphiti")
+    if failure == "mem0-configure":
+        expected.update(("mem0-history", "qdrant", "mem0-llm", "mem0-embedding"))
+    assert set(effects) == expected and len(effects) == len(expected)
+    diagnostics = getattr(error.value, "comparison_cleanup_errors", ())
+    assert diagnostics == (({"resource": "graphiti-embedding", "error_type": "RuntimeError"},)
+                           if cleanup_failure else ())
+    assert "private" not in json.dumps(diagnostics)

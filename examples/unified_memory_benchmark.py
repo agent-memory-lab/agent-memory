@@ -416,8 +416,9 @@ async def run(args):
     started = perf_counter()
     with OllamaAccountingProxy(args.upstream, ledger, timeout=args.operation_timeout) as proxy:
         native.OLLAMA_URL = proxy.url
-        client = ControlledClient(host=proxy.url, timeout=args.operation_timeout)
+        client = None
         try:
+            client = ControlledClient(host=proxy.url, timeout=args.operation_timeout)
             ledger.start_phase(0, "shared", "manifest")
             tags = await client.list()
             manifest["ollama_version"] = (await client._client.get("/api/version")).json()
@@ -446,54 +447,56 @@ async def run(args):
                     ledger.start_phase(trial, "shared", "backend_setup")
                     calls = {arm: 0 for arm in ARMS}
                     setup_started = perf_counter()
-                    mem0, graph, lite = await native._make_arm_clients(
-                        root,
-                        client,
-                        calls,
-                        graphiti_max_extraction_items=8,
-                    )
-                    report["backend_setup"].append(
-                        {"trial": trial, "seconds": perf_counter() - setup_started}
-                    )
-                    original_chat = mem0.llm.client.chat
-
-                    def controlled_mem0_chat(_chat=original_chat, **kwargs):
-                        kwargs["options"] = {**kwargs.get("options", {}), **SETTINGS}
-                        return _chat(**kwargs)
-
-                    mem0.llm.client.chat = controlled_mem0_chat
-                    mem0.llm.client._client.timeout = args.operation_timeout
-                    mem0.embedding_model.client._client.timeout = args.operation_timeout
-                    graph.embedder.client.timeout = args.operation_timeout
-                    path = root / "agent.sqlite3"
-                    local = UnifiedMemory(
-                        build_local_kernel(
-                            path,
-                            extractor=GeneratedTrajectoryClaimExtractor(
-                                ClaimGenerator(client),
-                                provider="ollama",
-                                model=native.MODEL,
-                                event_types=(
-                                    "user.message",
-                                    "agent.model.completed",
-                                    "agent.tool.completed",
-                                ),
-                                fail_open=False,
-                            ),
-                            embedding_provider=native.OllamaEmbeddings(client),
-                        ),
-                        MemoryScope(
-                            "unified-benchmark", user_id=uuid4().hex, session_id=uuid4().hex
-                        ),
-                        journal=SQLiteDeletionJournal(str(path) + ".deletions.db"),
-                    )
-                    adapters = {
-                        "agent-memory": CommonAgentAdapter(local),
-                        "mem0-oss": Mem0ComparisonAdapter(mem0),
-                        "graphiti": GraphitiComparisonAdapter(graph, previous_episode_context=2),
-                    }
-                    pid = getattr(getattr(lite, "client", None), "pid", None)
+                    local = mem0 = graph = lite = None
+                    pid = None
                     try:
+                        mem0, graph, lite = await native._make_arm_clients(
+                            root,
+                            client,
+                            calls,
+                            graphiti_max_extraction_items=8,
+                        )
+                        pid = getattr(getattr(lite, "client", None), "pid", None)
+                        report["backend_setup"].append(
+                            {"trial": trial, "seconds": perf_counter() - setup_started}
+                        )
+                        original_chat = mem0.llm.client.chat
+
+                        def controlled_mem0_chat(_chat=original_chat, **kwargs):
+                            kwargs["options"] = {**kwargs.get("options", {}), **SETTINGS}
+                            return _chat(**kwargs)
+
+                        mem0.llm.client.chat = controlled_mem0_chat
+                        mem0.llm.client._client.timeout = args.operation_timeout
+                        mem0.embedding_model.client._client.timeout = args.operation_timeout
+                        graph.embedder.client.timeout = args.operation_timeout
+                        path = root / "agent.sqlite3"
+                        local = UnifiedMemory(
+                            build_local_kernel(
+                                path,
+                                extractor=GeneratedTrajectoryClaimExtractor(
+                                    ClaimGenerator(client),
+                                    provider="ollama",
+                                    model=native.MODEL,
+                                    event_types=(
+                                        "user.message",
+                                        "agent.model.completed",
+                                        "agent.tool.completed",
+                                    ),
+                                    fail_open=False,
+                                ),
+                                embedding_provider=native.OllamaEmbeddings(client),
+                            ),
+                            MemoryScope(
+                                "unified-benchmark", user_id=uuid4().hex, session_id=uuid4().hex
+                            ),
+                            journal=SQLiteDeletionJournal(str(path) + ".deletions.db"),
+                        )
+                        adapters = {
+                            "agent-memory": CommonAgentAdapter(local),
+                            "mem0-oss": Mem0ComparisonAdapter(mem0),
+                            "graphiti": GraphitiComparisonAdapter(graph, previous_episode_context=2),
+                        }
                         await local.initialize()
                         for name in order:
                             row = await run_arm(
@@ -522,16 +525,44 @@ async def run(args):
                 else "completed_with_failures"
             )
         except (Exception, asyncio.CancelledError) as error:
+            factory_cleanup_errors = getattr(error, "comparison_cleanup_errors", ())
+            if factory_cleanup_errors:
+                report.setdefault("resource_cleanup_errors", []).extend(factory_cleanup_errors)
             report["status"] = "aborted" if isinstance(error, asyncio.CancelledError) else "failed"
             report["error_type"] = type(error).__name__
             raise
         finally:
-            await client._client.aclose()
+            client_close_error = None
+            try:
+                if client is not None:
+                    await client._client.aclose()
+            except (Exception, asyncio.CancelledError) as error:
+                # Closing the shared transport must not skip final accounting
+                # or erase the best-effort progress report on a partial run.
+                client_close_error = error
+                report.setdefault("resource_cleanup_errors", []).append(
+                    {"resource": "shared-model-client", "error_type": type(error).__name__}
+                )
+                if report.get("error_type") is not None:
+                    report.setdefault("original_error_type", report["error_type"])
+                report["status"] = (
+                    "aborted" if isinstance(error, asyncio.CancelledError) else "failed"
+                )
+                report["error_type"] = type(error).__name__
             drain_error = None
+            prior_error_type = report.get("error_type")
             try:
                 await require_model_accounting(proxy, report, args.operation_timeout)
-            except BenchmarkTimeout as error:
+            except (Exception, asyncio.CancelledError) as error:
                 drain_error = error
+                report["accounting_complete"] = False
+                report["status"] = "aborted"
+                if prior_error_type is not None:
+                    report.setdefault("original_error_type", prior_error_type)
+                report["error_type"] = (
+                    "IncompleteModelAccounting" if isinstance(error, BenchmarkTimeout)
+                    else type(error).__name__
+                )
             for row in report["arms"]:
                 row["model_usage"] = ledger.summary(trial=row["trial"], arm=row["name"])
             report["total_seconds"] = perf_counter() - started
@@ -540,6 +571,8 @@ async def run(args):
             write_json(args.output_dir / "report.json", report)
             if drain_error is not None:
                 raise drain_error
+            if client_close_error is not None:
+                raise client_close_error
     print(
         json.dumps({"status": report["status"], "summary": report["summary"]}, ensure_ascii=False)
     )

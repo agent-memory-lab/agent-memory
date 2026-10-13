@@ -471,6 +471,7 @@ async def execute_task(item, task, ordinal, output, args):
                 row["gold_answer"] = item["answer"]
                 row["status"] = "completed"
             except (Exception, asyncio.CancelledError) as error:
+                row["cleanup_errors"].extend(getattr(error, "comparison_cleanup_errors", ()))
                 if row["extraction"] is not None and getattr(error, "extraction", None) is not None:
                     record_extraction(row["extraction"], error)
                 row["status"] = "aborted" if isinstance(error, asyncio.CancelledError) else "failed"
