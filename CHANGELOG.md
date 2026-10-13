@@ -19,6 +19,13 @@ the first stable release.
 
 ### Fixed
 
+- Repair the legacy LongMemEval generator's explicit scored-claim schema so
+  useful proposals no longer all disappear at validation. Add real-core positive
+  contract fixtures, extraction diagnostics, partial provider usage receipts and
+  frozen input/configuration manifests that refuse stale result reuse. These
+  deterministic checks are not model-quality evidence; new Atom admission and
+  production defaults are unchanged. See [experiment validity](docs/LONGMEMEVAL_CONTRACT.md).
+
 - Keep core imports and SQLite operations available without Unix `resource`;
   unavailable peak RSS raises explicitly instead of fabricating a measurement.
   Add a unified seven-distribution build/install/archive gate on Linux, macOS,
