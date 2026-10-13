@@ -1,0 +1,3 @@
+# Stable pinned JSON and source bytes across Git autocrlf settings.
+* text eol=lf
+*.cmd text eol=crlf

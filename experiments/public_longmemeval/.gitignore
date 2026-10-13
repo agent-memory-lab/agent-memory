@@ -1,0 +1,11 @@
+config.local.json
+state/
+runs/
+__pycache__/
+*.pyc
+data/
+agent-memory-one-question-run/
+*.log
+smoke/corpus.json
+smoke/query.json
+smoke/gold.evaluator-only.json

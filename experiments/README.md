@@ -10,6 +10,12 @@ from the repository root.
   checkpoints and replay. Linux/macOS only (`fcntl`; Windows via WSL).
   Offline tests: `python -m pytest tests/test_evidence*.py`.
 
+- [Public LongMemEval](public_longmemeval/README.md): pinned public sample preparation (data not redistributed),
+  frozen development/holdout IDs, local Ollama and HTTPS-provider runners,
+  durable transport safeguards and independent evaluation.
+  Offline tests: `python -m unittest discover -s experiments/public_longmemeval/tests -v`.
+  CI covers Linux, macOS and Windows with mocked model calls.
+
 CI runs the offline tests without model credentials. Live execution is a separate
 operator action, requires approved endpoints/budgets and sends supplied source
 text to the chosen provider. Do not use private data without permission. Existing

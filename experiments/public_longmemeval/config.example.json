@@ -1,0 +1,11 @@
+{
+  "endpoint": "https://YOUR-PROVIDER.example/v1/chat/completions",
+  "model": "YOUR_INSTALLED_PROVIDER_MODEL",
+  "max_tokens": 1536,
+  "max_calls": 160,
+  "timeout_seconds": 90,
+  "deadline_seconds": 1800,
+  "input_cny_per_million": "SET_VERIFIED_RATE",
+  "output_cny_per_million": "SET_VERIFIED_RATE",
+  "tariff_verified": false
+}

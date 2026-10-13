@@ -180,3 +180,23 @@ jobs:
           tests/test_evidence_quote_store.py
           tests/test_evidence_response_checkpoints.py
           tests/test_evidence_run_binding.py
+
+  public-longmemeval-offline:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Public sample and mocked model contracts; no credentials or downloads
+        run: >-
+          python -X warn_default_encoding -W error::EncodingWarning -W error::ResourceWarning -m unittest discover
+          -s experiments/public_longmemeval/tests -v
+      - name: Check code-only runner and explicit dataset preparation entry points
+        run: |
+          python -m experiments.public_longmemeval.run_experiment --help
+          python -m experiments.public_longmemeval.prepare_smoke --help

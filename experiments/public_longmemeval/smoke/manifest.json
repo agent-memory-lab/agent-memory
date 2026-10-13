@@ -1,0 +1,17 @@
+{
+  "dataset": "LongMemEval-S cleaned",
+  "dataset_revision": "98d7416c24c778c2fee6e6f3006e7a073259d48f",
+  "dataset_sha256": "d6f21ea9d60a0d56f34a05b609c79c88a451d2ae03597821ea3d5a9678c3a442",
+  "license": "MIT",
+  "case_id": "case-034ada270915a3641cb4dd67",
+  "selection": "Smallest raw UTF-8 history among the six answerable questions in the previously frozen 10-stratum smoke. Resource-only selection; not a representative quality sample.",
+  "sessions": 49,
+  "turns": 527,
+  "content_utf8_bytes": 470523,
+  "artifacts": {
+    "gold.evaluator-only.json": "e0539f363640756f6a4a929d558bf8bbd5febdc687b89ff956128e5125b494a0",
+    "query.json": "c7daef51c1551d2b55ee7f0e27487ca22c910b316149ed8884c87a22d2d072f2",
+    "corpus.json": "a14d4afaecd3394749fabdd525e363afcf7b3830dbecb61b05f2cb5f2673de50"
+  },
+  "code_provenance": "Runners record hashes of current repository src/agent_memory Python files."
+}
