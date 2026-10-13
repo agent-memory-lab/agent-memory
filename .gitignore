@@ -25,3 +25,9 @@ docs/PLAN.md
 docs/PLAN_V4.md
 docs/TASKS.md
 docs/TASKS_V4.md
+
+# Experiment run outputs and credentials remain operator-local
+experiments/**/runs/
+experiments/**/outputs/
+experiments/**/state/
+experiments/**/config.local*
