@@ -56,7 +56,19 @@ from .domain import (
     canonical_json,
     utc_now,
 )
+from .extraction_result import (
+    ExtractionDiagnostic,
+    ExtractionError,
+    ExtractionFormatError,
+    ExtractionProviderError,
+    ExtractionRejection,
+    ExtractionReport,
+)
 from .lifecycle import is_memory_context
+from .operations.consolidation_outbox import (
+    drain_consolidation_cancellations,
+    drain_consolidation_outbox,
+)
 from .ports import (
     ClaimExtractor,
     ConsolidationScheduler,
@@ -124,6 +136,9 @@ class MemoryKernel:
 
     async def initialize(self) -> None:
         await self._repository.initialize()
+        if self._consolidation_scheduler is not None:
+            self._require_consolidation_outbox()
+            await self.retry_consolidation(limit=64)
 
     async def close(self) -> None:
         close = getattr(self._repository, "close", None)
@@ -132,30 +147,178 @@ class MemoryKernel:
             if isawaitable(result):
                 await result
 
+    def _require_consolidation_outbox(self) -> None:
+        methods = (
+            "claim_consolidation_intent",
+            "consolidation_delivery_is_current",
+            "consolidation_source_is_live",
+            "complete_consolidation_intent",
+            "fail_consolidation_intent",
+            "consolidation_intent_state",
+            "pending_consolidation_cancellations",
+            "ack_consolidation_cancellation",
+            "request_consolidation_cancellation",
+        )
+        if not all(callable(getattr(self._repository, name, None)) for name in methods):
+            raise NotImplementedError("repository lacks transactional consolidation outbox")
+
+    async def retry_consolidation(
+        self,
+        *,
+        scope: MemoryScope | None = None,
+        limit: int = 64,
+        lease_seconds: int = 60,
+    ) -> dict[str, int]:
+        """Retry committed scheduling intents; the scheduler deduplicates event identity."""
+        if self._consolidation_scheduler is None:
+            raise RuntimeError("no consolidation scheduler is configured")
+        self._require_consolidation_outbox()
+        cancellations = await drain_consolidation_cancellations(
+            self._repository,
+            self._consolidation_scheduler,
+            scope=scope,
+            limit=limit,
+        )
+        deliveries = await drain_consolidation_outbox(
+            self._repository,
+            self._consolidation_scheduler,
+            scope=scope,
+            limit=limit,
+            lease_seconds=lease_seconds,
+        )
+        return {
+            **deliveries,
+            **{f"cancellation_{key}": value for key, value in cancellations.items()},
+        }
+
+    async def _save_consolidation_intent(
+        self,
+        uow: MemoryUnitOfWork,
+        event: MemoryEvent,
+        result: IngestResult,
+    ) -> None:
+        if self._consolidation_scheduler is None or is_memory_context(event):
+            return
+        writer = getattr(uow, "save_consolidation_intent", None)
+        if not callable(writer):
+            raise NotImplementedError("unit of work lacks transactional consolidation outbox")
+        await writer(event, result)
+
+    async def _finish_ingestion(self, event: MemoryEvent, result: IngestResult) -> IngestResult:
+        if self._consolidation_scheduler is None or is_memory_context(event):
+            return result
+        await drain_consolidation_outbox(
+            self._repository,
+            self._consolidation_scheduler,
+            scope=event.scope,
+            event_id=event.id,
+            limit=1,
+        )
+        state = await self._repository.consolidation_intent_state(event.scope, event.id)
+        status = (
+            "cancelled"
+            if state in (None, "cancelled")
+            else "delivered"
+            if state == "delivered"
+            else "pending"
+        )
+        if status == "cancelled":
+            await drain_consolidation_cancellations(
+                self._repository,
+                self._consolidation_scheduler,
+                scope=event.scope,
+                limit=64,
+            )
+        return replace(result, consolidation_status=status)
+
+    async def _extract_with_diagnostic(self, event: MemoryEvent) -> ExtractionReport:
+        method = getattr(self._extractor, "extract_with_report", None)
+        try:
+            extracted = (
+                await method(event) if callable(method) else await self._extractor.extract(event)
+            )
+        except ExtractionError:
+            raise
+        except Exception as error:
+            raise ExtractionProviderError(
+                ExtractionDiagnostic("error", error_type=type(error).__name__)
+            ) from error
+        if callable(method):
+            report = extracted
+            if not isinstance(report, ExtractionReport):
+                raise ExtractionFormatError(
+                    ExtractionDiagnostic(
+                        "error",
+                        error_type="invalid_extractor_report",
+                    )
+                )
+            return report
+        drafts = extracted
+        if (
+            not isinstance(drafts, Sequence)
+            or isinstance(drafts, (str, bytes))
+            or any(not isinstance(draft, ClaimDraft) for draft in drafts)
+        ):
+            raise ExtractionFormatError(
+                ExtractionDiagnostic(
+                    "error",
+                    error_type="invalid_extractor_output",
+                )
+            )
+        values = tuple(drafts)
+        return ExtractionReport(
+            values,
+            ExtractionDiagnostic(
+                "completed" if values else "empty",
+                len(values),
+                len(values),
+            ),
+        )
+
     async def ingest_event(self, event: MemoryEvent) -> IngestResult:
         if event.event_type in ATOM_EVENT_TYPES:
             raise ValueError("typed atom events require admit_event or resolve_atom")
+        duplicate_result = None
+        stored_event = None
         if event.idempotency_key:
             async with self._repository.unit_of_work() as uow:
                 stored = await uow.find_event_by_idempotency(event.scope, event.idempotency_key)
                 if stored:
                     self._check_lifecycle_duplicate(stored, event)
                     claim_ids = tuple(await uow.claim_ids_for_event(stored.id))
-                    return IngestResult(stored.id, claim_ids, (), True, ())
+                    duplicate_result = IngestResult(stored.id, claim_ids, (), True, ())
+                    stored_event = stored
+                    await self._save_consolidation_intent(uow, stored, duplicate_result)
+            if duplicate_result is not None:
+                return await self._finish_ingestion(stored_event, duplicate_result)
 
         drafts: Sequence[ClaimDraft] = ()
+        diagnostic = ExtractionDiagnostic("skipped")
         if not is_memory_context(event) and await self._policy.should_extract(event):
-            extracted = await self._extractor.extract(event)
+            report = await self._extract_with_diagnostic(event)
             accepted: list[ClaimDraft] = []
             seen_drafts: set[tuple[ScopeLevel, str]] = set()
-            for draft in extracted:
+            rejected = list(report.diagnostic.rejections)
+            for draft in report.drafts:
                 dedup_key = (draft.scope_level, draft.key)
                 if dedup_key in seen_drafts:
+                    rejected.append(ExtractionRejection(None, "duplicate_claim_key"))
                     continue
                 if await self._policy.accept_claim(event, draft):
                     seen_drafts.add(dedup_key)
                     accepted.append(draft)
+                else:
+                    rejected.append(ExtractionRejection(None, "memory_policy_rejected"))
             drafts = tuple(accepted)
+            status = report.diagnostic.status
+            if report.diagnostic.successful:
+                status = "completed" if drafts else ("rejected" if rejected else "empty")
+            diagnostic = replace(
+                report.diagnostic,
+                status=status,
+                accepted_count=len(drafts),
+                rejections=tuple(rejected),
+            )
 
         async with self._repository.unit_of_work() as uow:
             if event.idempotency_key:
@@ -163,40 +326,41 @@ class MemoryKernel:
                 if stored:
                     self._check_lifecycle_duplicate(stored, event)
                     claim_ids = tuple(await uow.claim_ids_for_event(stored.id))
-                    return IngestResult(stored.id, claim_ids, (), True, ())
-
-            await uow.append_event(event)
-            accepted_ids: list[str] = []
-            delta_ids: list[str] = []
-            superseded_ids: list[str] = []
-            for draft in drafts:
-                claim, delta, superseded = await self._apply_claim(uow, event, draft)
-                accepted_ids.append(claim.id)
-                if delta:
-                    await uow.save_state_delta(delta)
-                    delta_ids.append(delta.id)
-                if superseded:
-                    superseded_ids.append(superseded)
-
-            result = IngestResult(
-                event_id=event.id,
-                claim_ids=tuple(accepted_ids),
-                state_delta_ids=tuple(delta_ids),
-                duplicate=False,
-                superseded_claim_ids=tuple(superseded_ids),
-            )
-        if self._consolidation_scheduler and not is_memory_context(event):
-            await self._consolidation_scheduler.enqueue_event(event, result)
-        return result
+                    duplicate_result = IngestResult(stored.id, claim_ids, (), True, ())
+                    stored_event = stored
+                    await self._save_consolidation_intent(uow, stored, duplicate_result)
+            if duplicate_result is None:
+                await uow.append_event(event)
+                accepted_ids: list[str] = []
+                delta_ids: list[str] = []
+                superseded_ids: list[str] = []
+                for draft in drafts:
+                    claim, delta, superseded = await self._apply_claim(uow, event, draft)
+                    accepted_ids.append(claim.id)
+                    if delta:
+                        await uow.save_state_delta(delta)
+                        delta_ids.append(delta.id)
+                    if superseded:
+                        superseded_ids.append(superseded)
+                result = IngestResult(
+                    event_id=event.id,
+                    claim_ids=tuple(accepted_ids),
+                    state_delta_ids=tuple(delta_ids),
+                    duplicate=False,
+                    superseded_claim_ids=tuple(superseded_ids),
+                    extraction=diagnostic,
+                )
+                await self._save_consolidation_intent(uow, event, result)
+        if duplicate_result is not None:
+            return await self._finish_ingestion(stored_event, duplicate_result)
+        return await self._finish_ingestion(event, result)
 
     @staticmethod
     def _check_lifecycle_duplicate(stored: MemoryEvent, incoming: MemoryEvent) -> None:
         stored_lifecycle = stored.metadata.get("lifecycle")
         incoming_lifecycle = incoming.metadata.get("lifecycle")
         stored_hash = (
-            stored_lifecycle.get("content_hash")
-            if isinstance(stored_lifecycle, Mapping)
-            else None
+            stored_lifecycle.get("content_hash") if isinstance(stored_lifecycle, Mapping) else None
         )
         incoming_hash = (
             incoming_lifecycle.get("content_hash")
@@ -385,6 +549,23 @@ class MemoryKernel:
         legacy = await reader(scope, valid_at=valid_at, known_at=known_at)
         return (await self._legacy_state(scope, legacy)) + atoms
 
+    async def guard_pipeline_delivery(
+        self, query: MemoryQuery, bundle: MemoryBundle,
+    ) -> MemoryBundle:
+        """Final local authority check while retaining configured external resolvers."""
+        from .retrieval.pipeline_delivery import normalize_pipeline_bundle
+
+        bundle = normalize_pipeline_bundle(bundle)
+        delivery_guard = getattr(self._repository, "guard_retrieval_delivery", None)
+        if callable(delivery_guard):
+            return await delivery_guard(query, bundle, pipeline=True)
+        bundle = await self.guard_admission_bundle(query.scope, bundle)
+        return replace(bundle, retrieval_metadata={
+            **bundle.retrieval_metadata,
+            "delivery_guard": {"status": "unsupported",
+                               "external_content_authority": "configured_pipeline_resolver"},
+        })
+
     async def retrieve(self, query: MemoryQuery) -> MemoryBundle:
         now = utc_now()
         atoms, atom_info = await AdmissionEngine(self._repository).state(
@@ -423,7 +604,35 @@ class MemoryKernel:
             )
         ranked = await self._reranker.rerank(query, candidates)
 
-        packed = pack_native_evidence(query, current, ranked)
+        from .retrieval.candidate_selection import stage_summary
+        from .retrieval.source_context import (
+            CONTEXT_POLICY,
+            MAX_CONTEXT_CANDIDATES,
+            context_anchors,
+        )
+
+        # Optional small-to-big context reads happen after the fixed embedding
+        # batch. Added windows carry inherited relevance, never semantic scores.
+        expansion = getattr(self._repository, "expand_source_context", None)
+        context = ()
+        anchors = ()
+        context_status = "unsupported"
+        if historical_state is not None:
+            context_status = "disabled_historical"
+        elif MemoryChannel.SEMANTIC not in query.channels:
+            context_status = "disabled_channel"
+        elif callable(expansion):
+            anchors = context_anchors(query, ranked)
+            context = tuple(await expansion(query, ranked, MAX_CONTEXT_CANDIDATES))[
+                :MAX_CONTEXT_CANDIDATES
+            ]
+            context_status = "applied"
+        # Existing ranked atoms came from AdmissionEngine's governed temporal
+        # path. Applying the legacy-source guard to them again would erase valid
+        # atoms; only newly read raw context needs this additional source gate.
+        context = await self._guard_atom_candidates(query.scope, context) if context else ()
+        packing_input = (*ranked, *context)
+        packed = pack_native_evidence(query, current, packing_input)
         selected_state = packed.state
         selected = packed.items
         citations = packed.citations
@@ -446,6 +655,18 @@ class MemoryKernel:
                 "candidate_count": len(candidates),
                 "selected_count": len(selected),
                 "state_count": len(selected_state),
+                "source_context_expansion": {
+                    "policy": CONTEXT_POLICY, "status": context_status,
+                    "anchor_count": len(anchors), "candidate_count": len(context),
+                    "semantic_scoring": False,
+                },
+                "retrieval_stages": {
+                    "candidate_recall": stage_summary(candidates),
+                    "reranked": stage_summary(ranked),
+                    "source_context": stage_summary(context),
+                    "packing_input": stage_summary(packing_input),
+                    "packed": stage_summary(selected),
+                } if query.trace_enabled else {},
                 **packed.metadata,
                 "protocol_version": PROTOCOL_VERSION,
                 **atom_info,
@@ -492,10 +713,21 @@ class MemoryKernel:
                 ),
                 run_id=query.run_id,
                 idempotency_key=query.request_id,
+                delivery_stage="pre_delivery",
             )
             async with self._repository.unit_of_work() as uow:
                 await uow.save_retrieval_trace(trace)
-        return bundle
+        # This is deliberately the last awaited boundary. Reranking, context
+        # expansion and even trace persistence can yield to a completed erase.
+        # Native adapters authorize all selected evidence in one new snapshot;
+        # do not perform more I/O after it or reuse the pre-guard Python objects.
+        delivery_guard = getattr(self._repository, "guard_retrieval_delivery", None)
+        if callable(delivery_guard):
+            return await delivery_guard(query, bundle)
+        return replace(bundle, retrieval_metadata={
+            **bundle.retrieval_metadata,
+            "delivery_guard": {"status": "unsupported"},
+        })
 
     async def propose(self, proposal: MemoryProposal) -> ProposalResult:
         async with self._repository.unit_of_work() as uow:
@@ -900,6 +1132,11 @@ class MemoryKernel:
                 await self._consolidation_scheduler.cancel_forget(request)
             except Exception:
                 pass
+            await drain_consolidation_cancellations(
+                self._repository,
+                self._consolidation_scheduler,
+                limit=64,
+            )
         return result
 
     async def forget_block(

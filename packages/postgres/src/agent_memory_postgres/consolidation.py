@@ -70,6 +70,7 @@ class TrajectoryBlockConsolidator:
             title=title,
             content=content,
             event_ids=(event_id,),
+            source_claim_ids=tuple(claim.id for claim in selected),
             channel=MemoryChannel.SEMANTIC,
             token_budget=self._policy.token_budget,
         )

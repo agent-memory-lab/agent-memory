@@ -229,6 +229,9 @@ class AgentMemory:
             query,
             tuple(current_state[: self.limits.max_state_claims]),
         )
+        final_guard = getattr(self._provider, "guard_pipeline_delivery", None)
+        if callable(final_guard):
+            return await final_guard(query, bundle)
         guard = getattr(self._provider, "guard_admission_bundle", None)
         return await guard(self.scope, bundle) if callable(guard) else bundle
 

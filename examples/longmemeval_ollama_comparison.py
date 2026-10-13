@@ -17,6 +17,18 @@ os.environ["MEM0_TELEMETRY"] = "false"
 os.environ["GRAPHITI_TELEMETRY_ENABLED"] = "false"
 
 
+try:
+    import longmemeval_claim_extraction as claim_extraction
+except ModuleNotFoundError as error:
+    if error.name != "longmemeval_claim_extraction":
+        raise
+    from examples import longmemeval_claim_extraction as claim_extraction
+
+BenchmarkClaimGenerator = claim_extraction.BenchmarkClaimGenerator
+CLAIM_SCHEMA = claim_extraction.CLAIM_SCHEMA
+EXTRACTION_PROMPT = claim_extraction.EXTRACTION_PROMPT
+record_extraction = claim_extraction.record_extraction
+
 from agent_memory import MemoryScope
 from agent_memory.evaluation.comparison import (
     AgentMemoryComparisonAdapter,
@@ -31,85 +43,13 @@ from agent_memory.unified_memory import SQLiteDeletionJournal, UnifiedMemory
 
 # Keep importing this contract module dependency-free. Live clients are loaded
 # only inside run(); offline tests exercise the real core, never mock its store.
-MODEL = "qwen3.5:9b"
+MODEL = claim_extraction.MODEL
 EMBED_MODEL = "nomic-embed-text"
 OLLAMA_URL = "http://localhost:11434"
 PROTOCOL_VERSION = "longmemeval-legacy-claims-v2"
-MAX_CLAIMS = 8
+MAX_CLAIMS = claim_extraction.MAX_CLAIMS
 MINIMUM_CONFIDENCE = 0.8
-NUM_CTX = 32768
-EXTRACTION_PROMPT = (
-    "Extract at most eight concise facts useful to answer future questions from this conversation "
-    "segment. Include user or assistant facts, named entities, dates, preferences, plans, and explicit "
-    "corrections. Skip general advice and filler. Use stable keys for facts that may be corrected later. "
-    "Each fact needs key, value, one short factual text, and numeric confidence between 0 and 1. "
-    "Confidence is your uncertain extraction score, not verified truth; do not automatically use 1. "
-    "Return an empty claims array if there are no useful facts. Do not invent anything."
-    "\n\nConversation segment:\n"
-)
-
-
-CLAIM_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "claims": {
-            "type": "array",
-            "maxItems": MAX_CLAIMS,
-            "items": {
-                "type": "object",
-                "properties": {
-                    "key": {"type": "string"},
-                    "value": {"type": "string"},
-                    "text": {"type": "string"},
-                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                },
-                "required": ["key", "value", "text", "confidence"],
-                "additionalProperties": False,
-            },
-        }
-    },
-    "required": ["claims"],
-    "additionalProperties": False,
-}
-
-
-class BenchmarkClaimGenerator:
-    """Bound extraction output so long benchmark sessions produce complete JSON."""
-
-    def __init__(self, client: ollama.AsyncClient, calls: dict[str, int]):
-        self.client = client
-        self.calls = calls
-        self.generated_claims = 0
-        self.receipts = []
-
-    async def generate_claims(self, event):
-        self.calls["agent-memory"] += 1
-        prompt = EXTRACTION_PROMPT + event.content
-        response = await self.client.chat(
-            model=MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            format=CLAIM_SCHEMA,
-            think=False,
-            options={"temperature": 0, "num_predict": 1536, "num_ctx": NUM_CTX},
-        )
-        self.receipts.append(_usage_receipt(response, "extraction"))
-        claims = json.loads(response.message.content)["claims"]
-        if not isinstance(claims, list):
-            raise ValueError("Qwen claim output must contain a claims array")
-        # Fail visibly on a broken legacy generation contract, rather than
-        # recording a quality score for a run where all facts silently vanished.
-        if len(claims) > MAX_CLAIMS:
-            raise ValueError("Qwen claim output exceeds the frozen claim limit")
-        for claim in claims:
-            if (not isinstance(claim, dict)
-                or set(claim) != {"key", "value", "text", "confidence"}
-                or any(not isinstance(claim[key], str) or not claim[key].strip()
-                       for key in ("key", "value", "text"))
-                or type(claim["confidence"]) not in (int, float)
-                or not 0 <= claim["confidence"] <= 1):
-                raise ValueError("Qwen claim output violates the legacy scored-claim schema")
-        self.generated_claims += len(claims)
-        return claims
+NUM_CTX = claim_extraction.NUM_CTX
 
 
 class BenchmarkClaimExtractor(GeneratedTrajectoryClaimExtractor):
@@ -119,18 +59,13 @@ class BenchmarkClaimExtractor(GeneratedTrajectoryClaimExtractor):
         super().__init__(generator, **kwargs)
         self.validated_claims = 0
 
-    async def extract(self, event):
-        claims = await super().extract(event)
-        self.validated_claims += len(claims)
-        return claims
+    async def extract_with_report(self, event):
+        report = await super().extract_with_report(event)
+        self.validated_claims += len(report.drafts)
+        return report
 
 
-def _usage_receipt(response, phase):
-    # Missing provider counts are unknown, never inferred as zero or priced free.
-    return {"phase": phase, **{
-        key: getattr(response, key, None)
-        for key in ("prompt_eval_count", "eval_count", "total_duration")
-    }}
+_usage_receipt = claim_extraction.usage_receipt
 
 
 def _implementation_identity():
@@ -161,6 +96,9 @@ def _freeze_run(data_path, selected, output_dir, offset, limit):
         "model": MODEL, "embedding_model": EMBED_MODEL,
         "ollama_url": OLLAMA_URL, "num_ctx": NUM_CTX,
         "claim_schema": CLAIM_SCHEMA, "extraction_prompt": EXTRACTION_PROMPT,
+        "extraction_options": claim_extraction.extraction_options(NUM_CTX),
+        "extraction_think": False,
+        "claim_extraction_sha256": _file_sha256(Path(claim_extraction.__file__)),
         "minimum_confidence": MINIMUM_CONFIDENCE,
         "chunk_utf8_bytes": 9000, "retrieval_limit": 8,
         "agent_memory_token_budget": 2048,
@@ -400,7 +338,10 @@ async def run(data_path: Path, output_dir: Path, work_dir: Path, offset: int = 0
                     if arm_name == "agent-memory":
                         scope = MemoryScope("longmemeval-s", user_id=qhash, session_id="official-s")
                         local_path = work_dir / "agent-memory.sqlite3"
-                        generator = BenchmarkClaimGenerator(client, call_counts)
+                        generator = BenchmarkClaimGenerator(
+                            client, call_counts, model=MODEL,
+                            prompt=EXTRACTION_PROMPT, num_ctx=NUM_CTX,
+                        )
                         extractor = BenchmarkClaimExtractor(
                             generator, provider="ollama", model=MODEL,
                             minimum_confidence=MINIMUM_CONFIDENCE, max_claims=MAX_CLAIMS,
@@ -437,6 +378,7 @@ async def run(data_path: Path, output_dir: Path, work_dir: Path, offset: int = 0
                     start = perf_counter()
                     calls_before = call_counts[arm_name]
                     ingested_events = 0
+                    extraction = {} if arm_name == "agent-memory" else None
                     try:
                         # A stable, per-question namespace makes retries idempotent at the
                         # benchmark level. Clear a partial prior attempt before replaying it.
@@ -447,7 +389,14 @@ async def run(data_path: Path, output_dir: Path, work_dir: Path, offset: int = 0
                         ):
                             for event in _session_event(question_id, session_index, session, timestamp):
                                 input_digest.update((event.body() + "\0").encode("utf-8"))
-                                await adapter.add(event)
+                                try:
+                                    submission = await adapter.add(event)
+                                except Exception as error:
+                                    if extraction is not None:
+                                        record_extraction(extraction, error)
+                                    raise
+                                if extraction is not None:
+                                    record_extraction(extraction, submission)
                                 ingested_events += 1
                             if (session_index + 1) % 5 == 0:
                                 print(
@@ -496,6 +445,7 @@ async def run(data_path: Path, output_dir: Path, work_dir: Path, offset: int = 0
                             "judge_label": correct,
                             "judge_output": judge_text,
                             "retrieved_count": len(memories),
+                            "extraction": extraction,
                             "answer_seconds": answer_seconds,
                             "total_question_seconds": perf_counter() - start,
                             "memory_model_calls": call_counts[arm_name] - calls_before,
@@ -518,6 +468,8 @@ async def run(data_path: Path, output_dir: Path, work_dir: Path, offset: int = 0
                                 "run_digest": run_digest, "arm": arm_name,
                                 "question_id": question_id, "error_type": type(error).__name__,
                                 "ingested_events": ingested_events,
+                                "extraction": extraction,
+                                "model_usage_receipts": generator.receipts if generator else [],
                                 "generated_claims": generator.generated_claims if generator else None,
                                 "validated_claims": extractor.validated_claims if generator else None,
                             }) + "\n")

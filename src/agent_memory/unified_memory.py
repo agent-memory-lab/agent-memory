@@ -1,18 +1,19 @@
 """Host-owned, exact-scope raw capture, retrieval and resumable deletion."""
 import asyncio
+import json
+import sqlite3
 from contextlib import contextmanager
 from datetime import UTC, datetime
-import json
 from pathlib import Path
-import sqlite3
 
 from .capture.api import submit_capture
 from .capture.policy import CaptureSanitizer
 from .capture.sink import DirectCaptureSink
 from .composition import build_local_kernel
-from .domain import ForgetMode, ForgetRequest, MemoryQuery
-from .providers import GeneratedTrajectoryClaimExtractor
 from .context.operations import RecoveryOperations
+from .domain import ForgetMode, ForgetRequest, MemoryQuery
+from .extraction_result import ExtractionDiagnostic, ExtractionFormatError, ExtractionRejection
+from .providers import GeneratedTrajectoryClaimExtractor
 
 
 class PendingMemoryDeletion(RuntimeError):
@@ -24,12 +25,20 @@ class _ExactExtractor:
         self.extractor = GeneratedTrajectoryClaimExtractor(generator, fail_open=False)
 
     async def extract(self, event):
-        drafts = await self.extractor.extract(event)
-        if any(event.scope.project(d.scope_level) != event.scope for d in drafts):
-            raise ValueError("unified capture requires exact-scope generated claims")
+        return (await self.extract_with_report(event)).drafts
+
+    async def extract_with_report(self, event):
+        report = await self.extractor.extract_with_report(event)
+        if any(event.scope.project(d.scope_level) != event.scope for d in report.drafts):
+            raise ExtractionFormatError(ExtractionDiagnostic(
+                "error", candidate_count=report.diagnostic.candidate_count,
+                rejections=(ExtractionRejection(None, "scope_mismatch"),),
+                error_type="ExtractionFormatError",
+            ))
         from .context.recovery import _extracted_event
-        _extracted_event.set(event.id)
-        return drafts
+        if report.diagnostic.successful:
+            _extracted_event.set(event.id)
+        return report
 
 
 class SQLiteDeletionJournal:
@@ -142,10 +151,10 @@ class UnifiedMemory(RecoveryOperations):
         if recovery_path is not None or recovery_store is not None:
             if str(path) == ":memory:":
                 raise ValueError("recovery requires persistent source evidence")
+            from .context.operations import LocalRetrievalReadinessProbe
             from .context.recovery import RecoveryMemory, RepositoryEvidenceVerifier
             from .context.store import SQLiteRecoveryStore
             from .sqlite import SQLiteMemoryRepository
-            from .context.operations import LocalRetrievalReadinessProbe
             evidence_repository = SQLiteMemoryRepository(path)
             evidence = RepositoryEvidenceVerifier(evidence_repository)
             recovery = RecoveryMemory(scope, recovery_store if recovery_store is not None else SQLiteRecoveryStore(recovery_path),

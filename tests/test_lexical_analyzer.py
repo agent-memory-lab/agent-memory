@@ -184,8 +184,15 @@ def test_historical_claim_search_shares_terms_and_keeps_evidence_gates(tmp_path,
             query = MemoryQuery(scope, "上海", valid_at=start, known_at=utc_now())
             rows = await kernel._repository.search(query, 8)
             assert [item.metadata["key"] for item in rows] == ["contiguous", "split"]
-            assert rows[0].score == pytest.approx(0.55 + 0.4 * 0.25 + 0.8 * 0.2)
-            assert rows[1].score == pytest.approx(2 / 3 * 0.55 + 0.4 * 0.25 + 0.8 * 0.2)
+            if backend == "sqlite":
+                # Native SQLite now exports comparable branch ranks while
+                # retaining scoped BM25 scores as diagnostic metadata.
+                assert [item.score for item in rows] == pytest.approx([1 / 61, 1 / 62])
+                assert rows[0].metadata["lexical_score"] > rows[1].metadata["lexical_score"]
+                assert [item.metadata["lexical_rank"] for item in rows] == [1, 2]
+            else:
+                assert rows[0].score == pytest.approx(0.55 + 0.4 * 0.25 + 0.8 * 0.2)
+                assert rows[1].score == pytest.approx(2 / 3 * 0.55 + 0.4 * 0.25 + 0.8 * 0.2)
             assert [item.metadata["source_event_ids"] for item in rows] == [
                 (events[0].id,), (events[1].id,),
             ]

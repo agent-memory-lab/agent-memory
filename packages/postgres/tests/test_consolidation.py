@@ -50,6 +50,7 @@ def test_consolidator_writes_one_evidence_backed_block_for_current_claims():
         assert len(provider.blocks) == 1
         block, expected_version = provider.blocks[0]
         assert block.event_ids == ("event-1",)
+        assert block.source_claim_ids == ("claim-1", "claim-2")
         assert "language: Use Chinese." in block.content
         assert expected_version == 0
 

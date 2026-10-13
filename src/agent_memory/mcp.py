@@ -180,6 +180,12 @@ class MCPMemoryTools:
                     "title": {"type": "string"},
                     "content": {"type": "string"},
                     "event_ids": {"type": "array", "items": {"type": "string"}},
+                    "source_claim_ids": {
+                        "type": "array", "maxItems": 256,
+                        "items": {"type": "string", "minLength": 1, "maxLength": 128},
+                        "description": "Omit to preserve existing dependencies. A nonempty "
+                        "array replaces them; [] cannot clear existing claim dependencies.",
+                    },
                     "channel": {"enum": [channel.value for channel in MemoryChannel]},
                     "scope_level": {"enum": [level.value for level in ScopeLevel]},
                     "token_budget": {"type": "integer", "minimum": 16, "maximum": 4096},
@@ -608,6 +614,10 @@ class MCPMemoryTools:
                 "status": ArtifactStatus(str(arguments.get("status", ArtifactStatus.ACTIVE))),
                 "metadata": self._mapping(arguments.get("metadata", {}), "metadata"),
             }
+            if "source_claim_ids" in arguments:
+                block_values["source_claim_ids"] = self._string_list(
+                    arguments["source_claim_ids"], "source_claim_ids", allow_empty=True
+                )
             block_id = self._optional_string(arguments, "block_id")
             if block_id:
                 block_values["id"] = block_id
@@ -887,8 +897,8 @@ class MCPMemoryTools:
         return value
 
     @staticmethod
-    def _string_list(value: Any, key: str) -> tuple[str, ...]:
-        if not isinstance(value, list) or not value or not all(
+    def _string_list(value: Any, key: str, *, allow_empty=False) -> tuple[str, ...]:
+        if not isinstance(value, list) or (not value and not allow_empty) or not all(
             isinstance(item, str) and item.strip() for item in value
         ):
             raise MCPToolError(f"{key} must be a non-empty array of strings")

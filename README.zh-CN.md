@@ -186,6 +186,8 @@ October 6: unknown
 
 [捕获集成模板](examples/capture_harness.py) 展示宿主生命周期接线，需要 Core + SDK，并由宿主配置 Provider、认证上下文和队列。
 
+[写入可靠性说明](docs/INGESTION_RELIABILITY.md) 记录抽取状态、严格模式失败处理、事务化整理调度补偿及有界长原文召回的接口与边界。
+
 </details>
 
 ## 集成方式
@@ -279,7 +281,7 @@ B2 的[独立生命周期证据](docs/design/v7.0.0/validation-b2.json)覆盖固
 | 历史视图与当前页面合成 | [有界历史](docs/design/v6.1.0/stage-14b3.md) · [父输入](docs/design/v6.1.0/stage-14c.md) · [当前 L2 页面](docs/design/v6.1.0/stage-15.md) |
 | 任务结果反馈与演化 | [反馈契约](docs/FEEDBACK_CONTRACT.md) · [Evolution 包](packages/evolution/README.md) |
 | 部署配置与故障恢复 | [单机部署](docs/single-host-deployment.md) · [恢复操作](docs/recovery-operations.md) |
-| 评测与资源测量 | [评测方法](docs/LOCAL_MEMORY_COMPARISON_EVAL.md) · [资源基线](docs/RESOURCE_BASELINE.md) |
+| 评测与资源测量 | [统一本地对比](docs/UNIFIED_LOCAL_BENCHMARK.md) · [评测方法](docs/LOCAL_MEMORY_COMPARISON_EVAL.md) · [资源基线](docs/RESOURCE_BASELINE.md) |
 | 目标架构与当前进度 | [设计版本](docs/design/README.md) · [v7 实施计划](docs/design/v7.0.0/plan.md) · [v7 任务台账](docs/design/v7.0.0/task.md) |
 
 ## 参与贡献

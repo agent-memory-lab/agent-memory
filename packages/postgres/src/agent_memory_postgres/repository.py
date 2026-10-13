@@ -47,10 +47,12 @@ from agent_memory.operations.artifact_dependencies import (
     affected_memory_keys,
     dependency_ids,
 )
+from agent_memory.operations.block_updates import resolve_block_dependencies
 from agent_memory.retrieval.temporal_history import temporal_candidates
 from agent_memory.serialization import to_jsonable
 
 from . import admission, retention
+from .artifact_temporal import postgres_current_claim_ids
 from .temporal_history import PostgresClaimHistory
 
 
@@ -338,6 +340,11 @@ class PostgresMemoryUnitOfWork:
                 event.content_hash,
             ),
         )
+
+    async def save_consolidation_intent(self, event, result):
+        from . import consolidation_outbox
+
+        await consolidation_outbox.save(self.connection, event, result)
 
     model_budget_contract = "model-budget/1"
 
@@ -948,7 +955,8 @@ class PostgresMemoryUnitOfWork:
         )
 
     async def save_block(self, block: MemoryBlock, expected_version: int) -> MemoryBlock:
-        await self._repository._validate_artifact_write(self.connection, block)
+        # Keep scope-before-row lock ordering consistent with withdrawal.
+        await admission.lock_scope(self.connection, block.scope)
         cursor = await self.connection.execute(
             "SELECT * FROM agent_memory_artifacts WHERE id = %s FOR UPDATE",
             (block.id,),
@@ -960,6 +968,8 @@ class PostgresMemoryUnitOfWork:
                 raise RuntimeError(
                     f"memory block version conflict: expected {expected_version}, current 0"
                 )
+            block = resolve_block_dependencies(block, None)
+            await self._repository._validate_artifact_write(self.connection, block)
             stored = replace(block, version=1, created_at=now, updated_at=now)
             await self._repository._insert_artifact(
                 self.connection,
@@ -988,6 +998,8 @@ class PostgresMemoryUnitOfWork:
                 f"memory block version conflict: expected {expected_version}, "
                 f"current {current.version}"
             )
+        block = resolve_block_dependencies(block, current)
+        await self._repository._validate_artifact_write(self.connection, block)
         stored = replace(
             block,
             version=current.version + 1,
@@ -1154,6 +1166,73 @@ class PostgresMemoryRepository:
     async def close(self) -> None:
         await self.pool.close()
 
+    async def claim_consolidation_intent(
+        self, *, scope=None, event_id=None, lease_seconds=60, exclude_event_ids=(),
+    ):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.claim(
+                uow.connection, self, scope=scope, event_id=event_id, lease_seconds=lease_seconds,
+                exclude_event_ids=exclude_event_ids,
+            )
+
+    async def consolidation_source_is_live(self, delivery):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.source_is_live(uow.connection, delivery)
+
+    async def consolidation_delivery_is_current(self, delivery):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.delivery_is_current(uow.connection, delivery)
+
+    async def complete_consolidation_intent(self, delivery):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.complete(uow.connection, delivery)
+
+    async def fail_consolidation_intent(self, delivery, error_code):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.fail(uow.connection, delivery, error_code)
+
+    async def consolidation_outbox_status(self, scope=None):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.status(uow.connection, scope)
+
+    async def consolidation_intent_state(self, scope, event_id):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.intent_state(uow.connection, scope, event_id)
+
+    async def pending_consolidation_cancellations(self, *, scope=None, limit=64):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.pending_cancellations(
+                uow.connection, scope=scope, limit=limit
+            )
+
+    async def request_consolidation_cancellation(self, scope, event_id):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.request_cancellation(uow.connection, scope, event_id)
+
+    async def ack_consolidation_cancellation(self, cancellation):
+        from . import consolidation_outbox
+
+        async with self.unit_of_work() as uow:
+            return await consolidation_outbox.ack_cancellation(uow.connection, cancellation)
+
     def unit_of_work(self) -> PostgresMemoryUnitOfWork:
         return PostgresMemoryUnitOfWork(self)
 
@@ -1240,6 +1319,12 @@ class PostgresMemoryRepository:
             )
             rows = await cursor.fetchall()
         return tuple(self._feedback_from_row(row) for row in rows)
+
+    async def guard_retrieval_delivery(self, query, bundle, *, pipeline=False):
+        """Authorize final delivery after every external await, including tracing."""
+        from .delivery_guard import guard_delivery
+
+        return await guard_delivery(self, query, bundle, pipeline=pipeline)
 
     async def search(self, query: MemoryQuery, limit: int) -> Sequence[MemoryItem]:
         if query.valid_at is not None or query.known_at is not None:
@@ -1461,6 +1546,7 @@ class PostgresMemoryRepository:
 
     async def _search_live_artifacts(self, connection, scope, where, params, text, limit):
         """Hydrate bounded matching pages; revoked entries never consume the limit."""
+        as_of = utc_now()
         accepted, seen = [], set()
         batch_size = min(max(limit, 32), 256)
         while len(accepted) < limit:
@@ -1471,21 +1557,24 @@ class PostgresMemoryRepository:
             if not rows:
                 break
             seen.update(row["id"] for row in rows)
-            accepted.extend(await self._live_artifact_rows(connection, scope, rows))
+            accepted.extend(await self._live_artifact_rows(
+                connection, scope, rows, as_of=as_of
+            ))
             if len(rows) < batch_size:
                 break
         return accepted[:limit]
 
-    async def _live_artifact_rows(self, connection, scope, rows):
+    async def _live_artifact_rows(self, connection, scope, rows, *, as_of=None):
         candidates = [dict(
             row, table="artifacts", payload=_object(row["payload_json"]),
             provenance=_object(row["provenance_json"]),
         ) for row in rows]
-        validity = await self._artifact_validity(connection, scope, candidates)
+        validity = await self._artifact_validity(connection, scope, candidates, as_of=as_of)
         return [row for row, candidate in zip(rows, candidates, strict=True)
                 if validity.accepts(candidate)]
 
-    async def _artifact_validity(self, connection, scope, candidates):
+    async def _artifact_validity(self, connection, scope, candidates, *, as_of=None):
+        now = as_of or utc_now()
         graph = []
         pending = {row["id"] for row in candidates}
         for row in candidates:
@@ -1502,7 +1591,10 @@ class PostgresMemoryRepository:
             for row in rows:
                 pending.update(dependency_ids(row) - seen)
         graph.extend(candidates)
-        return ArtifactValidity(graph)
+        current = await postgres_current_claim_ids(
+            connection, graph, valid_at=now, known_at=now
+        )
+        return ArtifactValidity(graph, current_claim_ids=current)
 
     async def _validate_artifact_write(self, connection, item):
         await admission.lock_scope(connection, item.scope)
@@ -1582,8 +1674,9 @@ class PostgresMemoryRepository:
             "agent_memory_events", "agent_memory_claims", "agent_memory_artifacts",
         )
         await admission.lock_scope(connection, request.scope)
-        from . import derived
+        from . import consolidation_outbox, derived
 
+        await consolidation_outbox.forget(connection, request)
         checkpoint = await derived.admission_checkpoint(connection, request.scope)
         await derived.forget(connection, request)
         await retention.forget(connection, request, journal=not replay)
@@ -2053,6 +2146,7 @@ class PostgresMemoryRepository:
             title=str(payload["title"]),
             content=str(payload["content"]),
             event_ids=tuple(payload.get("event_ids", provenance.source_event_ids)),
+            source_claim_ids=tuple(payload.get("source_claim_ids", ())),
             channel=MemoryChannel(payload.get("channel", MemoryChannel.SEMANTIC)),
             token_budget=int(payload.get("token_budget", 256)),
             status=ArtifactStatus(row["status"]),
