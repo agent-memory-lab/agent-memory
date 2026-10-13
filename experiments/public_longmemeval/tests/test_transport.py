@@ -57,10 +57,10 @@ class TransportTests(unittest.TestCase):
             return asyncio.run(client.chat("Public document: café", "answer", **kwargs))
 
     def ledger(self):
-        return json.loads((self.state / "ledger.json").read_text())
+        return json.loads((self.state / "ledger.json").read_text(encoding="utf-8"))
 
     def receipt(self, ident):
-        return json.loads((self.state / "calls" / (ident + ".json")).read_text())
+        return json.loads((self.state / "calls" / (ident + ".json")).read_text(encoding="utf-8"))
 
     def test_fresh_accounting_is_zero(self):
         client = self.client()
@@ -116,8 +116,8 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(client.budget_summary()["charged_tokens"], 14)
         self.assertEqual(Decimal(client.budget_summary()["charged_tariff_estimate_cny"]), Decimal("0.0000188"))
         for path in self.state.rglob("*.json"):
-            self.assertNotIn(KEY, path.read_text())
-            self.assertNotIn(ENDPOINT, path.read_text())
+            self.assertNotIn(KEY, path.read_text(encoding="utf-8"))
+            self.assertNotIn(ENDPOINT, path.read_text(encoding="utf-8"))
 
     def test_completed_restart_keeps_cumulative_accounting(self):
         first = self.client()
@@ -144,7 +144,7 @@ class TransportTests(unittest.TestCase):
         with self.assertRaises(t.ResumeBlocked):
             self.client()
         self.assertEqual(self.ledger()["budget"]["charged_tokens"], held)
-        self.assertNotIn(KEY, (self.state / "ledger.json").read_text())
+        self.assertNotIn(KEY, (self.state / "ledger.json").read_text(encoding="utf-8"))
 
     def test_missing_usage_keeps_full_reservation_and_body(self):
         client = self.client()
@@ -322,7 +322,7 @@ class TransportTests(unittest.TestCase):
         receipt = self.receipt(entry["id"])
         self.assertIsNone(receipt["response_body_base64"])
         for path in self.state.rglob("*.json"):
-            self.assertNotIn(KEY, path.read_text())
+            self.assertNotIn(KEY, path.read_text(encoding="utf-8"))
 
     def test_json_escaped_key_reflection_is_also_omitted(self):
         client = self.client()
@@ -354,8 +354,8 @@ class TransportTests(unittest.TestCase):
             with self.assertRaisesRegex(t.RequestFailed, "HTTPStatusError"):
                 asyncio.run(client.chat("x", "answer"))
         for path in self.state.rglob("*.json"):
-            self.assertNotIn(KEY, path.read_text())
-            self.assertNotIn(ENDPOINT, path.read_text())
+            self.assertNotIn(KEY, path.read_text(encoding="utf-8"))
+            self.assertNotIn(ENDPOINT, path.read_text(encoding="utf-8"))
 
     def test_raw_schema_is_wrapped_and_model_exposed(self):
         client = self.client()

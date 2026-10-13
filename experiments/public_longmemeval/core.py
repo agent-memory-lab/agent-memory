@@ -16,15 +16,15 @@ def core_identity():
         raise RuntimeError("A different agent_memory package was already imported")
     try:
         revision = subprocess.check_output(
-            ["git", "-C", str(REPOSITORY), "rev-parse", "HEAD"], text=True,
+            ["git", "-C", str(REPOSITORY), "rev-parse", "HEAD"], text=True, encoding="utf-8",
             stderr=subprocess.DEVNULL).strip()
     except (OSError, subprocess.CalledProcessError):
         revision = None
     return {"git_revision": revision, "files": {
-        str(p.relative_to(REPOSITORY)): hashlib.sha256(p.read_bytes()).hexdigest()
+        p.relative_to(REPOSITORY).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
         for p in sorted(source.rglob("*")) if p.suffix in (".py", ".sql")},
         "experiment_files": {
-            str(p.relative_to(REPOSITORY)): hashlib.sha256(p.read_bytes()).hexdigest()
+            p.relative_to(REPOSITORY).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
             for p in sorted(Path(__file__).parent.glob("*.py"))}}
 
 

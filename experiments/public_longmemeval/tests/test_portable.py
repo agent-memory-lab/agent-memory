@@ -85,8 +85,8 @@ class Contracts(unittest.TestCase):
                                "question_date": "2024-01-02T00:00:00+00:00"},
             }
             for name, value in documents.items():
-                (smoke / name).write_text(json.dumps(value))
-            (smoke / "manifest.json").write_text(json.dumps({"artifacts": {name: retrieval.sha(smoke / name) for name in documents}}))
+                (smoke / name).write_text(json.dumps(value), encoding="utf-8", newline="\n")
+            (smoke / "manifest.json").write_text(json.dumps({"artifacts": {name: retrieval.sha(smoke / name) for name in documents}}), encoding="utf-8", newline="\n")
             args = argparse.Namespace(smoke=smoke, output=root / "result", max_calls=160, max_seconds=1800)
             result = asyncio.run(mac_smoke.run(args, MockClient(), {"embedding": None}))
             self.assertEqual(result["status"], "completed")

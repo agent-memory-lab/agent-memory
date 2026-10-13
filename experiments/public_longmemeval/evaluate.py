@@ -40,7 +40,7 @@ def evaluate(run):
         path=run/name
         if path.exists(): raise FileExistsError('Do not overwrite an existing review: '+name)
     for name,value in [('evidence_recall.json',evidence),('manual_review.json',review),('arm_map.json',dict(zip('ABCD',shuffled)))]:
-        (run/name).write_text(json.dumps(value,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+        (run/name).write_text(json.dumps(value,ensure_ascii=False,indent=2)+'\n',encoding='utf-8', newline="\n")
     return evidence
 
 def summarize(run):
@@ -55,7 +55,7 @@ def summarize(run):
         scores[arm]={'manual_correct':row['correct'],'reason':row['reason']}
     output={'case_id':review['case_id'],'reviewer':review['reviewer'],'arms':scores,
             'scope':'One selected development question only, not benchmark accuracy or evidence of a novel mechanism'}
-    (run/'manual_summary.json').write_text(json.dumps(output,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+    (run/'manual_summary.json').write_text(json.dumps(output,ensure_ascii=False,indent=2)+'\n',encoding='utf-8', newline="\n")
     return output
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('command',choices=['prepare','summarize']);p.add_argument('run',type=Path)

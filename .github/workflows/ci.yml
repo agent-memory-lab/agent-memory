@@ -194,7 +194,7 @@ jobs:
           python-version: "3.13"
       - name: Public sample and mocked model contracts; no credentials or downloads
         run: >-
-          python -W error::ResourceWarning -m unittest discover
+          python -X warn_default_encoding -W error::EncodingWarning -W error::ResourceWarning -m unittest discover
           -s experiments/public_longmemeval/tests -v
       - name: Check code-only runner and explicit dataset preparation entry points
         run: |

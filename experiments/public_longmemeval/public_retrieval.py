@@ -38,7 +38,7 @@ def stable(value):
 
 
 def dump(path, value):
-    Path(path).write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    Path(path).write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 
 def timestamp(value):
@@ -83,9 +83,9 @@ def prepare(args):
     split = make_split(data)
     dump(args.output / "split.json", split)
     statistics = Counter()
-    with (args.output / "corpus.jsonl").open("w", encoding="utf-8") as corpus, \
-            (args.output / "queries.jsonl").open("w", encoding="utf-8") as queries, \
-            (args.output / "gold.evaluator-only.jsonl").open("w", encoding="utf-8") as gold:
+    with (args.output / "corpus.jsonl").open("w", encoding="utf-8", newline="\n") as corpus, \
+            (args.output / "queries.jsonl").open("w", encoding="utf-8", newline="\n") as queries, \
+            (args.output / "gold.evaluator-only.jsonl").open("w", encoding="utf-8", newline="\n") as gold:
         for row in data:
             case_id = "case-" + stable(row["question_id"])[:24]
             aligned = list(zip(row["haystack_session_ids"], row["haystack_dates"],
@@ -202,7 +202,7 @@ def retrieve(args):
     if args.output.exists():
         raise ValueError("Use a fresh result path to avoid mixed protocol outputs")
     started = perf_counter()
-    with (args.prepared / "corpus.jsonl").open(encoding='utf-8') as source, args.output.open("w", encoding="utf-8") as output:
+    with (args.prepared / "corpus.jsonl").open(encoding='utf-8') as source, args.output.open("w", encoding="utf-8", newline="\n") as output:
         for line in source:
             row = json.loads(line)
             if row["case_id"] not in selected:

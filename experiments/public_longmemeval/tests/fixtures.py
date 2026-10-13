@@ -22,5 +22,5 @@ def write_smoke(root):
         (smoke / name).write_bytes(data)
         hashes[name] = hashlib.sha256(data).hexdigest()
     (smoke / "manifest.json").write_text(json.dumps({"dataset_revision": "authored-synthetic-fixture",
-                                                   "artifacts": hashes}))
+                                                   "artifacts": hashes}), encoding="utf-8", newline="\n")
     return smoke

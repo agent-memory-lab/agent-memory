@@ -55,7 +55,7 @@ class LocalOllama:
         # inactivity timeout. It disables proxies and rejects every redirect.
         completed = subprocess.run([sys.executable, "-c", HTTP_WORKER],
             input=json.dumps({"url": self.host + route, "data": data, "timeout": timeout}),
-            text=True, capture_output=True, timeout=timeout, check=True)
+            text=True, encoding="utf-8", capture_output=True, timeout=timeout, check=True)
         return json.loads(completed.stdout)
 
     async def generate(self, route, data, phase):
@@ -143,13 +143,13 @@ async def run(args, client, preflight_result):
     from agent_memory.providers import GeneratedTrajectoryClaimExtractor, EmbeddingReranker
     from agent_memory.unified_memory import SQLiteDeletionJournal, UnifiedMemory
 
-    manifest = json.loads((args.smoke / "manifest.json").read_text())
+    manifest = json.loads((args.smoke / "manifest.json").read_text(encoding="utf-8"))
     for name, digest in manifest["artifacts"].items():
         if sha(args.smoke / name) != digest:
             raise ValueError("Smoke artifact changed: " + name)
     # No answer, evidence label, question type or native dataset ID reaches indexing.
-    record = json.loads((args.smoke / "corpus.json").read_text())
-    query = json.loads((args.smoke / "query.json").read_text())
+    record = json.loads((args.smoke / "corpus.json").read_text(encoding="utf-8"))
+    query = json.loads((args.smoke / "query.json").read_text(encoding="utf-8"))
     from experiments.public_longmemeval.public_retrieval import blind_sessions
     blind_sessions(record)
     if set(query) != {"case_id", "question", "question_date"} or query["case_id"] != record["case_id"]:

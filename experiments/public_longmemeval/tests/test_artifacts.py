@@ -15,20 +15,20 @@ ROOT = Path(__file__).resolve().parents[1]
 class Artifacts(unittest.TestCase):
     def test_sample_and_split_hashes(self):
         for directory in ("smoke", "protocol"):
-            manifest = json.loads((ROOT / directory / "manifest.json").read_text())
+            manifest = json.loads((ROOT / directory / "manifest.json").read_text(encoding="utf-8"))
             for name, digest in manifest["artifacts"].items():
                 path = ROOT / directory / name
                 if path.exists():
                     self.assertEqual(retrieval.sha(path), digest, name)
-        split = json.loads((ROOT / "protocol/split.json").read_text())
+        split = json.loads((ROOT / "protocol/split.json").read_text(encoding="utf-8"))
         groups = {}
         for name, expected in (("development", 50), ("holdout", 450), ("smoke", 10)):
-            groups[name] = json.loads((ROOT / "protocol" / (name + ".case-ids.json")).read_text())
+            groups[name] = json.loads((ROOT / "protocol" / (name + ".case-ids.json")).read_text(encoding="utf-8"))
             self.assertEqual(len(set(groups[name])), expected)
             self.assertEqual(groups[name], ["case-" + retrieval.stable(qid)[:24] for qid in split[name]])
         self.assertFalse(set(groups["development"]) & set(groups["holdout"]))
         self.assertTrue(set(groups["smoke"]) <= set(groups["development"]))
-        sample = json.loads((ROOT / "smoke/manifest.json").read_text())
+        sample = json.loads((ROOT / "smoke/manifest.json").read_text(encoding="utf-8"))
         self.assertIn(sample["case_id"], groups["smoke"])
 
     def test_source_identity_uses_checkout(self):
@@ -42,7 +42,7 @@ class Artifacts(unittest.TestCase):
         identity = core_identity()
         for name in ("extraction.py", "public_retrieval.py", "transport.py"):
             self.assertIn("experiments/public_longmemeval/" + name, identity["experiment_files"])
-        expected = {str(p.relative_to(REPOSITORY)) for p in (REPOSITORY / "src/agent_memory").rglob("*.sql")}
+        expected = {p.relative_to(REPOSITORY).as_posix() for p in (REPOSITORY / "src/agent_memory").rglob("*.sql")}
         self.assertTrue(expected <= set(identity["files"]))
 
     def test_input_binding_rejects_tampering(self):
@@ -56,9 +56,9 @@ class Artifacts(unittest.TestCase):
             with self.assertRaises(ValueError):
                 input_identity(copied)
             manifest_path = copied / "manifest.json"
-            manifest = json.loads(manifest_path.read_text())
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["artifacts"]["query.json"] = retrieval.sha(query)
-            manifest_path.write_text(json.dumps(manifest))
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8", newline="\n")
             self.assertNotEqual(input_identity(copied), original)
 
     def test_evaluator_rejects_missing_or_changed_binding(self):
@@ -74,7 +74,7 @@ class Artifacts(unittest.TestCase):
             result = {"status": "completed", "arms": arms}
             for binding in (None, {"manifest_sha256": "wrong", "artifacts": {}}):
                 result["input_artifacts"] = binding
-                (run / "result.json").write_text(json.dumps(result))
+                (run / "result.json").write_text(json.dumps(result), encoding="utf-8", newline="\n")
                 with self.assertRaisesRegex(ValueError, "input binding"):
                     evaluate.evaluate(run)
                 self.assertFalse((run / "manual_review.json").exists())
@@ -85,14 +85,14 @@ class Artifacts(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             fixture = write_smoke(root / "fixture")
-            manifest = json.loads((fixture / "manifest.json").read_text())
+            manifest = json.loads((fixture / "manifest.json").read_text(encoding="utf-8"))
             manifest["case_id"] = "synthetic-test"
             prepared = root / "prepared"
             prepared.mkdir()
             for source, target in (("corpus.json", "corpus.jsonl"),
                                    ("query.json", "queries.jsonl"),
                                    ("gold.evaluator-only.json", "gold.evaluator-only.jsonl")):
-                (prepared / target).write_text(json.dumps(json.loads((fixture / source).read_text())) + "\n")
+                (prepared / target).write_text(json.dumps(json.loads((fixture / source).read_text(encoding="utf-8"))) + "\n", encoding="utf-8", newline="\n")
             output = root / "output"
             select_prepared(prepared, output, manifest)
             for name in manifest["artifacts"]:

@@ -69,6 +69,6 @@ class TestRunner(unittest.TestCase):
             with self.assertRaises(FileExistsError): evaluate.evaluate(out)
     def test_partial_not_scored(self):
         with tempfile.TemporaryDirectory() as d:
-            p=Path(d);(p/'result.json').write_text(json.dumps({'status':'incomplete'}))
+            p=Path(d);(p/'result.json').write_text(json.dumps({'status':'incomplete'}), encoding="utf-8", newline="\n")
             with self.assertRaises(ValueError):evaluate.evaluate(p)
 if __name__=='__main__': unittest.main()
