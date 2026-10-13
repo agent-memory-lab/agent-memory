@@ -511,6 +511,11 @@ async def run(args):
                     finally:
                         resource_errors = await close_trial_resources(local, mem0, graph, lite, pid)
                         report.setdefault("resource_cleanup_errors", []).extend(resource_errors)
+                        if resource_errors:
+                            # A failed close can leave a model client or database
+                            # alive. Do not start another isolated trial or report
+                            # a completed run while resource ownership is unknown.
+                            raise RuntimeError("resource cleanup failed; stop before the next trial")
             report["status"] = (
                 "completed"
                 if all(row["status"] == "completed" for row in report["arms"])

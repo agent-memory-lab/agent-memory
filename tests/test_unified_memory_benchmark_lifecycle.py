@@ -8,6 +8,7 @@ import ast
 import asyncio
 import importlib.util
 import inspect
+import json
 from pathlib import Path
 from threading import Event
 from time import perf_counter
@@ -171,3 +172,150 @@ def test_local_only_and_partial_mem0_resources_close_without_other_frameworks():
         lifecycle_functions().close_trial_resources(closed("local"), mem0, None, None, None)
     )
     assert errors == [] and effects == ["local", "mem0", "qdrant"]
+
+
+def test_resource_cleanup_failure_stops_trials_and_persists_failed_report(tmp_path):
+    """Run the real orchestration with offline clients and a failed resource close."""
+    import importlib.metadata
+    import platform
+    import statistics
+    import subprocess
+    import tempfile
+    from datetime import UTC, datetime
+    from hashlib import sha256
+    from uuid import uuid4
+
+    path = _EXAMPLES / "unified_memory_benchmark.py"
+    tree = ast.parse(path.read_text())
+    selected = ast.Module(body=[
+        node for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name in ("run", "write_json", "aggregate")
+    ], type_ignores=[])
+    setups, cleanup_calls, client_closes = [], [], []
+    cleanup_error = {"resource": "falkor", "error_type": "RuntimeError"}
+
+    class Client:
+        def __init__(self, **_kwargs):
+            self._client = self
+
+        async def aclose(self):
+            client_closes.append(True)
+
+        async def list(self):
+            return SimpleNamespace(models=[SimpleNamespace(
+                model="offline", model_dump=lambda **_kwargs: {"model": "offline"},
+            )])
+
+        async def get(self, *_args):
+            return SimpleNamespace(json=lambda: {"version": "offline"})
+
+        async def chat(self, **_kwargs):
+            return None
+
+        async def embed(self, **_kwargs):
+            return None
+
+    class Proxy:
+        def __init__(self, *_args, **_kwargs):
+            self.url = "offline-no-network"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            pass
+
+    class Ledger:
+        def __init__(self, *_args):
+            pass
+
+        def start_phase(self, *_args):
+            pass
+
+        def summary(self, **_kwargs):
+            return {"calls": 0}
+
+    class Local:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def initialize(self):
+            pass
+
+    class AgentAdapter:
+        name = "agent-memory"
+        packing_token_budget = staticmethod(lambda: 100)
+
+        def __init__(self, *_args):
+            pass
+
+    async def make_clients(*_args, **_kwargs):
+        setups.append(True)
+        mem0 = SimpleNamespace(
+            llm=SimpleNamespace(client=SimpleNamespace(
+                chat=lambda **_kwargs: None, _client=SimpleNamespace(timeout=0),
+            )),
+            embedding_model=SimpleNamespace(client=SimpleNamespace(
+                _client=SimpleNamespace(timeout=0),
+            )),
+        )
+        graph = SimpleNamespace(embedder=SimpleNamespace(client=SimpleNamespace(timeout=0)))
+        return mem0, graph, SimpleNamespace(client=SimpleNamespace(pid=None))
+
+    async def run_arm(_client, adapter, _ledger, _fixture, trial, output, _timeout):
+        row = {"trial": trial, "name": adapter.name, "status": "completed",
+               "cases": [], "total_seconds_including_cleanup": 0}
+        output["arms"].append(row)
+        return row
+
+    async def close_resources(*_args):
+        cleanup_calls.append(True)
+        return [cleanup_error]
+
+    async def settled(*_args):
+        return True
+
+    def embeddings(*_args):
+        return None
+
+    embeddings.retrieval_prefix_version = "offline"
+    namespace = {
+        "__file__": str(path), "asyncio": asyncio, "importlib": importlib,
+        "json": json, "platform": platform, "statistics": statistics,
+        "subprocess": subprocess, "tempfile": tempfile, "UTC": UTC,
+        "datetime": datetime, "sha256": sha256, "Path": Path,
+        "perf_counter": perf_counter, "uuid4": uuid4,
+        "native": SimpleNamespace(MODEL="offline", EMBED_MODEL="offline-embed",
+                                  OllamaEmbeddings=embeddings, _make_arm_clients=make_clients),
+        "ARMS": ("agent-memory", "mem0-oss", "graphiti"), "SETTINGS": {},
+        "EXTRACTION_PROMPT": "", "ANSWER_PROMPT": "", "CLAIM_SCHEMA": {},
+        "ANSWER_SCHEMA": {}, "CommonAgentAdapter": AgentAdapter,
+        "Mem0ComparisonAdapter": lambda *_args: SimpleNamespace(name="mem0-oss"),
+        "GraphitiComparisonAdapter": lambda *_args, **_kwargs: SimpleNamespace(name="graphiti"),
+        "ModelCallLedger": Ledger, "OllamaAccountingProxy": Proxy, "ControlledClient": Client,
+        "UnifiedMemory": Local, "build_local_kernel": lambda *_args, **_kwargs: None,
+        "GeneratedTrajectoryClaimExtractor": lambda *_args, **_kwargs: None,
+        "ClaimGenerator": lambda *_args: None, "MemoryScope": lambda *_args, **_kwargs: None,
+        "SQLiteDeletionJournal": lambda *_args: None,
+        "canonical_digest": _PROTOCOL.canonical_digest, "run_arm": run_arm,
+        "close_trial_resources": close_resources, "require_model_accounting": settled,
+        "summarize_cases": _PROTOCOL.summarize_cases, "BenchmarkTimeout": _PROTOCOL.BenchmarkTimeout,
+    }
+    exec(compile(selected, str(path), "exec"), namespace)
+    fixture = tmp_path / "fixture.json"
+    fixture.write_text(json.dumps({"dataset_id": "offline", "initial": [],
+                                   "updates": [], "cases": []}))
+    output = tmp_path / "output"
+    args = SimpleNamespace(fixture=fixture, output_dir=output, repeats=2,
+                           operation_timeout=1, upstream="offline")
+    with pytest.raises(RuntimeError, match="resource cleanup failed"):
+        asyncio.run(namespace["run"](args))
+    report = json.loads((output / "report.json").read_text())
+    assert len(setups) == len(cleanup_calls) == len(client_closes) == 1
+    assert report["status"] == "failed"
+    assert report["error_type"] == "RuntimeError"
+    assert report["resource_cleanup_errors"] == [cleanup_error]
+    assert len(report["arms"]) == 3 and all(row["trial"] == 1 for row in report["arms"])
+    assert all(row["planned_trials"] == 2 and row["completed_trials"] == 1
+               for row in report["summary"])
