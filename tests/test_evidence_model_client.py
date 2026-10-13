@@ -435,7 +435,7 @@ class EndpointSafetyTests(unittest.TestCase):
     UNSAFE = (
         "http://example.invalid/chat",
         "https://private-user:private-password@example.invalid/chat",
-        "https://example.invalid/chat?api_key=private-query",
+        "https://example.invalid/chat?api_key=fake",
         "https://example.invalid/chat#private-fragment",
         "https:///chat",
         "https://example.invalid:invalid/chat",

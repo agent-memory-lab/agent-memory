@@ -130,7 +130,7 @@ def test_return_and_disk_response_are_allowlisted_and_preserve_shared_receipt(tm
     # These are deliberately fake extra fields, not discovered secrets or environment values.
     raw = receipt(
         headers={"provider-debug": "do-not-persist-header"},
-        api_key="not-a-real-secret-do-not-persist", environment="do-not-persist-environment",
+        api_key="fake-key", environment="do-not-persist-environment",
         extra_debug="do-not-persist-debug", shared_extraction_reused=True, phase="extract",
     )
     client = FakeClient(raw)
