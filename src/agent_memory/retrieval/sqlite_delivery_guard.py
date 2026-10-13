@@ -4,14 +4,15 @@ import json
 
 from ..domain import MemoryKind
 from .atom_state import project_records, select_record_snapshots
-from .candidate_identity import candidate_identity
 from .delivery_guard import (
     bundle_values,
     diagnostic_ids,
+    delivery_evidence_key,
     filter_delivery,
     requested_claim_ids,
     selected_artifact_ids,
     selected_source_ids,
+    snapshot_delivery_bundle,
 )
 from .pipeline_delivery import external_candidates, pipeline_reference_ids
 from .temporal_history import SQLiteClaimHistory
@@ -22,6 +23,7 @@ def guard_delivery(repository, query, bundle, *, pipeline=False):
     # reads resolve omitted axes identically.
     from ..sqlite import utc_now
 
+    bundle = snapshot_delivery_bundle(bundle)
     now = utc_now()
     valid_at, known_at = query.valid_at or now, query.known_at or now
     with repository._connection() as connection:
@@ -53,12 +55,13 @@ def guard_delivery(repository, query, bundle, *, pipeline=False):
                 f"SELECT id,event_type FROM events WHERE {where} AND archived_at IS NULL "
                 f"AND id IN ({marks})", (*params, *batch),
             ).fetchall()
-            events.update((row["id"], {**dict(row), "verified_candidate_ids": set()})
+            events.update((row["id"], {**dict(row), "verified_evidence_keys": set()})
                           for row in rows)
         for item in bundle_values(bundle):
             if getattr(item, "kind", None) == MemoryKind.EVENT and item.id in events:
-                if _event_matches(connection, item):
-                    events[item.id]["verified_candidate_ids"].add(candidate_identity(item))
+                key = delivery_evidence_key(item)
+                if key is not None and _event_matches(connection, item):
+                    events[item.id]["verified_evidence_keys"].add(key)
         atom_ids = {claim.id for claim in atoms}
         live_atoms = set()
         for start in range(0, len(atom_ids), 256):
@@ -89,7 +92,7 @@ def guard_delivery(repository, query, bundle, *, pipeline=False):
             bundle, query=query, valid_at=valid_at, known_at=known_at, claims=claims,
             atoms=atoms, atom_info=info, protected_sources=protected,
             events=events, artifacts=artifacts, claim_source_ids_live=claim_source_ids_live,
-            external_candidate_ids=external, pipeline=pipeline,
+            external_evidence_keys=external, pipeline=pipeline,
         )
 
 

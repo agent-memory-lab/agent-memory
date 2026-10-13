@@ -8,8 +8,10 @@ queries whose valid/knowledge coordinates address historical facts.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import replace
+from copy import deepcopy
+from dataclasses import fields, is_dataclass, replace
 from hashlib import sha256
+from json import dumps
 
 from ..consolidation.admission_runtime import ATOM_EVENT_TYPES, ATOM_PREFIX
 from ..domain import Claim, MemoryKind
@@ -19,8 +21,50 @@ from .packing import source_ids, token_estimate
 from .temporal_history import temporal_candidates
 
 
+def snapshot_delivery_bundle(bundle):
+    """Detach caller-owned metadata before adapter I/O can yield to a mutation.
+
+    Domain metadata accepts general Mapping objects, including read-only proxies;
+    normalize those recursively rather than relying on deepcopy's pickle support.
+    """
+    def snapshot(value):
+        if isinstance(value, Mapping):
+            return {key: snapshot(item) for key, item in value.items()}
+        if isinstance(value, tuple):
+            return tuple(snapshot(item) for item in value)
+        if isinstance(value, list):
+            return [snapshot(item) for item in value]
+        if is_dataclass(value) and not isinstance(value, type):
+            return replace(value, **{field.name: snapshot(getattr(value, field.name))
+                                     for field in fields(value) if field.init})
+        return deepcopy(value)
+
+    return snapshot(bundle)
+
+
 def bundle_values(bundle):
     return (*bundle.current_state, *bundle.relevant_memories, *bundle.episodes, *bundle.procedures)
+
+
+def delivery_evidence_key(item):
+    """Bind authorization to exact evidence, separately from packing identities.
+
+    Multiple items can share a public ID or an original chunk locator, including
+    different narrowed spans. Neither identity proves the other item's text or
+    provenance. Snapshot the fields used by final authorization so a valid sibling
+    cannot authorize another item, or changed metadata between adapter awaits.
+    """
+    fields = ("event_type", "key", "channel", "version", "source_span",
+              "source_revision", "source_chars")
+    try:
+        payload = dumps(
+            [item.id, item.kind, item.text, source_ids(item),
+             {key: item.metadata.get(key) for key in fields}],
+            sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False,
+        )
+    except (TypeError, ValueError):
+        return None
+    return sha256(payload.encode()).hexdigest()
 
 
 def diagnostic_ids(bundle, kinds):
@@ -62,7 +106,7 @@ def _text_matches(item, text):
 
 def filter_delivery(bundle, *, query, valid_at, known_at, claims, atoms, atom_info,
                     protected_sources, events, artifacts, claim_source_ids_live,
-                    external_candidate_ids=(), pipeline=False):
+                    external_evidence_keys=(), pipeline=False):
     """Keep only exact evidence whose live identity, scope and dependencies agree."""
     protected = set(protected_sources)
     event_ids = set(events)
@@ -76,7 +120,7 @@ def filter_delivery(bundle, *, query, valid_at, known_at, claims, atoms, atom_in
     )}
 
     def accepts(value):
-        if not isinstance(value, Claim) and candidate_identity(value) in external_candidate_ids:
+        if not isinstance(value, Claim) and delivery_evidence_key(value) in external_evidence_keys:
             return True
         sources = set(source_ids(value))
         if not sources:
@@ -112,8 +156,8 @@ def filter_delivery(bundle, *, query, valid_at, known_at, claims, atoms, atom_in
             return False
         if value.kind == MemoryKind.EVENT:
             row = events.get(value.id)
-            return (row is not None and candidate_identity(value)
-                    in row["verified_candidate_ids"]
+            return (row is not None and sources == {value.id}
+                    and delivery_evidence_key(value) in row["verified_evidence_keys"]
                     and value.metadata.get("event_type", row["event_type"] if pipeline else None)
                     == row["event_type"])
         row = artifacts.get(value.id)
@@ -125,7 +169,7 @@ def filter_delivery(bundle, *, query, valid_at, known_at, claims, atoms, atom_in
     def refresh(value):
         if isinstance(value, Claim):
             return canonical[value.id]
-        if candidate_identity(value) in external_candidate_ids:
+        if delivery_evidence_key(value) in external_evidence_keys:
             return value
         if pipeline and value.kind == MemoryKind.EVENT:
             return replace(value, metadata={
@@ -145,7 +189,7 @@ def filter_delivery(bundle, *, query, valid_at, known_at, claims, atoms, atom_in
                      for value in values}
     removed = len(bundle_values(bundle)) - len(values)
     external_count = sum(
-        not isinstance(value, Claim) and candidate_identity(value) in external_candidate_ids
+        not isinstance(value, Claim) and delivery_evidence_key(value) in external_evidence_keys
         for value in values
     )
     metadata = dict(bundle.retrieval_metadata)
@@ -158,10 +202,44 @@ def filter_delivery(bundle, *, query, valid_at, known_at, claims, atoms, atom_in
             metadata["diversity_selected"] = len(relevant) + len(episodes) + len(procedures)
         if removed:
             metadata["degraded"] = True
-    for field in ("citation_spans", "packing_selection_trace"):
-        if field in metadata:
-            metadata[field] = tuple(row for row in metadata[field]
-                                    if row.get("candidate_id") in candidate_ids)
+    # IDs alone do not bind diagnostic provenance either: a removed sibling can
+    # share the retained item's ID/chunk locator. Keep only exact span proofs and
+    # discard selection rows whose candidate identity became ambiguous.
+    if "citation_spans" in metadata:
+        proofs = []
+        for value in values:
+            proof = {"memory_id": value.id,
+                     "candidate_id": value.id if isinstance(value, Claim)
+                     else candidate_identity(value), "source_event_ids": source_ids(value)}
+            if not isinstance(value, Claim):
+                proof.update({key: value.metadata[key] for key in (
+                    "source_span", "source_revision", "source_chars",
+                ) if key in value.metadata})
+            proofs.append(proof)
+        metadata["citation_spans"] = tuple(
+            proof for row in metadata["citation_spans"] for proof in proofs
+            if all((tuple(row.get(key, ())) == expected if key == "source_event_ids"
+                    else row.get(key) == expected) for key, expected in proof.items())
+            and all(row.get(key) == proof.get(key) for key in (
+                "source_span", "source_revision", "source_chars",
+            ))
+        )
+    if "packing_selection_trace" in metadata:
+        original_keys = {}
+        for value in bundle_values(bundle):
+            identity = value.id if isinstance(value, Claim) else candidate_identity(value)
+            original_keys.setdefault(identity, set()).add(
+                value.id if isinstance(value, Claim) else delivery_evidence_key(value)
+            )
+        trace_fields = ("memory_id", "candidate_id", "kind", "input_rank", "relevance",
+                        "selection_score", "query_coverage", "new_query_coverage",
+                        "event_redundancy", "tokens")
+        metadata["packing_selection_trace"] = tuple(
+            {key: row[key] for key in trace_fields if key in row}
+            for row in metadata["packing_selection_trace"]
+            if row.get("candidate_id") in candidate_ids
+            and len(original_keys.get(row.get("candidate_id"), ())) == 1
+        )
     if metadata.get("retrieval_stages"):
         authorized_by_kind = {
             MemoryKind.CLAIM: set(canonical),
@@ -207,6 +285,8 @@ def filter_delivery(bundle, *, query, valid_at, known_at, claims, atoms, atom_in
     })
     return replace(bundle, current_state=current, relevant_memories=relevant,
                    episodes=episodes, procedures=procedures,
-                   citations=tuple(c for c in bundle.citations if c.memory_id in ids),
+                   citations=tuple(c for c in bundle.citations if any(
+                       c.memory_id == value.id and tuple(c.source_event_ids) == source_ids(value)
+                       for value in values)),
                    token_estimate=sum(token_estimate(value.text) for value in values),
                    retrieval_metadata=metadata)

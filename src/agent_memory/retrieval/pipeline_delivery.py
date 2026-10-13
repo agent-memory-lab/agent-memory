@@ -4,7 +4,7 @@ from dataclasses import replace
 
 from ..consolidation.admission_runtime import ATOM_EVENT_TYPES, ATOM_PREFIX
 from ..domain import Claim
-from .candidate_identity import candidate_identity
+from .delivery_guard import delivery_evidence_key
 from .packing import source_ids
 
 
@@ -68,5 +68,7 @@ def external_candidates(bundle, owned_ids, live_source_ids, protected_sources):
         ):
             continue
         if (sources & owned_ids) <= live_source_ids:
-            result.add(candidate_identity(value))
+            key = delivery_evidence_key(value)
+            if key is not None:
+                result.add(key)
     return result

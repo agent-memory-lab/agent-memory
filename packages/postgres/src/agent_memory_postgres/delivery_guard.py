@@ -2,14 +2,15 @@
 
 from agent_memory.domain import MemoryKind
 from agent_memory.retrieval.atom_state import project_records, select_record_snapshots
-from agent_memory.retrieval.candidate_identity import candidate_identity
 from agent_memory.retrieval.delivery_guard import (
     bundle_values,
     diagnostic_ids,
+    delivery_evidence_key,
     filter_delivery,
     requested_claim_ids,
     selected_artifact_ids,
     selected_source_ids,
+    snapshot_delivery_bundle,
 )
 from agent_memory.retrieval.pipeline_delivery import external_candidates, pipeline_reference_ids
 
@@ -20,6 +21,7 @@ from .temporal_history import PostgresClaimHistory
 async def guard_delivery(repository, query, bundle, *, pipeline=False):
     from .repository import utc_now
 
+    bundle = snapshot_delivery_bundle(bundle)
     now = utc_now()
     valid_at, known_at = query.valid_at or now, query.known_at or now
     async with repository.pool.connection() as connection:
@@ -48,12 +50,13 @@ async def guard_delivery(repository, query, bundle, *, pipeline=False):
                 "AND archived_at IS NULL "
                 "AND id = ANY(%s)", (*params, sorted(identities)),
             )
-            events = {row["id"]: {**row, "verified_candidate_ids": set()}
+            events = {row["id"]: {**row, "verified_evidence_keys": set()}
                       for row in await cursor.fetchall()}
             for item in bundle_values(bundle):
                 if getattr(item, "kind", None) == MemoryKind.EVENT and item.id in events:
-                    if await _event_matches(connection, item):
-                        events[item.id]["verified_candidate_ids"].add(candidate_identity(item))
+                    key = delivery_evidence_key(item)
+                    if key is not None and await _event_matches(connection, item):
+                        events[item.id]["verified_evidence_keys"].add(key)
             cursor = await connection.execute(
                 f"SELECT id FROM agent_memory_claims WHERE {where} AND archived_at IS NULL "
                 "AND id = ANY(%s)", (*params, [claim.id for claim in atoms]),
@@ -77,7 +80,7 @@ async def guard_delivery(repository, query, bundle, *, pipeline=False):
                 bundle, query=query, valid_at=valid_at, known_at=known_at, claims=claims,
                 atoms=atoms, atom_info=info, protected_sources=protected,
                 events=events, artifacts=artifacts, claim_source_ids_live=claim_source_ids_live,
-                external_candidate_ids=external, pipeline=pipeline,
+                external_evidence_keys=external, pipeline=pipeline,
             )
 
 
