@@ -247,7 +247,8 @@ def _bm25_statistics(connection, keys, terms, source_table, eligibility, params)
 
 
 def candidates(connection, scope, text, *, source_table, limit, eligibility="1", params=(),
-               exact=False, offset=0, context_chunks=1, anchor_terms=None):
+               exact=False, offset=0, context_chunks=1, anchor_terms=None,
+               required_term_groups=()):
     """Rank narrow locators in SQL; LIMIT precedes all evidence/payload hydration.
 
     Terms use the indexed partition/term primary key, not LIKE or Python scans.
@@ -256,7 +257,9 @@ def candidates(connection, scope, text, *, source_table, limit, eligibility="1",
     owner IDs retain public citations and admission guards. Eligibility SQL is
     trusted repository code, and expansion stays in the same read transaction.
     Optional native-query anchors gate matched chunks before ranking/limits;
-    all original query terms still contribute to BM25. Other callers are unchanged.
+    all original query terms still contribute to BM25. Optional term groups are
+    conjunctive gates (one hit per group) for bounded native intent probes.
+    Other callers are unchanged.
     """
     if source_table not in SOURCES:
         raise ValueError("unsupported lexical source")
@@ -271,6 +274,12 @@ def candidates(connection, scope, text, *, source_table, limit, eligibility="1",
     terms = tuple(dict.fromkeys(lexical_terms(text)))[:MAX_QUERY_TERMS]
     anchors = tuple(term for term in dict.fromkeys(anchor_terms or ()) if term in terms)
     if anchor_terms and not anchors:
+        return ()
+    if len(required_term_groups) > 4 or any(len(group) > 64 for group in required_term_groups):
+        raise ValueError("lexical term groups exceed the bounded probe policy")
+    groups = tuple(tuple(term for term in dict.fromkeys(group) if term in terms)
+                   for group in required_term_groups)
+    if any(not group for group in groups):
         return ()
     keys = partitions(scope, exact=exact)
     key_marks = ",".join("?" for _ in keys)
@@ -294,12 +303,13 @@ def candidates(connection, scope, text, *, source_table, limit, eligibility="1",
         )
         values = (sum(weights.values()), average, json.dumps(weights, ensure_ascii=False),
                   *keys, json.dumps(terms, ensure_ascii=False), source_table, *params)
-        if anchors:
-            hits += (
-                " HAVING MAX(CASE WHEN t.term IN (SELECT value FROM json_each(?)) "
-                "THEN 1 ELSE 0 END)=1"
+        gates = ((anchors,) if anchors else ()) + groups
+        if gates:
+            hits += " HAVING " + " AND ".join(
+                "MAX(CASE WHEN t.term IN (SELECT value FROM json_each(?)) "
+                "THEN 1 ELSE 0 END)=1" for _ in gates
             )
-            values = (*values, json.dumps(anchors, ensure_ascii=False))
+            values = (*values, *(json.dumps(group, ensure_ascii=False) for group in gates))
     else:
         hits = (
             "SELECT c.chunk_id,c.source_id,c.owner_id,c.span_start,"

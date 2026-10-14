@@ -9,7 +9,53 @@ from .candidate_identity import candidate_identity
 
 
 def _lexical_key(item):
+    if "candidate_route_rank" in item.metadata:
+        return (item.metadata["candidate_route_rank"], candidate_identity(item))
     return (-float(item.metadata.get("lexical_score", item.score)), candidate_identity(item))
+
+
+def rank_candidate_routes(literal, probe, *, probe_name, limit, identity):
+    """Mix a minority intent lane into one representation, deduplicating IDs.
+
+    Three literal slots alternate with one probe slot. Empty or duplicate slots
+    are borrowed immediately; the global candidate limit is never increased.
+    Rank positions, rather than BM25 values from different queries, are compared.
+    Shared owners always keep the literal locator, even when the probe schedules
+    them first. A metadata/intent hit must not replace a topical evidence window.
+    Accept locator rows so deduplication/selection precede evidence hydration;
+    return (row, rank, routes) without copying or fabricating evidence bodies.
+    """
+    if type(limit) is not int or limit < 1:
+        raise ValueError("candidate limit must be a positive integer")
+    lanes = (list(literal), list(probe))
+    memberships = defaultdict(list)
+    canonical = {}
+    for name, lane in zip(("literal", probe_name), lanes, strict=True):
+        for item in lane:
+            item_id = identity(item)
+            canonical.setdefault(item_id, item)
+            memberships[item_id].append(name)
+    positions = [0, 0]
+    selected, seen = [], set()
+    schedule = (0, 0, 0, 1)
+    turn = 0
+    while len(selected) < limit and any(positions[i] < len(lanes[i]) for i in (0, 1)):
+        preferred = schedule[turn % len(schedule)]
+        turn += 1
+        for lane in (preferred, 1 - preferred):
+            while positions[lane] < len(lanes[lane]):
+                item = lanes[lane][positions[lane]]
+                positions[lane] += 1
+                item_id = identity(item)
+                if item_id not in seen:
+                    seen.add(item_id)
+                    selected.append((canonical[item_id], len(selected) + 1,
+                                     tuple(dict.fromkeys(memberships[item_id]))))
+                    break
+            else:
+                continue
+            break
+    return tuple(selected)
 
 
 def _event_source_rounds(items):
@@ -76,8 +122,25 @@ def balanced_candidates(candidates, limit):
 
 def stage_summary(items, *, maximum=512):
     """Never serialize candidate evidence text into a diagnostic trace."""
-    return {"count": len(items), "truncated": len(items) > maximum, "items": [
+    result = {"count": len(items), "truncated": len(items) > maximum, "items": [
         {"id": item.id, "kind": item.kind.value, "candidate_id": candidate_identity(item),
          "score": float(item.score) if isfinite(item.score) else None}
         for item in items[:maximum]
     ]}
+    facets = {}
+    for item in items:
+        name = item.metadata.get("query_facet")
+        if not name:
+            continue
+        summary = facets.setdefault(name, {
+            "policy": item.metadata["query_facet_policy"],
+            "probe_limit": item.metadata["query_facet_probe_limit"],
+            "locator_count": item.metadata["query_facet_locator_count"],
+            "required_group_count": item.metadata["query_facet_group_count"],
+            "hydration_limit": item.metadata["query_facet_hydration_limit"],
+            "admitted_count": 0,
+        })
+        summary["admitted_count"] += name in item.metadata.get("candidate_routes", ())
+    if facets:
+        result["query_facets"] = facets
+    return result
