@@ -16,6 +16,7 @@ from decimal import Decimal, InvalidOperation
 import getpass
 import hashlib
 import http.client
+import importlib.util
 import json
 import math
 import os
@@ -31,11 +32,26 @@ from urllib.parse import urlsplit
 import uuid
 import warnings
 
+if __package__:
+    from .provider_contract import (STRUCTURED_OUTPUT_MODES, prepare_structured_output,
+                                    safe_response_metadata, strict_json_loads)
+else:
+    # The isolated worker (-I) deliberately has no project import path. Load
+    # only this adjacent, trusted pure helper; never add cwd to sys.path.
+    _contract_spec = importlib.util.spec_from_file_location(
+        "_benchmark_provider_contract", Path(__file__).with_name("provider_contract.py"))
+    _contract = importlib.util.module_from_spec(_contract_spec)
+    _contract_spec.loader.exec_module(_contract)
+    STRUCTURED_OUTPUT_MODES = _contract.STRUCTURED_OUTPUT_MODES
+    prepare_structured_output = _contract.prepare_structured_output
+    safe_response_metadata = _contract.safe_response_metadata
+    strict_json_loads = _contract.strict_json_loads
+
 
 TOKEN_CAP = 1_000_000
 COST_CAP = Decimal("5")
 BUDGET_ACCEPTANCE = "I ACCEPT THE CONFIGURED EXPERIMENT BUDGET"
-SCHEMA = 2
+SCHEMA = 3
 
 
 class TransportError(RuntimeError):
@@ -63,7 +79,11 @@ class BudgetNotAccepted(TransportError):
 
 
 class RequestFailed(TransportError):
-    pass
+    def __init__(self, message: str, *, diagnostics: dict[str, Any] | None = None):
+        super().__init__(message)
+        self.diagnostics = dict(diagnostics or {})
+        self.provider_error_code = self.diagnostics.get("provider_error_code")
+        self.request_id = self.diagnostics.get("provider_request_id")
 
 
 def _canonical(value: Any) -> bytes:
@@ -174,6 +194,7 @@ class Config:
     tariff_verified: bool = False
     request_overhead_tokens: int = 2048
     max_response_bytes: int = 16 * 1024 * 1024
+    structured_output_mode: str = "json_schema"
 
     def __post_init__(self):
         _validate_endpoint(self.endpoint)
@@ -193,6 +214,8 @@ class Config:
             raise TransportError("Tariffs must be positive verified conservative rates")
         if type(self.tariff_verified) is not bool:
             raise TransportError("Invalid tariff verification flag")
+        if self.structured_output_mode not in STRUCTURED_OUTPUT_MODES:
+            raise TransportError("Select explicit structured_output_mode: json_schema or json_object")
 
 
 def _validate_endpoint(endpoint: str):
@@ -215,16 +238,7 @@ def _safe_error_type(error: BaseException) -> str:
 
 
 def _read_json(body: bytes):
-    def pairs(items):
-        result = {}
-        for key, value in items:
-            if key in result:
-                raise ValueError("Duplicate JSON key")
-            result[key] = value
-        return result
-    def bad_constant(_):
-        raise ValueError("Nonfinite JSON number")
-    return json.loads(body.decode("utf-8"), object_pairs_hook=pairs, parse_constant=bad_constant)
+    return strict_json_loads(body)
 
 
 def _validated_usage(document: Any) -> dict[str, int] | None:
@@ -323,6 +337,7 @@ class Client:
             "max_calls": self.config.max_calls,
             "request_overhead_tokens": self.config.request_overhead_tokens,
             "deadline_seconds": self.config.deadline_seconds,
+            "structured_output_mode": self.config.structured_output_mode,
         }
 
     def _open_state(self) -> None:
@@ -381,7 +396,9 @@ class Client:
             if not _integer(entry.get("charged_tokens")):
                 raise ResumeBlocked("Invalid cumulative token accounting")
             _decimal(entry.get("charged_cny"))
-            for name in ("charged_tokens", "charged_cny", "reserved_input_tokens", "reserved_output_tokens", "reserved_cny", "phase"):
+            for name in ("charged_tokens", "charged_cny", "reserved_input_tokens", "reserved_output_tokens", "reserved_cny", "phase",
+                         "request_outcome", "usage_status", "cost_basis", "http_outcome", "provider_request_id",
+                         "provider_error_code", "error_category"):
                 if entry.get(name) != receipt.get(name):
                     raise ResumeBlocked("Receipt and ledger accounting differ")
             request_body = receipt["request_body_utf8"].encode("utf-8")
@@ -393,6 +410,9 @@ class Client:
             if _decimal(entry["reserved_cny"]) != reserved_cost:
                 raise ResumeBlocked("Reservation cost does not match the verified tariff")
             usage = _validated_usage({"usage": receipt.get("usage")})
+            if (entry.get("usage_status") != ("known" if usage is not None else "unknown")
+                    or entry.get("cost_basis") != ("provider_usage_tariff_estimate" if usage is not None else "conservative_reservation")):
+                raise ResumeBlocked("Usage state differs from the accounting basis")
             if usage is None:
                 expected_tokens = entry["reserved_input_tokens"] + entry["reserved_output_tokens"]
                 expected_cost = reserved_cost
@@ -423,12 +443,19 @@ class Client:
         calls = self._ledger.get("calls", [])
         tokens = sum(entry["charged_tokens"] for entry in calls)
         cost = sum((_decimal(entry["charged_cny"]) for entry in calls), Decimal(0))
+        known = [entry for entry in calls if entry.get("usage_status") == "known"]
+        known_cost = sum((_decimal(entry["charged_cny"]) for entry in known), Decimal(0))
+        known_tokens = sum(entry["charged_tokens"] for entry in known)
         return {
             "charged_tokens": tokens,
             "charged_tariff_estimate_cny": str(cost),
             "remaining_tokens": TOKEN_CAP - tokens,
             "remaining_tariff_estimate_cny": str(COST_CAP - cost),
             "new_calls": len(calls),
+            "known_usage_tokens": known_tokens,
+            "unknown_usage_reserved_tokens": tokens - known_tokens,
+            "known_usage_tariff_estimate_cny": str(known_cost),
+            "unknown_usage_reserved_cny": str(cost - known_cost),
         }
 
     def _save_ledger(self) -> None:
@@ -480,19 +507,31 @@ class Client:
             raise TransportError("Output cap must be within the configured per-call maximum")
         if not isinstance(prompt, str) or not isinstance(phase, str) or not phase:
             raise TransportError("Prompt and phase must be strings")
+        response_format = None
+        if format is not None:
+            try:
+                if format == "json" or (isinstance(format, dict) and format.get("type") == "json_object"):
+                    if self.config.structured_output_mode != "json_object":
+                        raise ValueError("Requested JSON mode differs from configured capability")
+                    prompt, response_format = prepare_structured_output(prompt, None, mode="json_object")
+                elif isinstance(format, dict) and format.get("type") == "text":
+                    response_format = {"type": "text"}
+                elif isinstance(format, dict):
+                    schema = format
+                    if format.get("type") == "json_schema":
+                        if self.config.structured_output_mode != "json_schema":
+                            raise ValueError("Requested schema mode differs from configured capability")
+                        schema = format["json_schema"]["schema"]
+                    prompt, response_format = prepare_structured_output(
+                        prompt, schema, mode=self.config.structured_output_mode)
+                else:
+                    raise ValueError("Response format must be a dictionary or 'json'")
+            except (ValueError, TypeError, KeyError):
+                raise TransportError("Invalid or conflicting structured-output configuration") from None
         body = {"model": self.config.model, "messages": [{"role": "user", "content": prompt}],
                 "enable_thinking": False, "max_tokens": output_limit, "stream": False, "temperature": 0}
-        if format is not None:
-            if format == "json":
-                body["response_format"] = {"type": "json_object"}
-            elif isinstance(format, dict):
-                if format.get("type") in ("json_object", "json_schema", "text"):
-                    body["response_format"] = format
-                else:
-                    body["response_format"] = {"type": "json_schema", "json_schema": {
-                        "name": "memory_claims", "strict": True, "schema": format}}
-            else:
-                raise TransportError("Response format must be a dictionary or 'json'")
+        if response_format is not None:
+            body["response_format"] = response_format
         payload = _canonical(body)
         if self._key.encode() in payload or self.config.endpoint.encode() in payload or self._key in phase or self.config.endpoint in phase:
             raise TransportError("A credential or endpoint appeared in persisted request content")
@@ -506,7 +545,9 @@ class Client:
         ident = uuid.uuid4().hex
         entry = {"id": ident, "phase": phase, "status": "reserved", "reserved_input_tokens": reserve_input,
                  "reserved_output_tokens": output_limit, "charged_tokens": reserve_tokens,
-                 "charged_cny": str(reserve_cost), "reserved_cny": str(reserve_cost)}
+                 "charged_cny": str(reserve_cost), "reserved_cny": str(reserve_cost),
+                 "request_outcome": "pending", "usage_status": "unknown", "cost_basis": "conservative_reservation",
+                 **safe_response_metadata(None, None)}
         receipt = {**entry, "created_unix": time.time(), "prompt": prompt,
                    "request_body_utf8": payload.decode(), "request_sha256": _sha(payload),
                    "request_utf8_bytes": len(payload), "usage": None, "response_body_base64": None}
@@ -523,17 +564,20 @@ class Client:
             cancelled = False
             try:
                 try:
-                    status, response = await asyncio.shield(task)
+                    result = await asyncio.shield(task)
                 except asyncio.CancelledError:
                     # Keep the lock and await the bounded worker, then persist before propagating cancellation.
                     cancelled = True
-                    status, response = await task
+                    result = await task
             except Exception as error:
                 kind = _safe_error_type(error)
                 self._record_failure(entry, receipt, kind)
                 raise RequestFailed(kind + "; reservation held; manual review required") from None
             receipt["latency_seconds"] = time.monotonic() - started
-            result = self._complete(entry, receipt, status, response)
+            # Two-item tuples remain accepted for authored offline mocks. The
+            # real worker additionally carries a validated request identifier.
+            status, response, *metadata = result
+            result = self._complete(entry, receipt, status, response, metadata[0] if metadata else None)
             if cancelled:
                 raise asyncio.CancelledError
             return result
@@ -547,12 +591,15 @@ class Client:
 
     def _record_failure(self, entry: dict[str, Any], receipt: dict[str, Any], kind: str) -> None:
         entry["status"] = receipt["status"] = "unresolved"
+        entry["request_outcome"] = receipt["request_outcome"] = "not_sent" if kind == "DeadlineReached" else "transport_error"
+        entry["error_category"] = receipt["error_category"] = "local_deadline" if kind == "DeadlineReached" else "transport_failure"
         receipt["error_type"] = kind
         self._ledger["halt_reason"] = kind
         self._receipt_write(entry, receipt)
         self._save_ledger()
 
-    def _complete(self, entry: dict[str, Any], receipt: dict[str, Any], status: int, response: bytes) -> str:
+    def _complete(self, entry: dict[str, Any], receipt: dict[str, Any], status: int, response: bytes,
+                  headers: dict[str, str] | None = None) -> str:
         receipt["http_status"] = status
         receipt["response_sha256"] = _sha(response)
         # Provider failures may echo request headers or URLs. Do not store their
@@ -561,12 +608,19 @@ class Client:
             document = _read_json(response)
         except Exception:
             document = None
+        diagnostics = safe_response_metadata(status, document, headers=headers,
+                                             secrets=(self._key, self.config.endpoint))
+        entry.update(diagnostics)
+        receipt.update(diagnostics)
+        entry["latency_seconds"] = receipt.get("latency_seconds")
         reflected = (self._key.encode() in response or self.config.endpoint.encode() in response
                      or _contains_secret(document, (self._key, self.config.endpoint)))
         if status == 200 and document is not None and not reflected:
             receipt["response_body_base64"] = base64.b64encode(response).decode("ascii")
         usage = _validated_usage(document)
         receipt["usage"] = usage
+        entry["usage_status"] = receipt["usage_status"] = "known" if usage is not None else "unknown"
+        entry["cost_basis"] = receipt["cost_basis"] = "provider_usage_tariff_estimate" if usage is not None else "conservative_reservation"
         if usage is not None:
             cost = self._cost(usage["prompt_tokens"], usage["completion_tokens"])
             entry["charged_tokens"] = usage["total_tokens"]
@@ -592,7 +646,7 @@ class Client:
                 if len(choices) == 1 and choices[0].get("finish_reason") in ("stop", "length"):
                     finish_reason = choices[0]["finish_reason"]
                     candidate = choices[0]["message"]["content"]
-                    if isinstance(candidate, str):
+                    if isinstance(candidate, str) and candidate.strip():
                         text = candidate
             except (KeyError, TypeError, IndexError, AttributeError):
                 pass
@@ -614,8 +668,12 @@ class Client:
             entry["status"] = receipt["status"] = "halted" if usage is not None else "unresolved"
             receipt["error_type"] = kind
             self._ledger["halt_reason"] = kind
+            entry["request_outcome"] = receipt["request_outcome"] = "http_error" if status != 200 else "response_rejected"
+            if diagnostics["error_category"] is None:
+                entry["error_category"] = receipt["error_category"] = "response_validation"
         else:
             entry["status"] = receipt["status"] = "completed"
+            entry["request_outcome"] = receipt["request_outcome"] = "success"
         # Exact response bytes and validated usage are durable BEFORE the ledger
         # advances, the answer returns, or the caller processes the next case.
         self._receipt_write(entry, receipt)
@@ -623,10 +681,11 @@ class Client:
         if overrun:
             raise UsageOverrun("Provider usage exceeded its reservation; actual usage charged; run stopped")
         if kind:
-            raise RequestFailed(kind + "; run stopped; manual accounting review required")
+            raise RequestFailed(kind + "; run stopped; manual accounting review required", diagnostics={
+                name: receipt[name] for name in ("http_outcome", "provider_request_id", "provider_error_code", "error_category")})
         return text
 
-    def _request(self, payload: bytes, timeout: float) -> tuple[int, bytes]:
+    def _request(self, payload: bytes, timeout: float) -> tuple[int, bytes, dict[str, str]]:
         """One killable subprocess, no key/endpoint in argv, stderr, or logs."""
         envelope = _canonical({"endpoint": self.config.endpoint, "key": self._key,
                                "payload_base64": base64.b64encode(payload).decode("ascii"),
@@ -654,7 +713,7 @@ class Client:
             response = base64.b64decode(result["body_base64"], validate=True)
             if len(response) > self.config.max_response_bytes:
                 raise ValueError
-            return status, response
+            return status, response, {"x-request-id": result.get("provider_request_id")}
         except Exception:
             raise RequestFailed("WorkerResultError") from None
 
@@ -687,7 +746,11 @@ def _worker() -> int:
         body = response.read(envelope["max_response_bytes"] + 1)
         if len(body) > envelope["max_response_bytes"]:
             raise ValueError("ResponseTooLarge")
-        result = {"status": response.status, "body_base64": base64.b64encode(body).decode("ascii")}
+        metadata = safe_response_metadata(response.status, None, headers={
+            name: response.getheader(name) for name in ("x-request-id", "x-dashscope-request-id", "request-id")},
+            secrets=(envelope["key"], envelope["endpoint"]))
+        result = {"status": response.status, "body_base64": base64.b64encode(body).decode("ascii"),
+                  "provider_request_id": metadata["provider_request_id"]}
     except Exception as error:
         result = {"error_type": _safe_error_type(error)}
     finally:
