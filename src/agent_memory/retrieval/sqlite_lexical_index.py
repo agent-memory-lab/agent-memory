@@ -88,7 +88,8 @@ def initialize(connection):
                 f"CREATE TRIGGER IF NOT EXISTS lexical_{table}_{operation.lower()} "
                 f"AFTER {operation}{update} ON {table} BEGIN {old}{new} END"
             )
-    connection.execute("BEGIN IMMEDIATE")
+    if not connection.in_transaction:
+        connection.execute("BEGIN IMMEDIATE")
     encoding = connection.execute("PRAGMA encoding").fetchone()[0]
     version = (f"{INDEX_VERSION}:{LEXICAL_ANALYZER_VERSION}:{CHUNK_CHARS}:"
                f"{CHUNK_OVERLAP}:encoded-spans:{encoding}")

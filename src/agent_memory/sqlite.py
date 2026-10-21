@@ -1206,6 +1206,10 @@ class SQLiteMemoryRepository:
     def _initialize_sync(self) -> None:
         self._enable_wal()
         with self._connection() as connection:
+            # Keep every DDL script and migration behind the same database writer
+            # lock. Legacy executescript() would commit and release it early.
+            connection.execute("BEGIN IMMEDIATE")
+            connection.autocommit = False
             connection.executescript(sqlite_retention.SCHEMA)
             from .operations import sqlite_model_budget
 
