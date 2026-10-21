@@ -108,7 +108,10 @@ class Embeddings:
 
 from experiments.public_longmemeval.extraction import ClaimGenerator, chunks
 from experiments.public_longmemeval.core import core_identity, input_identity
-from experiments.public_longmemeval.run_experiment import pack
+from experiments.public_longmemeval.reader_context import (
+    CORE_TOKEN_BUDGET, CORE_ITEM_LIMIT, ReaderContextError,
+    core_reader_context, legacy_reader_context, reader_contract,
+)
 from experiments.public_longmemeval.transport import atomic_write_json
 
 
@@ -170,17 +173,27 @@ async def run(args, client, preflight_result):
               "core_identity": identity, "input_artifacts": inputs, "models": preflight_result, "case_id": record["case_id"],
               "runner_sha256": sha(Path(__file__)), "source_manifest_sha256": sha(args.smoke / "manifest.json"),
               "max_model_calls": args.max_calls, "max_seconds": args.max_seconds,
-              "embedding_truncation": False, "agent_memory_recall_token_budget": 2048,
+              "embedding_truncation": False, "agent_memory_recall_token_budget": CORE_TOKEN_BUDGET,
               "agent_memory_mode": "embedding-reranked" if preflight_result["embedding"] else "default-no-embedding",
-              "shared_reader_context_utf8_byte_cap": 6000, "context_budget_is_model_tokens": False,
+              "reader_contract": reader_contract(), "provider_event_source_map": {},
               "events_completed": 0, "receipts": client.receipts, "arms": {}}
     started = time.monotonic()
     initialized = False
-    async def answer_arm(name, memories):
-        context, delivered = pack(memories)
+    def checkpoint():
+        result["seconds"] = time.monotonic() - started
+        result["model_calls"] = len(client.receipts)
+        result["provider_cost"] = None
+        atomic_write_json(args.output / "result.json", result)
+
+    async def answer_arm(name, reader_input, retrieval_seconds=0):
+        context = reader_input.context
         started_answer = time.monotonic()
-        result["arms"][name] = {"retrieved_memories": memories, "delivered_memories": delivered, "context_utf8_bytes": len(context.encode()),
-                                "status": "answering"}
+        result["arms"][name] = {"retrieved_memories": reader_input.candidates,
+                                "delivered_memories": reader_input.delivered,
+                                "reader_context": context, "reader_delivery": reader_input.diagnostics,
+                                "context_utf8_bytes": len(context.encode()),
+                                "retrieval_seconds": retrieval_seconds, "status": "answering"}
+        checkpoint()
         hypothesis = await client.chat(
             "Answer the question using only the retrieved memory. Do not use outside knowledge. "
             "If the memory does not provide enough information, say you do not know. Answer concisely.\n"
@@ -188,9 +201,11 @@ async def run(args, client, preflight_result):
             "answer:" + name, limit=384)
         result["arms"][name].update({"status": "completed", "hypothesis": hypothesis,
                                       "answer_seconds": time.monotonic() - started_answer})
+        checkpoint()
     try:
-        # Same reader and byte cap, cheap baselines first. These are one-case
-        # plumbing comparisons, not official benchmark QA estimates.
+        # Shared reader prompt, explicitly different evidence-budget ownership:
+        # raw baselines retain legacy bytes; native delivery preserves the core
+        # token-budgeted bundle. These are one-case plumbing diagnostics.
         from experiments.public_longmemeval.public_retrieval import BlindSession, bm25
         raw_chunks = [BlindSession(session["source_id"] + f"-part-{index:03d}", session["occurred_at"],
                                    "[" + session["occurred_at"] + "] " + content)
@@ -198,22 +213,32 @@ async def run(args, client, preflight_result):
                       for index, content in enumerate(chunks("\n".join(turn["role"] + ": " + turn["content"]
                                                                          for turn in session["turns"]))) ]
         by_id = {chunk.source_id: chunk for chunk in raw_chunks}
-        await answer_arm("no-memory", [])
-        ranked = bm25(query["question"], raw_chunks, 8)
-        await answer_arm("bm25-raw-chunk", [{"id": key, "text": by_id[key].text} for key in ranked])
-        recent = sorted(raw_chunks, key=lambda value: (value.occurred_at, value.source_id), reverse=True)[:8]
-        await answer_arm("recent-raw-chunk", [{"id": value.source_id, "text": value.text} for value in recent])
+        def raw_item(value):
+            return {"id": value.source_id, "text": value.text,
+                    "source_ids": [value.source_id.rsplit("-part-", 1)[0]]}
+        await answer_arm("no-memory", legacy_reader_context([]))
+        retrieval_started = time.monotonic()
+        ranked = bm25(query["question"], raw_chunks, CORE_ITEM_LIMIT)
+        await answer_arm("bm25-raw-chunk", legacy_reader_context([raw_item(by_id[key]) for key in ranked]),
+                         time.monotonic() - retrieval_started)
+        retrieval_started = time.monotonic()
+        recent = sorted(raw_chunks, key=lambda value: (value.occurred_at, value.source_id), reverse=True)[:CORE_ITEM_LIMIT]
+        await answer_arm("recent-raw-chunk", legacy_reader_context([raw_item(value) for value in recent]),
+                         time.monotonic() - retrieval_started)
         await memory.initialize()
         initialized = True
         adapter = AgentMemoryComparisonAdapter(memory)
         for session in record["sessions"]:
             body = "\n".join(turn["role"] + ": " + turn["content"] for turn in session["turns"])
             for index, content in enumerate(chunks(body)):
-                await adapter.add(RawInteraction(session["source_id"] + f"-part-{index:03d}", "user",
+                capture = await adapter.add(RawInteraction(session["source_id"] + f"-part-{index:03d}", "user",
                                                   content, datetime.fromisoformat(session["occurred_at"])))
+                if capture.status != "done" or not capture.provider_event_id:
+                    raise RuntimeError("Core returned no completed capture with a provider event identifier")
+                result["provider_event_source_map"][capture.provider_event_id] = session["source_id"]
                 result["events_completed"] += 1
+                checkpoint()
                 print(json.dumps({"event_completed": result["events_completed"], "model_calls": len(client.receipts)}), flush=True)
-        memories = await adapter.search(query["question"], limit=8)
         result["extraction_claims_proposed"] = generator.proposed
         result["extraction_claims_meeting_confidence_threshold"] = generator.meeting_confidence_threshold
         if generator.meeting_confidence_threshold == 0:
@@ -222,11 +247,17 @@ async def run(args, client, preflight_result):
             result["persisted_claims"] = connection.execute("SELECT COUNT(*) FROM claims").fetchone()[0]
         if result["persisted_claims"] == 0:
             raise RuntimeError("No generated claims persisted in the fresh database; extraction is not validated")
+        retrieval_started = time.monotonic()
+        bundle = await memory.recall(query["question"], limit=CORE_ITEM_LIMIT,
+                                     token_budget=CORE_TOKEN_BUDGET, include_current_state=False)
+        reader_input = core_reader_context(bundle, result["provider_event_source_map"],
+                                           token_budget=CORE_TOKEN_BUDGET, item_limit=CORE_ITEM_LIMIT)
+        retrieval_seconds = time.monotonic() - retrieval_started
         result["embedding_calls_completed"] = sum(row["phase"] == "embedding" and row["status"] == "completed"
                                                    for row in client.receipts)
         if preflight_result["embedding"] and not result["embedding_calls_completed"]:
             raise RuntimeError("Embedding was selected but no embedding request completed; path is not validated")
-        await answer_arm("agent-memory", memories)
+        await answer_arm("agent-memory", reader_input, retrieval_seconds)
         # Deliberately stop before judging. The parent can review gold after the
         # blind answer is saved; an independent calibrated judge is still needed.
         result["status"] = "completed"
@@ -234,7 +265,8 @@ async def run(args, client, preflight_result):
     except BaseException as error:
         result["status"] = "blocked_or_failed"
         result["error_type"] = type(error).__name__
-
+        if isinstance(error, ReaderContextError):
+            result["reader_contract_error"] = str(error)
         raise
     finally:
         try:
@@ -245,10 +277,7 @@ async def run(args, client, preflight_result):
             result["cleanup_error_type"] = type(cleanup_error).__name__
             raise
         finally:
-            result["seconds"] = time.monotonic() - started
-            result["model_calls"] = len(client.receipts)
-            result["provider_cost"] = None
-            atomic_write_json(args.output / "result.json", result)
+            checkpoint()
     return result
 
 

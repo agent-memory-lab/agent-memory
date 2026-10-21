@@ -1171,8 +1171,11 @@ class SQLiteMemoryUnitOfWork:
 
 
 class SQLiteMemoryRepository:
-    def __init__(self, database_path: str | Path) -> None:
+    def __init__(self, database_path: str | Path, *, enable_query_facets: bool = False) -> None:
+        if type(enable_query_facets) is not bool:
+            raise TypeError("enable_query_facets must be a bool")
         self._path = str(database_path)
+        self._enable_query_facets = enable_query_facets
         self._write_lock = asyncio.Lock()
 
     def _connect(self) -> sqlite3.Connection:
@@ -2112,13 +2115,15 @@ class SQLiteMemoryRepository:
     def _native_lexical_candidates(self, connection, query, pool, now, anchor_terms):
         """Collect governed native branches under one admission policy/snapshot."""
         from .retrieval import sqlite_lexical_index as index
+        from .retrieval.query_facets import query_facets
 
         candidates: list[MemoryItem] = []
         historical = query.valid_at is not None or query.known_at is not None
         if MemoryChannel.SEMANTIC in query.channels:
+            probes = query_facets(query.text) if self._enable_query_facets else ()
             candidates.extend(self._lexical_claim_candidates(
                 connection, query, pool, query.valid_at or now, query.known_at or now,
-                anchor_terms=anchor_terms,
+                anchor_terms=anchor_terms, facet=probes[0] if probes else None,
             ))
             if not historical:
                 where, params = self._visible_scope_clause(query.scope)
@@ -2161,9 +2166,11 @@ class SQLiteMemoryRepository:
         return tuple(candidates)
 
     def _lexical_claim_candidates(
-        self, connection, query, limit, valid_at, known_at, *, anchor_terms=None,
+        self, connection, query, limit, valid_at, known_at, *, anchor_terms=None, facet=None,
     ):
         from .retrieval import sqlite_lexical_index as index
+        from .retrieval.candidate_selection import rank_candidate_routes
+        from .retrieval.query_facets import MAX_PROBE_CANDIDATES, QUERY_FACET_POLICY
         from .retrieval.temporal_history import TemporalHistoryUnavailable, aware, load_claim
 
         valid_at, known_at = aware(valid_at, "valid_at"), aware(known_at, "known_at")
@@ -2187,15 +2194,33 @@ class SQLiteMemoryRepository:
             "'$.provenance.source_event_ids') evidence JOIN events e ON e.id=evidence.value "
             "WHERE e.archived_at IS NULL)"
         )
-        locators = index.candidates(
+        eligibility_params = (*params, known_at.isoformat(), known_at.isoformat(),
+                              valid_at.isoformat(), valid_at.isoformat())
+        literal = index.candidates(
             connection, query.scope, query.text, source_table="claim_versions", limit=limit,
-            eligibility=eligibility,
-            params=(*params, known_at.isoformat(), known_at.isoformat(),
-                    valid_at.isoformat(), valid_at.isoformat()),
-            anchor_terms=anchor_terms,
+            eligibility=eligibility, params=eligibility_params, anchor_terms=anchor_terms,
         )
+        probe_limit = min(MAX_PROBE_CANDIDATES, max(1, limit // 4))
+        probe = index.candidates(
+            connection, query.scope, facet.text, source_table="claim_versions",
+            limit=probe_limit,
+            eligibility=eligibility, params=eligibility_params,
+            required_term_groups=facet.required_groups,
+        ) if facet else ()
+        # Only bounded locator headers are merged. Duplicate/empty lanes lend
+        # their slots before the unchanged evidence hydration cap is applied.
+        locators = rank_candidate_routes(
+            literal, probe, probe_name=facet.name, limit=limit,
+            identity=lambda locator: locator["owner_id"],
+        ) if probe else ((locator, None, ()) for locator in literal)
+        facet_metadata = {"query_facet_policy": QUERY_FACET_POLICY,
+                          "query_facet": facet.name,
+                          "query_facet_probe_limit": probe_limit,
+                          "query_facet_locator_count": len(probe),
+                          "query_facet_group_count": len(facet.required_groups),
+                          "query_facet_hydration_limit": limit} if facet else {}
         candidates = []
-        for locator in locators:
+        for locator, route_rank, routes in locators:
             row = connection.execute(
                 "SELECT v.*,c.chunk_id,c.source_revision,c.span_start,c.span_end,c.source_chars "
                 "FROM claim_versions v JOIN lexical_chunks c ON c.source_id=v.revision_id "
@@ -2215,12 +2240,16 @@ class SQLiteMemoryRepository:
                 system_to=_datetime(row["system_to"]),
             )
             item = temporal_candidates((claim,), query.text, 1)[0]
+            route_metadata = {
+                "candidate_route_rank": route_rank, "candidate_routes": routes,
+            } if route_rank is not None else {}
             candidates.append(replace(
                 item, text=claim.text[row["span_start"]:row["span_end"]],
                 metadata={**item.metadata, **index.lineage(row),
                           "lexical_score": locator["rank_score"],
                           "lexical_ranker": "scoped-bm25/1",
-                          "source_revision_id": row["revision_id"]},
+                          "source_revision_id": row["revision_id"],
+                          **facet_metadata, **route_metadata},
             ))
         return tuple(candidates)
 

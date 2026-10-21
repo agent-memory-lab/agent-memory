@@ -13,11 +13,15 @@ from pathlib import Path
 from types import SimpleNamespace
 from experiments.public_longmemeval.core import core_identity, input_identity
 from experiments.public_longmemeval.extraction import ClaimGenerator, chunks
+from experiments.public_longmemeval.reader_context import (
+    CORE_TOKEN_BUDGET, CORE_ITEM_LIMIT, LEGACY_CONTEXT_BYTES, ReaderContextError,
+    core_reader_context, legacy_reader_context, legacy_pack, reader_contract,
+)
 from experiments.public_longmemeval.public_retrieval import REPO_REVISION, sha, blind_sessions, BlindSession, bm25
 
 ROOT = Path(__file__).resolve().parent
 ARMS = ('no-memory', 'bm25-raw-chunk', 'recent-raw-chunk', 'agent-memory')
-CONTEXT_BYTES = 6000
+CONTEXT_BYTES = LEGACY_CONTEXT_BYTES  # Legacy raw-baseline cap only.
 
 def verify():
     if sys.version_info < (3,13):
@@ -37,22 +41,11 @@ def verify():
     parts=sum(len(list(chunks('\n'.join(t['role']+': '+t['content'] for t in s['turns'])))) for s in record['sessions'])
     return record,query,{'sessions':len(record['sessions']),'turns':sum(len(s['turns']) for s in record['sessions']),
                         'extraction_calls':parts,'answer_calls':4,'max_calls_needed':parts+4,'core_identity':identity,'input_artifacts':inputs,
-                        'dataset_revision':manifest['dataset_revision'],'context_utf8_byte_cap':CONTEXT_BYTES}
+                        'dataset_revision':manifest['dataset_revision'],'reader_contract':reader_contract()}
 
 def pack(memories):
-    """Only count actually delivered evidence; final item may be explicitly partial."""
-    delivered=[]; remaining=CONTEXT_BYTES
-    for m in memories:
-        prefix='- '; suffix='\n'
-        budget=remaining-len((prefix+suffix).encode())
-        if budget<=0: break
-        body=m['text'].encode()[:budget].decode('utf-8',errors='ignore')
-        if not body: break
-        text=prefix+body+suffix
-        delivered.append({**m,'text':body,'partial':body!=m['text']})
-        remaining-=len(text.encode())
-        if body!=m['text']: break
-    return ''.join('- '+m['text']+'\n' for m in delivered) or '(no memory retrieved)',delivered
+    """Compatibility alias for the legacy raw baseline; native delivery uses v2."""
+    return legacy_pack(memories)
 
 async def experiment(client, output):
     from experiments.public_longmemeval.transport import atomic_write_json
@@ -73,7 +66,7 @@ async def experiment(client, output):
     result={'status':'running','evidence_class':'real_public_dataset_user_run','official_score_equivalent':False,
       'case_id':query['case_id'],'question':query['question'],'question_date':query['question_date'],
       'input_artifacts':plan['input_artifacts'],'protocol':plan,'runner_sha256':sha(Path(__file__)),'model':client.model,'embedding_mode':'default-no-embedding',
-      'core_recall_estimated_token_budget':2048,'arms':{},'events_completed':0,'extraction_seconds':None,'provider_event_source_map':{},
+      'core_recall_estimated_token_budget':CORE_TOKEN_BUDGET,'arms':{},'events_completed':0,'extraction_seconds':None,'provider_event_source_map':{},
       'purpose':'Single selected development case diagnostic; not a representative accuracy estimate'}
     start=time.monotonic(); initialized=False
     def checkpoint():
@@ -83,9 +76,10 @@ async def experiment(client, output):
         if hasattr(client,'budget_summary'):
             result['cumulative_budget']=client.budget_summary()
         atomic_write_json(output/'result.json',result)
-    async def answer(name, candidates, retrieval_seconds):
-        context,delivered=pack(candidates)
-        result['arms'][name]={'status':'answering','retrieved_candidates':candidates,'delivered_memories':delivered,
+    async def answer(name, reader_input, retrieval_seconds):
+        context=reader_input.context
+        result['arms'][name]={'status':'answering','retrieved_candidates':reader_input.candidates,
+          'delivered_memories':reader_input.delivered, 'reader_delivery':reader_input.diagnostics,
           'reader_context':context,'context_utf8_bytes':len(context.encode()),'retrieval_seconds':retrieval_seconds}
         checkpoint(); started=time.monotonic()
         answer=await client.chat('Answer the question using only the retrieved memory. Do not use outside knowledge. '
@@ -99,11 +93,11 @@ async def experiment(client, output):
           for s in record['sessions'] for i,c in enumerate(chunks('\n'.join(t['role']+': '+t['content'] for t in s['turns'])))]
         byid={x.source_id:x for x in raw}
         def item(x): return {'id':x.source_id,'text':x.text,'source_ids':[x.source_id.split('-part-')[0]]}
-        await answer('no-memory',[],0)
+        await answer('no-memory',legacy_reader_context([]),0)
         started=time.monotonic();ranked=bm25(query['question'],raw,8)
-        await answer('bm25-raw-chunk',[item(byid[k]) for k in ranked],time.monotonic()-started)
+        await answer('bm25-raw-chunk',legacy_reader_context([item(byid[k]) for k in ranked]),time.monotonic()-started)
         started=time.monotonic();recent=sorted(raw,key=lambda x:(x.occurred_at,x.source_id),reverse=True)[:8]
-        await answer('recent-raw-chunk',[item(x) for x in recent],time.monotonic()-started)
+        await answer('recent-raw-chunk',legacy_reader_context([item(x) for x in recent]),time.monotonic()-started)
         await memory.initialize();initialized=True; adapter=AgentMemoryComparisonAdapter(memory);started=time.monotonic()
         for s in record['sessions']:
             for i,c in enumerate(chunks('\n'.join(t['role']+': '+t['content'] for t in s['turns']))):
@@ -119,18 +113,15 @@ async def experiment(client, output):
             result['persisted_claims']=conn.execute('SELECT COUNT(*) FROM claims').fetchone()[0]
         if not result['persisted_claims']: raise RuntimeError('No facts persisted; write path is not validated')
         started=time.monotonic()
-        bundle=await memory.recall(query['question'],limit=8,token_budget=2048,include_current_state=False)
-        citations={c.memory_id:list(c.source_event_ids) for c in bundle.citations}
-        items=sorted((*bundle.relevant_memories,*bundle.episodes,*bundle.procedures),key=lambda x:(-x.score,x.id))[:8]
-        source_map=result['provider_event_source_map']
-        if any(sid not in source_map for x in items for sid in citations.get(x.id,[])):
-            raise RuntimeError('Recall cited an event outside the captured public history')
-        candidates=[{'id':x.id,'text':x.text,'kind':x.kind.value,'source_event_ids':citations.get(x.id,[]),
-                     'source_ids':sorted({source_map[sid] for sid in citations.get(x.id,[])})} for x in items]
-        await answer('agent-memory',candidates,time.monotonic()-started)
+        bundle=await memory.recall(query['question'],limit=CORE_ITEM_LIMIT,
+          token_budget=CORE_TOKEN_BUDGET,include_current_state=False)
+        reader_input=core_reader_context(bundle,result['provider_event_source_map'],
+          token_budget=CORE_TOKEN_BUDGET,item_limit=CORE_ITEM_LIMIT)
+        await answer('agent-memory',reader_input,time.monotonic()-started)
         result['status']='completed';result['answer_accuracy']=None
     except BaseException as e:
         result['status']='incomplete';result['error_type']=type(e).__name__
+        if isinstance(e, ReaderContextError): result['reader_contract_error']=str(e)
         raise
     finally:
         try:

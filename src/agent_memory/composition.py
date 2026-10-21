@@ -30,10 +30,12 @@ def build_local_kernel(
     embedding_provider: EmbeddingProvider | None = None,
     consolidation_scheduler: ConsolidationScheduler | None = None,
     trusted_evaluator_ids: Collection[str] | None = None,
+    enable_query_facets: bool = False,
 ) -> MemoryKernel:
+    """Build the local kernel; experimental query-facet recall requires opt-in."""
     base_reranker = reranker or ReciprocalRankFusionReranker()
     return MemoryKernel(
-        repository=SQLiteMemoryRepository(database_path),
+        repository=SQLiteMemoryRepository(database_path, enable_query_facets=enable_query_facets),
         extractor=extractor or MetadataClaimExtractor(),
         policy=policy or TrustedMemoryPolicy(),
         reranker=(

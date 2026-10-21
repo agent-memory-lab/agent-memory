@@ -62,7 +62,17 @@ class TestRunner(unittest.TestCase):
             self.assertTrue(memories)
             self.assertTrue(all(m['source_ids'] for m in memories))
             self.assertTrue(all(s.startswith('session-') and '-part-' not in s for m in memories for s in m['source_ids']))
-            self.assertTrue(all(x['context_utf8_bytes']<=6000 for x in result['arms'].values()))
+            for name, arm in result['arms'].items():
+                if name == 'agent-memory':
+                    self.assertEqual(arm['reader_delivery']['mode'], 'core-evidence-verbatim/v2')
+                    self.assertEqual([m['text'] for m in arm['retrieved_candidates']],
+                                     [m['text'] for m in arm['delivered_memories']])
+                    self.assertEqual(arm['reader_delivery']['partial_count'], 0)
+                    self.assertLessEqual(arm['context_utf8_bytes'], 8216)
+                else:
+                    self.assertEqual(arm['reader_delivery']['mode'], 'legacy-utf8-prefix/v1')
+                    self.assertLessEqual(arm['context_utf8_bytes'], 6000)
+            self.assertFalse(result['protocol']['reader_contract']['cross_arm_budget_equivalence'])
             evidence=evaluate.evaluate(out)
             self.assertIsNone(evidence['qa_accuracy'])
             with self.assertRaises(ValueError): evaluate.summarize(out)

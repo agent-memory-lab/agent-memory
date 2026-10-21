@@ -1,6 +1,7 @@
 {
   "endpoint": "https://YOUR-PROVIDER.example/v1/chat/completions",
   "model": "YOUR_INSTALLED_PROVIDER_MODEL",
+  "structured_output_mode": "json_schema",
   "max_tokens": 1536,
   "max_calls": 160,
   "timeout_seconds": 90,
