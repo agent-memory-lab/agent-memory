@@ -38,7 +38,7 @@ class ReaderProtocolEvaluation(unittest.TestCase):
         return evaluate.evaluate(self.run)
 
     def review(self):
-        review = json.loads((self.run/'manual_review.json').read_text())
+        review = json.loads((self.run/'manual_review.json').read_text(encoding="utf-8"))
         review['reviewer'] = 'Synthetic fixture reviewer'
         for row in review['answers'].values():
             row.update(correct=1, reason='Authored fixture answer matches.')

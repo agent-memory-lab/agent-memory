@@ -417,8 +417,8 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(Decimal(budget["known_usage_tariff_estimate_cny"]), 0)
         self.assertEqual(budget["unknown_usage_reserved_cny"], entry["reserved_cny"])
         for path in self.state.rglob("*.json"):
-            self.assertNotIn(KEY, path.read_text())
-            self.assertNotIn("never save", path.read_text())
+            self.assertNotIn(KEY, path.read_text(encoding="utf-8"))
+            self.assertNotIn("never save", path.read_text(encoding="utf-8"))
 
     def test_error_with_known_usage_is_charged_without_unknown_reservation(self):
         client = self.client()
