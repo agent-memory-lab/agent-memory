@@ -30,6 +30,12 @@ the first stable release.
 
 ### Fixed
 
+- Bind reader v3 quotes to exact source-labeled evidence blocks, retaining host
+  dates, speakers and spans without a second text crop. Separate malformed
+  responses from abstention and freeze packing/framing ablations before opening
+  labels. Existing callable defaults stay v2; new benchmark CLI runs declare v3.
+  See [reader compatibility](docs/BENCHMARK_RELIABILITY_V3.md).
+
 - Keep evidence dependency groups intact during budgeted packing and final
   authorized delivery. Add opt-in v3/v4/v5 packing, bounded coverage reservations
   and an explicitly configured passage reranker; v2 stays the default and stored

@@ -3,14 +3,14 @@ from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime
 from hashlib import sha256
-from json import dumps
+from json import dumps, loads
 from types import SimpleNamespace
 
 import pytest
 
-from agent_memory import Citation, MemoryItem, MemoryKind, MemoryQuery, MemoryScope
+from agent_memory import Citation, MemoryItem, MemoryKind, MemoryScope
 from agent_memory.retrieval.candidate_identity import candidate_identity
-from agent_memory.retrieval.packing import pack_native_evidence, token_estimate
+from agent_memory.retrieval.packing import token_estimate
 from experiments.public_longmemeval.reader_context import (
     CORE_READER_MODE, LEGACY_READER_MODE, ReaderContextError, core_reader_context,
     legacy_pack, legacy_reader_context, reader_contract,
@@ -48,23 +48,31 @@ def source_map(items):
     return {source: 'session-'+source for value in items for source in value.metadata['source_event_ids']}
 
 
-def test_native_late_update_survives_previously_clipped_context():
+@pytest.mark.parametrize('version', ['v2', 'v3'])
+def test_native_late_update_survives_previously_clipped_context(version):
     values = [item('early', 'Fictional project record. '+'a'*3400, score=.9),
               item('middle', 'Historical project note. '+'b'*2600, score=.8),
               item('latest', 'Recent project update: the revised fictional budget is 73 units.', score=.7)]
-    native = pack_native_evidence(MemoryQuery(SCOPE, 'project budget', token_budget=2048,
-                                            limit=8, include_current_state=False), (), values)
-    bundle = selected_bundle(native.items)
-    bundle.token_estimate = native.tokens
-    bundle.citations = native.citations
-    bundle.retrieval_metadata = native.metadata
-    packed = core_reader_context(bundle, source_map(values))
+    # This regression exercises serialization of an already selected bundle.
+    # Fix its citation order independently of evolving retrieval/ranking policy:
+    # the final update must occur after the historical 6000-byte prefix limit.
+    bundle = selected_bundle(values, order=values)
+    packed = core_reader_context(bundle, source_map(values), version=version)
     old_context, old_delivered = legacy_pack(packed.candidates)
     assert len(packed.context.encode()) > 6000
     assert '73 units' in packed.context and '73 units' not in old_context
-    assert [r['text'] for r in packed.candidates] == [r['text'] for r in packed.delivered]
-    assert packed.diagnostics['text_preservation'] == 'verbatim'
+    assert [r['id'] for r in packed.delivered] == ['early', 'middle', 'latest']
+    assert [r['text'] for r in packed.candidates] == [value.text for value in values]
+    assert [r['text'] for r in packed.delivered] == [value.text for value in values]
+    if version == 'v3':
+        assert [block['text'] for block in loads(packed.context)] == [value.text for value in values]
+        assert packed.diagnostics['text_preservation'] == 'verbatim_after_json_decode'
+    else:
+        assert packed.context == ''.join('- '+value.text+'\n' for value in values)
+        assert packed.diagnostics['text_preservation'] == 'verbatim'
     assert packed.diagnostics['partial_count'] == packed.diagnostics['omitted_count'] == 0
+    assert [r['id'] for r in old_delivered] == ['early', 'middle']
+    assert old_delivered[-1]['partial'] is True
     assert len(old_delivered) < len(packed.delivered)
 
 
@@ -212,6 +220,43 @@ def test_contract_separates_raw_bytes_from_core_evidence_tokens():
     assert contract['agent-memory']['serialization_utf8_guard'] == 8216
     assert contract['raw-baselines']['context_utf8_byte_cap'] == 6000
     assert contract['cross_arm_budget_equivalence'] is False
+
+
+def test_v3_labeled_source_dates_roles_and_same_event_windows_are_preserved():
+    import json
+    full = 'user: I used to repair clocks.\nassistant: Consider a new hobby.'
+    first = event_window('same', full, 0, 29)
+    second = event_window('same', full, 30, len(full))
+    metadata = {'same':{'source_id':'session-synthetic','occurred_at':'2024-03-01T00:00:00+00:00',
+                       'roles':['user','assistant']}}
+    packed = core_reader_context(selected_bundle([second, first]), {'same':'session-synthetic'},
+                                 version='v3', source_metadata=metadata)
+    blocks = json.loads(packed.context)
+    assert [b['text'] for b in blocks] == [second.text, first.text]
+    assert [b['evidence_id'] for b in blocks] == ['E1','E2']
+    assert blocks[0]['source_details'][0]['occurred_at'] == '2024-03-01T00:00:00+00:00'
+    assert blocks[0]['source_details'][0]['speaker_scope'] == 'mixed_transcript'
+    assert blocks[0]['source_span'] == second.metadata['source_span']
+    assert packed.diagnostics['framing_in_core_budget'] is False
+    assert packed.diagnostics['serialized_context_estimated_tokens'] == token_estimate(packed.context)
+    assert packed.diagnostics['evidence_estimated_tokens'] == token_estimate(first.text) + token_estimate(second.text)
+    assert packed.diagnostics['partial_count'] == packed.diagnostics['omitted_count'] == 0
+    assert reader_contract('v3')['answer_reader']['schema_version'] == 'evidence-reader/3'
+    assert reader_contract()['version'] == 'public-longmemeval-reader/2'
+
+
+def test_v3_unknown_source_time_is_not_the_claim_creation_time():
+    import json
+    values = [item('claim', 'The user prefers quiet rooms.')]
+    packed = core_reader_context(selected_bundle(values), source_map(values), version='v3')
+    assert json.loads(packed.context)[0]['source_details'][0]['occurred_at'] == 'unknown'
+
+
+def test_v3_source_annotations_must_match_authorized_citations():
+    values = [item('claim', 'Synthetic statement')]
+    with pytest.raises(ReaderContextError, match='source_metadata_identity_mismatch'):
+        core_reader_context(selected_bundle(values), source_map(values), version='v3', source_metadata={
+            'event-claim':{'source_id':'other-session','occurred_at':'2024-01-01T00:00:00+00:00','roles':['user']}})
 
 
 @pytest.mark.parametrize('over_budget', [False, True])

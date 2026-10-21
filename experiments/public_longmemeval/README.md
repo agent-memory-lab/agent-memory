@@ -9,10 +9,11 @@ answers, saved live results or private account history are included.
 
 ## Offline checks (Python 3.13+)
 
-From the repository root, without installing dependencies or contacting a model:
+From a development checkout with the core and test dependencies installed, without contacting a model:
 
 ```sh
 python3.13 -m unittest discover -s experiments/public_longmemeval/tests -v
+python3.13 -m pytest -q experiments/public_longmemeval/tests
 ```
 
 Mandatory CI checks run against authored synthetic fixtures and mocked providers.
@@ -105,6 +106,40 @@ explicit finite numeric confidence in [0, 1], and no duplicate JSON fields. JSON
 mode does not provide provider-side schema enforcement. A 503 response cannot
 establish format compatibility: a successful synthetic response must also pass
 local Claims validation before the selected mode is considered verified.
+
+## Source-bound reader (v3)
+
+Packing is selected independently with `--packing-version v2|v3|v4|v5` in the HTTPS,
+local smoke and full-comparison runners. **V2 is the stable packing default.**
+V3 remains experimental after losing necessary evidence in synthetic competition
+tests. Choosing reader v3 does not enable packing v3. Manifests record the exact
+packing policy parameters separately from the reader contract. See the
+[generalization audit](../../docs/BENCHMARK_PACKING_GENERALIZATION.md).
+
+V4 adds source-bound context units and removal-only dependency checks at final
+delivery. It keeps independent same-topic facts and labels narrowed relevance as
+an unverified parent bound. It remains opt-in; see the
+[v4 design and acceptance limits](../../docs/BENCHMARK_EVIDENCE_UNITS_V4.md).
+
+New HTTPS and local smoke CLI runs default to `--reader-version v3`. Use
+`--reader-version v2` explicitly to retain the plain answer protocol described
+below. Existing Python call defaults remain v2; the full LongMemEval example
+adds the separate `--reader-mode structured-v3` option without changing its
+existing default.
+
+V3 sends all selected evidence as JSON blocks with source IDs, available dates,
+speaker metadata and exact source spans. Decoding each text field gives the
+unchanged selected text. Content and JSON framing have separately recorded byte
+limits; framing overflow fails instead of clipping the evidence. Unknown host
+metadata stays unknown. Model output binds exact quotes to individual block IDs
+and reports missing facts when abstaining. Invalid quotes remain protocol
+errors; raw completions and validation diagnostics are retained without retries.
+Traceability does not establish factual entailment or completeness.
+
+Freeze new protocol/runtime hashes and write results to a new directory. Do not
+rewrite previous scores or resume a paid run with a fresh unseeded ledger. See
+[the v3 architecture and acceptance record](../../docs/BENCHMARK_RELIABILITY_V3.md)
+for selection changes, compatibility, and development-evaluation limits.
 
 ## Reader delivery and isolated repair audits (v2)
 
@@ -235,3 +270,18 @@ The full-data downloader is explicit and import-safe:
 `python3.13 -m experiments.public_longmemeval.download_full`. It contacts only the
 pinned dataset URL and verifies size/hash before accepting it. It does not fetch
 models. Use `public_retrieval.py --help` for preparation and retrieval commands.
+
+## Experimental v5 passage selection
+
+`--packing-version v5` enables bounded lexical reservations for explicitly
+coordinated query topics. It does not configure a remote scoring service. The
+Python host may additionally pass `passage_reranker=...` with explicit v5 to the
+local/PostgreSQL builders; that provider owns its credentials, model and ledger.
+It scores the actual feasible source text in at most one bounded batch. Returned
+evidence is checked and final authority filtering remains mandatory.
+
+See [v5 design and development results](../../docs/BENCHMARK_COVERAGE_PASSAGES_V5.md)
+for strict/partial ranking protocols, diagnostics and limits. V2 remains the
+default. The 24-case evidence gate and 3-case live repair are exposed development
+checks, not full LongMemEval accuracy. New protocols and ledgers must retain
+frozen results and cumulative costs; no automatic model retry is introduced.

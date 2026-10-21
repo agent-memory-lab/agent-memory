@@ -52,6 +52,7 @@ import agent_memory
 from agent_memory import MemoryScope
 from agent_memory.capture.policy import CaptureSanitizer
 from agent_memory.composition import build_local_kernel
+from agent_memory.retrieval.packing_policy import packing_contract
 from agent_memory.evaluation.comparison import GraphitiComparisonAdapter, Mem0ComparisonAdapter
 from agent_memory.providers import GeneratedTrajectoryClaimExtractor
 from agent_memory.unified_memory import SQLiteDeletionJournal, UnifiedMemory
@@ -81,14 +82,24 @@ async def generate_answer(
     allow_contextual_inference=False,
     reader_thinking=False,
     reader_output_tokens=None,
+    evidence_records=None,
 ):
     """One answer attempt; the interface cannot receive benchmark gold or labels."""
     if reader_mode != "structured" and allow_contextual_inference:
         raise ValueError("contextual inference requires the structured reader")
     if type(reader_thinking) is not bool:
         raise ValueError("reader_thinking must be a boolean")
-    if reader_mode != "structured" and (reader_thinking or reader_output_tokens is not None):
+    if reader_mode not in ("structured", "structured-v3") and (reader_thinking or reader_output_tokens is not None):
         raise ValueError("reader generation options require the structured reader")
+    if reader_mode == "structured-v3":
+        if evidence_records is None:
+            raise ValueError("v3 requires delivered evidence records, not a flattened string")
+        result = await checked_call(ledger, row, "answer.question",
+            evidence_reader.read_evidence_v3(client, model=native.MODEL, question=question,
+                question_date=question_date, records=evidence_records, thinking=reader_thinking,
+                max_output_tokens=reader_output_tokens), timeout)
+        row["answer_reader"] = result.to_dict()
+        return evidence_reader.render_answer(result)
     if reader_mode == "structured":
         result = await checked_call(
             ledger,
@@ -135,6 +146,12 @@ def answer_reader_manifest(args):
     allow_inference = getattr(args, "allow_contextual_inference", False)
     thinking = getattr(args, "reader_thinking", False)
     output_tokens = getattr(args, "reader_output_tokens", None)
+    if mode == 'structured-v3':
+        if allow_inference:
+            raise ValueError('v3 requires explicit support; contextual inference policy belongs to v2')
+        policy = evidence_reader.reader_policy_manifest_v3(thinking=thinking, max_output_tokens=output_tokens)
+        return {'mode':mode, **policy, 'schema_sha256':canonical_digest(evidence_reader.RESPONSE_SCHEMA_V3),
+                'thinking':policy['requested_thinking'], 'max_output_tokens':policy['requested_max_output_tokens']}
     policy = evidence_reader.reader_policy_manifest(
         allow_contextual_inference=allow_inference,
         thinking=thinking,
@@ -335,6 +352,7 @@ async def execute_task(item, task, ordinal, output, args):
                     local = UnifiedMemory(
                         build_local_kernel(
                             path,
+                            packing_version=getattr(args, "packing_version", "v2"),
                             extractor=GeneratedTrajectoryClaimExtractor(
                                 BenchmarkClaimGenerator(client, calls, model=native.MODEL),
                                 provider="ollama",
@@ -369,6 +387,10 @@ async def execute_task(item, task, ordinal, output, args):
                         )
                         if row["extraction"] is not None:
                             record_extraction(row["extraction"], submission)
+                        if getattr(submission, 'provider_event_id', None):
+                            row.setdefault('reader_source_metadata', {})[submission.provider_event_id] = {
+                                'source_id':f'session-{index:04d}', 'occurred_at':event.occurred_at.isoformat(),
+                                'roles':sorted({turn['role'] for turn in session}), 'speaker_scope':'mixed_transcript'}
                         row["ingested_events"] += 1
                     row["sessions_completed"] = index + 1
                     write_json(
@@ -425,8 +447,15 @@ async def execute_task(item, task, ordinal, output, args):
                 )
                 if local is not None:
                     row["retrieval_diagnostics"] = adapter.last_retrieval_diagnostics
-                evidence = bounded_evidence(memories)
-                if local is not None:
+                evidence_records = None
+                if getattr(args, 'reader_mode', 'direct') == 'structured-v3':
+                    evidence_records = evidence_reader.records_from_memories_v3(memories,
+                        source_metadata=row.get('reader_source_metadata', {}))
+                    evidence, _, row['reader_delivery'] = evidence_reader.labeled_evidence_v3(evidence_records)
+                    row['answer_evidence_records'] = evidence_records
+                else:
+                    evidence = bounded_evidence(memories)
+                if local is not None and evidence_records is None:
                     row["retrieval_diagnostics"]["answer_evidence"] = evidence_diagnostic(
                         memories, evidence
                     )
@@ -446,6 +475,7 @@ async def execute_task(item, task, ordinal, output, args):
                     allow_contextual_inference=getattr(args, "allow_contextual_inference", False),
                     reader_thinking=getattr(args, "reader_thinking", False),
                     reader_output_tokens=getattr(args, "reader_output_tokens", None),
+                    evidence_records=evidence_records,
                 )
                 judge_prompt = lme._judge_prompt(
                     item["question_type"],
@@ -509,6 +539,7 @@ async def execute_task(item, task, ordinal, output, args):
 
 async def run(args):
     reader_manifest = answer_reader_manifest(args)
+    packing_manifest = packing_contract(getattr(args, "packing_version", "v2"))
     selection = load_evaluation_selection(
         args.data,
         DATA_SHA256,
@@ -592,11 +623,13 @@ async def run(args):
         "python_hash_seed": os.environ.get("PYTHONHASHSEED"),
         "platform": platform.platform(),
         "answer_prompt_sha256": canonical_digest(
+            evidence_reader.READER_PROMPT_V3 if getattr(args, "reader_mode", "direct") == "structured-v3" else
             evidence_reader.policy_prompt(getattr(args, "allow_contextual_inference", False))
             if getattr(args, "reader_mode", "direct") == "structured"
             else ANSWER_PROMPT
         ),
         "answer_reader": reader_manifest,
+        "packing_contract": packing_manifest,
         "top_k": 8,
         "evidence_utf8_byte_budget": 8192,
         "agent_internal_estimated_token_budget": CommonAgentAdapter.packing_token_budget(),
@@ -716,11 +749,13 @@ def main():
     parser.add_argument("--timeout", type=float, default=300)
     parser.add_argument("--request-budget", type=int, default=10000)
     parser.add_argument("--max-attempts", type=int, default=2)
+    parser.add_argument("--packing-version", choices=("v2", "v3", "v4", "v5"), default="v2",
+                        help="Stable v2 or experimental v3/v4/v5, independent of --reader-mode")
     parser.add_argument(
         "--reader-mode",
-        choices=("direct", "structured"),
+        choices=("direct", "structured", "structured-v3"),
         default="direct",
-        help="Shared answer protocol; structured mode validates verbatim supporting quotes",
+        help="direct/structured preserve v2; structured-v3 binds quotes to source-labelled blocks",
     )
     parser.add_argument(
         "--allow-contextual-inference",

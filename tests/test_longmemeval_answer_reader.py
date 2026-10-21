@@ -61,6 +61,7 @@ def invoke(
     allow_contextual_inference=False,
     reader_thinking=False,
     reader_output_tokens=None,
+    evidence_records=None,
 ):
     answer, observed = worker_answer()
     value = asyncio.run(
@@ -76,6 +77,7 @@ def invoke(
             allow_contextual_inference=allow_contextual_inference,
             reader_thinking=reader_thinking,
             reader_output_tokens=reader_output_tokens,
+            evidence_records=evidence_records,
         )
     )
     return value, observed
@@ -170,4 +172,30 @@ def test_direct_reader_cannot_silently_ignore_structured_generation_options(kwar
     client = Client("unused")
     with pytest.raises(ValueError):
         invoke(client, {}, **kwargs)
+    assert client.calls == []
+
+
+@pytest.mark.parametrize('bad_quote', [False, True])
+def test_v3_worker_uses_bound_records_and_preserves_invalid_raw_completion(bad_quote):
+    records = [{'text':'user: I exhibit at Maple Workshop.', 'source_ids':['synthetic-session']}]
+    raw = json.dumps({'schema_version':'evidence-reader/3','answerable':True,'answer':'Maple Workshop',
+        'supporting_quotes':[{'evidence_id':'E1','text':'Fabricated quote' if bad_quote else 'I exhibit at Maple Workshop.'}],
+        'missing_information':[]})
+    client, row = Client(raw), {}
+    if bad_quote:
+        with pytest.raises(READER.InvalidEvidenceReaderResponse):
+            invoke(client,row,reader_mode='structured-v3',evidence_records=records)
+        assert row['answer_reader']['status'] == 'invalid'
+    else:
+        answer, operations = invoke(client,row,reader_mode='structured-v3',evidence_records=records)
+        assert answer == 'Maple Workshop' and len(operations) == 1
+    assert row['answer_reader']['raw_response'] == raw
+    assert len(client.calls) == 1 and client.calls[0]['format'] == READER.RESPONSE_SCHEMA_V3
+    assert client.calls[0]['options']['num_predict'] == 768
+
+
+def test_v3_worker_requires_source_records_and_does_not_guess_from_flattened_text():
+    client = Client('unused')
+    with pytest.raises(ValueError,match='requires delivered evidence records'):
+        invoke(client,{},reader_mode='structured-v3')
     assert client.calls == []
