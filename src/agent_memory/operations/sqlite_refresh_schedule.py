@@ -48,7 +48,9 @@ CREATE INDEX IF NOT EXISTS refresh_schedule_reservation_usage_idx
 def initialize(connection):
     # SQLite lacks ADD COLUMN IF NOT EXISTS. BEGIN IMMEDIATE serializes the
     # forward migration of pre-clock development/backup tables across processes.
-    connection.execute("BEGIN IMMEDIATE")
+    owns_transaction = not connection.in_transaction
+    if owns_transaction:
+        connection.execute("BEGIN IMMEDIATE")
     try:
         columns = {row[1] for row in connection.execute(
             "PRAGMA table_info(refresh_schedule_contract)"
@@ -57,9 +59,11 @@ def initialize(connection):
             connection.execute(
                 "ALTER TABLE refresh_schedule_contract ADD COLUMN observed_clock TEXT"
             )
-        connection.commit()
+        if owns_transaction:
+            connection.commit()
     except BaseException:
-        connection.rollback()
+        if owns_transaction:
+            connection.rollback()
         raise
 
 
