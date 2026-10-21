@@ -30,6 +30,11 @@ the first stable release.
 
 ### Fixed
 
+- Validate benchmark provider formats and retain redacted transport failures; deliver
+  native evidence without recropping and preserve frozen runs through isolated
+  evidence audits. Add opt-in bounded query facets without changing default
+  retrieval or stored schemas. See [v2 contracts](docs/BENCHMARK_RELIABILITY_V2.md).
+
 - Repair the legacy LongMemEval generator's explicit scored-claim schema so
   useful proposals no longer all disappear at validation. Add real-core positive
   contract fixtures, extraction diagnostics, partial provider usage receipts and
