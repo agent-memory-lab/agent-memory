@@ -215,7 +215,9 @@ jobs:
           python -X warn_default_encoding -W error::EncodingWarning -W error::ResourceWarning -m unittest discover
           -s experiments/public_longmemeval/tests -v
       - name: Include pytest-style reader and audit contracts
-        run: python -m pytest -q experiments/public_longmemeval/tests
+        run: >-
+          python -X warn_default_encoding -W error::EncodingWarning -W error::ResourceWarning
+          -m pytest -q experiments/public_longmemeval/tests
       - name: Check code-only runner and explicit dataset preparation entry points
         run: |
           python -m experiments.public_longmemeval.run_experiment --help

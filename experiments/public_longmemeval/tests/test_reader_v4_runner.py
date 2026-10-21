@@ -66,7 +66,7 @@ def test_opt_in_v4_records_both_calls_and_preserves_native_delivery(
             asyncio.run(call())
     else:
         asyncio.run(call())
-    saved = json.loads((tmp_path / "run/result.json").read_text())
+    saved = json.loads((tmp_path / "run/result.json").read_text(encoding="utf-8"))
     native = saved["arms"]["agent-memory"]
     assert native["answer_reader"]["schema_version"] == "evidence-reader/4"
     assert native["answer_reader"]["status"] == ("invalid" if invalid else "supported")

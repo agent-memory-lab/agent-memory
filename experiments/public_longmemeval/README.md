@@ -286,15 +286,30 @@ default. The 24-case evidence gate and 3-case live repair are exposed developmen
 checks, not full LongMemEval accuracy. New protocols and ledgers must retain
 frozen results and cumulative costs; no automatic model retry is introduced.
 
-## Opt-in audited reader (v4)
+## Opt-in v4 QA reliability and acceptance
 
-Use `--reader-version v4` for at most two separately accounted calls per arm:
-a source-bound draft and support audit. The four-arm preflight reserves eight
-answer calls. Reader v3 remains the default. Protocol 4.2 preserves exact
-citation positions and temporal precision through audit; inferred source-month
-bounds are declared assumptions, not verified event dates.
+`run_experiment.py` and `mac_smoke.py` accept `--reader-version v4`.
+Each arm uses at most two separately recorded calls: source-bound draft and
+support audit. The four-arm public preflight therefore budgets eight answer
+calls rather than four. Reader v3 remains the default; v4's protocol revision
+4.2 has only scoped development and offline proof evidence and has not passed full acceptance.
 
-See [v4 protocol and measured limits](../../docs/BENCHMARK_QA_RELIABILITY_V4.md)
-and [4.2 safety corrections](../../docs/BENCHMARK_QA_RELIABILITY_V4_2.md).
-Development regressions and offline proof checks do not establish full benchmark
-accuracy or quality/cost acceptance.
+`python -m experiments.public_longmemeval.replay_qa --help` describes blind,
+frozen-evidence replay. Preparation performs no paid calls. Execution requires
+an explicit output, credential pointer, immutable prior cumulative ledger and
+an accountable transport; no budget is reset and no failed attempt is retried.
+`qa_report` separately reports rubric credit, answerability consistency and
+full-cost gaps. See [design and measured limits](../../docs/BENCHMARK_QA_RELIABILITY_V4.md).
+
+Protocol revision [4.2](../../docs/BENCHMARK_QA_RELIABILITY_V4_2.md) preserves temporal
+precision, source-month assumptions and exact citation positions through the
+audit. It also corrects attempt-level failure rates and conservative cost
+accounting. `replay_qa --offline --source FROZEN_RUN --output NEW_OUTPUT` checks
+saved candidates without API calls or gold access. `qa_report SOURCE
+--destination NEW_DIRECTORY` preserves older reports and writes V3 audit files.
+Neither command produces a new model accuracy score.
+
+The optional `replay_qa --execute` harness currently requires POSIX private
+credential-file permissions. It refuses paid execution on Windows before loading
+run files or credentials; `prepare`, `--offline` and `qa_report` remain portable.
+This restriction does not apply to the separate Windows HTTPS runner above.
