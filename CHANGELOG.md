@@ -34,7 +34,8 @@ the first stable release.
   rubric credit separate from false abstention, validate judge/summary consistency
   and retain conservative unknown/pending costs. Add immutable evidence replay
   with gold opened only after frozen answers and independent V3 audit outputs;
-  old ledgers and results are never reset. See [acceptance record](docs/design/qa-reliability-2026-10-20/validation.md).
+  old ledgers and results are never reset. Paid replay explicitly requires POSIX
+  private credential-file permissions; offline replay stays portable. See [acceptance record](docs/design/qa-reliability-2026-10-20/validation.md).
 
 - Add an opt-in audited v4 answer reader with exact citation positions, bounded
   deterministic arithmetic/date calculations, declared temporal precision and

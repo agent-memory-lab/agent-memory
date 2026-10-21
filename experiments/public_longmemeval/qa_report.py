@@ -73,9 +73,8 @@ def report(output, *, destination=None):
     gold = {
         r["case_id"]: r
         for r in (
-        json.loads(line)
-        for line in Path(plan["gold"]).read_text(encoding="utf-8").splitlines()
-    )
+            json.loads(line) for line in Path(plan["gold"]).read_text(encoding="utf-8").splitlines()
+        )
     }
     outcomes, paired, new_only = [], [], []
     stages, latencies = Counter(), {}

@@ -13,6 +13,7 @@ import asyncio
 import hashlib
 import importlib.util
 import json
+import os
 import re
 import shutil
 import time
@@ -267,6 +268,8 @@ class RecordedClient:
 
 
 async def execute(output, *, credential_pointer):
+    if os.name != "posix":
+        raise ValueError("paid_replay_requires_posix_private_credentials")
     output = Path(output).resolve()
     plan = read(output / "manifest.json")
     verify(output, plan)
@@ -328,9 +331,9 @@ async def execute(output, *, credential_pointer):
         gold = {
             r["case_id"]: r
             for r in (
-            json.loads(line)
-            for line in Path(plan["gold"]).read_text(encoding="utf-8").splitlines()
-        )
+                json.loads(line)
+                for line in Path(plan["gold"]).read_text(encoding="utf-8").splitlines()
+            )
         }
         import ast
 

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -45,8 +46,9 @@ def prepare(tmp_path):
     rubric = tmp_path / "rubric.py"
     rubric.write_text(
         "def get_anscheck_prompt(kind, question, answer, hypothesis, flag):\n"
-        "    return answer + hypothesis\n"
-    , encoding="utf-8")
+        "    return answer + hypothesis\n",
+        encoding="utf-8",
+    )
     helper = tmp_path / "client.py"
     helper.write_text("UNUSED=True", encoding="utf-8")
     output = tmp_path / "output"
@@ -67,6 +69,9 @@ def test_prepare_is_blind_frozen_and_does_not_open_gold_or_start_api(tmp_path):
         replay_qa.verify(output, plan)
 
 
+@pytest.mark.skipif(
+    os.name != "posix", reason="Paid replay requires POSIX private credential permissions"
+)
 def test_actual_runner_records_draft_check_then_freezes_before_gold_judge(tmp_path, monkeypatch):
     output, plan = prepare(tmp_path)
     credential = tmp_path / "credential"
@@ -162,9 +167,9 @@ def test_actual_runner_records_draft_check_then_freezes_before_gold_judge(tmp_pa
     destination = tmp_path / "new-reports"
     report(output, destination=destination)
     assert (destination / "REPORT_V3.json").exists()
-    offline=replay_qa.replay_candidates(output,tmp_path/'offline')
-    assert len(offline['cases'])==1 and offline['new_accuracy'] is None
-    assert offline['paid_calls']==0 and offline['gold_opened'] is False
+    offline = replay_qa.replay_candidates(output, tmp_path / "offline")
+    assert len(offline["cases"]) == 1 and offline["new_accuracy"] is None
+    assert offline["paid_calls"] == 0 and offline["gold_opened"] is False
     # A later working-source edit must not invalidate the frozen runtime copy.
     Path(plan["transport_path"]).write_text("WORKING_COPY_CHANGED=True", encoding="utf-8")
     projected = report(output)
@@ -179,6 +184,9 @@ def test_actual_runner_records_draft_check_then_freezes_before_gold_judge(tmp_pa
 
 
 @pytest.mark.parametrize("mode", ["headroom", "transport_error", "persist_error"])
+@pytest.mark.skipif(
+    os.name != "posix", reason="Paid replay requires POSIX private credential permissions"
+)
 def test_budget_and_failure_boundaries_never_retry_and_always_close(tmp_path, monkeypatch, mode):
     output, plan = prepare(tmp_path)
     credential = tmp_path / "credential"
@@ -291,3 +299,16 @@ def test_monetary_projection_uses_integer_rounding_without_precision_loss():
     for invalid in (-1, True, 1.5, None):
         with pytest.raises(ValueError, match="invalid_nano_cny"):
             nanos_to_microunits(invalid)
+
+
+def test_paid_replay_refuses_unsupported_permissions_before_loading_any_files(
+    tmp_path, monkeypatch
+):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(replay_qa, "os", SimpleNamespace(name="nt"))
+    with pytest.raises(ValueError, match="paid_replay_requires_posix_private_credentials"):
+        asyncio.run(
+            replay_qa.execute(tmp_path / "missing-run", credential_pointer=tmp_path / "missing")
+        )
+    assert not (tmp_path / "missing-run").exists()

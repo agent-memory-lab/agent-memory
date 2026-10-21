@@ -308,3 +308,8 @@ accounting. `replay_qa --offline --source FROZEN_RUN --output NEW_OUTPUT` checks
 saved candidates without API calls or gold access. `qa_report SOURCE
 --destination NEW_DIRECTORY` preserves older reports and writes V3 audit files.
 Neither command produces a new model accuracy score.
+
+The optional `replay_qa --execute` harness currently requires POSIX private
+credential-file permissions. It refuses paid execution on Windows before loading
+run files or credentials; `prepare`, `--offline` and `qa_report` remain portable.
+This restriction does not apply to the separate Windows HTTPS runner above.
