@@ -36,7 +36,7 @@ class ReaderContext:
 
 def reader_contract(version='v2') -> dict[str, Any]:
     """Serializable protocol declaration; no optional core imports or I/O."""
-    if version not in ('v2', 'v3'):
+    if version not in ('v2', 'v3', 'v4'):
         raise ReaderContextError('unsupported_reader_version')
     contract = {
         'version': 'public-longmemeval-reader/2',
@@ -61,7 +61,7 @@ def reader_contract(version='v2') -> dict[str, Any]:
             'partial/omitted evidence per arm; this is not an equal-context-budget comparison.'
         ),
     }
-    if version == 'v3':
+    if version in ('v3', 'v4'):
         from examples.memory_evidence_reader import reader_policy_manifest_v3
         policy = reader_policy_manifest_v3()
         contract['version'] = 'public-longmemeval-reader/3'
@@ -71,6 +71,10 @@ def reader_contract(version='v2') -> dict[str, Any]:
             framing_utf8_byte_budget=policy['framing_utf8_byte_budget'])
         contract['raw-baselines']['source_framing'] = 'applied after explicit legacy text selection'
         contract['answer_reader'] = policy
+        if version == 'v4':
+            from examples.memory_evidence_reader_v4 import manifest
+            contract['version'] = 'public-longmemeval-reader/4'
+            contract['answer_reader'] = manifest()
     return contract
 
 
@@ -99,7 +103,7 @@ def core_reader_context(
     public memory IDs may repeat for different source windows. This is a host
     consistency check, not a replacement for the core's authorization checks.
     """
-    if version not in ('v2', 'v3'):
+    if version not in ('v2', 'v3', 'v4'):
         raise ReaderContextError('unsupported_reader_version')
     from agent_memory.retrieval.candidate_identity import candidate_identity
     from agent_memory.retrieval.packing import ordered_bundle_evidence, source_ids, token_estimate
@@ -187,7 +191,7 @@ def core_reader_context(
         'partial_semantics': 'relative to selected core evidence; core source windows remain explicit',
         'framing_in_core_budget': False, 'cross_arm_budget_equivalence': False,
     })
-    return source_labeled_context(packed, source_metadata=source_metadata) if version == 'v3' else packed
+    return source_labeled_context(packed, source_metadata=source_metadata) if version in ('v3', 'v4') else packed
 
 
 def source_labeled_context(packed: ReaderContext, *, source_metadata=None) -> ReaderContext:
@@ -254,6 +258,13 @@ async def answer_with_sources(client, *, reader_input, question, question_date, 
     raw = await client.chat(prompt, phase, format=RESPONSE_SCHEMA_V3, limit=MAX_OUTPUT_TOKENS_V3)
     result = validate_reader_response_v3(raw, records=reader_input.delivered)
     return raw, result
+
+
+async def answer_with_checks(client, *, reader_input, question, question_date, phase):
+    """Opt-in v4; the caller records both draft and support-check receipts."""
+    from examples.memory_evidence_reader_v4 import read_answer
+    return await read_answer(client, question=question, question_date=question_date,
+        records=reader_input.delivered, phase=phase)
 
 
 def legacy_reader_context(

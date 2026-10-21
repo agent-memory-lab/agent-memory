@@ -194,7 +194,7 @@ async def run(args, client, preflight_result):
         atomic_write_json(args.output / "result.json", result)
 
     async def answer_arm(name, reader_input, retrieval_seconds=0):
-        if reader_version == 'v3' and not reader_input.diagnostics['mode'].endswith('/v3'):
+        if reader_version in ('v3', 'v4') and not reader_input.diagnostics['mode'].endswith('/v3'):
             reader_input = source_labeled_context(reader_input)
         context = reader_input.context
         started_answer = time.monotonic()
@@ -204,7 +204,16 @@ async def run(args, client, preflight_result):
                                 "context_utf8_bytes": len(context.encode()),
                                 "retrieval_seconds": retrieval_seconds, "status": "answering"}
         checkpoint()
-        if reader_version == 'v3':
+        if reader_version == 'v4':
+            from experiments.public_longmemeval.reader_context import answer_with_checks
+            evaluated = await answer_with_checks(client, reader_input=reader_input,
+                question=query['question'], question_date=query['question_date'], phase='answer:'+name)
+            result['arms'][name]['answer_reader'] = evaluated
+            checkpoint()
+            if evaluated['status'] == 'invalid':
+                raise ReaderContextError('invalid_v4_reader_response')
+            hypothesis = evaluated['answer']
+        elif reader_version == 'v3':
             from examples.memory_evidence_reader import render_answer
             raw, evaluated = await answer_with_sources(client, reader_input=reader_input,
                 question=query['question'], question_date=query['question_date'], phase='answer:'+name)
@@ -318,8 +327,8 @@ def main():
     parser.add_argument("--output", type=Path, default=Path("agent-memory-one-question-run"))
     parser.add_argument("--max-calls", type=int, default=160)
     parser.add_argument("--max-seconds", type=int, default=1800)
-    parser.add_argument('--reader-version', choices=('v2','v3'), default='v3',
-                        help='Source-bound v3 for new runs; v2 explicitly preserves legacy answering')
+    parser.add_argument('--reader-version', choices=('v2','v3','v4'), default='v3',
+                        help='v3 default; opt-in v4 adds an accounted support audit; v2 preserves legacy answering')
     parser.add_argument('--packing-version', choices=('v2','v3','v4','v5'), default='v2',
                         help='Stable v2 by default; opt in to experimental v3/v4/v5 independently of the reader')
     args = parser.parse_args()

@@ -285,3 +285,16 @@ for strict/partial ranking protocols, diagnostics and limits. V2 remains the
 default. The 24-case evidence gate and 3-case live repair are exposed development
 checks, not full LongMemEval accuracy. New protocols and ledgers must retain
 frozen results and cumulative costs; no automatic model retry is introduced.
+
+## Opt-in audited reader (v4)
+
+Use `--reader-version v4` for at most two separately accounted calls per arm:
+a source-bound draft and support audit. The four-arm preflight reserves eight
+answer calls. Reader v3 remains the default. Protocol 4.2 preserves exact
+citation positions and temporal precision through audit; inferred source-month
+bounds are declared assumptions, not verified event dates.
+
+See [v4 protocol and measured limits](../../docs/BENCHMARK_QA_RELIABILITY_V4.md)
+and [4.2 safety corrections](../../docs/BENCHMARK_QA_RELIABILITY_V4_2.md).
+Development regressions and offline proof checks do not establish full benchmark
+accuracy or quality/cost acceptance.

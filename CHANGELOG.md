@@ -30,6 +30,12 @@ the first stable release.
 
 ### Fixed
 
+- Add an opt-in audited v4 answer reader with exact citation positions, bounded
+  deterministic arithmetic/date calculations, declared temporal precision and
+  a separately accounted support check. Keep approximate source-month assumptions
+  explicit and preserve semantic refusals. Protocol 4.2 changes no stored schemas,
+  default readers or authoritative facts. See [limits](docs/BENCHMARK_QA_RELIABILITY_V4_2.md).
+
 - Bind reader v3 quotes to exact source-labeled evidence blocks, retaining host
   dates, speakers and spans without a second text crop. Separate malformed
   responses from abstention and freeze packing/framing ablations before opening
