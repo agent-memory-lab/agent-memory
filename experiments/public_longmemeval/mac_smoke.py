@@ -111,6 +111,7 @@ from experiments.public_longmemeval.core import core_identity, input_identity
 from experiments.public_longmemeval.reader_context import (
     CORE_TOKEN_BUDGET, CORE_ITEM_LIMIT, ReaderContextError,
     core_reader_context, legacy_reader_context, reader_contract,
+    source_labeled_context, answer_with_sources,
 )
 from experiments.public_longmemeval.transport import atomic_write_json
 
@@ -135,9 +136,14 @@ def preflight(client, embedding_mode="auto"):
 
 
 async def run(args, client, preflight_result):
+    reader_version = getattr(args, 'reader_version', 'v2')
+    contract = reader_contract(reader_version)
     if sys.version_info < (3, 13):
         raise RuntimeError("agent-memory requires Python 3.13 or newer")
     identity = core_identity()
+    from agent_memory.retrieval.packing_policy import packing_contract
+    packing_version = getattr(args, 'packing_version', 'v2')
+    packing = packing_contract(packing_version)
     inputs = input_identity(args.smoke)
     from agent_memory import MemoryScope
     from agent_memory.capture.policy import CaptureSanitizer
@@ -161,6 +167,7 @@ async def run(args, client, preflight_result):
     database = args.output / "agent-memory.sqlite3"
     generator = ClaimGenerator(client)
     memory = UnifiedMemory(build_local_kernel(database,
+        packing_version=packing_version,
         extractor=GeneratedTrajectoryClaimExtractor(generator, provider="ollama",
             model=client.model, event_types=("user.message", "agent.model.completed", "agent.tool.completed"),
             fail_open=False),
@@ -175,7 +182,8 @@ async def run(args, client, preflight_result):
               "max_model_calls": args.max_calls, "max_seconds": args.max_seconds,
               "embedding_truncation": False, "agent_memory_recall_token_budget": CORE_TOKEN_BUDGET,
               "agent_memory_mode": "embedding-reranked" if preflight_result["embedding"] else "default-no-embedding",
-              "reader_contract": reader_contract(), "provider_event_source_map": {},
+              "reader_contract": contract, "packing_contract": packing,
+              "provider_event_source_map": {}, "provider_event_metadata": {},
               "events_completed": 0, "receipts": client.receipts, "arms": {}}
     started = time.monotonic()
     initialized = False
@@ -186,6 +194,8 @@ async def run(args, client, preflight_result):
         atomic_write_json(args.output / "result.json", result)
 
     async def answer_arm(name, reader_input, retrieval_seconds=0):
+        if reader_version == 'v3' and not reader_input.diagnostics['mode'].endswith('/v3'):
+            reader_input = source_labeled_context(reader_input)
         context = reader_input.context
         started_answer = time.monotonic()
         result["arms"][name] = {"retrieved_memories": reader_input.candidates,
@@ -194,11 +204,19 @@ async def run(args, client, preflight_result):
                                 "context_utf8_bytes": len(context.encode()),
                                 "retrieval_seconds": retrieval_seconds, "status": "answering"}
         checkpoint()
-        hypothesis = await client.chat(
-            "Answer the question using only the retrieved memory. Do not use outside knowledge. "
-            "If the memory does not provide enough information, say you do not know. Answer concisely.\n"
-            f"Question date: {query['question_date']}\nQuestion: {query['question']}\nRetrieved memory:\n{context}",
-            "answer:" + name, limit=384)
+        if reader_version == 'v3':
+            from examples.memory_evidence_reader import render_answer
+            raw, evaluated = await answer_with_sources(client, reader_input=reader_input,
+                question=query['question'], question_date=query['question_date'], phase='answer:'+name)
+            result['arms'][name].update(answer_reader_raw=raw, answer_reader=evaluated.to_dict())
+            checkpoint()
+            hypothesis = render_answer(evaluated)
+        else:
+            hypothesis = await client.chat(
+                "Answer the question using only the retrieved memory. Do not use outside knowledge. "
+                "If the memory does not provide enough information, say you do not know. Answer concisely.\n"
+                f"Question date: {query['question_date']}\nQuestion: {query['question']}\nRetrieved memory:\n{context}",
+                "answer:" + name, limit=384)
         result["arms"][name].update({"status": "completed", "hypothesis": hypothesis,
                                       "answer_seconds": time.monotonic() - started_answer})
         checkpoint()
@@ -213,9 +231,13 @@ async def run(args, client, preflight_result):
                       for index, content in enumerate(chunks("\n".join(turn["role"] + ": " + turn["content"]
                                                                          for turn in session["turns"]))) ]
         by_id = {chunk.source_id: chunk for chunk in raw_chunks}
+        sessions = {session['source_id']:session for session in record['sessions']}
         def raw_item(value):
+            sid = value.source_id.rsplit('-part-', 1)[0]
             return {"id": value.source_id, "text": value.text,
-                    "source_ids": [value.source_id.rsplit("-part-", 1)[0]]}
+                    "source_ids": [sid], 'kind':'event',
+                    'source_details':[{'source_id':sid, 'occurred_at':value.occurred_at,
+                        'roles':sorted({turn['role'] for turn in sessions[sid]['turns']}), 'speaker_scope':'mixed_transcript'}]}
         await answer_arm("no-memory", legacy_reader_context([]))
         retrieval_started = time.monotonic()
         ranked = bm25(query["question"], raw_chunks, CORE_ITEM_LIMIT)
@@ -236,6 +258,9 @@ async def run(args, client, preflight_result):
                 if capture.status != "done" or not capture.provider_event_id:
                     raise RuntimeError("Core returned no completed capture with a provider event identifier")
                 result["provider_event_source_map"][capture.provider_event_id] = session["source_id"]
+                result['provider_event_metadata'][capture.provider_event_id] = {
+                    'source_id':session['source_id'], 'occurred_at':session['occurred_at'],
+                    'roles':sorted({turn['role'] for turn in session['turns']})}
                 result["events_completed"] += 1
                 checkpoint()
                 print(json.dumps({"event_completed": result["events_completed"], "model_calls": len(client.receipts)}), flush=True)
@@ -251,7 +276,8 @@ async def run(args, client, preflight_result):
         bundle = await memory.recall(query["question"], limit=CORE_ITEM_LIMIT,
                                      token_budget=CORE_TOKEN_BUDGET, include_current_state=False)
         reader_input = core_reader_context(bundle, result["provider_event_source_map"],
-                                           token_budget=CORE_TOKEN_BUDGET, item_limit=CORE_ITEM_LIMIT)
+                                           token_budget=CORE_TOKEN_BUDGET, item_limit=CORE_ITEM_LIMIT,
+                                           version=reader_version, source_metadata=result['provider_event_metadata'])
         retrieval_seconds = time.monotonic() - retrieval_started
         result["embedding_calls_completed"] = sum(row["phase"] == "embedding" and row["status"] == "completed"
                                                    for row in client.receipts)
@@ -292,6 +318,10 @@ def main():
     parser.add_argument("--output", type=Path, default=Path("agent-memory-one-question-run"))
     parser.add_argument("--max-calls", type=int, default=160)
     parser.add_argument("--max-seconds", type=int, default=1800)
+    parser.add_argument('--reader-version', choices=('v2','v3'), default='v3',
+                        help='Source-bound v3 for new runs; v2 explicitly preserves legacy answering')
+    parser.add_argument('--packing-version', choices=('v2','v3','v4','v5'), default='v2',
+                        help='Stable v2 by default; opt in to experimental v3/v4/v5 independently of the reader')
     args = parser.parse_args()
     if not 1 <= args.max_calls <= 500 or not 1 <= args.max_seconds <= 7200:
         parser.error("Bounded limits required: calls 1..500, seconds 1..7200")

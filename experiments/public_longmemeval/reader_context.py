@@ -10,9 +10,11 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 CORE_READER_MODE = 'core-evidence-verbatim/v2'
+CORE_READER_MODE_V3 = 'core-evidence-source-bound/v3'
 LEGACY_READER_MODE = 'legacy-utf8-prefix/v1'
 CORE_TOKEN_BUDGET = 2048
 CORE_ITEM_LIMIT = 8
@@ -32,9 +34,11 @@ class ReaderContext:
     diagnostics: dict[str, Any]
 
 
-def reader_contract() -> dict[str, Any]:
+def reader_contract(version='v2') -> dict[str, Any]:
     """Serializable protocol declaration; no optional core imports or I/O."""
-    return {
+    if version not in ('v2', 'v3'):
+        raise ReaderContextError('unsupported_reader_version')
+    contract = {
         'version': 'public-longmemeval-reader/2',
         'agent-memory': {
             'mode': CORE_READER_MODE, 'budget_owner': 'native_core_packer',
@@ -57,6 +61,17 @@ def reader_contract() -> dict[str, Any]:
             'partial/omitted evidence per arm; this is not an equal-context-budget comparison.'
         ),
     }
+    if version == 'v3':
+        from examples.memory_evidence_reader import reader_policy_manifest_v3
+        policy = reader_policy_manifest_v3()
+        contract['version'] = 'public-longmemeval-reader/3'
+        contract['agent-memory'].update(mode=CORE_READER_MODE_V3,
+            serialization_utf8_guard=4*CORE_TOKEN_BUDGET+policy['framing_utf8_byte_budget'],
+            framing='source-labelled JSON; decoded text unchanged',
+            framing_utf8_byte_budget=policy['framing_utf8_byte_budget'])
+        contract['raw-baselines']['source_framing'] = 'applied after explicit legacy text selection'
+        contract['answer_reader'] = policy
+    return contract
 
 
 def _render(items: Sequence[Mapping[str, Any]]) -> str:
@@ -75,6 +90,7 @@ def _source_tuple(value: Any) -> tuple[str, ...]:
 def core_reader_context(
     bundle, source_event_map: Mapping[str, str], *,
     token_budget: int = CORE_TOKEN_BUDGET, item_limit: int = CORE_ITEM_LIMIT,
+    version='v2', source_metadata: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> ReaderContext:
     """Validate and deliver every selected native evidence item, without repacking.
 
@@ -83,6 +99,8 @@ def core_reader_context(
     public memory IDs may repeat for different source windows. This is a host
     consistency check, not a replacement for the core's authorization checks.
     """
+    if version not in ('v2', 'v3'):
+        raise ReaderContextError('unsupported_reader_version')
     from agent_memory.retrieval.candidate_identity import candidate_identity
     from agent_memory.retrieval.packing import ordered_bundle_evidence, source_ids, token_estimate
 
@@ -153,7 +171,7 @@ def core_reader_context(
     byte_guard = 4*token_budget + 3*item_limit
     if context_bytes > byte_guard:
         raise ReaderContextError('serialization_guard_exceeded')
-    return ReaderContext(context, tuple(candidates), delivered, {
+    packed = ReaderContext(context, tuple(candidates), delivered, {
         'mode': CORE_READER_MODE, 'budget_owner': 'native_core_packer',
         'evidence_estimated_token_budget': token_budget,
         'evidence_estimated_tokens': estimated_tokens,
@@ -169,6 +187,73 @@ def core_reader_context(
         'partial_semantics': 'relative to selected core evidence; core source windows remain explicit',
         'framing_in_core_budget': False, 'cross_arm_budget_equivalence': False,
     })
+    return source_labeled_context(packed, source_metadata=source_metadata) if version == 'v3' else packed
+
+
+def source_labeled_context(packed: ReaderContext, *, source_metadata=None) -> ReaderContext:
+    """Add host provenance framing to already selected text; never repack it.
+
+    Source dates belong to the captured source, not the derived claim's creation
+    timestamp. Missing metadata is unknown. Mixed transcript chunks remain mixed;
+    the capture adapter's outer `user` role cannot turn assistant text into fact.
+    """
+    from examples.memory_evidence_reader import labeled_evidence_v3
+    from agent_memory.retrieval.packing import token_estimate
+    metadata = source_metadata or {}
+    if not isinstance(metadata, Mapping):
+        raise ReaderContextError('invalid_source_metadata')
+    delivered = []
+    for candidate in packed.delivered:
+        details = []
+        for source in candidate.get('source_event_ids', ()):
+            entry = metadata.get(source)
+            if entry is None:
+                details.append({'event_id': source, 'occurred_at': 'unknown', 'roles': 'unknown'})
+                continue
+            if not isinstance(entry, Mapping) or entry.get('source_id') not in candidate['source_ids']:
+                raise ReaderContextError('source_metadata_identity_mismatch')
+            date, roles = entry.get('occurred_at'), entry.get('roles')
+            try:
+                if not isinstance(date, str) or len(date) > 128 or datetime.fromisoformat(date).tzinfo is None:
+                    raise ValueError
+            except ValueError:
+                raise ReaderContextError('source_metadata_date_invalid') from None
+            if (not isinstance(roles, (list, tuple)) or not roles
+                    or any(role not in ('user', 'assistant', 'system', 'tool') for role in roles)):
+                raise ReaderContextError('source_metadata_roles_invalid')
+            details.append({'event_id': source, 'source_id': entry['source_id'],
+                'occurred_at': date, 'roles': sorted(set(roles)),
+                'speaker_scope': 'mixed_transcript' if len(set(roles)) > 1 else roles[0]})
+        row = dict(candidate)
+        if details:
+            row['source_details'] = details
+        delivered.append(row)
+    try:
+        context, blocks, framing = labeled_evidence_v3(delivered)
+    except (ValueError, TypeError, UnicodeError) as error:
+        raise ReaderContextError('source_framing_invalid:' + str(error)) from None
+    delivered = tuple({**row, 'evidence_id': block['evidence_id']} for row, block in zip(delivered, blocks, strict=True))
+    return ReaderContext(context, packed.candidates, delivered, {
+        **packed.diagnostics, **framing, 'mode': CORE_READER_MODE_V3 if packed.diagnostics['mode'] == CORE_READER_MODE else 'legacy-selected-source-bound/v3',
+        'base_selection_mode': packed.diagnostics['mode'],
+        'framing_in_core_budget': False, 'evidence_text_not_repacked': True,
+        'serialized_context_estimated_tokens': token_estimate(context),
+        'serialization_utf8_guard': 8192+framing['framing_utf8_byte_budget'],
+    })
+
+
+async def answer_with_sources(client, *, reader_input, question, question_date, phase):
+    """One shared structured answer request; callers persist before rendering.
+
+    The raw completion is preserved separately from validation. Protocol errors
+    cannot become an ordinary abstention or silently overwrite that completion.
+    """
+    from examples.memory_evidence_reader import (build_reader_prompt_v3, RESPONSE_SCHEMA_V3,
+        MAX_OUTPUT_TOKENS_V3, validate_reader_response_v3)
+    prompt = build_reader_prompt_v3(question=question, question_date=question_date, records=reader_input.delivered)
+    raw = await client.chat(prompt, phase, format=RESPONSE_SCHEMA_V3, limit=MAX_OUTPUT_TOKENS_V3)
+    result = validate_reader_response_v3(raw, records=reader_input.delivered)
+    return raw, result
 
 
 def legacy_reader_context(

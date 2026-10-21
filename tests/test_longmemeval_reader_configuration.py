@@ -226,6 +226,15 @@ def run_cli(monkeypatch, options):
     return observed
 
 
+def test_cli_packing_selection_is_independent_of_reader_selection(monkeypatch):
+    args = run_cli(monkeypatch, ["--packing-version", "v3"])[0]
+    assert args.packing_version == "v3" and args.reader_mode == "direct"
+    args = run_cli(monkeypatch, ["--reader-mode", "structured-v3"])[0]
+    assert args.packing_version == "v2" and args.reader_mode == "structured-v3"
+    args = run_cli(monkeypatch, ["--packing-version", "v4", "--reader-mode", "structured-v3"])[0]
+    assert args.packing_version == "v4" and args.reader_mode == "structured-v3"
+
+
 def test_cli_explicit_reader_options_reach_worker_without_model_calls(monkeypatch):
     rows = run_cli(
         monkeypatch,

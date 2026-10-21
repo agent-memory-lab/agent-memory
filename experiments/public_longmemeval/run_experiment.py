@@ -16,6 +16,7 @@ from experiments.public_longmemeval.extraction import ClaimGenerator, chunks
 from experiments.public_longmemeval.reader_context import (
     CORE_TOKEN_BUDGET, CORE_ITEM_LIMIT, LEGACY_CONTEXT_BYTES, ReaderContextError,
     core_reader_context, legacy_reader_context, legacy_pack, reader_contract,
+    source_labeled_context, answer_with_sources,
 )
 from experiments.public_longmemeval.public_retrieval import REPO_REVISION, sha, blind_sessions, BlindSession, bm25
 
@@ -23,12 +24,14 @@ ROOT = Path(__file__).resolve().parent
 ARMS = ('no-memory', 'bm25-raw-chunk', 'recent-raw-chunk', 'agent-memory')
 CONTEXT_BYTES = LEGACY_CONTEXT_BYTES  # Legacy raw-baseline cap only.
 
-def verify():
+def verify(reader_version='v2', packing_version='v2'):
     if sys.version_info < (3,13):
         raise RuntimeError('Requires installed Python 3.13+; nothing is installed automatically')
     if any(not (ROOT/"smoke"/name).is_file() for name in ("corpus.json", "query.json", "gold.evaluator-only.json")):
         raise RuntimeError("Optional sample is absent; run download_full and prepare_smoke explicitly first")
     identity=core_identity()
+    from agent_memory.retrieval.packing_policy import packing_contract
+    packing = packing_contract(packing_version)
     inputs=input_identity(ROOT/"smoke")
     manifest=json.loads((ROOT/'smoke/manifest.json').read_text(encoding='utf-8'))
     for name,digest in manifest['artifacts'].items():
@@ -41,15 +44,16 @@ def verify():
     parts=sum(len(list(chunks('\n'.join(t['role']+': '+t['content'] for t in s['turns'])))) for s in record['sessions'])
     return record,query,{'sessions':len(record['sessions']),'turns':sum(len(s['turns']) for s in record['sessions']),
                         'extraction_calls':parts,'answer_calls':4,'max_calls_needed':parts+4,'core_identity':identity,'input_artifacts':inputs,
-                        'dataset_revision':manifest['dataset_revision'],'reader_contract':reader_contract()}
+                        'dataset_revision':manifest['dataset_revision'],'reader_contract':reader_contract(reader_version),
+                        'packing_contract':packing}
 
 def pack(memories):
     """Compatibility alias for the legacy raw baseline; native delivery uses v2."""
     return legacy_pack(memories)
 
-async def experiment(client, output):
+async def experiment(client, output, *, reader_version='v2', packing_version='v2'):
     from experiments.public_longmemeval.transport import atomic_write_json
-    record,query,plan=verify()
+    record,query,plan=verify(reader_version, packing_version)
     output.mkdir(parents=True,exist_ok=False)
     from agent_memory import MemoryScope
     from agent_memory.capture.policy import CaptureSanitizer
@@ -58,7 +62,7 @@ async def experiment(client, output):
     from agent_memory.providers import GeneratedTrajectoryClaimExtractor
     from agent_memory.unified_memory import SQLiteDeletionJournal, UnifiedMemory
     database=output/'agent-memory.sqlite3'; generator=ClaimGenerator(client)
-    memory=UnifiedMemory(build_local_kernel(database,extractor=GeneratedTrajectoryClaimExtractor(generator,
+    memory=UnifiedMemory(build_local_kernel(database,packing_version=packing_version,extractor=GeneratedTrajectoryClaimExtractor(generator,
         provider='openai-compatible-user-selected',model=client.model,
         event_types=('user.message','agent.model.completed','agent.tool.completed'),fail_open=False)),
         MemoryScope('public-longmemeval-real',user_id=record['case_id'],session_id='one-question'),
@@ -66,7 +70,7 @@ async def experiment(client, output):
     result={'status':'running','evidence_class':'real_public_dataset_user_run','official_score_equivalent':False,
       'case_id':query['case_id'],'question':query['question'],'question_date':query['question_date'],
       'input_artifacts':plan['input_artifacts'],'protocol':plan,'runner_sha256':sha(Path(__file__)),'model':client.model,'embedding_mode':'default-no-embedding',
-      'core_recall_estimated_token_budget':CORE_TOKEN_BUDGET,'arms':{},'events_completed':0,'extraction_seconds':None,'provider_event_source_map':{},
+      'core_recall_estimated_token_budget':CORE_TOKEN_BUDGET,'arms':{},'events_completed':0,'extraction_seconds':None,'provider_event_source_map':{},'provider_event_metadata':{},
       'purpose':'Single selected development case diagnostic; not a representative accuracy estimate'}
     start=time.monotonic(); initialized=False
     def checkpoint():
@@ -77,22 +81,37 @@ async def experiment(client, output):
             result['cumulative_budget']=client.budget_summary()
         atomic_write_json(output/'result.json',result)
     async def answer(name, reader_input, retrieval_seconds):
+        if reader_version == 'v3' and not reader_input.diagnostics['mode'].endswith('/v3'):
+            reader_input = source_labeled_context(reader_input)
         context=reader_input.context
         result['arms'][name]={'status':'answering','retrieved_candidates':reader_input.candidates,
           'delivered_memories':reader_input.delivered, 'reader_delivery':reader_input.diagnostics,
           'reader_context':context,'context_utf8_bytes':len(context.encode()),'retrieval_seconds':retrieval_seconds}
         checkpoint(); started=time.monotonic()
-        answer=await client.chat('Answer the question using only the retrieved memory. Do not use outside knowledge. '
-          'If the memory does not provide enough information, say you do not know. Answer concisely.\n'
-          f"Question date: {query['question_date']}\nQuestion: {query['question']}\nRetrieved memory:\n{context}",
-          'answer:'+name,limit=384)
+        if reader_version == 'v3':
+            from examples.memory_evidence_reader import render_answer
+            raw, evaluated = await answer_with_sources(client, reader_input=reader_input,
+                question=query['question'], question_date=query['question_date'], phase='answer:'+name)
+            result['arms'][name].update(answer_reader_raw=raw, answer_reader=evaluated.to_dict())
+            checkpoint()
+            answer = render_answer(evaluated)
+        else:
+            answer=await client.chat('Answer the question using only the retrieved memory. Do not use outside knowledge. '
+              'If the memory does not provide enough information, say you do not know. Answer concisely.\n'
+              f"Question date: {query['question_date']}\nQuestion: {query['question']}\nRetrieved memory:\n{context}",
+              'answer:'+name,limit=384)
         result['arms'][name].update(status='completed',hypothesis=answer,answer_seconds=time.monotonic()-started)
         checkpoint()
     try:
         raw=[BlindSession(s['source_id']+f'-part-{i:03d}',s['occurred_at'],'['+s['occurred_at']+'] '+c)
           for s in record['sessions'] for i,c in enumerate(chunks('\n'.join(t['role']+': '+t['content'] for t in s['turns'])))]
         byid={x.source_id:x for x in raw}
-        def item(x): return {'id':x.source_id,'text':x.text,'source_ids':[x.source_id.split('-part-')[0]]}
+        sessions = {s['source_id']: s for s in record['sessions']}
+        def item(x):
+            sid = x.source_id.rsplit('-part-', 1)[0]
+            return {'id':x.source_id,'text':x.text,'source_ids':[sid], 'kind':'event',
+                'source_details':[{'source_id':sid,'occurred_at':x.occurred_at,
+                    'roles':sorted({t['role'] for t in sessions[sid]['turns']}), 'speaker_scope':'mixed_transcript'}]}
         await answer('no-memory',legacy_reader_context([]),0)
         started=time.monotonic();ranked=bm25(query['question'],raw,8)
         await answer('bm25-raw-chunk',legacy_reader_context([item(byid[k]) for k in ranked]),time.monotonic()-started)
@@ -104,6 +123,9 @@ async def experiment(client, output):
                 capture=await adapter.add(RawInteraction(s['source_id']+f'-part-{i:03d}','user',c,datetime.fromisoformat(s['occurred_at'])))
                 if not capture.provider_event_id: raise RuntimeError('Core returned no provider event identifier')
                 result['provider_event_source_map'][capture.provider_event_id]=s['source_id']
+                result['provider_event_metadata'][capture.provider_event_id] = {
+                    'source_id':s['source_id'], 'occurred_at':s['occurred_at'],
+                    'roles':sorted({t['role'] for t in s['turns']})}
                 result['events_completed']+=1;checkpoint()
                 print('Saved memory segment',result['events_completed'],'/',plan['extraction_calls'],flush=True)
         result['extraction_seconds']=time.monotonic()-started
@@ -116,7 +138,8 @@ async def experiment(client, output):
         bundle=await memory.recall(query['question'],limit=CORE_ITEM_LIMIT,
           token_budget=CORE_TOKEN_BUDGET,include_current_state=False)
         reader_input=core_reader_context(bundle,result['provider_event_source_map'],
-          token_budget=CORE_TOKEN_BUDGET,item_limit=CORE_ITEM_LIMIT)
+          token_budget=CORE_TOKEN_BUDGET,item_limit=CORE_ITEM_LIMIT,version=reader_version,
+          source_metadata=result['provider_event_metadata'])
         await answer('agent-memory',reader_input,time.monotonic()-started)
         result['status']='completed';result['answer_accuracy']=None
     except BaseException as e:
@@ -138,7 +161,11 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('command',choices=['preflight','run'])
     p.add_argument('--config',type=Path,default=ROOT/'config.local.json')
-    args=p.parse_args();_,_,plan=verify()
+    p.add_argument('--reader-version', choices=('v2','v3'), default='v3',
+                   help='New runs default to source-bound v3; v2 preserves the legacy answer protocol')
+    p.add_argument('--packing-version', choices=('v2','v3','v4','v5'), default='v2',
+                   help='v2 is stable; experimental v3/v4/v5 are independent of the reader version')
+    args=p.parse_args();_,_,plan=verify(args.reader_version, args.packing_version)
     print(json.dumps(plan,ensure_ascii=False,indent=2))
     if args.command=='preflight': return
     from experiments.public_longmemeval.transport import Config, Client, prompt_api_key
@@ -154,7 +181,8 @@ def main():
     if not key: raise ValueError('No key supplied')
     with Client(config,key,ROOT/'state') as client:
         client.accept_budget()
-        asyncio.run(experiment(client,ROOT/'runs'/('run-'+datetime.now().strftime('%Y%m%d-%H%M%S'))))
+        asyncio.run(experiment(client,ROOT/'runs'/('run-'+datetime.now().strftime('%Y%m%d-%H%M%S')),
+            reader_version=args.reader_version, packing_version=args.packing_version))
     print('Saved answers and receipts. Run evaluate.py on the saved run directory for independent manual review.')
 if __name__=='__main__':
     try: main()
