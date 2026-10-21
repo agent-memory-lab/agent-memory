@@ -41,7 +41,7 @@ class MockClient:
             return json.dumps({'claims': [{'key': 'fictional.robot.color', 'value': 'blue',
                 'text': 'The fictional robot stores a blue cube.', 'confidence': .95}]})
         if phase == 'answer:agent-memory':
-            self.answer_checkpoint = json.loads((self.output/'result.json').read_text())
+            self.answer_checkpoint = json.loads((self.output/'result.json').read_text(encoding="utf-8"))
             if self.fail_answer:
                 raise RuntimeError('Synthetic reader failure')
         return 'Offline mock answer, not a model benchmark result.'
@@ -73,7 +73,7 @@ def test_real_core_local_runner_preserves_native_citations_and_checkpoints(tmp_p
         assert result['arms'][name]['context_utf8_bytes'] <= 6000
     assert client.answer_checkpoint['arms']['agent-memory']['status'] == 'answering'
     assert client.answer_checkpoint['arms']['agent-memory']['reader_context'] == native['reader_context']
-    saved = json.loads((args.output/'result.json').read_text())
+    saved = json.loads((args.output/'result.json').read_text(encoding="utf-8"))
     assert saved['status'] == 'completed' and saved['answer_accuracy'] is None
 
 
@@ -122,7 +122,7 @@ def test_reader_contract_failure_saved_before_answer_call(tmp_path, monkeypatch,
     client = MockClient(args.output)
     with pytest.raises(ReaderContextError, match=code):
         asyncio.run(mac_smoke.run(args, client, {'embedding': None}))
-    saved = json.loads((args.output/'result.json').read_text())
+    saved = json.loads((args.output/'result.json').read_text(encoding="utf-8"))
     assert saved['status'] == 'blocked_or_failed'
     assert saved['error_type'] == 'ReaderContextError'
     assert saved['reader_contract_error'] == code
@@ -136,7 +136,7 @@ def test_failed_answer_keeps_context_and_source_evidence(tmp_path):
     client = MockClient(args.output, fail_answer=True)
     with pytest.raises(RuntimeError, match='Synthetic reader failure'):
         asyncio.run(mac_smoke.run(args, client, {'embedding': None}))
-    saved = json.loads((args.output/'result.json').read_text())
+    saved = json.loads((args.output/'result.json').read_text(encoding="utf-8"))
     assert saved['status'] == 'blocked_or_failed'
     native = saved['arms']['agent-memory']
     assert native['status'] == 'answering'
@@ -153,7 +153,7 @@ def test_missing_capture_source_id_fails_without_claiming_ingest_completion(tmp_
     client = MockClient(args.output)
     with pytest.raises(RuntimeError, match='provider event identifier'):
         asyncio.run(mac_smoke.run(args, client, {'embedding': None}))
-    saved = json.loads((args.output/'result.json').read_text())
+    saved = json.loads((args.output/'result.json').read_text(encoding="utf-8"))
     assert saved['events_completed'] == 0
     assert saved['provider_event_source_map'] == {}
     assert saved['status'] == 'blocked_or_failed'

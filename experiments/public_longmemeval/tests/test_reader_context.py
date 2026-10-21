@@ -298,7 +298,7 @@ def test_runner_delivers_large_native_bundle_without_legacy_second_pack(tmp_path
     if over_budget:
         with pytest.raises(ReaderContextError, match='core_token_budget_exceeded'):
             asyncio.run(runner.experiment(client, tmp_path/'run'))
-        failed = json.loads((tmp_path/'run/result.json').read_text())
+        failed = json.loads((tmp_path/'run/result.json').read_text(encoding="utf-8"))
         assert failed['status'] == 'incomplete'
         assert failed['reader_contract_error'] == 'core_token_budget_exceeded'
         assert 'answer:agent-memory' not in client.prompts

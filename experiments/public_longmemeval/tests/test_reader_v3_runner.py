@@ -50,7 +50,7 @@ def test_v3_real_sqlite_path_uses_one_shared_reader_and_saves_protocol_errors(tm
             asyncio.run(invocation())
     else:
         asyncio.run(invocation())
-    saved = json.loads((tmp_path/'run/result.json').read_text())
+    saved = json.loads((tmp_path/'run/result.json').read_text(encoding="utf-8"))
     contract = saved.get('reader_contract') or saved['protocol']['reader_contract']
     assert contract['version'] == 'public-longmemeval-reader/3'
     assert len(contract['answer_reader']['shared_reader_sha256']) == 64
