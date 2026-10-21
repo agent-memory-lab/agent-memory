@@ -74,6 +74,12 @@ the first stable release.
   diagnostics without rewriting stopped runs. See
   [ingestion reliability and compatibility](docs/INGESTION_RELIABILITY.md).
 
+- Serialize SQLite schema creation and forward migrations in one database writer
+  transaction, preserving the lock across scripts and rolling back partial
+  initialization on failure. Nested scheduler/index initialization respects its
+  caller's transaction. Stored schemas and ordinary write semantics are unchanged.
+  See [initialization guarantees](docs/SQLITE_INITIALIZATION.md).
+
 - Keep core imports and SQLite operations available without Unix `resource`;
   unavailable peak RSS raises explicitly instead of fabricating a measurement.
   Add a unified seven-distribution build/install/archive gate on Linux, macOS,
