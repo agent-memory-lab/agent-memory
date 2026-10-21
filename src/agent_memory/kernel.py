@@ -78,6 +78,7 @@ from .ports import (
     Reranker,
 )
 from .retrieval.packing import contiguous_excerpt, pack_native_evidence
+from .retrieval.packing_policy import packing_contract
 from .retrieval.temporal_history import temporal_candidates
 
 if TYPE_CHECKING:
@@ -114,7 +115,14 @@ class MemoryKernel:
         capabilities: MemoryCapabilities | None = None,
         consolidation_scheduler: ConsolidationScheduler | None = None,
         trusted_evaluator_ids: Collection[str] | None = None,
+        packing_version: str = "v2",
+        passage_reranker: Reranker | None = None,
     ) -> None:
+        packing_contract(packing_version)  # Fail before opening a repository or invoking a model.
+        if passage_reranker is not None and packing_version != "v5":
+            raise ValueError("passage_reranker requires explicit packing_version=v5")
+        self._passage_reranker = passage_reranker
+        self._packing_version = packing_version
         self._repository = repository
         self._extractor = extractor
         self._policy = policy
@@ -633,7 +641,11 @@ class MemoryKernel:
         # atoms; only newly read raw context needs this additional source gate.
         context = await self._guard_atom_candidates(query.scope, context) if context else ()
         packing_input = (*ranked, *context)
-        packed = pack_native_evidence(query, current, packing_input)
+        passage_options = {}
+        if self._passage_reranker is not None:
+            from .retrieval.passage_reranking import rerank_passages
+            passage_options["passages"] = await rerank_passages(query, packing_input, self._passage_reranker)
+        packed = pack_native_evidence(query, current, packing_input, version=self._packing_version, **passage_options)
         selected_state = packed.state
         selected = packed.items
         citations = packed.citations

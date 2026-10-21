@@ -31,8 +31,10 @@ def build_local_kernel(
     consolidation_scheduler: ConsolidationScheduler | None = None,
     trusted_evaluator_ids: Collection[str] | None = None,
     enable_query_facets: bool = False,
+    packing_version: str = "v2",
+    passage_reranker: Reranker | None = None,
 ) -> MemoryKernel:
-    """Build the local kernel; experimental query-facet recall requires opt-in."""
+    """Build a kernel with stable v2 packing; facets and v3/v4 packing require opt-in."""
     base_reranker = reranker or ReciprocalRankFusionReranker()
     return MemoryKernel(
         repository=SQLiteMemoryRepository(database_path, enable_query_facets=enable_query_facets),
@@ -46,6 +48,8 @@ def build_local_kernel(
         provider_name="sqlite-local",
         consolidation_scheduler=consolidation_scheduler,
         trusted_evaluator_ids=trusted_evaluator_ids,
+        packing_version=packing_version,
+        passage_reranker=passage_reranker,
         capabilities=MemoryCapabilities(
             automatic_extraction=extractor is not None,
             memory_blocks=True,

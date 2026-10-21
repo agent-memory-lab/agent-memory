@@ -30,6 +30,11 @@ the first stable release.
 
 ### Fixed
 
+- Keep evidence dependency groups intact during budgeted packing and final
+  authorized delivery. Add opt-in v3/v4/v5 packing, bounded coverage reservations
+  and an explicitly configured passage reranker; v2 stays the default and stored
+  schemas are unchanged. See [packing limits](docs/BENCHMARK_COVERAGE_PASSAGES_V5.md).
+
 - Validate benchmark provider formats and retain redacted transport failures; deliver
   native evidence without recropping and preserve frozen runs through isolated
   evidence audits. Add opt-in bounded query facets without changing default
