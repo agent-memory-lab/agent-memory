@@ -12,8 +12,12 @@ from json import dumps
 from math import isfinite, log1p
 
 from ..domain import Citation, Claim, MemoryItem, MemoryKind, MemoryQuery
-from .analyzer import lexical_terms
+from .analyzer import lexical_terms, query_content_anchors
 from .candidate_identity import MAX_SOURCE_WINDOW_CHARS, candidate_identity
+from .packing_policy import _packing_policy, packing_contract
+from .evidence_units import context_relations, dependency_group
+from .coverage_plan import coverage_plan
+from .passage_reranking import passage_key, query_key
 
 
 def token_estimate(text: str) -> int:
@@ -389,6 +393,10 @@ class _PreparedEvidence:
     sources: tuple[str, ...]
     event_signature: tuple | None
     relevance: float
+    support: frozenset[str]
+    parent_relevance: float
+    support_retention: float
+    context_score_factor: float
 
 
 def _event_interval(entry: _PreparedEvidence) -> tuple[int, int] | None:
@@ -476,20 +484,45 @@ def pack_native_evidence(
     query: MemoryQuery,
     current: Sequence[Claim],
     ranked: Sequence[MemoryItem],
+    *,
+    version: str = "v2",
+    passages=None,
 ) -> NativePackingResult:
-    """Relevance-led feasible packing with bounded coverage and redundancy.
+    """Select native evidence using a frozen, explicitly selected policy.
+
+    Stable v2 retains the historical relevance-led choices. Experimental v3
+    uses the heuristics below. V4 uses conservative identity/coverage deduplication
+    and source-bound context units, with parent scores explicitly unverified for
+    narrowed passages. Selecting a reader never selects a packing policy.
+    All policies share source, span and budget checks.
 
     Sources are not truth units: different claims from the same source are never
     collapsed. The full input pool is analyzed once without pre-truncating
     conflicts; selection rescans cached sets for at most 64 + query.limit rounds.
-    Reranker score gaps are preserved on a request-local [0, 1] scale. Coverage
-    contributes at most 0.02, provenance diversity at most 0.005, and overlapping
-    EVENT evidence receives at most a 0.03 penalty. These bounded adjustments
-    cannot promote an irrelevant word-rich passage over a substantially more
-    relevant semantic match. Coverage remains a heuristic, not a corpus proof.
+    Reranker score gaps are preserved on a request-local [0, 1] scale. Only the
+    best effective-relevance frontier (within 0.12) competes on coverage, cost
+    and provenance. Query-topic repetition costs at most 0.08 (soft MMR, never
+    claim removal). New query topics contribute at most 0.08, other coverage
+    at most 0.02, provenance at most 0.005, overlap costs at most 0.03 and token
+    cost at most 0.10. Narrowed passages must retain their parent's query support
+    to retain its score. After selection, remaining tokens grow exact selected
+    source windows fairly without consuming more slots. These are lexical/budget
+    heuristics, not answer-completeness or truth judgments.
     """
+    policy = _packing_policy(version)
+    if passages is not None and (version != "v5" or passages.query_binding != query_key(query)):
+        raise ValueError("passage ranking must bind the same v5 query")
+    plan = coverage_plan(query.text, ranked) if policy.coverage_reservations else None
+    covered_groups: set[str] = set()
+    relations = context_relations(ranked) if policy.dependency_units else None
     terms = set(lexical_terms(query.text))
-    finite_scores = [item.score for item in ranked if isfinite(item.score)]
+    support_terms = (set(query_content_anchors(query.text)) or terms) if policy.content_anchors else terms
+    variant_query = (
+        (" ".join(query_content_anchors(query.text)) or query.text)
+        if policy.dependency_units else query.text
+    )
+    finite_scores = [item.score for item in ranked if isfinite(item.score)
+                     and (not policy.dependency_units or item.metadata.get("context_only") is not True)]
     floor = min(0.0, min(finite_scores, default=0.0))
     ceiling = max(finite_scores, default=0.0)
     span = ceiling - floor
@@ -499,13 +532,72 @@ def pack_native_evidence(
         )
         for item in ranked
     }
+    ranked_by_id = {candidate_identity(item): item for item in ranked}
+    if passages is not None:
+        relevance_by_id.update(passages.relevance)
+    if relations is not None:
+        # Context carries its anchor's allocation bound, never an independently
+        # measured passage score. Child-provided scores cannot inflate the scale.
+        for child, parent in relations.parents.items():
+            relevance_by_id[child] = relevance_by_id.get(parent, 0.0)
+    match_cache: dict[str, frozenset[str]] = {}
+
+    def matches_for(text):
+        if text not in match_cache:
+            match_cache[text] = frozenset(terms.intersection(lexical_terms(text)))
+        return match_cache[text]
+
+    context_factors: dict[str, float] = {}
+    for key, value in ranked_by_id.items():
+        if not (
+            policy.discount_context
+            and value.kind == MemoryKind.EVENT and value.metadata.get("context_only") is True
+            and value.metadata.get("relevance_origin") == "inherited_context_anchor"
+        ):
+            continue
+        anchor = ranked_by_id.get(value.metadata.get("context_anchor_candidate_id"))
+        anchor_support = (
+            matches_for(anchor.text).intersection(support_terms)
+            if anchor is not None and anchor.kind == MemoryKind.EVENT
+            and anchor.id == value.id
+            and anchor.metadata.get("source_revision") == value.metadata.get("source_revision")
+            else frozenset()
+        )
+        retention = (
+            len(matches_for(value.text).intersection(anchor_support)) / len(anchor_support)
+            if anchor_support else 1.0
+        )
+        # Adjacency has not been reranked. It cannot inherit the anchor's full
+        # score, but a pronoun or answer-only neighbour can have no lexical
+        # overlap and still be useful: keep this discount bounded, never zero.
+        context_factors[key] = 0.8 + 0.1 * retention
 
     def identity(value):
         return candidate_identity(value) if isinstance(value, MemoryItem) else value.id
 
-    def prepare(value: Claim | MemoryItem) -> _PreparedEvidence:
+    def prepare(
+        value: Claim | MemoryItem, parent: _PreparedEvidence | None = None,
+    ) -> _PreparedEvidence:
         sources = source_ids(value)
-        matches = frozenset(terms.intersection(lexical_terms(value.text)))
+        matches = matches_for(value.text)
+        support = matches.intersection(support_terms)
+        parent_relevance = (
+            relevance_by_id.get(identity(value), 0.0)
+            if isinstance(value, MemoryItem)
+            else len(matches) / max(1, len(terms))
+        )
+        context_score_factor = context_factors.get(identity(value), 1.0)
+        parent_relevance *= context_score_factor
+        retention = 1.0
+        if policy.discount_narrowing and parent is not None and value.text != parent.value.text:
+            # A locator keeps its source identity after narrowing, not the
+            # relevance of words that no longer reach the reader. If the parent
+            # was a semantic-only hit, no lexical check can validate its new
+            # passage: conservatively discount by retained text instead.
+            retention = (
+                len(support.intersection(parent.support)) / len(parent.support)
+                if parent.support else len(value.text) / max(1, len(parent.value.text))
+            )
         signature = None
         if isinstance(value, MemoryItem) and value.kind == MemoryKind.EVENT and sources:
             signature = (
@@ -520,11 +612,11 @@ def pack_native_evidence(
             matches,
             sources,
             signature,
-            (
-                relevance_by_id.get(identity(value), 0.0)
-                if isinstance(value, MemoryItem)
-                else len(matches) / max(1, len(terms))
-            ),
+            parent_relevance * retention,
+            support,
+            parent_relevance,
+            retention,
+            context_score_factor,
         )
 
     prepared_state = [prepare(claim) for claim in current] if query.include_current_state else []
@@ -546,32 +638,62 @@ def pack_native_evidence(
 
     def feasible_variant(
         identity: str, available: int, *, exclude_covered: bool = False,
+        score_variants: bool = False,
     ) -> _PreparedEvidence | None:
         variants = tuple(
             entry for entry in item_variants.get(identity, ())
-            if not exclude_covered or not _event_fully_covered(entry, selected_entries)
+            if entry.support_retention > 0
+            and (not exclude_covered or not _event_fully_covered(entry, selected_entries))
         )
-        # Preserve full context whenever it fits. A slice can accidentally turn
+        if score_variants:
+            return max(
+                (entry for entry in variants if entry.cost <= available),
+                key=lambda entry: (selection_metrics(entry)[0], entry.cost),
+                default=None,
+            )
+        # Without budget competition preserve full context whenever it fits.
+        # A slice can accidentally turn
         # a word prefix into a query token; that is never a reason to discard
         # an otherwise feasible original chunk.
         if variants and variants[0].cost <= available:
             return variants[0]
         fitting = (entry for entry in variants[1:] if entry.cost <= available)
-        return max(fitting, key=lambda entry: (len(entry.terms), entry.cost), default=None)
+        return max(
+            fitting,
+            key=lambda entry: (
+                (entry.relevance, len(entry.support), len(entry.terms), entry.cost)
+                if policy.discount_narrowing else (len(entry.terms), entry.cost)
+            ),
+            default=None,
+        )
 
     for item in ordered_items:
         key = identity(item)
+        if relations is not None and key in relations.context_ids and key not in relations.parents:
+            continue
         if key in item_variants:
             continue
         located = any(key in item.metadata for key in ("source_span", "lexical_chunk_id"))
         if item.kind == MemoryKind.EVENT and located:
-            variants = _indexed_event_variants(item, query.text)
+            variants = _indexed_event_variants(item, variant_query)
         else:
             # One initial-budget excerpt of each legacy complete source. Only
             # bounded indexed chunks get multiple precomputed variants.
-            fitted = fit_event(item, query.text, query.token_budget)
+            fitted = fit_event(item, variant_query, query.token_budget)
             variants = () if fitted is None else (fitted,)
-        item_variants[key] = tuple(prepare(variant) for variant in variants)
+        if passages is not None and key in passages.items:
+            expected = passage_key(passages.items[key])
+            variants = tuple(value for value in variants if passage_key(value) == expected)
+            if not variants:
+                raise ValueError("scored passage no longer matches a source variant")
+        if variants:
+            parent = prepare(item)
+            item_variants[key] = tuple(
+                parent if variant is item else prepare(variant, parent)
+                for variant in variants
+            )
+        else:
+            item_variants[key] = ()
         primary = feasible_variant(key, query.token_budget)
         if primary is None:
             infeasible += 1
@@ -601,8 +723,56 @@ def pack_native_evidence(
     citation_spans: list[dict] = []
     selected_entries: list[_PreparedEvidence] = []
     selection_trace: list[dict] = []
+    dependency_groups: list[dict] = []
     used_tokens = duplicate_sources = 0
+    # The item cap also bounds the initial cost frontier: discarded tail
+    # candidates must not manufacture pressure when the leading evidence fits.
+    # Current state retains its existing precedence; cost optimization applies
+    # to retrieved representations, not to replacing authoritative state.
+    state_costs = [entry.cost for entry, _ in entries if isinstance(entry.value, Claim)]
+    item_costs = [entry.cost for entry, _ in entries if not isinstance(entry.value, Claim)]
+    budget_pressure = bool(policy.cost_weight) and (
+        sum(state_costs[:64]) + sum(item_costs[:query.limit]) > query.token_budget
+    )
+    initial_cost_share = query.token_budget / max(1, min(query.limit, len(entries)))
+
+    def selection_metrics(entry):
+        coverage = len(entry.support) / max(1, len(support_terms))
+        novelty = len(entry.support - covered_terms) / max(1, len(support_terms))
+        # Reward coverage of the still missing topics, not repeated mentions of
+        # already covered topics. Dividing by this evidence's complete support
+        # would dilute the final missing topic whenever it shares common nouns
+        # with previous evidence. This marginal reward always stays in [0, 1].
+        topic_novelty = len(entry.support - covered_terms) / max(1, len(support_terms - covered_terms))
+        topic_repetition = max(
+            (len(entry.support.intersection(previous.support)) / max(1, len(entry.support))
+             for previous in selected_entries),
+            default=0.0,
+        )
+        redundancy = max(
+            (_event_redundancy(entry, previous) for previous in selected_entries),
+            default=0.0,
+        )
+        cost_share = (query.token_budget - used_tokens) / max(1, query.limit - len(selected))
+        cost_penalty = (
+            policy.cost_weight * min(1.0, entry.cost / cost_share)
+            if budget_pressure and not isinstance(entry.value, Claim) else 0.0
+        )
+        score = (
+            entry.relevance
+            + 0.01 * coverage
+            + 0.01 * novelty
+            + policy.topic_novelty_weight * topic_novelty
+            - policy.topic_repetition_weight * topic_repetition
+            + (0.005 if set(entry.sources) - covered_sources else 0.0)
+            - 0.03 * redundancy
+            - cost_penalty
+        )
+        return score, coverage, novelty, redundancy, cost_penalty, topic_novelty, cost_share, topic_repetition
+
     while entries and used_tokens < query.token_budget:
+        pending = (tuple(group for group in plan.groups if group.id not in covered_groups)
+                   if plan is not None and passages is None else ())
         feasible = []
         remaining = []
         for original, rank in entries:
@@ -614,8 +784,13 @@ def pack_native_evidence(
                 # full state claim under its same original memory ID.
                 entry = feasible_variant(identity(entry.value), available)
                 is_state = False
-            elif not is_state and entry.cost > available:
-                entry = feasible_variant(identity(entry.value), available)
+            elif not is_state and pending:
+                allowance = int(available / len(pending))
+                entry = feasible_variant(identity(entry.value), allowance) or feasible_variant(identity(entry.value), available)
+            elif not is_state and (budget_pressure or entry.cost > available):
+                entry = feasible_variant(
+                    identity(entry.value), available, score_variants=budget_pressure,
+                )
             if entry is None:
                 infeasible += 1
                 continue
@@ -628,78 +803,247 @@ def pack_native_evidence(
                 duplicate_sources += 1
                 continue
             if _event_fully_covered(entry, selected_entries):
-                entry = feasible_variant(identity(entry.value), available, exclude_covered=True)
+                entry = feasible_variant(
+                    identity(entry.value), available, exclude_covered=True,
+                    score_variants=budget_pressure,
+                )
                 if entry is None:
                     duplicate_sources += 1
                     continue
-            coverage = len(entry.terms) / max(1, len(terms))
-            novelty = len(entry.terms - covered_terms) / max(1, len(terms))
-            redundancy = max(
-                (_event_redundancy(entry, previous) for previous in selected_entries),
-                default=0.0,
-            )
-            score = (
-                entry.relevance
-                + 0.01 * coverage
-                + 0.01 * novelty
-                + (0.005 if set(entry.sources) - covered_sources else 0.0)
-                - 0.03 * redundancy
-            )
-            feasible.append((score, -rank, entry, coverage, novelty, redundancy))
+            score, coverage, novelty, redundancy, cost_penalty, topic_novelty, cost_share, topic_repetition = selection_metrics(entry)
+            feasible.append((score, -rank, entry, coverage, novelty, redundancy,
+                             cost_penalty, topic_novelty, cost_share, topic_repetition))
             remaining.append((original, rank))
         if not feasible:
             break
-        score, negative_rank, entry, coverage, novelty, redundancy = max(
-            feasible, key=lambda row: (row[0], row[1])
-        )
-        value = entry.value
-        if isinstance(value, Claim):
-            state.append(value)
+        if relations is not None:
+            by_id = {identity(row[2].value): row for row in feasible}
+            units = []
+            for root in feasible:
+                root_id = identity(root[2].value)
+                if root_id in relations.context_ids:
+                    continue
+                children = [child for child, parent in relations.parents.items() if parent == root_id]
+                available_children = [by_id[child] for child in children if child in by_id]
+                options = [[root, *available_children], *([root, child] for child in available_children), [root]]
+                # Adjacency is an optional association, not proof every neighbour
+                # is needed. Prefer the largest feasible unit, then provider
+                # order; an oversized neighbour must not block a fitting pair.
+                members = next(option for option in options if (
+                    sum(row[2].cost for row in option) <= query.token_budget-used_tokens
+                    and len(selected)+sum(not isinstance(row[2].value, Claim) for row in option) <= query.limit
+                ))
+                units.append(members)
+            if not units:
+                break
+            if pending:
+                # Reserve a representation for the next explicit topic before
+                # filling spare capacity with repeated coverage. Match the actual
+                # feasible text, not query words that were removed by narrowing.
+                for group in pending:
+                    matching = [unit for unit in units if any(
+                        group.anchors.intersection(row[2].terms) for row in unit)]
+                    if matching:
+                        units = matching
+                        break
+                reserve = max(0, len(pending)-1)
+                bounded = [unit for unit in units if (
+                    len(selected)+sum(not isinstance(row[2].value, Claim) for row in unit)
+                    <= query.limit-reserve
+                    and sum(row[2].cost for row in unit) <= (query.token_budget-used_tokens)/len(pending)
+                )]
+                if bounded:
+                    units = bounded
+                else:
+                    units = [[unit[0]] for unit in units]
+            chosen = max(units, key=lambda rows: (rows[0][0], rows[0][1]))
         else:
-            selected.append(value)
-        selected_entries.append(entry)
-        selection_trace.append({
-            "memory_id": value.id,
-            "candidate_id": identity(value),
-            "kind": value.kind.value if isinstance(value, MemoryItem) else MemoryKind.CLAIM.value,
-            "input_rank": -negative_rank,
-            "relevance": entry.relevance,
-            "selection_score": score,
-            "query_coverage": coverage,
-            "new_query_coverage": novelty,
-            "event_redundancy": redundancy,
+            best_relevance = max(row[2].relevance for row in feasible)
+            chosen = [max(
+                (row for row in feasible if policy.relevance_frontier is None
+                 or row[2].relevance >= best_relevance - policy.relevance_frontier),
+                key=lambda row: (row[0], row[1]),
+            )]
+        group = dependency_group([row[2].value for row in chosen]) if len(chosen) > 1 else None
+        if group is not None:
+            dependency_groups.append(group)
+        chosen_ids = set()
+        for row in chosen:
+            score, negative_rank, entry, coverage, novelty, redundancy, cost_penalty, topic_novelty, cost_share, topic_repetition = row
+            value = entry.value
+            chosen_ids.add(identity(value))
+            if isinstance(value, Claim):
+                state.append(value)
+            else:
+                selected.append(value)
+            selected_entries.append(entry)
+            selection_trace.append({
+                "memory_id": value.id,
+                "candidate_id": identity(value),
+                "kind": value.kind.value if isinstance(value, MemoryItem) else MemoryKind.CLAIM.value,
+                "input_rank": -negative_rank,
+                "relevance": entry.relevance,
+                "parent_relevance": entry.parent_relevance,
+                "support_retention": entry.support_retention,
+                "context_score_factor": entry.context_score_factor,
+                "selection_score": score,
+                "query_coverage": coverage,
+                "new_query_coverage": novelty,
+                "event_redundancy": redundancy,
+                "cost_penalty": cost_penalty,
+                "cost_share_tokens": cost_share,
+                "new_topic_fraction": topic_novelty,
+                "query_topic_repetition": topic_repetition,
+                "tokens": entry.cost,
+                "initial_tokens": entry.cost,
+                "initial_relevance": entry.relevance,
+                "initial_support_retention": entry.support_retention,
+                "context_expansion_tokens": 0,
+            })
+            if relations is not None:
+                selection_trace[-1]["relevance_basis"] = (
+                    "reranked_passage" if passages is not None and isinstance(value, MemoryItem)
+                    and identity(value) in passages.ranked_ids
+                    and passage_key(value) == passage_key(passages.items[identity(value)]) else
+                    "unranked_passage" if passages is not None and isinstance(value, MemoryItem)
+                    and identity(value) in passages.items
+                    and passage_key(value) == passage_key(passages.items[identity(value)]) else
+                    "current_state_lexical" if isinstance(value, Claim) else
+                    "inherited_anchor_bound" if identity(value) in relations.parents else
+                    "unverified_parent_bound" if isinstance(value, MemoryItem)
+                    and value.text != ranked_by_id[identity(value)].text else "reranked_candidate"
+                )
+                if group is not None:
+                    selection_trace[-1]["dependency_group_id"] = group["group_id"]
+            if isinstance(value, MemoryItem) and "source_span" in value.metadata:
+                selection_trace[-1]["initial_source_span"] = value.metadata["source_span"]
+            if entry.event_signature is not None:
+                event_signatures.add(entry.event_signature)
+            covered_terms.update(entry.support)
+            covered_sources.update(entry.sources)
+            if plan is not None:
+                covered_groups.update(plan.matches(entry.terms))
+            used_tokens += entry.cost
+        if relations is not None:
+            chosen_ids.update(child for child, parent in relations.parents.items() if parent in chosen_ids)
+        entries = [
+            (candidate, rank) for candidate, rank in remaining
+            if identity(candidate.value) not in chosen_ids
+        ]
+
+    # Growing already selected source windows cannot evict independent claims.
+    # Only precomputed variants of the same locator are eligible, and they must
+    # contain every character already selected. In each round distinct source
+    # events share the available budget; multiple windows of one source do not
+    # get extra shares. A smallest-increment fallback borrows unused shares only
+    # when no group could grow. Strict cost increases bound this loop by the
+    # finite variant count (at most 13 per selected indexed window).
+    def expansion_options():
+        groups: dict[str, list[tuple[int, _PreparedEvidence, int]]] = {}
+        available = query.token_budget - used_tokens
+        for position, previous in enumerate(selected_entries):
+            previous_span = _event_interval(previous)
+            if previous_span is None:
+                continue
+            for grown in item_variants.get(identity(previous.value), ()):
+                grown_span = _event_interval(grown)
+                delta = grown.cost - previous.cost
+                if (
+                    grown_span is not None and 0 < delta <= available
+                    and grown_span[0] <= previous_span[0] < previous_span[1] <= grown_span[1]
+                    and not _event_fully_covered(grown, selected_entries)
+                ):
+                    groups.setdefault(previous.value.id, []).append((position, grown, delta))
+        return groups
+
+    while policy.expand_selected_context and used_tokens < query.token_budget:
+        groups = expansion_options()
+        if not groups:
+            break
+        progressed = False
+        for group_index, group in enumerate(groups):
+            # Re-evaluate against earlier groups' expansions in this round.
+            options = expansion_options().get(group, ())
+            allowance = (query.token_budget - used_tokens) / (len(groups) - group_index)
+            choice = max(
+                (option for option in options if option[2] <= allowance),
+                key=lambda option: (option[2], -option[0]), default=None,
+            )
+            if choice is None:
+                continue
+            position, grown, delta = choice
+            selected_entries[position] = grown
+            used_tokens += delta
+            progressed = True
+        if not progressed:
+            position, grown, delta = min(
+                (option for options in groups.values() for option in options),
+                key=lambda option: (option[2], option[0]),
+            )
+            selected_entries[position] = grown
+            used_tokens += delta
+
+    # Bind every final proof and cost to exactly what the reader receives.
+    # Selection scores intentionally describe the compact selection stage;
+    # final relevance and spans describe the subsequently expanded evidence.
+    state = []
+    selected = []
+    covered_terms = set()
+    for entry, trace in zip(selected_entries, selection_trace, strict=True):
+        value = entry.value
+        (state if isinstance(value, Claim) else selected).append(value)
+        covered_terms.update(entry.support)
+        trace.update({
             "tokens": entry.cost,
+            "relevance": entry.relevance,
+            "support_retention": entry.support_retention,
+            "context_expansion_tokens": entry.cost - trace["initial_tokens"],
         })
-        if entry.event_signature is not None:
-            event_signatures.add(entry.event_signature)
         citations.append(Citation(value.id, entry.sources))
-        proof = {
-            "memory_id": value.id, "candidate_id": identity(value),
-            "source_event_ids": entry.sources,
-        }
+        proof = {"memory_id": value.id, "candidate_id": identity(value),
+                 "source_event_ids": entry.sources}
         if isinstance(value, MemoryItem):
             proof.update({key: value.metadata[key] for key in (
                 "source_span", "source_revision", "source_chars",
             ) if key in value.metadata})
+            if "source_span" in value.metadata:
+                trace["source_span"] = value.metadata["source_span"]
         citation_spans.append(proof)
-        covered_terms.update(entry.terms)
-        covered_sources.update(entry.sources)
-        used_tokens += entry.cost
-        entries = [
-            (candidate, rank) for candidate, rank in remaining
-            if identity(candidate.value) != identity(value)
-        ]
+    used_tokens = sum(entry.cost for entry in selected_entries)
     return NativePackingResult(
         tuple(state),
         tuple(selected),
         tuple(citations),
         used_tokens,
         {
-            "strategy": "relevance_bounded_diversity_v2",
+            "strategy": policy.strategy,
+            "packing_contract": packing_contract(version),
             "coverage": "partial",
             "world_negative": False,
             "packing_query_terms_covered": len(covered_terms),
-            "packing_query_terms_total": len(terms),
+            "packing_query_terms_total": len(support_terms),
+            "packing_support_policy": (
+                "content_anchors_or_full_query/1" if policy.content_anchors else "full_query/1"
+            ),
+            "packing_budget_pressure": budget_pressure,
+            "packing_initial_cost_share_tokens": initial_cost_share,
+            "packing_relevance_frontier": policy.relevance_frontier,
+            "packing_topic_novelty_weight": policy.topic_novelty_weight,
+            "packing_topic_repetition_weight": policy.topic_repetition_weight,
+            "packing_context_relevance_policy": (
+                "inherited_anchor_bounded_0.8_0.9/1" if policy.discount_context else "unchanged/1"
+            ),
+            "packing_trace_score_stage": (
+                "compact_selection_before_context_growth" if policy.expand_selected_context
+                else "selection_without_context_growth"
+            ),
+            "packing_context_expansion_tokens": sum(
+                row["context_expansion_tokens"] for row in selection_trace
+            ),
+            "packing_zero_support_variants": sum(
+                entry.support_retention == 0
+                for variants in item_variants.values() for entry in variants
+            ),
             "packing_source_count": len(covered_sources),
             "packing_duplicate_sources": duplicate_sources,
             "packing_infeasible": infeasible,
@@ -707,5 +1051,21 @@ def pack_native_evidence(
             "packing_analyzed_items": len(prepared_items),
             "citation_spans": tuple(citation_spans),
             "packing_selection_trace": tuple(selection_trace),
+            **({"packing_coverage_plan": plan.metadata((*state, *selected)),
+                "packing_selection_driver": "actual_passage_ranking" if passages is not None else "lexical_coverage_reservations",
+                "packing_passage_reranking": dict(passages.diagnostics) if passages is not None else
+                    {"status": "not_configured", "reranker_calls": 0, "scored_count": 0}}
+               if plan is not None else {}),
+            **({
+                "packing_dependency_groups": tuple(dependency_groups),
+                "packing_dependency_rejected": relations.rejected,
+                "packing_dependency_deferred": sum(
+                    key not in {identity(entry.value) for entry in selected_entries}
+                    for key in relations.parents
+                ),
+                "packing_fact_deduplication": "exact_identity_or_verified_event_coverage/1",
+                "packing_passage_relevance_verified": False,
+                "packing_relevance_policy": "parent_bounds_without_length_discount/1",
+            } if relations is not None else {}),
         },
     )

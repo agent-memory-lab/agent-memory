@@ -93,7 +93,8 @@ def test_invalid_interval_metadata_never_proves_coverage_or_crashes_overlap(side
     values[side] = replace(original, metadata={**original.metadata, **change})
 
     def prepared(value):
-        return _PreparedEvidence(value, 1, frozenset(), ("event",), ("event",), 1.0)
+        return _PreparedEvidence(value, 1, frozenset(), ("event",), ("event",), 1.0,
+                                 frozenset(), 1.0, 1.0, 1.0)
 
     candidate, selected = prepared(values["candidate"]), prepared(values["selected"])
     assert _event_fully_covered(candidate, (selected,)) is False

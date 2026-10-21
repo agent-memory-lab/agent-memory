@@ -1,5 +1,21 @@
 # Batch 3: bounded host planning and source-faithful evidence packing
 
+This page records the Batch 3 implementation and its original acceptance
+results. The native packer has since received the versioned
+[v3 evidence-selection repair](../../BENCHMARK_RELIABILITY_V3.md); that document
+describes the current scoring, context growth, reader contract and regression
+limits. The adaptive-host API described here is unchanged.
+
+The [generalization audit](../../BENCHMARK_PACKING_GENERALIZATION.md) keeps stable
+v2 packing as the default. V3 scoring and context growth require an explicit
+`packing_version="v3"` choice and failed the synthetic competition acceptance
+gate. Reader selection is independent of packing selection.
+
+Later opt-in experiments are recorded in [v4 evidence units](../../BENCHMARK_EVIDENCE_UNITS_V4.md)
+and [v5 coverage and actual passage ranking](../../BENCHMARK_COVERAGE_PASSAGES_V5.md).
+V5 supports host-injected passage ranking, with explicit cost and protocol
+boundaries; selecting v5 alone does not start model requests. V2 remains default.
+
 ## What is wired
 
 `MemoryKernel.retrieve()` now uses `retrieval.packing.pack_native_evidence` after

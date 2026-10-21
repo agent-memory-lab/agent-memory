@@ -10,6 +10,7 @@ from agent_memory.providers import (
     ReciprocalRankFusionReranker,
     TrustedMemoryPolicy,
 )
+from agent_memory.retrieval.packing_policy import packing_contract
 
 from .jobs import PostgresConsolidationQueue
 from .repository import PostgresMemoryRepository
@@ -25,7 +26,12 @@ def build_postgres_kernel(
     min_pool_size: int = 1,
     max_pool_size: int = 10,
     trusted_evaluator_ids: Collection[str] | None = None,
+    packing_version: str = "v2",
+    passage_reranker: Reranker | None = None,
 ) -> MemoryKernel:
+    packing_contract(packing_version)
+    if passage_reranker is not None and packing_version != "v5":
+        raise ValueError("passage_reranker requires explicit packing_version=v5")
     base_reranker = reranker or ReciprocalRankFusionReranker()
     repository = PostgresMemoryRepository.from_dsn(
         dsn,
@@ -51,4 +57,6 @@ def build_postgres_kernel(
         ),
         consolidation_scheduler=queue,
         trusted_evaluator_ids=trusted_evaluator_ids,
+        packing_version=packing_version,
+        passage_reranker=passage_reranker,
     )

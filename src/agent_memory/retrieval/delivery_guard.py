@@ -15,7 +15,7 @@ from json import dumps
 
 from ..consolidation.admission_runtime import ATOM_EVENT_TYPES, ATOM_PREFIX
 from ..domain import Claim, MemoryKind
-from .analyzer import lexical_terms
+from .analyzer import lexical_terms, query_content_anchors
 from .candidate_identity import candidate_identity
 from .packing import source_ids, token_estimate
 from .temporal_history import temporal_candidates
@@ -183,7 +183,25 @@ def filter_delivery(bundle, *, query, valid_at, known_at, claims, atoms, atom_in
     relevant = tuple(refresh(value) for value in bundle.relevant_memories if accepts(value))
     episodes = tuple(value for value in bundle.episodes if accepts(value))
     procedures = tuple(value for value in bundle.procedures if accepts(value))
+    metadata = dict(bundle.retrieval_metadata)
+    packing = metadata.get("packing_contract")
+    if ("packing_dependency_groups" in metadata
+            or isinstance(packing, Mapping) and packing.get("version") == "v4"):
+        from .evidence_units import retain_complete_groups
+
+        before_dependencies = (*current, *relevant, *episodes, *procedures)
+        retained, groups = retain_complete_groups(before_dependencies, metadata.get("packing_dependency_groups", ()))
+        retained_ids = {id(value) for value in retained}
+        current = tuple(value for value in current if id(value) in retained_ids)
+        relevant = tuple(value for value in relevant if id(value) in retained_ids)
+        episodes = tuple(value for value in episodes if id(value) in retained_ids)
+        procedures = tuple(value for value in procedures if id(value) in retained_ids)
+        metadata["packing_dependency_groups"] = groups
+        metadata["packing_dependency_delivery_dropped"] = len(before_dependencies)-len(retained)
     values = (*current, *relevant, *episodes, *procedures)
+    if "packing_coverage_plan" in metadata:
+        from .coverage_plan import refresh_coverage_metadata
+        metadata["packing_coverage_plan"] = refresh_coverage_metadata(metadata["packing_coverage_plan"], values)
     ids = {value.id for value in values}
     candidate_ids = {value.id if isinstance(value, Claim) else candidate_identity(value)
                      for value in values}
@@ -192,7 +210,6 @@ def filter_delivery(bundle, *, query, valid_at, known_at, claims, atoms, atom_in
         not isinstance(value, Claim) and delivery_evidence_key(value) in external_evidence_keys
         for value in values
     )
-    metadata = dict(bundle.retrieval_metadata)
     if pipeline:
         if "included_count" in metadata:
             metadata["included_count"] = len(relevant) + len(episodes) + len(procedures)
@@ -233,13 +250,23 @@ def filter_delivery(bundle, *, query, valid_at, known_at, claims, atoms, atom_in
             )
         trace_fields = ("memory_id", "candidate_id", "kind", "input_rank", "relevance",
                         "selection_score", "query_coverage", "new_query_coverage",
-                        "event_redundancy", "tokens")
+                        "event_redundancy", "tokens", "parent_relevance",
+                        "support_retention", "cost_penalty", "cost_share_tokens",
+                        "new_topic_fraction", "query_topic_repetition", "context_score_factor",
+                        "initial_tokens", "initial_relevance",
+                        "initial_support_retention", "context_expansion_tokens",
+                        "initial_source_span", "source_span", "relevance_basis", "dependency_group_id")
         metadata["packing_selection_trace"] = tuple(
             {key: row[key] for key in trace_fields if key in row}
             for row in metadata["packing_selection_trace"]
             if row.get("candidate_id") in candidate_ids
             and len(original_keys.get(row.get("candidate_id"), ())) == 1
         )
+        if "packing_context_expansion_tokens" in metadata:
+            metadata["packing_context_expansion_tokens"] = sum(
+                row.get("context_expansion_tokens", 0)
+                for row in metadata["packing_selection_trace"]
+            )
     if metadata.get("retrieval_stages"):
         authorized_by_kind = {
             MemoryKind.CLAIM: set(canonical),
@@ -260,6 +287,8 @@ def filter_delivery(bundle, *, query, valid_at, known_at, claims, atoms, atom_in
             for name, stage in metadata["retrieval_stages"].items()
         }
     terms = set(lexical_terms(query.text))
+    if metadata.get("packing_support_policy") == "content_anchors_or_full_query/1":
+        terms = set(query_content_anchors(query.text)) or terms
     covered_terms = {term for value in values
                      for term in lexical_terms(value.text) if term in terms}
     metadata.update(atom_info)
@@ -267,6 +296,7 @@ def filter_delivery(bundle, *, query, valid_at, known_at, claims, atoms, atom_in
         "selected_count": len(relevant) + len(episodes) + len(procedures),
         "state_count": len(current),
         "packing_query_terms_covered": len(covered_terms),
+        "packing_query_terms_total": len(terms),
         "packing_source_count": len({source for value in values for source in source_ids(value)}),
         "atom_support": {key: value for key, value in atom_info["atom_support"].items()
                          if key in ids},
