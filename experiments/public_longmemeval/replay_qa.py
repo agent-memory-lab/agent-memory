@@ -327,7 +327,10 @@ async def execute(output, *, credential_pointer):
             raise ValueError("gold_changed")
         gold = {
             r["case_id"]: r
-            for r in (json.loads(line) for line in Path(plan["gold"]).read_text(encoding="utf-8").splitlines())
+            for r in (
+            json.loads(line)
+            for line in Path(plan["gold"]).read_text(encoding="utf-8").splitlines()
+        )
         }
         import ast
 
