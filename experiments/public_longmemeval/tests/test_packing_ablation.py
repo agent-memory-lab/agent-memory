@@ -10,8 +10,8 @@ from experiments.public_longmemeval.tests.packing_fixtures import challenges
 def inputs(tmp_path):
     blind, labels = challenges()
     source, gold = tmp_path / "blind.jsonl", tmp_path / "requirements.jsonl"
-    source.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in blind))
-    gold.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in labels))
+    source.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in blind), encoding="utf-8")
+    gold.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in labels), encoding="utf-8")
     return source, gold
 
 
@@ -19,10 +19,10 @@ def test_all_four_arms_freeze_before_evaluation_without_model_calls(tmp_path):
     source, gold = inputs(tmp_path)
     output = tmp_path / "run"
     freeze(source, output)
-    manifest = json.loads((output / "manifest.json").read_text())
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["evaluator_requirements_opened"] is False
     assert manifest["model_calls"] == 0
-    rows = json.loads((output / "arms.json").read_text())
+    rows = json.loads((output / "arms.json").read_text(encoding="utf-8"))
     expected = {f"packing-{p}/reader-{r}" for p in ("v2", "v3") for r in ("v2", "v3")}
     assert len(rows) == 24
     for row in rows:
@@ -49,7 +49,7 @@ def test_tampered_frozen_output_is_rejected_before_labels_are_opened(tmp_path):
     source, gold = inputs(tmp_path)
     output = tmp_path / "run"
     freeze(source, output)
-    (output / "arms.json").write_text("[]")
+    (output / "arms.json").write_text("[]", encoding="utf-8")
     gold.unlink()
     with pytest.raises(ValueError, match="frozen arms changed"):
         evaluate(output, gold)
@@ -57,9 +57,9 @@ def test_tampered_frozen_output_is_rejected_before_labels_are_opened(tmp_path):
 
 def test_unknown_blind_fields_cannot_supply_oracle_requirements(tmp_path):
     source, _ = inputs(tmp_path)
-    rows = [json.loads(line) for line in source.read_text().splitlines()]
+    rows = [json.loads(line) for line in source.read_text(encoding="utf-8").splitlines()]
     rows[0]["required_evidence"] = ["oracle"]
-    source.write_text("\n".join(json.dumps(row) for row in rows))
+    source.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
     with pytest.raises(ValueError, match="blind input"):
         freeze(source, tmp_path / "run")
     assert not (tmp_path / "run").exists()
@@ -74,7 +74,7 @@ def test_regression_gate_preserves_failed_acceptance_report(tmp_path, monkeypatc
     with pytest.raises(SystemExit) as stopped:
         main()
     assert stopped.value.code == 2
-    report = json.loads((output / "evaluation.json").read_text())
+    report = json.loads((output / "evaluation.json").read_text(encoding="utf-8"))
     assert report["comparison"]["no_new_evidence_loss_gate"] == "rejected"
     assert json.loads(capsys.readouterr().out)["comparison"]["regressions"]
 
