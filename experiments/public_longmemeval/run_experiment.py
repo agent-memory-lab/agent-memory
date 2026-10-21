@@ -16,7 +16,7 @@ from experiments.public_longmemeval.extraction import ClaimGenerator, chunks
 from experiments.public_longmemeval.reader_context import (
     CORE_TOKEN_BUDGET, CORE_ITEM_LIMIT, LEGACY_CONTEXT_BYTES, ReaderContextError,
     core_reader_context, legacy_reader_context, legacy_pack, reader_contract,
-    source_labeled_context, answer_with_sources,
+    source_labeled_context, answer_with_sources, answer_with_checks,
 )
 from experiments.public_longmemeval.public_retrieval import REPO_REVISION, sha, blind_sessions, BlindSession, bm25
 
@@ -42,8 +42,9 @@ def verify(reader_version='v2', packing_version='v2'):
     if set(query)!={'case_id','question','question_date'} or query['case_id']!=record['case_id']:
         raise ValueError('Unexpected query fields')
     parts=sum(len(list(chunks('\n'.join(t['role']+': '+t['content'] for t in s['turns'])))) for s in record['sessions'])
+    answer_calls = 8 if reader_version == 'v4' else 4
     return record,query,{'sessions':len(record['sessions']),'turns':sum(len(s['turns']) for s in record['sessions']),
-                        'extraction_calls':parts,'answer_calls':4,'max_calls_needed':parts+4,'core_identity':identity,'input_artifacts':inputs,
+                        'extraction_calls':parts,'answer_calls':answer_calls,'max_calls_needed':parts+answer_calls,'core_identity':identity,'input_artifacts':inputs,
                         'dataset_revision':manifest['dataset_revision'],'reader_contract':reader_contract(reader_version),
                         'packing_contract':packing}
 
@@ -81,14 +82,22 @@ async def experiment(client, output, *, reader_version='v2', packing_version='v2
             result['cumulative_budget']=client.budget_summary()
         atomic_write_json(output/'result.json',result)
     async def answer(name, reader_input, retrieval_seconds):
-        if reader_version == 'v3' and not reader_input.diagnostics['mode'].endswith('/v3'):
+        if reader_version in ('v3', 'v4') and not reader_input.diagnostics['mode'].endswith('/v3'):
             reader_input = source_labeled_context(reader_input)
         context=reader_input.context
         result['arms'][name]={'status':'answering','retrieved_candidates':reader_input.candidates,
           'delivered_memories':reader_input.delivered, 'reader_delivery':reader_input.diagnostics,
           'reader_context':context,'context_utf8_bytes':len(context.encode()),'retrieval_seconds':retrieval_seconds}
         checkpoint(); started=time.monotonic()
-        if reader_version == 'v3':
+        if reader_version == 'v4':
+            evaluated = await answer_with_checks(client, reader_input=reader_input,
+                question=query['question'], question_date=query['question_date'], phase='answer:'+name)
+            result['arms'][name]['answer_reader'] = evaluated
+            checkpoint()
+            if evaluated['status'] == 'invalid':
+                raise ReaderContextError('invalid_v4_reader_response')
+            answer = evaluated['answer']
+        elif reader_version == 'v3':
             from examples.memory_evidence_reader import render_answer
             raw, evaluated = await answer_with_sources(client, reader_input=reader_input,
                 question=query['question'], question_date=query['question_date'], phase='answer:'+name)
@@ -161,8 +170,8 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('command',choices=['preflight','run'])
     p.add_argument('--config',type=Path,default=ROOT/'config.local.json')
-    p.add_argument('--reader-version', choices=('v2','v3'), default='v3',
-                   help='New runs default to source-bound v3; v2 preserves the legacy answer protocol')
+    p.add_argument('--reader-version', choices=('v2','v3','v4'), default='v3',
+                   help='v3 default; opt-in v4 adds an accounted support audit; v2 preserves legacy answering')
     p.add_argument('--packing-version', choices=('v2','v3','v4','v5'), default='v2',
                    help='v2 is stable; experimental v3/v4/v5 are independent of the reader version')
     args=p.parse_args();_,_,plan=verify(args.reader_version, args.packing_version)
