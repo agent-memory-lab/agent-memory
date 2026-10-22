@@ -19,6 +19,12 @@ from .temporal_history import SQLiteClaimHistory
 
 
 def guard_delivery(repository, query, bundle, *, pipeline=False):
+    with repository._connection() as connection:
+        connection.execute("BEGIN")
+        return guard_delivery_snapshot(repository, connection, query, bundle, pipeline=pipeline)
+
+
+def guard_delivery_snapshot(repository, connection, query, bundle, *, pipeline=False):
     # Use the adapter clock so controlled-time contracts and native current
     # reads resolve omitted axes identically.
     from ..sqlite import utc_now
@@ -26,74 +32,72 @@ def guard_delivery(repository, query, bundle, *, pipeline=False):
     bundle = snapshot_delivery_bundle(bundle)
     now = utc_now()
     valid_at, known_at = query.valid_at or now, query.known_at or now
-    with repository._connection() as connection:
-        connection.execute("BEGIN")
-        claims = SQLiteClaimHistory(repository).read(connection, query.scope, valid_at, known_at)
-        snapshot = repository._admission_snapshot(connection, query.scope)
-        atoms, info = project_records(select_record_snapshots(snapshot, known_at), valid_at)
-        protected = repository._admission_protected_sources(connection, query.scope)
-        where, params = repository._visible_scope_clause(query.scope)
-        identities = selected_source_ids(bundle) | diagnostic_ids(bundle, (MemoryKind.EVENT,))
-        claim_ids = requested_claim_ids(bundle)
-        claim_sources = {source for claim in (*claims, *atoms) if claim.id in claim_ids
-                         for source in claim.provenance.source_event_ids}
-        identities.update(claim_sources)
-        claim_source_ids_live = set()
-        for start in range(0, len(claim_sources), 256):
-            batch = sorted(claim_sources)[start:start + 256]
-            marks = ",".join("?" for _ in batch)
-            claim_source_ids_live.update(row["id"] for row in connection.execute(
-                "SELECT id FROM events WHERE tenant_id=? AND namespace=? "
-                f"AND archived_at IS NULL AND id IN ({marks})",
-                (query.scope.tenant_id, query.scope.namespace, *batch),
-            ))
-        events = {}
-        for start in range(0, len(identities), 256):
-            batch = sorted(identities)[start:start + 256]
-            marks = ",".join("?" for _ in batch)
-            rows = connection.execute(
-                f"SELECT id,event_type FROM events WHERE {where} AND archived_at IS NULL "
-                f"AND id IN ({marks})", (*params, *batch),
-            ).fetchall()
-            events.update((row["id"], {**dict(row), "verified_evidence_keys": set()})
-                          for row in rows)
-        for item in bundle_values(bundle):
-            if getattr(item, "kind", None) == MemoryKind.EVENT and item.id in events:
-                key = delivery_evidence_key(item)
-                if key is not None and _event_matches(connection, item):
-                    events[item.id]["verified_evidence_keys"].add(key)
-        atom_ids = {claim.id for claim in atoms}
-        live_atoms = set()
-        for start in range(0, len(atom_ids), 256):
-            batch = sorted(atom_ids)[start:start + 256]
-            marks = ",".join("?" for _ in batch)
-            live_atoms.update(row["id"] for row in connection.execute(
-                f"SELECT id FROM claims WHERE {where} AND archived_at IS NULL "
-                f"AND id IN ({marks})", (*params, *batch),
-            ))
-        atoms = tuple(claim for claim in atoms if claim.id in live_atoms)
-        identities = sorted(selected_artifact_ids(bundle))
-        artifacts = {}
-        for start in range(0, len(identities), 256):
-            batch = identities[start:start + 256]
-            marks = ",".join("?" for _ in batch)
-            rows = connection.execute(
-                f"SELECT * FROM artifacts WHERE {where} AND id IN ({marks})",
-                (*params, *batch),
-            ).fetchall()
-            for row in repository._live_artifact_rows(connection, query.scope, rows):
-                artifacts[row["id"]] = {**dict(row), "source_event_ids":
-                    json.loads(row["provenance_json"])["source_event_ids"]}
-        external = external_candidates(
-            bundle, _owned_ids(connection, pipeline_reference_ids(bundle)),
-            set(events), protected,
-        ) if pipeline else ()
-        return filter_delivery(
-            bundle, query=query, valid_at=valid_at, known_at=known_at, claims=claims,
-            atoms=atoms, atom_info=info, protected_sources=protected,
-            events=events, artifacts=artifacts, claim_source_ids_live=claim_source_ids_live,
-            external_evidence_keys=external, pipeline=pipeline,
-        )
+    claims = SQLiteClaimHistory(repository).read(connection, query.scope, valid_at, known_at)
+    snapshot = repository._admission_snapshot(connection, query.scope)
+    atoms, info = project_records(select_record_snapshots(snapshot, known_at), valid_at)
+    protected = repository._admission_protected_sources(connection, query.scope)
+    where, params = repository._visible_scope_clause(query.scope)
+    identities = selected_source_ids(bundle) | diagnostic_ids(bundle, (MemoryKind.EVENT,))
+    claim_ids = requested_claim_ids(bundle)
+    claim_sources = {source for claim in (*claims, *atoms) if claim.id in claim_ids
+                     for source in claim.provenance.source_event_ids}
+    identities.update(claim_sources)
+    claim_source_ids_live = set()
+    for start in range(0, len(claim_sources), 256):
+        batch = sorted(claim_sources)[start:start + 256]
+        marks = ",".join("?" for _ in batch)
+        claim_source_ids_live.update(row["id"] for row in connection.execute(
+            "SELECT id FROM events WHERE tenant_id=? AND namespace=? "
+            f"AND archived_at IS NULL AND id IN ({marks})",
+            (query.scope.tenant_id, query.scope.namespace, *batch),
+        ))
+    events = {}
+    for start in range(0, len(identities), 256):
+        batch = sorted(identities)[start:start + 256]
+        marks = ",".join("?" for _ in batch)
+        rows = connection.execute(
+            f"SELECT id,event_type FROM events WHERE {where} AND archived_at IS NULL "
+            f"AND id IN ({marks})", (*params, *batch),
+        ).fetchall()
+        events.update((row["id"], {**dict(row), "verified_evidence_keys": set()})
+                      for row in rows)
+    for item in bundle_values(bundle):
+        if getattr(item, "kind", None) == MemoryKind.EVENT and item.id in events:
+            key = delivery_evidence_key(item)
+            if key is not None and _event_matches(connection, item):
+                events[item.id]["verified_evidence_keys"].add(key)
+    atom_ids = {claim.id for claim in atoms}
+    live_atoms = set()
+    for start in range(0, len(atom_ids), 256):
+        batch = sorted(atom_ids)[start:start + 256]
+        marks = ",".join("?" for _ in batch)
+        live_atoms.update(row["id"] for row in connection.execute(
+            f"SELECT id FROM claims WHERE {where} AND archived_at IS NULL "
+            f"AND id IN ({marks})", (*params, *batch),
+        ))
+    atoms = tuple(claim for claim in atoms if claim.id in live_atoms)
+    identities = sorted(selected_artifact_ids(bundle))
+    artifacts = {}
+    for start in range(0, len(identities), 256):
+        batch = identities[start:start + 256]
+        marks = ",".join("?" for _ in batch)
+        rows = connection.execute(
+            f"SELECT * FROM artifacts WHERE {where} AND id IN ({marks})",
+            (*params, *batch),
+        ).fetchall()
+        for row in repository._live_artifact_rows(connection, query.scope, rows):
+            artifacts[row["id"]] = {**dict(row), "source_event_ids":
+                json.loads(row["provenance_json"])["source_event_ids"]}
+    external = external_candidates(
+        bundle, _owned_ids(connection, pipeline_reference_ids(bundle)),
+        set(events), protected,
+    ) if pipeline else ()
+    return filter_delivery(
+        bundle, query=query, valid_at=valid_at, known_at=known_at, claims=claims,
+        atoms=atoms, atom_info=info, protected_sources=protected,
+        events=events, artifacts=artifacts, claim_source_ids_live=claim_source_ids_live,
+        external_evidence_keys=external, pipeline=pipeline,
+    )
 
 
 def _event_matches(connection, item):
