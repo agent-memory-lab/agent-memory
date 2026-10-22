@@ -229,19 +229,17 @@ class SQLiteResearchBackend:
                 ).fetchone()
                 return row is not None and row["occurred_at"] == item.occurred_at.isoformat()
 
-            bundles = tuple(
-                replace(
-                    b,
-                    relevant_memories=tuple(i for i in b.relevant_memories if current_time(i)),
-                    episodes=tuple(i for i in b.episodes if current_time(i)),
-                    procedures=tuple(i for i in b.procedures if current_time(i)),
+            guarded = []
+            for bundle in bundles:
+                current = replace(
+                    bundle,
+                    relevant_memories=tuple(i for i in bundle.relevant_memories if current_time(i)),
+                    episodes=tuple(i for i in bundle.episodes if current_time(i)),
+                    procedures=tuple(i for i in bundle.procedures if current_time(i)),
                 )
-                for b in bundles
-            )
-            guarded = tuple(
-                guard_delivery_snapshot(self.repository, connection, contract.query, b)
-                for b in bundles
-            )
+                guarded.append(
+                    guard_delivery_snapshot(self.repository, connection, contract.query, current)
+                )
             final_keys = {r.key for r in evidence_records(guarded)}
             valid = []
             requirements = {r.id: r for r in contract.requirements}
@@ -260,7 +258,7 @@ class SQLiteResearchBackend:
                     and set(receipt.evidence_keys) <= final_keys
                 ):
                     valid.append(receipt)
-            return FinalizedEvidence(guarded, tuple(valid))
+            return FinalizedEvidence(tuple(guarded), tuple(valid))
 
 
 @dataclass(frozen=True, slots=True)

@@ -321,36 +321,7 @@ class EvidenceResearchLoop:
                 if type(assessment) is not ReaderAssessment:
                     raise _Stop("invalid_reader_assessment")
                 support = self._support(assessment, requirements, records)
-                temporal = {}
-                temporal_needed = tuple(
-                    r for r in contract.requirements if r.kind == "temporal" and r.id in support
-                )
-                if temporal_needed and self.temporal_resolver is not None:
-                    values = await session.call(
-                        "temporal_policy",
-                        lambda a, records=records: self.temporal_resolver(
-                            deepcopy(contract), deepcopy(records), a
-                        ),
-                    )
-                    if type(values) is not tuple or len(values) > len(temporal_needed):
-                        raise _Stop("invalid_temporal_policy")
-                    for value in values:
-                        if (
-                            type(value) is not TemporalResolution
-                            or value.requirement_id in temporal
-                        ):
-                            raise _Stop("invalid_temporal_policy")
-                        req = requirements.get(value.requirement_id)
-                        if (
-                            req is None
-                            or req.kind != "temporal"
-                            or value.precision != req.precision
-                            or value.approximate
-                            and not contract.allow_approximate
-                            or not set(value.evidence_keys) <= set(support.get(req.id, ()))
-                        ):
-                            raise _Stop("precision_policy_mismatch")
-                        temporal[req.id] = value
+                temporal = await self._resolve_temporal(session, requirements, records, support)
                 receipt_ids = {r.requirement_id for r in receipts}
                 missing = tuple(
                     r.id
@@ -469,6 +440,36 @@ class EvidenceResearchLoop:
             # an interrupted run, because it has not passed the final boundary.
             return session.result("partial", str(stop), missing=missing)
 
+    async def _resolve_temporal(self, session, requirements, records, support):
+        contract = session.contract
+        needed = tuple(r for r in contract.requirements if r.kind == "temporal" and r.id in support)
+        if not needed or self.temporal_resolver is None:
+            return {}
+        values = await session.call(
+            "temporal_policy",
+            lambda allowance: self.temporal_resolver(
+                deepcopy(contract), deepcopy(records), allowance
+            ),
+        )
+        if type(values) is not tuple or len(values) > len(needed):
+            raise _Stop("invalid_temporal_policy")
+        temporal = {}
+        for value in values:
+            if type(value) is not TemporalResolution or value.requirement_id in temporal:
+                raise _Stop("invalid_temporal_policy")
+            req = requirements.get(value.requirement_id)
+            if (
+                req is None
+                or req.kind != "temporal"
+                or value.precision != req.precision
+                or value.approximate
+                and not contract.allow_approximate
+                or not set(value.evidence_keys) <= set(support.get(req.id, ()))
+            ):
+                raise _Stop("precision_policy_mismatch")
+            temporal[req.id] = value
+        return temporal
+
     @staticmethod
     def _support(assessment, requirements, records):
         keys, support = {r.key for r in records}, {}
@@ -505,26 +506,26 @@ class EvidenceResearchLoop:
     @staticmethod
     def _render(contract, assessment, temporal, receipts):
         # Closed counts and time values are never copied from the reader's prose.
-        if any(r.kind != "fact" for r in contract.requirements):
-            values = []
-            for req in contract.requirements:
-                if req.kind == "enumeration":
-                    value = (
-                        f"{len(receipts[req.id].source_versions)} recorded rows "
-                        f"in {req.coverage_domain}."
-                    )
-                elif req.kind == "absence":
-                    value = f"No recorded rows in {req.coverage_domain}."
-                elif req.kind == "temporal":
-                    result = temporal[req.id]
-                    value = ("Approximately: " if result.approximate else "") + result.value
-                else:
-                    # Freeform fact prose cannot silently smuggle a different
-                    # complete count or a finer time claim into mixed output.
-                    value = "Supported by the cited evidence."
-                values.append(req.id + ": " + value)
-            return "\n".join(values)
-        return assessment.answer
+        if all(r.kind == "fact" for r in contract.requirements):
+            return assessment.answer
+        values = []
+        for req in contract.requirements:
+            if req.kind == "enumeration":
+                value = (
+                    f"{len(receipts[req.id].source_versions)} recorded rows "
+                    f"in {req.coverage_domain}."
+                )
+            elif req.kind == "absence":
+                value = f"No recorded rows in {req.coverage_domain}."
+            elif req.kind == "temporal":
+                result = temporal[req.id]
+                value = ("Approximately: " if result.approximate else "") + result.value
+            else:
+                # Freeform fact prose cannot silently smuggle a different
+                # complete count or a finer time claim into mixed output.
+                value = "Supported by the cited evidence."
+            values.append(req.id + ": " + value)
+        return "\n".join(values)
 
 
 __all__ = [

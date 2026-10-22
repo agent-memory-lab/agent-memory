@@ -90,3 +90,16 @@ PYTHONPATH=src:packages/evolution/src python packages/evolution/examples/offline
 - 费用回执和资源测量由可信宿主提供；协议无法证明宿主未遗漏外部调用。
 - 完整 LongMemEval-S、STATE-Bench 与真实业务 LIFE-07 未运行，既有 QA-07/08/09 状态保持不变。
 - 用户累计 API 上限仍为 20 元，原记录余额 0.0888379 元；本轮付费调用 0，原账本、协议、断点与成绩未重置。
+
+## 6. 简洁性复核（基线 `91c66b0`）
+
+在现有模块内合并重复结算检查、事务收尾与审计 INSERT；将时间策略和纯测量判断
+与协调流程分开。没有新增文件、公共接口或通用抽象层，六个生产文件合计净减 27 行。
+函数跨度变化：`answer` 253→224 行、`observe_temperature` 239→193 行、
+`_transition` 52→28 行、`_invalidate_sources` 99→75 行；跨度含注释与空行，仅作辅助指标。
+异步调用前后的来源、策略和版本重验继续保留。
+
+局部联合回归 **304 passed / 87 skipped / 0 failed，4.63 秒**；跳过均为未配置的真实 PostgreSQL。
+范围为架构、QA 验收、证据补查、政策与刷新、反馈存储、交付守卫及 evolution 测试。
+新增两例真实 SQLite 审计写入失败测试，确认状态、活动指针、历史与来源墓碑一并回滚。
+全部七个修改的 Python 文件通过 Ruff；`git diff --check` 通过。原验收数字不与本轮相加。

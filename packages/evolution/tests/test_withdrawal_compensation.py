@@ -104,6 +104,40 @@ async def canary(path, deployment, scope=None):
     return engine, registry, candidate, approval
 
 
+@pytest.mark.parametrize("operation", ["transition", "invalidate"])
+def test_audit_write_failure_rolls_back_state_pointer_and_source_tombstones(tmp_path, operation):
+    async def scenario():
+        path = tmp_path / "evolution.db"
+        engine, registry, candidate, approval = await canary(path, Deployment())
+        await engine.promote(candidate.id, actor="host", approval=approval)
+        before = await registry.get(candidate.id)
+        history = await registry.history(candidate.id)
+        with closing(sqlite3.connect(path)) as connection, connection:
+            connection.execute(
+                "CREATE TRIGGER reject_audit BEFORE INSERT ON evolution_promotions "
+                "BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END"
+            )
+        with pytest.raises(sqlite3.IntegrityError, match="audit unavailable"):
+            if operation == "transition":
+                await registry.transition(
+                    candidate.id, EvolutionState.ACTIVE, EvolutionState.ROLLING_BACK,
+                    actor="host", reason="rollback",
+                )
+            else:
+                await registry.invalidate_sources(
+                    ("source",), scope=candidate.scope, actor="host", reason="erase", erase=True
+                )
+        assert await registry.get(candidate.id) == before
+        assert await registry.active_candidate_id(candidate.scope) == candidate.id
+        assert await registry.history(candidate.id) == history
+        with closing(sqlite3.connect(path)) as connection:
+            assert connection.execute(
+                "SELECT count(*) FROM evolution_invalidated_sources"
+            ).fetchone()[0] == 0
+
+    asyncio.run(scenario())
+
+
 def test_active_invalidation_denies_immediately_and_recovers_after_reopen(tmp_path):
     async def scenario():
         deployment = Deployment()

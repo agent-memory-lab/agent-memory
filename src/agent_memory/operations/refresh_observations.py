@@ -247,6 +247,52 @@ async def observation_context(queue, facet_id, *, processor_key=None):
         )
 
 
+def _assess_measurements(observation, attempts, calls):
+    """Pure quality/cost gates over the transaction's already locked receipts."""
+    baseline, candidate = observation.baseline, observation.candidate
+    gaps = []
+    saved = observation.net_work_saved
+    if saved is None:
+        gaps.append("work_phases_unknown_or_pending")
+    elif saved <= 0:
+        gaps.append("measured_work_not_saved")
+    if any(item.quality_passed is not True for item in (baseline, candidate)):
+        gaps.append("quality_gate_not_passed")
+    if any(stage.model_calls is None for item in (baseline, candidate) for stage in item.stages):
+        gaps.append("model_call_census_unknown")
+    if candidate.p95_latency_ns is None or candidate.p95_latency_ns > observation.latency_limit_ns:
+        gaps.append("latency_gate_not_passed")
+
+    amounts, currencies = {}, set()
+    for phase, key in attempts:
+        call = calls[key]
+        if not call or call["state"] != "settled" or call["actual_microunits"] is None:
+            gaps.append("model_cost_unsettled")
+        elif call["phase"] != phase:
+            raise DerivedError("refresh_model_cost_phase_mismatch")
+        else:
+            amounts[key] = call["actual_microunits"]
+            currencies.add(call["currency"])
+    if len(currencies) > 1:
+        gaps.append("model_cost_currency_mismatch")
+
+    money = []
+    for item in (baseline, candidate):
+        keys = {key for stage in item.stages for key in stage.model_cost_keys}
+        complete = (
+            {stage.phase for stage in item.stages} == WORK_PHASES
+            and not item.pending_operations
+            and all(stage.model_calls is not None for stage in item.stages)
+            and keys <= amounts.keys()
+        )
+        total = sum(amounts[key] for key in keys) if complete else None
+        _count(total, optional=True)
+        money.append(total)
+    if len(currencies) <= 1 and all(value is not None for value in money) and money[1] > money[0]:
+        gaps.append("model_cost_regression")
+    return gaps, currencies, money
+
+
 async def observe_temperature(
     queue,
     facet_id,
@@ -363,53 +409,7 @@ async def observe_temperature(
             seconds=policy.hotness_window_seconds
         ):
             raise DerivedError("refresh_observation_window_stale")
-        gaps = []
-        if observation.net_work_saved is None:
-            gaps.append("work_phases_unknown_or_pending")
-        elif observation.net_work_saved <= 0:
-            gaps.append("measured_work_not_saved")
-        if any(v.quality_passed is not True for v in (baseline, candidate)):
-            gaps.append("quality_gate_not_passed")
-        if any(
-            stage.model_calls is None for item in (baseline, candidate) for stage in item.stages
-        ):
-            gaps.append("model_call_census_unknown")
-        if (
-            candidate.p95_latency_ns is None
-            or candidate.p95_latency_ns > observation.latency_limit_ns
-        ):
-            gaps.append("latency_gate_not_passed")
-        currencies = set()
-        for phase, key in attempts:
-            call = calls[key]
-            if not call or call["state"] != "settled" or call["actual_microunits"] is None:
-                gaps.append("model_cost_unsettled")
-            elif call["phase"] != phase:
-                raise DerivedError("refresh_model_cost_phase_mismatch")
-            else:
-                currencies.add(call["currency"])
-        if len(currencies) > 1:
-            gaps.append("model_cost_currency_mismatch")
-        money = []
-        for item in (baseline, candidate):
-            keys = {key for stage in item.stages for key in stage.model_cost_keys}
-            total = (
-                sum(calls[key]["actual_microunits"] for key in keys)
-                if {stage.phase for stage in item.stages} == WORK_PHASES
-                and not item.pending_operations
-                and all(stage.model_calls is not None for stage in item.stages)
-                and all(
-                    calls[key]
-                    and calls[key]["state"] == "settled"
-                    and calls[key]["actual_microunits"] is not None
-                    for key in keys
-                )
-                else None
-            )
-            _count(total, optional=True)
-            money.append(total)
-        if len(currencies) <= 1 and all(v is not None for v in money) and money[1] > money[0]:
-            gaps.append("model_cost_regression")
+        gaps, currencies, money = _assess_measurements(observation, attempts, calls)
         measured = observation.net_work_saved if not gaps else None
         chosen = temperature_decision(
             policy,

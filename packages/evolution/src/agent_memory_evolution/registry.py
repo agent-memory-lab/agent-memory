@@ -341,8 +341,7 @@ class SQLiteEvolutionRegistry:
         return record
 
     def _transition(self, record: PromotionRecord) -> None:
-        connection = self._connect()
-        try:
+        with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             cursor = connection.execute(
                 """UPDATE evolution_candidates SET state = ?, updated_at = ?
@@ -368,30 +367,28 @@ class SQLiteEvolutionRegistry:
                     "DELETE FROM evolution_active_pointers WHERE candidate_id = ?",
                     (record.candidate_id,),
                 )
-            connection.execute(
-                """INSERT INTO evolution_promotions (
-                     id, candidate_id, from_state, to_state, actor, reason,
-                     evaluation_id, approval_ref, idempotency_key, created_at
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    record.id,
-                    record.candidate_id,
-                    record.from_state.value,
-                    record.to_state.value,
-                    record.actor,
-                    record.reason,
-                    record.evaluation_id,
-                    record.approval_ref,
-                    record.idempotency_key,
-                    record.created_at.isoformat(),
-                ),
-            )
-            connection.commit()
-        except BaseException:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
+            self._insert_promotion(connection, record)
+
+    @staticmethod
+    def _insert_promotion(connection, record: PromotionRecord) -> None:
+        connection.execute(
+            """INSERT INTO evolution_promotions (
+                 id, candidate_id, from_state, to_state, actor, reason,
+                 evaluation_id, approval_ref, idempotency_key, created_at
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                record.id,
+                record.candidate_id,
+                record.from_state.value,
+                record.to_state.value,
+                record.actor,
+                record.reason,
+                record.evaluation_id,
+                record.approval_ref,
+                record.idempotency_key,
+                record.created_at.isoformat(),
+            ),
+        )
 
     async def history(self, candidate_id: str) -> Sequence[PromotionRecord]:
         return await asyncio.to_thread(self._history, candidate_id)
@@ -520,9 +517,8 @@ class SQLiteEvolutionRegistry:
         all_in_scope: bool,
         erase: bool,
     ) -> Sequence[PromotionRecord]:
-        connection = self._connect()
         records: list[PromotionRecord] = []
-        try:
+        with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             rows = connection.execute(
                 "SELECT * FROM evolution_candidates",
@@ -583,33 +579,10 @@ class SQLiteEvolutionRegistry:
                     "DELETE FROM evolution_active_pointers WHERE candidate_id = ?",
                     (candidate.id,),
                 )
-                connection.execute(
-                    """INSERT INTO evolution_promotions (
-                         id, candidate_id, from_state, to_state, actor, reason,
-                         evaluation_id, approval_ref, idempotency_key, created_at
-                       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        record.id,
-                        record.candidate_id,
-                        record.from_state,
-                        record.to_state,
-                        record.actor,
-                        record.reason,
-                        None,
-                        None,
-                        None,
-                        record.created_at.isoformat(),
-                    ),
-                )
+                self._insert_promotion(connection, record)
                 records.append(record)
                 self._scrub_erased(connection, candidate.id)
-            connection.commit()
-            return tuple(records)
-        except BaseException:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
+        return tuple(records)
 
     async def finish_activation(self, candidate_id: str) -> None:
         await asyncio.to_thread(self._finish_activation, candidate_id)

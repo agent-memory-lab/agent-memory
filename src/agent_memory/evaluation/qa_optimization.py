@@ -18,6 +18,8 @@ from .public_qa_acceptance import summarize_public_qa
 from .question_cost import CostSnapshot
 from .question_statistics import BootstrapProtocol, _interval
 
+_EXECUTION_BINDINGS = ("dataset_sha256", "answer_model_sha256", "judge_sha256", "workload_sha256")
+
 
 @dataclass(frozen=True, slots=True)
 class QACase:
@@ -61,7 +63,7 @@ class QAOptimizationPlan:
             or len({c.case_id for c in self.cases}) != len(self.cases)
         ):
             raise ValueError("unique nonempty frozen cases required")
-        for name in ("dataset_sha256", "answer_model_sha256", "judge_sha256", "workload_sha256"):
+        for name in _EXECUTION_BINDINGS:
             _hash(getattr(self, name), name)
         if type(self.bootstrap) is not BootstrapProtocol:
             raise ValueError("typed bootstrap protocol required")
@@ -154,7 +156,7 @@ class QAExecutionManifest:
     workload_sha256: str
 
     def __post_init__(self):
-        for name in ("dataset_sha256", "answer_model_sha256", "judge_sha256", "workload_sha256"):
+        for name in _EXECUTION_BINDINGS:
             _hash(getattr(self, name), name)
 
 
@@ -228,13 +230,13 @@ def compare_qa_optimization(plan, baseline, candidate, *, expected_plan_sha256):
     if baseline.costs.currency != candidate.costs.currency:
         raise ValueError("incomparable currencies")
     for label, run in (("baseline", baseline), ("candidate", candidate)):
-        if type(run) is not QAOptimizationRun or run.plan_sha256 != plan.fingerprint:
+        if run.plan_sha256 != plan.fingerprint:
             raise ValueError("run is not bound to the frozen plan")
         if run.execution_manifest is None:
             reasons.append(f"{label}:execution_manifest_missing")
         elif any(
             getattr(run.execution_manifest, name) != getattr(plan, name)
-            for name in ("dataset_sha256", "answer_model_sha256", "judge_sha256", "workload_sha256")
+            for name in _EXECUTION_BINDINGS
         ):
             raise ValueError("execution manifest differs from frozen plan")
         if any(

@@ -224,6 +224,7 @@ evidence research, recoverable source excerpts, shared policy receipts, observed
 refresh decisions, and retractable procedural skills. Default packing remains unchanged.
 [Task status](docs/design/v7.3.0/task.md) and [targeted validation](docs/design/v7.3.0/validation.md)
 distinguish local engineering checks from independent model quality and full-cost acceptance.
+Module boundaries and simplicity review follow the [architecture guide](docs/ARCHITECTURE.md).
 
 | Capability | Current implementation | Evidence |
 | --- | --- | --- |

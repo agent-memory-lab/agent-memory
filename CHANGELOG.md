@@ -7,6 +7,12 @@ the first stable release.
 
 ### Added
 
+- Add opt-in v7.3 evidence research, recoverable context, shared policy receipts,
+  measured refresh decisions, retractable multi-step Skills and frozen paired QA
+  reports. Source recovery requires a native recovery snapshot; evolution source
+  invalidation now requires an explicit scope. Defaults and real quality acceptance
+  remain separate; see [v7.3 contracts and limits](docs/design/AGENT_MEMORY_DESIGN_V7.3.0.md).
+
 - Add repeated local Agent Memory/Mem0 OSS/Graphiti comparisons with shared
   answering, rotated arm order, immutable source/model manifests and transport
   token accounting. Isolate Mem0 history as well as vector storage. This is an

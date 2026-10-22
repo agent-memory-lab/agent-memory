@@ -169,7 +169,6 @@ class DecisionJournal:
     async def append_in(self, uow, record):
         if type(record) is not PolicyDecisionRecord or record.scope != self.scope:
             raise DerivedError("policy_decision_scope_mismatch")
-        await uow.lock_admission_scope(self.scope)
         old = await self.get_in(uow, record.id)
         if old is not None:
             if old.fingerprint != record.fingerprint:
