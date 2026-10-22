@@ -219,6 +219,12 @@ The public boundary is `MemoryProvider`. Optional packages use lazy discovery; i
 
 The current documented delivery baseline is **[v7.2: raw project lifecycle and derived evolution](docs/design/v7.2.0/validation.md)**, building on [V7-B6](docs/design/v7.0.0/batch-b6.md) and the [v7.1 runtime](docs/design/v7.1.0/validation.md). Its targeted engineering validation is separate from real business quality and cost acceptance. The software package is **v0.1.0 / Alpha**; architecture, protocol, and package versions are tracked separately.
 
+The opt-in [v7.3 extension](docs/design/AGENT_MEMORY_DESIGN_V7.3.0.md) adds bounded
+evidence research, recoverable source excerpts, shared policy receipts, observed
+refresh decisions, and retractable procedural skills. Default packing remains unchanged.
+[Task status](docs/design/v7.3.0/task.md) and [targeted validation](docs/design/v7.3.0/validation.md)
+distinguish local engineering checks from independent model quality and full-cost acceptance.
+
 | Capability | Current implementation | Evidence |
 | --- | --- | --- |
 | Raw-source project lifecycle and business policies | Host-bound membership, storage rules and independent authoritative field verification drive automatic views; user self-reports stay pending | [v7.2](docs/design/AGENT_MEMORY_DESIGN_V7.2.0.md) · [Example](examples/project_memory_lifecycle.py) |

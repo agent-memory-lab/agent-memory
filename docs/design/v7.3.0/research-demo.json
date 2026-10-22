@@ -1,0 +1,11 @@
+{
+  "fixture": true,
+  "status": "answered",
+  "answer": "Mei.",
+  "reader_rounds": 2,
+  "calls": 5,
+  "paid_calls": 0,
+  "entailment_verified": false,
+  "evidence_count": 2,
+  "reservation_basis": "utf8_input_bytes_plus_output_token_cap"
+}
