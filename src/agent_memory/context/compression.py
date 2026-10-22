@@ -10,7 +10,7 @@ from typing import Protocol
 from uuid import uuid4
 
 from .recovery import RecoveryState, _text
-from .store import _refs
+from .store import StoredRecoveryRecord, _refs
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,8 +108,14 @@ def _json(value):
 
 
 class CompressionCoordinator:
+    """Scope-local coordinator; hosts serialize source and strategy mutations.
+
+    Final recovery snapshots reject changes observed during asynchronous callbacks.
+    They are not a distributed transaction across source, recovery and strategy stores.
+    Sharing those stores across controllers requires a host-owned writer/delivery fence.
+    """
     def __init__(self, recovery, *, compressor=None, validator=None, counter=None, timeout_seconds=30,
-                 strategy_registry=None):
+                 strategy_registry=None, source_recovery=None):
         if not isinstance(timeout_seconds, (int, float)) or not math.isfinite(timeout_seconds) or not 0 < timeout_seconds <= 120:
             raise ValueError("compression timeout must be between zero and 120 seconds")
         self.recovery = recovery
@@ -117,6 +123,7 @@ class CompressionCoordinator:
         self.validator, self.counter = validator, counter or UTF8ByteCounter()
         self.timeout_seconds = timeout_seconds
         self.strategy_registry = strategy_registry
+        self.source_recovery = source_recovery
         if strategy_registry is not None and strategy_registry.scope != recovery.scope:
             raise ValueError("compression strategy registry scope mismatch")
 
@@ -138,7 +145,8 @@ class CompressionCoordinator:
                 if self.strategy_registry is not None:
                     snapshot, binding = await self.strategy_registry.resolve()
                     worker = CompressionCoordinator(self.recovery, compressor=binding.compressor,
-                        validator=binding.validator, counter=binding.counter, timeout_seconds=self.timeout_seconds)
+                        validator=binding.validator, counter=binding.counter,
+                        timeout_seconds=self.timeout_seconds, source_recovery=self.source_recovery)
                     return await worker._propose(plan, strategy_snapshot=snapshot,
                                                   registry=self.strategy_registry)
                 return await self._propose(plan)
@@ -160,13 +168,17 @@ class CompressionCoordinator:
         # The compressor cannot alter this required state or the evidence set.
         base = {"format": "agent-memory-context-v1", "run_id": plan.run_id,
                 "recovery": asdict(state), "source_event_ids": refs, "summary": ""}
+        references = ()
+        if self.source_recovery is not None:
+            references = await self.source_recovery.bind(self.recovery.scope, plan.segments)
+            base.update(format="agent-memory-context-v2", recoverable_sources=references)
         available = plan.token_budget - self._count(_json(base))
         if available <= 0:
             return CompressionResult(False, "required_state_exceeds_budget", input_digest=plan.digest)
         if type(self.compressor) is not ExtractiveContextCompressor and self.validator is None:
             return CompressionResult(False, "custom_compressor_requires_validator", input_digest=plan.digest)
         summary = await self.compressor.compress(plan, summary_budget=available)
-        _text(summary, limit=65536)
+        _text(summary, limit=65536, empty=bool(references))
         if self.validator is not None and await self.validator.validate(plan, state, summary) is not True:
             return CompressionResult(False, "host_validation_rejected", input_digest=plan.digest)
         base["summary"] = summary
@@ -178,20 +190,36 @@ class CompressionCoordinator:
         if await self.recovery.load(plan.run_id) != state:
             return CompressionResult(False, "recovery_changed", input_digest=plan.digest)
         await self.recovery.require_sources(plan.run_id, refs)
+        if references and not await self.source_recovery.validate(self.recovery.scope, references):
+            return CompressionResult(False, "recovery_sources_changed", input_digest=plan.digest)
         identity = str(uuid4())
         payload = {"run_id": plan.run_id, "recovery_version": state.version,
                    "input_digest": plan.digest, "replacement": replacement,
                    "budget_used": used, "token_budget": plan.token_budget,
                    "counter_id": self._counter_id(self.counter), "strategy": strategy_snapshot}
+        if references:
+            payload["recoverable_sources"] = references
         if registry is not None and not await registry.is_current(strategy_snapshot):
             return CompressionResult(False, "compression_strategy_changed", input_digest=plan.digest)
-        await self.recovery.store.write(self.recovery.scope, "summary", identity,
-                                       payload, refs, expected_revision=0)
+        revision = await self.recovery.store.write(self.recovery.scope, "summary", identity,
+                                                  payload, refs, expected_revision=0)
+        if registry is not None and not await registry.is_current(strategy_snapshot):
+            return CompressionResult(
+                False, "compression_strategy_changed", input_digest=plan.digest
+            )
+        # Source validation and persistence can both yield after the earlier
+        # state check. Bind the exact serialized row before returning its text.
+        expected = StoredRecoveryRecord(revision, json.loads(_json(payload)), refs)
+        if not await self._current(identity, expected):
+            return CompressionResult(False, "recovery_changed", input_digest=plan.digest)
         return CompressionResult(True, "host_approval_required", identity, replacement, plan.digest, used)
 
     async def load(self, summary_id):
+        return await self._load(summary_id)
+
+    async def _load(self, summary_id, *, expected_row=None):
         row = await self.recovery.store.read(self.recovery.scope, "summary", summary_id)
-        if row is None:
+        if row is None or (expected_row is not None and row != expected_row):
             return None
         payload = row.payload
         counter = self.counter
@@ -204,15 +232,59 @@ class CompressionCoordinator:
             return None
         if payload.get("counter_id", self._counter_id(counter)) != self._counter_id(counter):
             return None
-        state = await self.recovery.load(payload["run_id"])
-        if state is None or state.version != payload["recovery_version"]:
-            return None
         await self.recovery.require_sources(payload["run_id"], row.source_event_ids)
+        references = payload.get("recoverable_sources")
+        if references and (self.source_recovery is None or not await self.source_recovery.validate(
+            self.recovery.scope, references
+        )):
+            return None
         replacement = payload["replacement"]
         used = counter.count(replacement)
         if type(used) is not int or used < 0:
             raise ValueError("token counter returned an invalid count")
         if used > payload["token_budget"]:
             return None
+        if self.strategy_registry is not None and not await self.strategy_registry.is_current(
+            payload["strategy"]
+        ):
+            return None
+        # All injected callbacks finish before the final native snapshot. In
+        # particular, source validation may yield while another host saves state.
+        if not await self._current(summary_id, row):
+            return None
         return CompressionResult(True, "host_approval_required", summary_id,
                                  replacement, payload["input_digest"], used)
+
+    async def _current(self, summary_id, row):
+        guard = getattr(self.recovery.store, "compression_current", None)
+        if callable(guard):
+            return await guard(self.recovery.scope, summary_id, row) is True
+        if row.payload.get("recoverable_sources"):
+            # Custom stores must implement the bounded snapshot for raw recovery.
+            return False
+        # Preserve legacy non-recoverable custom stores. No source text is handed
+        # back through this compatibility path.
+        current = await self.recovery.store.read(self.recovery.scope, "summary", summary_id)
+        state = await self.recovery.store.read(self.recovery.scope, "state", row.payload["run_id"])
+        return bool(
+            current == row and state is not None
+            and state.revision == row.payload["recovery_version"]
+            and state.payload.get("version") == state.revision
+            and state.payload.get("run_id") == row.payload["run_id"]
+        )
+
+    async def recover_source(self, summary_id, source_event_id):
+        """Recover only a reference saved in a current, source-checked proposal."""
+        if self.source_recovery is None:
+            return None
+        row = await self.recovery.store.read(self.recovery.scope, "summary", summary_id)
+        if row is None or await self._load(summary_id, expected_row=row) is None:
+            return None
+        reference = next((ref for ref in row.payload.get("recoverable_sources", ())
+                          if ref["source_event_id"] == source_event_id), None)
+        if reference is None:
+            return None
+        result = await self.source_recovery.restore(self.recovery.scope, reference)
+        if result is None or await self._load(summary_id, expected_row=row) is None:
+            return None
+        return result
