@@ -1128,6 +1128,8 @@ class MemoryKernel:
     @staticmethod
     def _feedback_comparable(payload: Mapping[str, object]) -> dict[str, object]:
         comparable = dict(payload)
+        if comparable.get("policy_details") is None:
+            comparable.pop("policy_details", None)  # Pre-policy feedback remains replayable.
         for generated in (
             "id",
             "created_at",

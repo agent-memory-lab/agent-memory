@@ -495,6 +495,21 @@ class RefreshDemandQueue:
             raise DerivedError("refresh_processor_unsupported")
         return self.processors[key]
 
+    async def observation_context(self, facet_id, *, processor_key=None):
+        from .refresh_observations import observation_context
+
+        return await observation_context(self, facet_id, processor_key=processor_key)
+
+    async def observe_temperature(self, facet_id, observation, *, expected_revision,
+                                  next_revision, budget_available, apply=False, processor_key=None):
+        from .refresh_observations import observe_temperature
+
+        return await observe_temperature(
+            self, facet_id, observation, expected_revision=expected_revision,
+            next_revision=next_revision, budget_available=budget_available,
+            apply=apply, processor_key=processor_key,
+        )
+
     async def configure(self, facet_id, policy, *, processor_key=None):
         if not isinstance(policy, RefreshPolicy):
             raise TypeError("RefreshPolicy required")

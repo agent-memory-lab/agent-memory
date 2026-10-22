@@ -376,6 +376,61 @@ class MemoryBlock:
 
 
 @dataclass(frozen=True, slots=True)
+class PolicyDecisionDetails:
+    """Bounded machine-readable reasons; no source bodies or model responses."""
+
+    stage: str
+    reasons: tuple[str, ...]
+    input_versions: tuple[str, ...]
+    evidence_references: tuple[str, ...] = ()
+    cost_references: tuple[str, ...] = ()
+    outcome: str = "proposed"
+    model_version: str | None = None
+    measurements: tuple[tuple[str, int | None], ...] = ()
+    schema: str = "policy-decision/1"
+
+    def __post_init__(self) -> None:
+        if self.schema != "policy-decision/1" or self.stage not in {
+            "storage", "verification", "retrieval", "packing", "refresh", "evolution",
+            "compression",
+        }:
+            raise ValueError("invalid policy decision stage or schema")
+        if self.outcome not in {"proposed", "applied", "rejected", "failed", "skipped"}:
+            raise ValueError("invalid policy decision outcome")
+
+        def code(value):
+            return (type(value) is str and 1 <= len(value) <= 128
+                    and all(c.isascii() and (c.isalnum() or c in "_.:/-") for c in value))
+
+        reasons = tuple(self.reasons)
+        if len(reasons) > 32 or len(set(reasons)) != len(reasons) or any(
+            not code(value) for value in reasons
+        ):
+            raise ValueError("bounded policy reason codes required")
+        object.__setattr__(self, "reasons", reasons)
+        for name in ("input_versions", "evidence_references", "cost_references"):
+            values = tuple(getattr(self, name))
+            if len(values) > 128 or len(set(values)) != len(values) or any(
+                type(v) is not str or len(v) != 64 or any(c not in "0123456789abcdef" for c in v)
+                for v in values
+            ):
+                raise ValueError("bounded unique SHA256 policy references required")
+            object.__setattr__(self, name, values)
+        if self.model_version is not None and not code(self.model_version):
+            raise ValueError("bounded policy model version required")
+        values = tuple(tuple(pair) for pair in self.measurements)
+        if len(values) > 64 or any(len(pair) != 2 for pair in values):
+            raise ValueError("bounded policy measurements required")
+        if len({pair[0] for pair in values}) != len(values) or any(
+            not code(name) or (value is not None and (
+                type(value) is not int or not -(2**63 - 1) <= value <= 2**63 - 1
+            )) for name, value in values
+        ):
+            raise ValueError("policy measurements require codes and finite integer units")
+        object.__setattr__(self, "measurements", values)
+
+
+@dataclass(frozen=True, slots=True)
 class DecisionRecord:
     scope: MemoryScope
     action: str
@@ -391,8 +446,14 @@ class DecisionRecord:
     corrects_id: str | None = None
     feedback_status: FeedbackStatus = FeedbackStatus.ACCEPTED
     created_at: datetime = field(default_factory=utc_now)
+    policy_details: PolicyDecisionDetails | Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
+        if isinstance(self.policy_details, Mapping):
+            object.__setattr__(self, "policy_details", PolicyDecisionDetails(**self.policy_details))
+        if (self.policy_details is not None
+                and type(self.policy_details) is not PolicyDecisionDetails):
+            raise ValueError("typed policy decision details required")
         if not self.action.strip() or not self.policy_version.strip():
             raise ValueError("decision action and policy_version are required")
         if self.memory_usage == MemoryUsage.CONFIRMED and not self.memory_ids:

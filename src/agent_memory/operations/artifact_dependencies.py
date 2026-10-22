@@ -7,6 +7,24 @@ from typing import Any
 MemoryKey = tuple[str, str]
 
 
+def policy_references_available(scope, identities, rows, validity):
+    """Require native, currently visible references for a policy observation.
+
+    Unlike legacy polymorphic feedback references, unknown external IDs cannot
+    establish this contract. Availability does not assert factual truth or that
+    these memories alone suffice to answer a question.
+    """
+    available = {
+        row["id"] for row in rows
+        if row["table"] in {"events", "claims", "artifacts"}
+        and row["tenant_id"] == scope.tenant_id and row["namespace"] == scope.namespace
+        and all(row[field] is None or row[field] == getattr(scope, field)
+                for field in ("user_id", "agent_id", "workspace_id", "session_id"))
+        and validity.accepts(row)
+    }
+    return set(identities) <= available
+
+
 def affected_memory_keys(
     rows: Sequence[Mapping[str, Any]], memory_keys: set[MemoryKey]
 ) -> set[MemoryKey]:
