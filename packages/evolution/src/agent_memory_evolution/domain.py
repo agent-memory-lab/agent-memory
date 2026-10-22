@@ -8,6 +8,8 @@ from uuid import uuid4
 
 from agent_memory.domain import MemoryScope, Procedure, utc_now
 
+from .evidence import EpisodeRevision, validate_evidence
+
 
 class EvolutionState(StrEnum):
     CANDIDATE = "candidate"
@@ -32,6 +34,11 @@ class EvaluationStage(StrEnum):
 class GeneratedProcedure:
     procedure: Procedure
     source_episode_ids: tuple[str, ...]
+    evidence: tuple[EpisodeRevision, ...] = ()
+
+    def __post_init__(self):
+        if self.evidence:
+            validate_evidence(self.procedure, self.evidence)
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,12 +53,19 @@ class EvolutionCandidate:
     generator_version: str = "1"
     created_at: datetime = field(default_factory=utc_now)
     updated_at: datetime = field(default_factory=utc_now)
+    withdrawal_pending: bool = False
+    activation_pending: bool = False
+    evidence: tuple[EpisodeRevision, ...] = ()
+    erasure_pending: bool = False
+    erased: bool = False
 
     def __post_init__(self) -> None:
-        if not self.source_episode_ids:
+        if not self.source_episode_ids and not self.erased:
             raise ValueError("evolution candidate requires source episodes")
         if self.procedure.scope.partition_key() != self.scope.partition_key():
             raise ValueError("candidate and procedure scopes must match")
+        if self.evidence:
+            validate_evidence(self.procedure, self.evidence)
 
 
 @dataclass(frozen=True, slots=True)

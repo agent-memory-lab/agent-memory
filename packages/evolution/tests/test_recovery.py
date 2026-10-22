@@ -62,8 +62,8 @@ def test_restart_recovers_incomplete_activation(tmp_path) -> None:
 
         records = await engine.recover()
         assert len(records) == 1
-        assert records[0].to_state == EvolutionState.CANARY
-        assert (await registry.get(candidate.id)).state == EvolutionState.CANARY
+        assert records[0].to_state == EvolutionState.ROLLED_BACK
+        assert (await registry.get(candidate.id)).state == EvolutionState.ROLLED_BACK
         assert await engine.active_candidate(scope) is None
         assert await engine.recover() == ()
 

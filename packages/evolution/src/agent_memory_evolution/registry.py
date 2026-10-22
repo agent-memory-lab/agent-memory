@@ -20,17 +20,19 @@ from .domain import (
     PromotionApproval,
     PromotionRecord,
 )
+from .evidence import load_evidence
 
 ALLOWED_TRANSITIONS = {
     EvolutionState.CANDIDATE: {EvolutionState.EVALUATED, EvolutionState.REJECTED},
     EvolutionState.EVALUATED: {EvolutionState.SHADOW, EvolutionState.ROLLED_BACK},
     EvolutionState.SHADOW: {EvolutionState.CANARY, EvolutionState.ROLLED_BACK},
     EvolutionState.CANARY: {EvolutionState.ACTIVATING, EvolutionState.ROLLED_BACK},
-    EvolutionState.ACTIVATING: {EvolutionState.ACTIVE, EvolutionState.CANARY},
+    EvolutionState.ACTIVATING: {EvolutionState.ACTIVE, EvolutionState.ROLLING_BACK},
     EvolutionState.ACTIVE: {EvolutionState.ROLLING_BACK},
-    EvolutionState.ROLLING_BACK: {EvolutionState.ROLLED_BACK, EvolutionState.ACTIVE},
+    EvolutionState.ROLLING_BACK: {EvolutionState.ROLLED_BACK},
     EvolutionState.ROLLED_BACK: set(),
     EvolutionState.REJECTED: set(),
+    EvolutionState.INVALIDATED: set(),
 }
 
 
@@ -119,6 +121,11 @@ class SQLiteEvolutionRegistry:
                     procedure_version INTEGER NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS evolution_invalidated_sources (
+                    scope_partition_key TEXT NOT NULL,
+                    source_event_id TEXT NOT NULL,
+                    PRIMARY KEY (scope_partition_key, source_event_id)
+                );
             """)
             self._ensure_column(
                 connection,
@@ -142,6 +149,40 @@ class SQLiteEvolutionRegistry:
             self._ensure_column(
                 connection, "evolution_promotions", "idempotency_key", "TEXT"
             )
+            legacy_withdrawals = "withdrawal_pending" not in {
+                row["name"] for row in connection.execute("PRAGMA table_info(evolution_candidates)")
+            }
+            for column in ("withdrawal_pending", "activation_pending", "erasure_pending", "erased"):
+                self._ensure_column(
+                    connection, "evolution_candidates", column, "INTEGER NOT NULL DEFAULT 0"
+                )
+            self._ensure_column(connection, "evolution_candidates", "evidence_json",
+                                "TEXT NOT NULL DEFAULT '[]'")
+            # An old active pointer may have been replaced without removing the
+            # deployed artifact. Upgrade all formerly deployed invalidations once.
+            if legacy_withdrawals:
+                connection.execute(
+                    "UPDATE evolution_candidates SET withdrawal_pending = 1 WHERE state = ? AND "
+                    "(id IN (SELECT candidate_id FROM evolution_active_pointers) OR id IN "
+                    "(SELECT candidate_id FROM evolution_promotions WHERE from_state IN (?, ?) "
+                    "OR to_state IN (?, ?)))",
+                    (EvolutionState.INVALIDATED, EvolutionState.ACTIVE, EvolutionState.ACTIVATING,
+                     EvolutionState.ACTIVE, EvolutionState.ACTIVATING),
+                )
+            connection.execute(
+                "DELETE FROM evolution_active_pointers WHERE candidate_id IN "
+                "(SELECT id FROM evolution_candidates WHERE state != ?)",
+                (EvolutionState.ACTIVE,),
+            )
+            for row in connection.execute(
+                "SELECT * FROM evolution_candidates WHERE state = ?", (EvolutionState.INVALIDATED,)
+            ).fetchall():
+                candidate = self._candidate(row)
+                connection.executemany(
+                    "INSERT OR IGNORE INTO evolution_invalidated_sources VALUES (?, ?)",
+                    ((candidate.scope.partition_key(), identity)
+                     for identity in candidate.procedure.provenance.source_event_ids),
+                )
             connection.execute(
                 """CREATE UNIQUE INDEX IF NOT EXISTS idx_evolution_promotions_idempotency
                    ON evolution_promotions(candidate_id, idempotency_key)
@@ -163,9 +204,33 @@ class SQLiteEvolutionRegistry:
 
     def _register(self, candidate: EvolutionCandidate) -> str:
         with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            for source_id in candidate.procedure.provenance.source_event_ids:
+                if connection.execute(
+                    "SELECT 1 FROM evolution_invalidated_sources "
+                    "WHERE scope_partition_key = ? AND source_event_id = ?",
+                    (candidate.scope.partition_key(), source_id),
+                ).fetchone():
+                    raise EvolutionConflict("candidate evidence has been invalidated")
+            previous = connection.execute(
+                "SELECT * FROM evolution_candidates WHERE id = ?", (candidate.id,)
+            ).fetchone()
+            if previous:
+                stored = self._candidate(previous)
+                if (stored.procedure != candidate.procedure
+                        or stored.scope != candidate.scope
+                        or stored.source_episode_ids != candidate.source_episode_ids
+                        or stored.generator != candidate.generator
+                        or stored.generator_version != candidate.generator_version
+                        or stored.evidence != candidate.evidence
+                        or stored.baseline_version != candidate.baseline_version):
+                    raise EvolutionConflict("candidate identity is bound to immutable evidence")
+                return candidate.id
             connection.execute(
-                """INSERT OR IGNORE INTO evolution_candidates
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO evolution_candidates (
+                   id, scope_json, procedure_json, source_episode_ids_json, state,
+                   baseline_version, generator, generator_version, created_at, updated_at,
+                   evidence_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     candidate.id,
                     json.dumps(to_jsonable(candidate.scope), sort_keys=True),
@@ -177,6 +242,7 @@ class SQLiteEvolutionRegistry:
                     candidate.generator_version,
                     candidate.created_at.isoformat(),
                     candidate.updated_at.isoformat(),
+                    json.dumps(to_jsonable(candidate.evidence), sort_keys=True),
                 ),
             )
         return candidate.id
@@ -292,6 +358,16 @@ class SQLiteEvolutionRegistry:
                 raise EvolutionConflict(
                     f"candidate {record.candidate_id} is no longer {record.from_state}"
                 )
+            if record.to_state == EvolutionState.ACTIVATING:
+                connection.execute(
+                    "UPDATE evolution_candidates SET activation_pending = 1 WHERE id = ?",
+                    (record.candidate_id,),
+                )
+            if record.to_state != EvolutionState.ACTIVE:
+                connection.execute(
+                    "DELETE FROM evolution_active_pointers WHERE candidate_id = ?",
+                    (record.candidate_id,),
+                )
             connection.execute(
                 """INSERT INTO evolution_promotions (
                      id, candidate_id, from_state, to_state, actor, reason,
@@ -363,6 +439,12 @@ class SQLiteEvolutionRegistry:
         if candidate.state != EvolutionState.ACTIVE:
             raise EvolutionConflict("active pointer requires an active candidate")
         with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current = connection.execute(
+                "SELECT * FROM evolution_candidates WHERE id = ?", (candidate.id,)
+            ).fetchone()
+            if current is None or self._candidate(current) != candidate:
+                raise EvolutionConflict("active candidate changed before pointer publication")
             connection.execute(
                 """INSERT INTO evolution_active_pointers VALUES (?, ?, ?, ?)
                    ON CONFLICT(scope_partition_key) DO UPDATE SET
@@ -396,9 +478,11 @@ class SQLiteEvolutionRegistry:
     def _active_candidate_id(self, scope: MemoryScope) -> str | None:
         with self._connection() as connection:
             row = connection.execute(
-                """SELECT candidate_id FROM evolution_active_pointers
-                   WHERE scope_partition_key = ?""",
-                (scope.partition_key(),),
+                """SELECT p.candidate_id FROM evolution_active_pointers p
+                   JOIN evolution_candidates c ON c.id = p.candidate_id
+                   WHERE p.scope_partition_key = ? AND c.state = ?
+                   AND c.withdrawal_pending = 0 AND c.activation_pending = 0""",
+                (scope.partition_key(), EvolutionState.ACTIVE),
             ).fetchone()
         return row["candidate_id"] if row else None
 
@@ -406,35 +490,67 @@ class SQLiteEvolutionRegistry:
         self,
         source_event_ids: Sequence[str],
         *,
+        scope: MemoryScope,
         actor: str,
         reason: str,
+        all_in_scope: bool = False,
+        erase: bool = False,
     ) -> Sequence[PromotionRecord]:
+        if (not isinstance(scope, MemoryScope) or not actor.strip() or not reason.strip()
+                or len(source_event_ids) > 4096
+                or any(not isinstance(value, str) or not value.strip()
+                       for value in source_event_ids)):
+            raise ValueError("bounded source identities and exact scope are required")
         return await asyncio.to_thread(
             self._invalidate_sources,
             set(source_event_ids),
+            scope,
             actor,
             reason,
+            all_in_scope,
+            erase,
         )
 
     def _invalidate_sources(
         self,
         source_event_ids: set[str],
+        scope: MemoryScope,
         actor: str,
         reason: str,
+        all_in_scope: bool,
+        erase: bool,
     ) -> Sequence[PromotionRecord]:
         connection = self._connect()
         records: list[PromotionRecord] = []
         try:
             connection.execute("BEGIN IMMEDIATE")
             rows = connection.execute(
-                "SELECT * FROM evolution_candidates WHERE state != ?",
-                (EvolutionState.INVALIDATED,),
+                "SELECT * FROM evolution_candidates",
             ).fetchall()
+            if all_in_scope:
+                for row in rows:
+                    candidate = self._candidate(row)
+                    if candidate.scope == scope:
+                        source_event_ids.update(candidate.procedure.provenance.source_event_ids)
+            connection.executemany(
+                "INSERT OR IGNORE INTO evolution_invalidated_sources VALUES (?, ?)",
+                ((scope.partition_key(), source_id) for source_id in source_event_ids),
+            )
             for row in rows:
                 candidate = self._candidate(row)
+                if candidate.scope != scope or candidate.erased:
+                    continue
                 if not (
                     set(candidate.procedure.provenance.source_event_ids) & source_event_ids
                 ):
+                    continue
+                if erase:
+                    connection.execute(
+                        "UPDATE evolution_candidates SET erasure_pending = 1 WHERE id = ?",
+                        (candidate.id,),
+                    )
+                if candidate.state == EvolutionState.INVALIDATED:
+                    self._scrub_erased(connection, candidate.id)
                     continue
                 record = PromotionRecord(
                     candidate_id=candidate.id,
@@ -445,12 +561,16 @@ class SQLiteEvolutionRegistry:
                 )
                 cursor = connection.execute(
                     """
-                    UPDATE evolution_candidates SET state = ?, updated_at = ?
+                    UPDATE evolution_candidates SET state = ?, updated_at = ?,
+                      withdrawal_pending = CASE WHEN state IN (?, ?, ?) THEN 1 ELSE 0 END
                     WHERE id = ? AND state = ?
                     """,
                     (
                         EvolutionState.INVALIDATED,
                         record.created_at.isoformat(),
+                        EvolutionState.ACTIVE,
+                        EvolutionState.ACTIVATING,
+                        EvolutionState.ROLLING_BACK,
                         candidate.id,
                         candidate.state,
                     ),
@@ -459,6 +579,10 @@ class SQLiteEvolutionRegistry:
                     raise EvolutionConflict(
                         f"candidate {candidate.id} changed during invalidation"
                     )
+                connection.execute(
+                    "DELETE FROM evolution_active_pointers WHERE candidate_id = ?",
+                    (candidate.id,),
+                )
                 connection.execute(
                     """INSERT INTO evolution_promotions (
                          id, candidate_id, from_state, to_state, actor, reason,
@@ -478,6 +602,7 @@ class SQLiteEvolutionRegistry:
                     ),
                 )
                 records.append(record)
+                self._scrub_erased(connection, candidate.id)
             connection.commit()
             return tuple(records)
         except BaseException:
@@ -485,6 +610,87 @@ class SQLiteEvolutionRegistry:
             raise
         finally:
             connection.close()
+
+    async def finish_activation(self, candidate_id: str) -> None:
+        await asyncio.to_thread(self._finish_activation, candidate_id)
+
+    def _finish_activation(self, candidate_id: str) -> None:
+        with self._connection() as connection:
+            connection.execute(
+                "UPDATE evolution_candidates SET activation_pending = 0 WHERE id = ?",
+                (candidate_id,),
+            )
+
+    async def pending_withdrawals(self) -> Sequence[EvolutionCandidate]:
+        return await asyncio.to_thread(self._pending_withdrawals)
+
+    def _pending_withdrawals(self) -> Sequence[EvolutionCandidate]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM evolution_candidates WHERE withdrawal_pending = 1 ORDER BY id"
+            ).fetchall()
+        return tuple(self._candidate(row) for row in rows)
+
+    async def request_withdrawal(self, candidate_id: str) -> None:
+        await asyncio.to_thread(self._request_withdrawal, candidate_id)
+
+    def _request_withdrawal(self, candidate_id: str) -> None:
+        with self._connection() as connection:
+            cursor = connection.execute(
+                "UPDATE evolution_candidates SET withdrawal_pending = 1 "
+                "WHERE id = ? AND state = ?", (candidate_id, EvolutionState.INVALIDATED),
+            )
+            if cursor.rowcount != 1:
+                raise EvolutionConflict("withdrawal requires an invalidated candidate")
+
+    async def complete_withdrawal(self, candidate_id: str) -> bool:
+        return await asyncio.to_thread(self._complete_withdrawal, candidate_id)
+
+    def _complete_withdrawal(self, candidate_id: str) -> bool:
+        with self._connection() as connection:
+            cursor = connection.execute(
+                "UPDATE evolution_candidates SET withdrawal_pending = 0 "
+                "WHERE id = ? AND state = ? AND activation_pending = 0",
+                (candidate_id, EvolutionState.INVALIDATED),
+            )
+            completed = cursor.rowcount == 1
+            if completed:
+                self._scrub_erased(connection, candidate_id)
+            return completed
+
+    @classmethod
+    def _scrub_erased(cls, connection, candidate_id):
+        row = connection.execute(
+            "SELECT * FROM evolution_candidates WHERE id = ? AND state = ? "
+            "AND erasure_pending = 1 AND withdrawal_pending = 0 AND activation_pending = 0",
+            (candidate_id, EvolutionState.INVALIDATED),
+        ).fetchone()
+        if row is None:
+            return
+        candidate = cls._candidate(row)
+        # Keep only the identity/version needed for audit and idempotent cleanup.
+        tombstone = Procedure(
+            id=candidate.procedure.id, scope=candidate.scope, name="Erased procedure",
+            trigger="erased", steps=(), success_conditions=(),
+            status=ArtifactStatus.RETIRED, version=candidate.procedure.version,
+            provenance=Provenance(extractor="erased", created_at=candidate.created_at),
+            created_at=candidate.created_at,
+        )
+        connection.execute(
+            "UPDATE evolution_candidates SET procedure_json = ?, source_episode_ids_json = '[]', "
+            "evidence_json = '[]', generator = 'erased', generator_version = 'erased', "
+            "baseline_version = NULL, erasure_pending = 0, erased = 1 WHERE id = ?",
+            (json.dumps(to_jsonable(tombstone), sort_keys=True), candidate_id),
+        )
+        connection.execute(
+            "DELETE FROM evolution_evaluations WHERE candidate_id = ?", (candidate_id,)
+        )
+        connection.execute(
+            "UPDATE evolution_promotions SET actor = 'system', reason = 'erased candidate', "
+            "evaluation_id = NULL, approval_ref = NULL, idempotency_key = NULL "
+            "WHERE candidate_id = ?",
+            (candidate_id,),
+        )
 
     def _history(self, candidate_id: str) -> Sequence[PromotionRecord]:
         with self._connection() as connection:
@@ -510,6 +716,16 @@ class SQLiteEvolutionRegistry:
             steps=tuple(data["steps"]),
             success_conditions=tuple(data["success_conditions"]),
             failure_patterns=tuple(data["failure_patterns"]),
+            applicability_conditions=tuple(data.get("applicability_conditions", ())),
+            counterexample_episode_ids=tuple(data.get("counterexample_episode_ids", ())),
+            source_episode_ids=tuple(data.get("source_episode_ids", ())),
+            extractor_version=data.get("extractor_version", "legacy"),
+            evidence_start_at=datetime.fromisoformat(data["evidence_start_at"])
+            if data.get("evidence_start_at") else None,
+            evidence_end_at=datetime.fromisoformat(data["evidence_end_at"])
+            if data.get("evidence_end_at") else None,
+            reward_definition_id=data.get("reward_definition_id"),
+            reward_formula_version=data.get("reward_formula_version"),
             status=ArtifactStatus(data["status"]),
             provenance=Provenance(
                 source_event_ids=tuple(provenance["source_event_ids"]),
@@ -538,6 +754,11 @@ class SQLiteEvolutionRegistry:
             generator_version=row["generator_version"],
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
+            withdrawal_pending=bool(row["withdrawal_pending"]),
+            activation_pending=bool(row["activation_pending"]),
+            evidence=load_evidence(json.loads(row["evidence_json"])),
+            erasure_pending=bool(row["erasure_pending"]),
+            erased=bool(row["erased"]),
         )
 
     @staticmethod
