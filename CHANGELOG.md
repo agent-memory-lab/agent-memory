@@ -3,7 +3,10 @@
 All notable changes are documented here. The project follows Semantic Versioning after
 the first stable release.
 
-## 0.1.0 - Unreleased
+## 0.1.0 - 2026-10-26 (Alpha)
+
+First GitHub pre-release. The software version is 0.1.0; the architecture baseline
+is v7.3. This release does not claim complete real-model benchmark or cost acceptance.
 
 ### Added
 
