@@ -402,6 +402,68 @@ def test_unsettled_real_model_receipt_blocks_policy_promotion(store, settled_cos
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("shared_attempt", [True, False])
+def test_paired_policy_measurements_require_independent_model_attempts(store, shared_attempt):
+    async def run():
+        async with store() as (engine, kernel, scope, clock):
+            _, queue, pair = await configured_observation(engine, kernel, scope, clock)
+            ledger = ModelBudget(engine.repository)
+            accounts = await ledger.configure(
+                (BudgetAccount("paired-policy", "window", "CNY", "1", None),)
+            )
+
+            async def measured_attempt(name):
+                call = await ledger.reserve(
+                    operation_id="paired-measurement",
+                    attempt_id=name,
+                    request_sha256=digest(name),
+                    account_keys=accounts,
+                    maximum_microunits=None,
+                    phase="foreground",
+                )
+                async with engine.repository.unit_of_work() as uow:
+                    await ledger.intent(uow, call["key"], digest(name))
+                await ledger.settle(call["key"], actual_microunits=100, receipt_id=name)
+                return call["key"]
+
+            baseline_key = await measured_attempt("baseline")
+            candidate_key = baseline_key if shared_attempt else await measured_attempt("candidate")
+
+            def with_attempt(arm, key):
+                return replace(
+                    arm,
+                    stages=tuple(
+                        replace(stage, model_cost_keys=(key,), model_calls=1)
+                        if stage.phase == "foreground" else stage
+                        for stage in arm.stages
+                    ),
+                )
+
+            async def apply_pair():
+                measured = replace(
+                    pair,
+                    baseline=with_attempt(pair.baseline, baseline_key),
+                    candidate=with_attempt(pair.candidate, candidate_key),
+                )
+                return await observe(queue, measured, apply=True)
+
+            before = await ledger.snapshot()
+            if shared_attempt:
+                with pytest.raises(ValueError, match="across paired arms"):
+                    await apply_pair()
+                assert (await queue.observation_context("language"))["policy"]["revision"] == "one"
+                assert not (await kernel.feedback_history(scope, "decision")).items
+            else:
+                result = await apply_pair()
+                assert result.outcome == "applied"
+                assert set(result.cost_references) == {baseline_key, candidate_key}
+                assert dict(result.measurements)["baseline.model_microunits"] == 100
+                assert dict(result.measurements)["candidate.model_microunits"] == 100
+            assert await ledger.snapshot() == before
+
+    asyncio.run(run())
+
+
 def test_policy_update_and_decision_receipt_rollback_together(store, monkeypatch):
     async def run():
         async with store() as (engine, kernel, scope, clock):

@@ -182,6 +182,14 @@ class PairedWorkObservation:
                 )
         if self.baseline.policy_mode == self.candidate.policy_mode:
             raise ValueError("paired measurements require distinct refresh modes")
+        baseline_attempts = {
+            key for stage in self.baseline.stages for key in stage.model_cost_keys
+        }
+        if any(
+            key in baseline_attempts
+            for stage in self.candidate.stages for key in stage.model_cost_keys
+        ):
+            raise ValueError("one model attempt cannot be counted across paired arms")
         _count(self.latency_limit_ns)
 
     @property

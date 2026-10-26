@@ -137,6 +137,8 @@ class SQLiteResearchBackend:
         )
         if query.valid_at is not None or query.known_at is not None:
             return RetrievalBatch(_bundle(), partial_reason="historical_research_unsupported")
+        if route in ("semantic", "census") and MemoryChannel.SEMANTIC not in query.channels:
+            return RetrievalBatch(_bundle(), partial_reason="semantic_channel_disabled")
         if route == "native":
             return RetrievalBatch(await self.kernel.retrieve(query))
         if route == "semantic":
@@ -336,18 +338,28 @@ class SQLiteVectorResearchRoute:
     async def retrieve(self, query, allowance):
         if query.valid_at is not None or query.known_at is not None:
             raise ValueError("semantic_history_unsupported")
+        if MemoryChannel.SEMANTIC not in query.channels:
+            return _bundle(request_id=query.request_id)
         vector = _vector(
             await self.embedder.embed_query(query.text, allowance), self.embedder.spec.dimension
         )
         return await asyncio.to_thread(self._retrieve, query, vector)
 
     def _retrieve(self, query, vector):
-        sources = {s.event_id: s for s in self.sources}
+        # Rank vectors before loading bodies; unrelated sources need no hydration.
+        sources = {}
+        for source in self.sources:
+            score = sum(a * b for a, b in zip(vector, source.vector, strict=True))
+            if score > 0:
+                sources[source.event_id] = (source, score)
         scored = []
         where, params = self.repository._visible_scope_clause(query.scope)
         with self.repository._connection() as connection:
             connection.execute("BEGIN")
-            ids = tuple(sources)
+            # Governed raw sources must not consume the result/context capacity
+            # before the final guard removes them. Reuse the admission authority.
+            protected = set(self.repository._admission_protected_sources(connection, query.scope))
+            ids = tuple(identity for identity in sources if identity not in protected)
             for start in range(0, len(ids), 256):
                 batch = ids[start : start + 256]
                 marks = ",".join("?" for _ in batch)
@@ -357,12 +369,10 @@ class SQLiteVectorResearchRoute:
                     (*params, *batch),
                 ).fetchall()
                 for row in rows:
-                    source = sources[row["id"]]
+                    source, score = sources[row["id"]]
                     if sha256(row["content"].encode()).hexdigest() != source.text_sha256:
                         continue
-                    score = sum(a * b for a, b in zip(vector, source.vector, strict=True))
-                    if score > 0:
-                        scored.append(_item(row, score=score))
+                    scored.append(_item(row, score=score))
             scored.sort(key=lambda i: (-i.score, i.id))
             selected, used = [], 0
             for item in scored:

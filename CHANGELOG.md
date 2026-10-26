@@ -36,6 +36,13 @@ the first stable release.
 
 ### Fixed
 
+- Filter admission-protected semantic sources before result and context limits,
+  hydrate only positive vector matches, and honor disabled semantic channels
+  before embedding or census dispatch. Stop research planning once no acquisition
+  round remains. Reject paired refresh measurements that reuse the same model
+  attempt across both arms. APIs, storage schemas and default recall are unchanged;
+  see [targeted optimization checks](docs/design/v7.3.0/validation.md#7-查询与成本优化2026-10-25).
+
 - Report benchmark technical failures over recorded attempts, keep official
   rubric credit separate from false abstention, validate judge/summary consistency
   and retain conservative unknown/pending costs. Add immutable evidence replay

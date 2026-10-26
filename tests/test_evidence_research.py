@@ -171,6 +171,52 @@ def test_reader_and_planner_calls_share_budget_and_leave_final_slot(tmp_path):
     asyncio.run(run())
 
 
+def test_final_round_does_not_call_planner_for_an_unusable_plan(tmp_path):
+    async def run():
+        seen = []
+
+        async def reader(c, records, allowance):
+            seen.append("reader")
+            return ReaderAssessment()
+
+        async def planner(c, assessment, records, allowance):
+            seen.append("planner")
+            return ResearchPlan((EvidenceGap("owner"),), model_calls=1)
+
+        async with sqlite_research(tmp_path / "memory.db", reader, planner=planner) as loop:
+            result = await loop.answer(contract(limits=ResearchLimits(max_rounds=1)))
+
+        assert seen == ["reader"]
+        assert result.reason == "round_budget_exhausted"
+        assert result.calls == 2 and result.model_call_reservations == 1
+        assert result.answer is None and result.evidence == ()
+        assert result.missing_requirements == ("owner",)
+
+    asyncio.run(run())
+
+
+def test_planner_can_acquire_missing_evidence_before_the_final_round(tmp_path):
+    async def run():
+        path, seen, plans = tmp_path / "memory.db", [], []
+        async with AgentMemory.local(path, scope=SCOPE) as memory:
+            await memory.remember("Deployment briefing references violet.")
+            await memory.remember("Violet specialist is Mei.")
+
+        async def planner(c, assessment, records, allowance):
+            plans.append(allowance)
+            return ResearchPlan((EvidenceGap("owner"),), model_calls=1)
+
+        async with sqlite_research(path, owner_reader(seen), planner=planner) as loop:
+            result = await loop.answer(contract(limits=ResearchLimits(max_rounds=2)))
+
+        assert result.status == "answered" and result.answer == "Mei."
+        assert len(seen) == 2 and len(plans) == 1
+        assert result.calls == 6 and result.model_calls == 1
+        assert result.events[-1].stage == "delivery"
+
+    asyncio.run(run())
+
+
 def test_planner_cannot_dispatch_without_reserving_delivered_evidence_body():
     from agent_memory.domain import MemoryItem, MemoryKind
     from agent_memory.retrieval.evidence_research_adapters import _bundle

@@ -400,6 +400,8 @@ class EvidenceResearchLoop:
                         records=final_records,
                         receipts=tuple(valid.values()),
                     )
+                if round_index + 1 == contract.limits.max_rounds:
+                    raise _Stop("round_budget_exhausted")
                 gaps = assessment.gaps
                 if self.planner is not None:
                     plan = await session.call(

@@ -103,3 +103,33 @@ PYTHONPATH=src:packages/evolution/src python packages/evolution/examples/offline
 范围为架构、QA 验收、证据补查、政策与刷新、反馈存储、交付守卫及 evolution 测试。
 新增两例真实 SQLite 审计写入失败测试，确认状态、活动指针、历史与来源墓碑一并回滚。
 全部七个修改的 Python 文件通过 Ruff；`git diff --check` 通过。原验收数字不与本轮相加。
+
+## 7. 查询与成本优化（2026-10-25）
+
+基线为 `e3ff69a`，修改限于现有研究查询、SQLite 语义适配和刷新测量模块。
+未新增依赖、队列、公共接口或存储字段；默认 recall 与 packing 不变。
+
+| 问题 | 修复与验证 |
+| --- | --- |
+| 高分但受准入保护的原文先占用 limit / token_budget，最终被过滤后漏掉后续合法证据 | 同一 SQLite 快照内，复用仓储准入保护集合提前排除；覆盖直接来源及传递引用、条数和预算两种限制，最终交付守卫仍保留 |
+| 语义路线先加载所有索引来源正文，再筛选正相似度 | 先计算向量分数，再读取正分候选；32 条来源夹具中仅 1 条正匹配，SQL 跟踪确认只请求该条正文；零向量不读取候选正文 |
+| 禁用 semantic channel 后仍可执行 embedding / census | 在派发前检查请求通道；无模型调用，返回空证据或明确 partial 原因；上层保守预留仍单独记录，不伪装实际费用 |
+| 最后一轮缺证后仍调用 planner，生成的计划无法执行 | 无剩余轮次则返回 round_budget_exhausted；验证末轮不调用 planner，以及有剩余轮次时正常规划补证 |
+| baseline / candidate 可共用同一次已结算模型回执，形成失真的收益对比 | 配对构造时拒绝交叉重复 attempt；真实 SQLite 预算账本测试确认独立回执仍可应用策略，拒绝不会改变策略或财务账本 |
+
+准入容量、禁用通道、末轮规划和重复回执用例先在修改前复现失败，再验证修复。
+针对性联合回归为 **242 passed / 105 skipped / 0 failed，5.14 秒**；跳过项均为未配置的真实 PostgreSQL。
+
+```bash
+PYTHONPATH=src python -m pytest \
+  tests/test_evidence_research.py tests/test_evidence_research_reader.py \
+  tests/test_evidence_research_integration.py tests/test_policy_decision_observations.py \
+  tests/test_refresh_demand.py tests/test_refresh_host_policy.py \
+  tests/test_model_cost_runtime_v7.py tests/test_final_delivery_guard.py \
+  tests/test_delivery_evidence_binding.py tests/test_atom_admission.py \
+  tests/test_architecture.py -ra
+```
+
+这次验证没有全量测试或付费模型调用；既有评测断点、协议、费用账本和成绩保持原样。
+候选读取数量及规划调用减少只代表这些受控情形，不能推导整体延迟、真实模型准确率或总成本收益。
+新增校验只收紧无效测量的接纳规则，已有合法合同可继续使用，无需数据迁移。
