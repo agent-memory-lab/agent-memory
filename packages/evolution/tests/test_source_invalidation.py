@@ -39,13 +39,13 @@ def test_source_deletion_invalidates_candidate_and_blocks_promotion(tmp_path) ->
         candidate = await engine.register_procedure(procedure, ("episode-1",))
 
         records = await engine.invalidate_sources(
-            ("event-1",), actor="privacy-worker", reason="source erased"
+            ("event-1",), scope=scope, actor="privacy-worker", reason="source erased"
         )
         assert len(records) == 1
         assert records[0].to_state == EvolutionState.INVALIDATED
         assert (await registry.get(candidate.id)).state == EvolutionState.INVALIDATED
         assert await engine.invalidate_sources(
-            ("event-1",), actor="privacy-worker", reason="retry"
+            ("event-1",), scope=scope, actor="privacy-worker", reason="retry"
         ) == ()
 
         with pytest.raises(EvolutionGateError, match="cannot be promoted"):

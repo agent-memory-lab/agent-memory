@@ -6,6 +6,7 @@ All front/background demand shares one persisted limits configuration.
 
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
+from math import isfinite
 
 from ..derived.model import DerivedError, timestamp
 
@@ -156,6 +157,7 @@ def temperature_decision(policy, stats, *, now, budget_available):
         budget_available
         and reuses >= policy.promote_reuses
         and type(benefit) in (int, float)
+        and (type(benefit) is int or isfinite(benefit))
         and benefit > 0
     ):
         return "on_change"

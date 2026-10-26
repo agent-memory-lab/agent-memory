@@ -34,6 +34,9 @@ class RecoveryStore(Protocol):
     """
     async def initialize(self) -> None: ...
     async def read(self, scope, kind, identity) -> StoredRecoveryRecord | None: ...
+    async def compression_current(self, scope, summary_id, expected) -> bool:
+        """Compare a summary and its state version in one bounded native snapshot."""
+        ...
     async def write(self, scope, kind, identity, payload, source_event_ids,
                     *, expected_revision) -> int: ...
     async def sources(self, scope, source_event_ids) -> tuple[StoredRecoveryRecord, ...]: ...
@@ -136,6 +139,43 @@ class SQLiteRecoveryStore:
                     return None
                 return self._decode(row) if row else None
         return await asyncio.to_thread(read)
+
+    async def compression_current(self, scope, summary_id, expected):
+        """Final snapshot of this DB only; external source/strategy gates run first."""
+        _key("summary", summary_id)
+        if type(expected) is not StoredRecoveryRecord:
+            raise TypeError("typed expected summary required")
+        run_id = expected.payload.get("run_id")
+        _key("state", run_id)
+
+        def current():
+            with self._db() as db:
+                db.execute("BEGIN")
+                scope_key = scope.partition_key()
+                if not self._run_open(db, scope_key, run_id):
+                    return False
+                summary = db.execute(
+                    "SELECT revision,payload,sources,run_id FROM recovery_records_v1 "
+                    "WHERE scope=? AND kind='summary' AND identity=? AND payload IS NOT NULL",
+                    (scope_key, summary_id),
+                ).fetchone()
+                if summary is None or summary[3] != run_id or self._decode(summary) != expected:
+                    return False
+                state = db.execute(
+                    "SELECT revision,payload,sources,run_id FROM recovery_records_v1 "
+                    "WHERE scope=? AND kind='state' AND identity=? AND payload IS NOT NULL",
+                    (scope_key, run_id),
+                ).fetchone()
+                if state is None or state[3] != run_id:
+                    return False
+                state = self._decode(state)
+                return (
+                    state.revision == expected.payload.get("recovery_version")
+                    and state.payload.get("version") == state.revision
+                    and state.payload.get("run_id") == run_id
+                )
+
+        return await asyncio.to_thread(current)
 
     async def write(self, scope, kind, identity, payload, source_event_ids, *, expected_revision):
         _key(kind, identity)

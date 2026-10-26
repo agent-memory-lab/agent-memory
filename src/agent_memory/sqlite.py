@@ -1112,6 +1112,19 @@ class SQLiteMemoryUnitOfWork:
             decision.created_at,
         )
 
+    async def policy_references_available(self, scope, identities):
+        from .operations.artifact_dependencies import policy_references_available
+
+        if not identities:
+            return True
+        if len(identities) > 128:
+            return False
+        rows = self._repository._artifact_dependency_rows(
+            self.connection, scope, set(identities), tombstones=True, metadata_only=True
+        )
+        validity = self._repository._artifact_validity(self.connection, scope, rows)
+        return policy_references_available(scope, identities, rows, validity)
+
     async def save_outcome(self, outcome: OutcomeEvent) -> None:
         self._repository._insert_evolution_record(
             self.connection,

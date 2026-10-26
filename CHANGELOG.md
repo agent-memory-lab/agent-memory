@@ -3,9 +3,18 @@
 All notable changes are documented here. The project follows Semantic Versioning after
 the first stable release.
 
-## 0.1.0 - Unreleased
+## 0.1.0 - 2026-10-26 (Alpha)
+
+First GitHub pre-release. The software version is 0.1.0; the architecture baseline
+is v7.3. This release does not claim complete real-model benchmark or cost acceptance.
 
 ### Added
+
+- Add opt-in v7.3 evidence research, recoverable context, shared policy receipts,
+  measured refresh decisions, retractable multi-step Skills and frozen paired QA
+  reports. Source recovery requires a native recovery snapshot; evolution source
+  invalidation now requires an explicit scope. Defaults and real quality acceptance
+  remain separate; see [v7.3 contracts and limits](docs/design/AGENT_MEMORY_DESIGN_V7.3.0.md).
 
 - Add repeated local Agent Memory/Mem0 OSS/Graphiti comparisons with shared
   answering, rotated arm order, immutable source/model manifests and transport
@@ -29,6 +38,13 @@ the first stable release.
   See [v7.2 architecture and limits](docs/design/AGENT_MEMORY_DESIGN_V7.2.0.md).
 
 ### Fixed
+
+- Filter admission-protected semantic sources before result and context limits,
+  hydrate only positive vector matches, and honor disabled semantic channels
+  before embedding or census dispatch. Stop research planning once no acquisition
+  round remains. Reject paired refresh measurements that reuse the same model
+  attempt across both arms. APIs, storage schemas and default recall are unchanged;
+  see [targeted optimization checks](docs/design/v7.3.0/validation.md#7-查询与成本优化2026-10-25).
 
 - Report benchmark technical failures over recorded attempts, keep official
   rubric credit separate from false abstention, validate judge/summary consistency

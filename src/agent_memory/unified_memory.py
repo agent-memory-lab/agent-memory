@@ -117,7 +117,7 @@ class UnifiedMemory(RecoveryOperations):
     """
     def __init__(self, provider, scope, *, journal, targets=None, sanitizer=None,
                  recovery=None, compressor=None, compression_validator=None,
-                 token_counter=None, strategy_registry=None):
+                 token_counter=None, strategy_registry=None, source_recovery=None):
         self.provider, self.scope, self.journal = provider, scope, journal
         self.targets = dict(targets or {})
         self._recovery, self._compression = recovery, None
@@ -127,8 +127,10 @@ class UnifiedMemory(RecoveryOperations):
             self.targets["__recovery_v1"] = recovery
             from .context.compression import CompressionCoordinator
             self._compression = CompressionCoordinator(recovery, compressor=compressor,
-                validator=compression_validator, counter=token_counter, strategy_registry=strategy_registry)
-        elif any(value is not None for value in (compressor, compression_validator, token_counter, strategy_registry)):
+                validator=compression_validator, counter=token_counter,
+                strategy_registry=strategy_registry, source_recovery=source_recovery)
+        elif any(value is not None for value in (compressor, compression_validator, token_counter,
+                                                strategy_registry, source_recovery)):
             raise ValueError("compression requires recovery persistence")
         if len(self.targets) > 16 or any(not isinstance(k, str) or not 1 <= len(k) <= 128 for k in self.targets):
             raise ValueError("configure at most 16 named deletion targets")
@@ -143,9 +145,12 @@ class UnifiedMemory(RecoveryOperations):
     @classmethod
     def local(cls, path, scope, *, generator=None, targets=None, journal_path=None,
               recovery_path=None, retrieval_probe=None, compressor=None,
-              compression_validator=None, token_counter=None, recovery_store=None, strategy_registry=None):
+              compression_validator=None, token_counter=None, recovery_store=None,
+              strategy_registry=None, recoverable_compression=False):
+        if type(recoverable_compression) is not bool:
+            raise ValueError("recoverable_compression must be boolean")
         kernel = build_local_kernel(path, extractor=_ExactExtractor(generator) if generator else None)
-        recovery = None
+        recovery = source_recovery = None
         if recovery_path is not None and recovery_store is not None:
             raise ValueError("choose recovery_path or recovery_store, not both")
         if recovery_path is not None or recovery_store is not None:
@@ -156,16 +161,19 @@ class UnifiedMemory(RecoveryOperations):
             from .context.store import SQLiteRecoveryStore
             from .sqlite import SQLiteMemoryRepository
             evidence_repository = SQLiteMemoryRepository(path)
+            if recoverable_compression:
+                from .context.source_recovery import RepositorySourceRecovery
+                source_recovery = RepositorySourceRecovery(evidence_repository)
             evidence = RepositoryEvidenceVerifier(evidence_repository)
             recovery = RecoveryMemory(scope, recovery_store if recovery_store is not None else SQLiteRecoveryStore(recovery_path),
                 evidence, retrieval_probe=retrieval_probe if retrieval_probe is not None else
                 LocalRetrievalReadinessProbe(evidence_repository, kernel, evidence))
-        elif retrieval_probe is not None:
+        elif retrieval_probe is not None or recoverable_compression:
             raise ValueError("retrieval probe requires recovery persistence")
         return cls(kernel, scope, journal=SQLiteDeletionJournal(journal_path or str(path) + ".deletions.db"),
                    targets=targets, recovery=recovery, compressor=compressor,
                    compression_validator=compression_validator, token_counter=token_counter,
-                   strategy_registry=strategy_registry)
+                   strategy_registry=strategy_registry, source_recovery=source_recovery)
 
     async def initialize(self):
         await self.journal.initialize()
@@ -255,6 +263,15 @@ class UnifiedMemory(RecoveryOperations):
         async with self._lock:
             await self._ready()
             result = await self._compression.load(summary_id)
+            await self._ready()
+            return result
+
+    async def recover_compressed_source(self, summary_id, source_event_id):
+        """Read an exact original excerpt through the same scope/deletion gate."""
+        self._require_recovery()
+        async with self._lock:
+            await self._ready()
+            result = await self._compression.recover_source(summary_id, source_event_id)
             await self._ready()
             return result
 

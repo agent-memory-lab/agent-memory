@@ -120,6 +120,9 @@ class PartitionedRecoveryStore:
     async def read(self, scope, kind, identity):
         return await self._delegate(scope, "read", kind, identity)
 
+    async def compression_current(self, scope, summary_id, expected):
+        return await self._delegate(scope, "compression_current", summary_id, expected)
+
     async def sources(self, scope, source_event_ids):
         return await self._delegate(scope, "sources", source_event_ids)
 

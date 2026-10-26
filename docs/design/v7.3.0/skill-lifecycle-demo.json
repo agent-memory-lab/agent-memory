@@ -1,0 +1,33 @@
+{
+  "fixture_only": true,
+  "steps": 3,
+  "counterexample_episodes": 3,
+  "replays": [
+    {
+      "stage": "offline",
+      "samples": 30,
+      "successes": 30,
+      "baseline_successes": 0,
+      "task_success_delta": 1
+    },
+    {
+      "stage": "shadow",
+      "samples": 50,
+      "successes": 50,
+      "baseline_successes": 0,
+      "task_success_delta": 1
+    },
+    {
+      "stage": "canary",
+      "samples": 100,
+      "successes": 100,
+      "baseline_successes": 0,
+      "task_success_delta": 1
+    }
+  ],
+  "repaired_timeout": 30,
+  "withdrawal_denied_use": true,
+  "registry_payload_erased": true,
+  "review_export": "temporary export verified and removed",
+  "export_note": "Review export is a detached copy; its retention belongs to the host."
+}

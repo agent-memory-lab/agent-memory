@@ -80,10 +80,24 @@ PostgreSQL 新增可重复执行的 `004_claim_history.sql`；SQLite 初始化�
 
 ## 明确边界
 
-1. 本次双时态覆盖 **Claim 原子事实**。事件、场景块、Episode、Procedure、Persona 与 ontology 的历史视图没有随之实现。显式时间查询仅返回 Claim，不拼入当前原文、当前摘要或画像，也绕过不支持历史快照的自定义召回管线。
+1. 本文描述的是 **Claim 原子事实** 的双时态合同。通用 `recall` 的显式时间查询仅返回受支持的历史 Claim，不拼入当前原文、当前摘要或画像，也绕过不支持历史快照的自定义召回管线。后续 v7.2 已增加 QuestionService 的注册覆盖期内 admitted-L1 双时间问题/页面重建，以及 Persona 按 revision 的历史；这些专用接口不意味着所有对象都支持任意双时态查询。能力矩阵见下表。
 2. 当前查询、历史查询都受现有范围与证据可用性限制。已删除或归档的事实/原文不因回看旧版本恢复；来源删除会同步清理历史载荷的来源列表。删除会牺牲相关认知历史，这是现有遗忘权限的预期结果。
 3. 同一 key 是单值状态槽。本次有效期计算不是多方证词裁决器，不自动解决权威性、否定、假设和多值关系。需要这些语义时应在抽取/冲突策略层明确建模。
 4. 系统时间由写入端生成，并按 key 保证递增。时间倒退或多个写入拥有同一时刻时，通过微秒递增维持确定顺序；客户端不能通过有效期字段设置认知时间。
 5. 每个 key 最多参与 512 条未被更正的原始断言，超限原子失败。历史版本数量会随更新增长；本次没有自动压缩或删除历史版本。该边界约束的是单次有效期计算，不是完整数据库存储预算。
 
 行为验证在 `tests/test_bitemporal_claims.py`，同一测试契约可对 SQLite 和真实 PostgreSQL 执行。
+
+## 当前历史能力矩阵（2026-10-22）
+
+| 对象 / 入口 | 已支持 | 边界 |
+| --- | --- | --- |
+| Claim / `recall(valid_at, known_at)` | 现实有效期与系统认知版本 | 受当前权限、来源和删除约束；迁移前不可重建 |
+| 注册问题 / QuestionPage | `history_rebuild=True` 下双时间重建 | admitted-L1、注册覆盖期内；publication_manifest 连续历史仍不支持 |
+| L2 ScenarioEvolution | 复用注册页面的维护与历史 | 不扩大父视图历史覆盖 |
+| L3 Persona | 不可变 revision 历史与撤回 | revision 历史不等同于任意 valid_at/known_at 重建 |
+| Procedure / Skill | 候选、评估、晋升、回滚、失效轨迹 | 可选 evolution 包；没有通用双时间查询承诺 |
+| 新 evidence research | 保留传入时间语义，检查后端历史能力 | 本地原文/全集补查不支持时返回明确 partial，不能拼当前证据 |
+
+参见 [v7.2 生命周期](design/AGENT_MEMORY_DESIGN_V7.2.0.md) 与
+[v7.3 证据查询](design/AGENT_MEMORY_DESIGN_V7.3.0.md)。

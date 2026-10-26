@@ -79,6 +79,14 @@ SQLite/PostgreSQL 适配器负责批次原子性、版本比较和删除屏障�
 - 新业务代码优先进入已有能力目录。根目录的职责是共享契约、核心流程与装配入口，
   不再按功能前缀无限增加文件。
 
+## 简洁性评审
+
+- 同一业务规则只保留一处实现；复用代码放在拥有该规则的模块，避免增加通用工具层。
+- 主流程明确展示事务、外部调用和最终交付顺序。仅在消除重复或分离独立计算时提取辅助函数。
+- 边界校验与异步调用后的重新校验分别承担输入约束和并发保护，不能作为重复代码删去。
+- 不为假设中的扩展增加配置、继承层级或适配器；不以压缩表达式、删除说明换取行数下降。
+- 重构沿用公开接口和已有行为测试，报告重复逻辑与主流程复杂度的变化；按受影响模块验证。
+
 ## 导入兼容
 
 推荐新代码直接使用所属能力的路径：
@@ -149,3 +157,21 @@ QuestionView。它复用 `ontology/rules.py` 的类型检查与有界关系链�
 `MemoryHost(evolutions=...)` 使用同一 RefreshHost 调度这些处理器，不增加事实库或任务队列。
 真实原文 A9 接线单独位于 `evaluation/raw_workflow.py`，生产代码不导入评测；
 状态、图表和验收边界见 [v7.2](design/AGENT_MEMORY_DESIGN_V7.2.0.md)。
+
+## V7.3 证据驱动查询与撤回
+
+`retrieval/evidence_research*` 在宿主冻结的需求、范围和预算内组织有限轮补查，复用
+原有检索与最终读取守卫。模型只能提交需求/路由建议；完整集合、时间精度和授权来自
+宿主/仓储合同。它不导入实验 reader 或 evaluation，也不自动替换默认 packing。
+`context/source_recovery.py` 为显式启用的压缩绑定原文版本和位置，恢复仍经过 UnifiedMemory
+的作用域/删除闸门，不建立原文副本库。
+
+`operations/decision_records.py` 将政策记录包装到既有 DecisionRecord 和反馈账本；
+`refresh_observations.py` 记录同单位的完整配对工作量，冷热切换使用原有策略 revision/CAS。
+外部模型和 Skill 留在可选包。Evolution 失效通过持久待撤回状态连接部署端口与删除日志，
+不增加后台队列；模型生成经验不越过原有离线/shadow/canary 门控。
+
+`evaluation/qa_optimization.py` 复用费用快照与公共 QA 评分合同，冻结实验计划并按
+历史组配对统计；离线开发结果不能获得真实质量验收标签。
+实现与边界见 [v7.3 设计](design/AGENT_MEMORY_DESIGN_V7.3.0.md) 和
+[验收状态](design/v7.3.0/task.md)。

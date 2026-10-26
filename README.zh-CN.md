@@ -218,6 +218,12 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 
 当前文档交付基线为 **[v7.2：原文项目闭环与派生演化](docs/design/v7.2.0/validation.md)**，承接 [V7-B6](docs/design/v7.0.0/batch-b6.md) 与 [v7.1 运行时](docs/design/v7.1.0/validation.md)。本轮定向工程验证与真实业务质量、成本验收分开。软件包仍为 **v0.1.0 / Alpha**；架构、协议和软件版本分别管理。
 
+显式启用的 [v7.3 扩展](docs/design/AGENT_MEMORY_DESIGN_V7.3.0.md) 增加有界证据补查、
+可恢复原文片段、共享政策回执、基于观测的刷新决策，以及可撤回的程序经验 Skill。
+默认打包协议保持不变。[任务状态](docs/design/v7.3.0/task.md)与
+[局部验证记录](docs/design/v7.3.0/validation.md)分别记录工程检查、独立模型质量和完整成本验收。
+模块边界与简洁性评审遵循[架构指南](docs/ARCHITECTURE.md)。
+
 | 领域 | 已交付范围 | 实施证据 |
 | --- | --- | --- |
 | 原文项目闭环与业务政策 | 用户自述保持待决，宿主绑定成员和保存/核验政策，独立权威字段核验后自动刷新视图 | [v7.2](docs/design/AGENT_MEMORY_DESIGN_V7.2.0.md) · [示例](examples/project_memory_lifecycle.py) |

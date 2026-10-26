@@ -1,0 +1,182 @@
+{
+  "schema": "qa-optimization-comparison/1",
+  "plan_sha256": "63fbd73e2cabea12bb83ed3bbccaf1b4f4525150fe0208921ab9719a018fda98",
+  "accepted": false,
+  "acceptance_gaps": [
+    "no_licensed_real_dataset",
+    "baseline:no_independent_holdout",
+    "baseline:unbounded_cost",
+    "baseline:cost_phases_incomplete",
+    "baseline:local_resource_cost_unmeasured",
+    "baseline:offline_execution",
+    "baseline:unsettled_cost",
+    "candidate:no_independent_holdout",
+    "candidate:unbounded_cost",
+    "candidate:cost_phases_incomplete",
+    "candidate:local_resource_cost_unmeasured",
+    "candidate:offline_execution",
+    "candidate:unsettled_cost",
+    "cost_ratio_threshold_not_met",
+    "latency_ratio_threshold_not_met"
+  ],
+  "baseline": {
+    "schema": "public-qa-acceptance/2",
+    "planned": 2,
+    "started": 2,
+    "scored": 2,
+    "correct": 0,
+    "accuracy_scored": 0,
+    "effective_correct": 0,
+    "effective_accuracy_scored": 0,
+    "answerability_disagreements": 2,
+    "full_benchmark_accuracy": 0,
+    "not_started": 0,
+    "unjudged": 0,
+    "technical_failures": 0,
+    "technical_failure_rate_started": 0,
+    "resolved_fraction": 1,
+    "abstentions_scored": 2,
+    "incorrect_answers": 0,
+    "incorrect_abstentions": 2,
+    "accepted": false,
+    "acceptance_gaps": [
+      "no_independent_holdout",
+      "unbounded_cost",
+      "cost_phases_incomplete",
+      "local_resource_cost_unmeasured"
+    ],
+    "cost": {
+      "currency": "CNY",
+      "ledger_sha256": "714f115c9327530aa0801ead7ceef58f09258e92d4f26075b6162297c1c8bd4b",
+      "accounted_upper_microunits": null,
+      "invoiced_microunits": null,
+      "by_phase_upper_microunits": {},
+      "unknown_usage_calls": 0,
+      "model_calls": 0,
+      "per_scored_case_upper_microunits": null,
+      "basis": "provider bills where available, otherwise tariff estimates or conservative reserves; local resources separate"
+    },
+    "thresholds": {
+      "minimum_accuracy": 0,
+      "maximum_technical_failure_rate": 1,
+      "calibration": "engineering_defaults_not_business_calibrated"
+    },
+    "failure_stages": {
+      "retrieval": 2
+    },
+    "latency_p95_ms": 10.892375,
+    "report_sha256": "bb2363f864559c22c3e59c2e1dd25e25c1ce675eacfad140ba2af64a2301f139"
+  },
+  "candidate": {
+    "schema": "public-qa-acceptance/2",
+    "planned": 2,
+    "started": 2,
+    "scored": 2,
+    "correct": 2,
+    "accuracy_scored": 1,
+    "effective_correct": 2,
+    "effective_accuracy_scored": 1,
+    "answerability_disagreements": 0,
+    "full_benchmark_accuracy": 1,
+    "not_started": 0,
+    "unjudged": 0,
+    "technical_failures": 0,
+    "technical_failure_rate_started": 0,
+    "resolved_fraction": 1,
+    "abstentions_scored": 0,
+    "incorrect_answers": 0,
+    "incorrect_abstentions": 0,
+    "accepted": false,
+    "acceptance_gaps": [
+      "no_independent_holdout",
+      "unbounded_cost",
+      "cost_phases_incomplete",
+      "local_resource_cost_unmeasured"
+    ],
+    "cost": {
+      "currency": "CNY",
+      "ledger_sha256": "ace87de98a83cb12e58bdd9cccc686f46ccd25d7ba6e7e399a52b70e176503ef",
+      "accounted_upper_microunits": null,
+      "invoiced_microunits": null,
+      "by_phase_upper_microunits": {},
+      "unknown_usage_calls": 0,
+      "model_calls": 0,
+      "per_scored_case_upper_microunits": null,
+      "basis": "provider bills where available, otherwise tariff estimates or conservative reserves; local resources separate"
+    },
+    "thresholds": {
+      "minimum_accuracy": 0.8,
+      "maximum_technical_failure_rate": 0.02,
+      "calibration": "engineering_defaults_not_business_calibrated"
+    },
+    "failure_stages": {},
+    "latency_p95_ms": 18.543458,
+    "report_sha256": "1e23478a32993c7ea42e5fcf13092a973e77dd75c3477a03cb9f241f3c7fadfe"
+  },
+  "task_kinds": {
+    "fact": {
+      "planned": 2,
+      "baseline_effective_per_planned": 0,
+      "candidate_effective_per_planned": 1,
+      "difference": 1
+    }
+  },
+  "paired": {
+    "groups": 2,
+    "planned": 2,
+    "effective_per_planned_difference": 1,
+    "confidence_interval": [
+      1,
+      1
+    ],
+    "confidence_level": 0.95,
+    "cost_upper_ratio": null,
+    "latency_p95_ratio": 1.7024255958870314
+  },
+  "boundary": "Trusted host annotations. Offline/development/partial runs are diagnostic. A plan hash binds settings but does not prove annotation independence.",
+  "fixture": true,
+  "execution": "offline",
+  "exposure": "development",
+  "paid_calls": 0,
+  "timing_scope": "answer() wall time; setup excluded; two synthetic cases only",
+  "local_resources": "unknown",
+  "case_results": {
+    "baseline": [
+      {
+        "case_id": "violet",
+        "status": "partial",
+        "answer": null,
+        "reason": "round_budget_exhausted",
+        "calls": 2,
+        "latency_ms": 10.892375
+      },
+      {
+        "case_id": "amber",
+        "status": "partial",
+        "answer": null,
+        "reason": "round_budget_exhausted",
+        "calls": 2,
+        "latency_ms": 9.344083
+      }
+    ],
+    "candidate": [
+      {
+        "case_id": "violet",
+        "status": "answered",
+        "answer": "Mei.",
+        "reason": "supported_by_delivered_evidence",
+        "calls": 5,
+        "latency_ms": 17.954958
+      },
+      {
+        "case_id": "amber",
+        "status": "answered",
+        "answer": "Luis.",
+        "reason": "supported_by_delivered_evidence",
+        "calls": 5,
+        "latency_ms": 18.543458
+      }
+    ]
+  },
+  "interpretation": "Synthetic mechanism demonstration; no generalization or cost improvement claim."
+}
