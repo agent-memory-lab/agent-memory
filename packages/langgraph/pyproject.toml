@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-memory-langgraph"
-version = "0.1.0"
+version = "0.1.1"
 description = "LangGraph lifecycle adapter for agent-memory"
 readme = "README.md"
 requires-python = ">=3.13"

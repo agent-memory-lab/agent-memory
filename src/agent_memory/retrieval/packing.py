@@ -14,9 +14,9 @@ from math import isfinite, log1p
 from ..domain import Citation, Claim, MemoryItem, MemoryKind, MemoryQuery
 from .analyzer import lexical_terms, query_content_anchors
 from .candidate_identity import MAX_SOURCE_WINDOW_CHARS, candidate_identity
-from .packing_policy import _packing_policy, packing_contract
-from .evidence_units import context_relations, dependency_group
 from .coverage_plan import coverage_plan
+from .evidence_units import context_relations, dependency_group
+from .packing_policy import _packing_policy, packing_contract
 from .passage_reranking import passage_key, query_key
 
 
@@ -491,7 +491,7 @@ def pack_native_evidence(
     """Select native evidence using a frozen, explicitly selected policy.
 
     Stable v2 retains the historical relevance-led choices. Experimental v3
-    uses the heuristics below. V4 uses conservative identity/coverage deduplication
+    uses the heuristics below. V4 uses identity/coverage deduplication
     and source-bound context units, with parent scores explicitly unverified for
     narrowed passages. Selecting a reader never selects a packing policy.
     All policies share source, span and budget checks.
@@ -730,8 +730,9 @@ def pack_native_evidence(
     # Current state retains its existing precedence; cost optimization applies
     # to retrieved representations, not to replacing authoritative state.
     state_costs = [entry.cost for entry, _ in entries if isinstance(entry.value, Claim)]
-    item_costs = [entry.cost for entry, _ in entries if not isinstance(entry.value, Claim)]
-    budget_pressure = bool(policy.cost_weight) and (
+    item_costs = [entry.cost for entry, _ in entries if not isinstance(entry.value, Claim)
+                  and (relations is None or identity(entry.value) not in relations.context_ids)]
+    budget_pressure = (bool(policy.cost_weight) or policy.reserve_evidence_budget) and (
         sum(state_costs[:64]) + sum(item_costs[:query.limit]) > query.token_budget
     )
     initial_cost_share = query.token_budget / max(1, min(query.limit, len(entries)))
@@ -770,11 +771,70 @@ def pack_native_evidence(
         )
         return score, coverage, novelty, redundancy, cost_penalty, topic_novelty, cost_share, topic_repetition
 
+    def uncovered_unit(rows):
+        # Variants with different parent identities can narrow to the same
+        # source interval. Check within the unit before costing it or binding
+        # its dependency proof, not only against earlier selected units.
+        members = []
+        covered = list(selected_entries)
+        for row in rows:
+            if not _event_fully_covered(row[2], covered):
+                members.append(row)
+                covered.append(row[2])
+        return members
+
+    # Reservations use complete variants retaining every lexical support term.
+    # With no lexical support, keep the semantic hit intact: its shorter text
+    # has not been independently ranked. These are capacity bounds, not scores.
+    minimum_variants = {
+        key: min((entry for entry in variants
+                  if entry.support >= variants[0].support
+                  and (variants[0].support or entry is variants[0])),
+                 key=lambda entry: entry.cost)
+        for key, variants in item_variants.items() if variants and policy.reserve_evidence_budget
+    }
+
+    def evidence_reservations():
+        frontier = []
+        covered = list(selected_entries)
+        for entry, _ in entries:
+            key = identity(entry.value)
+            if (isinstance(entry.value, Claim)
+                or (relations is not None and key in relations.context_ids)):
+                continue
+            minimum = minimum_variants[key]
+            if _event_fully_covered(minimum, covered):
+                continue
+            frontier.append((key, minimum))
+            covered.append(minimum)
+            if len(frontier) >= query.limit - len(selected):
+                break
+        reservations = {key: entry.cost for key, entry in frontier}
+        slots = query.limit - len(selected) - len(frontier)
+        if relations is not None and slots > 0:
+            for child, parent in relations.parents.items():
+                minimum = minimum_variants.get(child)
+                if (parent in reservations and minimum is not None
+                    and not _event_fully_covered(minimum, covered)):
+                    reservations[parent] += minimum.cost
+                    covered.append(minimum)
+                    slots -= 1
+                    if slots == 0:
+                        break
+        return reservations
+
+    def unit_allowance(key, reservations):
+        reserved = sum(cost for other, cost in reservations.items() if other != key)
+        return max(0, query.token_budget - used_tokens - reserved)
+
     while entries and used_tokens < query.token_budget:
         pending = (tuple(group for group in plan.groups if group.id not in covered_groups)
                    if plan is not None and passages is None else ())
         feasible = []
         remaining = []
+        reservations = (evidence_reservations()
+                        if policy.reserve_evidence_budget and budget_pressure else {})
+
         for original, rank in entries:
             entry = original
             is_state = isinstance(entry.value, Claim)
@@ -784,9 +844,19 @@ def pack_native_evidence(
                 # full state claim under its same original memory ID.
                 entry = feasible_variant(identity(entry.value), available)
                 is_state = False
+            elif not is_state and policy.reserve_evidence_budget and budget_pressure:
+                # Earlier evidence can keep long context after reserving only
+                # the minimum complete representations of the leading roots.
+                key = identity(entry.value)
+                parent = relations.parents.get(key, key) if relations is not None else key
+                allowance = min(available, max(unit_allowance(parent, reservations),
+                                               minimum_variants[key].cost))
+                entry = (feasible_variant(key, allowance)
+                         or feasible_variant(key, available))
             elif not is_state and pending:
                 allowance = int(available / len(pending))
-                entry = feasible_variant(identity(entry.value), allowance) or feasible_variant(identity(entry.value), available)
+                entry = (feasible_variant(identity(entry.value), allowance)
+                         or feasible_variant(identity(entry.value), available))
             elif not is_state and (budget_pressure or entry.cost > available):
                 entry = feasible_variant(
                     identity(entry.value), available, score_variants=budget_pressure,
@@ -825,15 +895,48 @@ def pack_native_evidence(
                     continue
                 children = [child for child, parent in relations.parents.items() if parent == root_id]
                 available_children = [by_id[child] for child in children if child in by_id]
-                options = [[root, *available_children], *([root, child] for child in available_children), [root]]
+                options = [uncovered_unit(option) for option in (
+                    [root, *available_children],
+                    *([root, child] for child in available_children), [root],
+                )]
+                if policy.reserve_evidence_budget and budget_pressure:
+                    fitted_options = []
+                    allowance = max(unit_allowance(root_id, reservations),
+                                    minimum_variants.get(root_id, root[2]).cost)
+                    for option in options:
+                        # Fit parent and neighbours together. Independently
+                        # giving each the entire unit allowance loses children
+                        # even when complete compact forms fit as a group.
+                        available = min(allowance, query.token_budget - used_tokens)
+                        if sum(minimum_variants.get(identity(row[2].value), row[2]).cost
+                               for row in option) > available:
+                            continue
+                        fitted = []
+                        for position, row in enumerate(option):
+                            reserve = sum(
+                                minimum_variants.get(identity(later[2].value), later[2]).cost
+                                for later in option[position + 1:]
+                            )
+                            entry = feasible_variant(
+                                identity(row[2].value), available - reserve, exclude_covered=True,
+                            )
+                            if entry is None:
+                                break
+                            metrics = selection_metrics(entry)
+                            fitted.append((metrics[0], row[1], entry, *metrics[1:]))
+                            available -= entry.cost
+                        if len(fitted) == len(option):
+                            fitted_options.append(uncovered_unit(fitted))
+                    options = fitted_options or [[root]]
                 # Adjacency is an optional association, not proof every neighbour
                 # is needed. Prefer the largest feasible unit, then provider
                 # order; an oversized neighbour must not block a fitting pair.
-                members = next(option for option in options if (
+                members = next((option for option in options if option and (
                     sum(row[2].cost for row in option) <= query.token_budget-used_tokens
                     and len(selected)+sum(not isinstance(row[2].value, Claim) for row in option) <= query.limit
-                ))
-                units.append(members)
+                )), None)
+                if members:
+                    units.append(members)
             if not units:
                 break
             if pending:
@@ -952,6 +1055,13 @@ def pack_native_evidence(
                     grown_span is not None and 0 < delta <= available
                     and grown_span[0] <= previous_span[0] < previous_span[1] <= grown_span[1]
                     and not _event_fully_covered(grown, selected_entries)
+                    # Growth must not make another selected group member
+                    # redundant after the group's selection/proof was formed.
+                    and not any(
+                        other is not previous and _event_fully_covered(other, (grown,))
+                        and not _event_fully_covered(other, (previous,))
+                        for other in selected_entries
+                    )
                 ):
                     groups.setdefault(previous.value.id, []).append((position, grown, delta))
         return groups
@@ -982,6 +1092,21 @@ def pack_native_evidence(
             )
             selected_entries[position] = grown
             used_tokens += delta
+
+    # Context growth changes span proofs, but not group membership. Bind every
+    # dependency and trace to the grown text before the delivery guard sees it.
+    selected_by_id = {identity(entry.value): entry.value for entry in selected_entries}
+    refreshed_groups = {}
+    for group in dependency_groups:
+        refreshed_groups[group["group_id"]] = dependency_group([
+            selected_by_id[proof["candidate_id"]] for proof in group["members"]
+        ])
+    dependency_groups = list(refreshed_groups.values())
+    for trace in selection_trace:
+        if "dependency_group_id" in trace:
+            trace["dependency_group_id"] = refreshed_groups[
+                trace["dependency_group_id"]
+            ]["group_id"]
 
     # Bind every final proof and cost to exactly what the reader receives.
     # Selection scores intentionally describe the compact selection stage;

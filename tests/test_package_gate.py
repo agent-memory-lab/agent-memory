@@ -23,7 +23,7 @@ def test_inventory_covers_every_project_and_includes_seventh_local_models():
     }
     assert next(p for p in packages if p["distribution"] == "agent-memory-local-models") == {
         "path": "packages/local-models", "distribution": "agent-memory-local-models",
-        "module": "agent_memory_local_models", "version": "0.1.0",
+        "module": "agent_memory_local_models", "version": "0.1.1",
     }
 
 

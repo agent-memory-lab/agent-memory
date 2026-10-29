@@ -1,0 +1,26 @@
+# Only the two runtime distributions enter the build context.
+**
+!pyproject.toml
+!README.md
+!LICENSE
+!src/
+!src/**
+!packages/
+!packages/mcp-server/
+!packages/mcp-server/pyproject.toml
+!packages/mcp-server/README.md
+!packages/mcp-server/src/
+!packages/mcp-server/src/**
+
+# Keep local caches, credentials, and state out even inside an allowed source tree.
+**/.git
+**/__pycache__
+**/*.py[cod]
+**/.env
+**/.env.*
+**/*.db
+**/*.db-*
+**/*.sqlite
+**/*.sqlite3
+**/*.pem
+**/*.key

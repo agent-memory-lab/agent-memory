@@ -30,7 +30,7 @@ Agent Memory 为 Agent 保存来源、组织当前事实与历史，并返回带
 
 **基础写入与检索无需 API Key、向量数据库或后台服务。** 核心运行时默认零第三方依赖；模型辅助抽取和其他集成按需安装。
 
-> **Alpha · v0.1.0。** 已有本地运行时和可选集成包；整体生产验收与真实领域质量校准尚未完成。当前范围见[能力状态与路线图](#能力状态与路线图)。
+> **Alpha · v0.1.1。** 已有本地运行时和可选集成包；整体生产验收与真实领域质量校准尚未完成。当前范围见[能力状态与路线图](#能力状态与路线图)。
 
 ## 记忆会变化，依据要留下
 
@@ -72,6 +72,21 @@ py -3.13 -m venv .venv
 </details>
 
 macOS 或 Linux 开发环境可使用 `./setup.sh`；`./setup.sh --all` 同时安装可选包。通过 `PYTHON_BIN=/path/to/python3.13 ./setup.sh` 指定解释器。
+
+### 运行 MCP 容器
+
+[GitHub Packages 镜像](https://github.com/users/agent-memory-lab/packages?repo_name=agent-memory)
+包含核心库和 MCP 服务，支持 Linux amd64/arm64：
+
+```bash
+docker pull ghcr.io/agent-memory-lab/agent-memory:0.1.1
+docker run --rm -i -v agent-memory-data:/data \
+  ghcr.io/agent-memory-lab/agent-memory:0.1.1 \
+  --tenant-id demo --database /data/memory.sqlite3
+```
+
+这是供 MCP 客户端连接的 stdio 进程，身份由宿主指定，命名卷保留 SQLite 数据。
+客户端配置、不可变 digest 及 HTTP 部署要求见[容器使用说明](docs/CONTAINER_PACKAGE.md)。
 
 ### 写入 → 检索 → 查看来源
 
@@ -216,7 +231,7 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 
 ## 能力状态与路线图
 
-当前文档交付基线为 **[v7.2：原文项目闭环与派生演化](docs/design/v7.2.0/validation.md)**，承接 [V7-B6](docs/design/v7.0.0/batch-b6.md) 与 [v7.1 运行时](docs/design/v7.1.0/validation.md)。本轮定向工程验证与真实业务质量、成本验收分开。软件包仍为 **v0.1.0 / Alpha**；架构、协议和软件版本分别管理。
+当前文档交付基线为 **[v7.2：原文项目闭环与派生演化](docs/design/v7.2.0/validation.md)**，承接 [V7-B6](docs/design/v7.0.0/batch-b6.md) 与 [v7.1 运行时](docs/design/v7.1.0/validation.md)。本轮定向工程验证与真实业务质量、成本验收分开。软件包仍为 **v0.1.1 / Alpha**；架构、协议和软件版本分别管理。
 
 显式启用的 [v7.3 扩展](docs/design/AGENT_MEMORY_DESIGN_V7.3.0.md) 增加有界证据补查、
 可恢复原文片段、共享政策回执、基于观测的刷新决策，以及可撤回的程序经验 Skill。

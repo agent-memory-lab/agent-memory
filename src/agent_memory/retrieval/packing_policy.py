@@ -18,6 +18,7 @@ class _PackingPolicy:
     expand_selected_context: bool = False
     dependency_units: bool = False
     coverage_reservations: bool = False
+    reserve_evidence_budget: bool = False
 
 
 _V2 = _PackingPolicy("v2", "relevance_bounded_diversity_v2")
@@ -27,9 +28,11 @@ _V3 = _PackingPolicy(
     topic_novelty_weight=0.08, topic_repetition_weight=0.08, cost_weight=0.10,
     relevance_frontier=0.12, expand_selected_context=True,
 )
-_V4 = _PackingPolicy("v4", "source_context_units_v4", experimental=True, dependency_units=True)
-_V5 = _PackingPolicy("v5", "coverage_passage_units_v5", experimental=True,
-                     dependency_units=True, coverage_reservations=True)
+_V4 = _PackingPolicy("v4", "source_context_units_v4_r2", experimental=True, dependency_units=True,
+                     reserve_evidence_budget=True, expand_selected_context=True)
+_V5 = _PackingPolicy("v5", "coverage_passage_units_v5_r2", experimental=True,
+                     dependency_units=True, coverage_reservations=True,
+                     reserve_evidence_budget=True, expand_selected_context=True)
 PACKING_VERSIONS = (_V2.version, _V3.version, _V4.version, _V5.version)
 
 
