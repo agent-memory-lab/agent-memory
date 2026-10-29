@@ -3,7 +3,14 @@
 All notable changes are documented here. The project follows Semantic Versioning after
 the first stable release.
 
-## Unreleased
+## 0.1.1 - 2026-10-29 (Alpha)
+
+### Added
+
+- Publish the core and MCP server as a non-root GitHub Container Registry image
+  for Linux amd64 and arm64. Version and commit tags bind the source revision;
+  CI checks actual stdio MCP write/recall before publishing and after pulling
+  the published digest. See [container usage](docs/CONTAINER_PACKAGE.md).
 
 ### Fixed
 

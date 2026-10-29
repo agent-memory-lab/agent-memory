@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-memory-local-models"
-version = "0.1.0"
+version = "0.1.1"
 description = "Opt-in local tokenizer and final-logit model adapters for agent-memory"
 readme = "README.md"
 requires-python = ">=3.13"
