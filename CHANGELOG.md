@@ -3,6 +3,18 @@
 All notable changes are documented here. The project follows Semantic Versioning after
 the first stable release.
 
+## Unreleased
+
+### Fixed
+
+- Deduplicate covered source spans inside evidence groups before charging slots
+  and tokens. In opt-in v4/v5, reserve minimum complete evidence under budget pressure, price
+  parent/context units jointly, and preserve leading semantic evidence when
+  competing reservations cannot fit. Rebind dependency proofs after context
+  growth and skip empty units. V2 retains its previous default policy; v4/v5 have
+  explicit strategy revisions and no schema changes. See the
+  [offline repair validation](docs/evaluation/PACKING_REPAIR_2026-10-28.md).
+
 ## 0.1.0 - 2026-10-26 (Alpha)
 
 First GitHub pre-release. The software version is 0.1.0; the architecture baseline
