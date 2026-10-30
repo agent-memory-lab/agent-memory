@@ -6,6 +6,14 @@ Describe the problem and resulting behavior.
 
 Record the checks run and any limits on their coverage.
 
+## Simplicity review
+
+- What reproducible problem does this fix?
+- Can the fix stay in an existing module?
+- If adding abstractions, state, or dependencies, why are they necessary?
+- Which regression test fails before the fix and passes after it?
+- What is the cost of not making this change?
+
 ## README synchronization
 
 Required whenever either README changes; see [CONTRIBUTING.md](https://github.com/agent-memory-lab/agent-memory/blob/main/CONTRIBUTING.md#bilingual-readme-updates-required).

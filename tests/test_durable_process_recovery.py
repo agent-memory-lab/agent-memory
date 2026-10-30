@@ -6,7 +6,7 @@ import os
 import signal
 import sys
 from dataclasses import replace
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -105,6 +105,8 @@ def test_real_worker_kill_recovers_saved_stage_without_duplicate_publication(
             published = phase == "worker_after_publication_commit"
             rows = await engine.repository.admission_records(scope)
             assert bool(rows) == published
+            if published:
+                assert datetime.fromisoformat(rows[0]["recorded_at"]) == clock[0]
             status = await queue.status("one")
             assert status["l1_decided"] == published
             async with engine.repository.unit_of_work() as uow:
