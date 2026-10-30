@@ -333,6 +333,12 @@ async def main(config):
         await queue.apply(lease.task, None)
         await pause()
     else:
+        # The subprocess does not inherit the parent's monkeypatched admission clock.
+        if config["backend"] == "postgres":
+            import agent_memory_postgres.admission as writer
+        else:
+            import agent_memory.sqlite as writer
+        writer.utc_now = lambda: now
         generator = Generator()
         pipeline = AtomExtractionPipeline(generator, generator)
         configuration = processing_configuration_sha256(pipeline, base.POLICY, base.SELF)
