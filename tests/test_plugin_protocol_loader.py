@@ -184,10 +184,57 @@ def test_context_rejects_naive_deadline():
         ("0.2.4", "~=0.2.3", True),
         ("0.3.0", "~=0.2.3", False),
         ("0.1.0", "!=0.1.0", False),
+        ("1.0.0-alpha", ">=1.0.0", False),
+        ("1.0.0-alpha", "==1.0.0", False),
+        ("1.0.0-rc.1", "<1.0.0", True),
+        ("1.0.0", ">1.0.0-rc.1", True),
+        ("1.0.0-alpha", "!=1.0.0", True),
+        ("1.0.0-alpha", "<=1.0.0-alpha", True),
+        ("1.0.0-alpha", "==1.0.0-alpha", True),
+        ("1.0.0-beta", "==1.0.0-alpha", False),
+        ("1.0.0-alpha.2", "<1.0.0-alpha.10", True),
+        ("1.0.0-alpha.10", ">1.0.0-alpha.2", True),
+        ("1.0.0-1", "<1.0.0-alpha", True),
+        ("1.0.0-alpha", "<1.0.0-alpha.1", True),
+        ("1.0.0-beta", ">=1.0.0-alpha,<1.0.0-rc.1", True),
+        ("1.0.0-rc.1", ">=1.0.0-alpha,<1.0.0-rc.1", False),
+        ("2.0.0-alpha", ">1.9.9", True),
+        ("1.0.0-alpha", "~=1.0.0", False),
+        ("1.0.0", "~=1.0.0-alpha", True),
+        ("1.1.0", "~=1.0.0-alpha", False),
+        ("1.1.0-alpha", "~=1.0.0-alpha", False),
+        ("1.1.0-alpha", "~=1.0.0", False),
+        ("2.0.0", "~=1.0-alpha", False),
     ],
 )
 def test_version_constraints(value, constraint, expected):
     assert version_satisfies(value, constraint) is expected
+
+
+@pytest.mark.parametrize("value", ["1.0.0+build.1", "1.0.0-alpha+build.1"])
+def test_version_constraints_keep_build_metadata_unsupported(value):
+    with pytest.raises(ValueError, match="unsupported version"):
+        version_satisfies(value, ">=1.0.0")
+    with pytest.raises(ValueError, match="unsupported version"):
+        version_satisfies("1.0.0", f"=={value}")
+
+
+@pytest.mark.parametrize("core", [">=1.0.0", "==1.0.0", "~=1.0.0"])
+def test_loader_rejects_prerelease_for_stable_requirement_before_initialize(core):
+    async def scenario():
+        loader = PluginLoader(core_version="1.0.0-rc.1")
+        plugin = FakeRetriever(manifest("candidate", core=core))
+        loader.register(
+            name="candidate", kind=PluginKind.RETRIEVER, factory=lambda: plugin,
+        )
+        with pytest.raises(PluginError) as caught:
+            await loader.load("candidate", PluginKind.RETRIEVER, context())
+        assert caught.value.code is PluginErrorCode.INCOMPATIBLE_PLUGIN_API
+        assert caught.value.field == "requires.core"
+        assert plugin.log == []
+        assert loader.loaded == ()
+
+    run(scenario())
 
 
 def test_loader_negotiates_capabilities_and_tightens_limits():

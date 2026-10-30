@@ -3,6 +3,15 @@
 All notable changes are documented here. The project follows Semantic Versioning after
 the first stable release.
 
+## Unreleased
+
+### Fixed
+
+- Compare plugin core prerelease versions by precedence instead of treating them
+  as stable releases. Preserve existing constraint syntax and compatible-release
+  bounds; build metadata remains unsupported in core constraints. No API or schema
+  version change is required.
+
 ## 0.1.1 - 2026-10-29 (Alpha)
 
 ### Added

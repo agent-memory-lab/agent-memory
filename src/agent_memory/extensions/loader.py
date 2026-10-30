@@ -51,7 +51,7 @@ _VERSION_PATTERN = re.compile(
     r"(?P<major>0|[1-9]\d*)"
     r"(?:\.(?P<minor>0|[1-9]\d*))?"
     r"(?:\.(?P<patch>0|[1-9]\d*))?"
-    r"(?:-[0-9A-Za-z.-]+)?\Z"
+    r"(?:-(?P<prerelease>[0-9A-Za-z.-]+))?\Z"
 )
 _SPECIFIER_PATTERN = re.compile(r"(?P<operator>==|!=|>=|<=|>|<|~=)(?P<version>.+)\Z")
 
@@ -97,18 +97,33 @@ def installed_core_version() -> str:
         return "0.1.0"
 
 
-def _parse_version(value: str) -> tuple[int, int, int]:
+def _parse_version(value: str) -> tuple[int, int, int, bool, tuple[tuple[int, int | str], ...]]:
     matched = _VERSION_PATTERN.fullmatch(value)
     if matched is None:
         raise ValueError(f"unsupported version {value!r}")
+    prerelease = matched.group("prerelease")
+    # Stable releases sort above prereleases; numeric identifiers sort before text.
+    identifiers = tuple(
+        (0, int(part)) if part.isdigit() else (1, part)
+        for part in prerelease.split(".")
+    ) if prerelease is not None else ()
     return (
         int(matched.group("major")),
         int(matched.group("minor") or 0),
         int(matched.group("patch") or 0),
+        prerelease is None,
+        identifiers,
     )
 
 
 def version_satisfies(value: str, constraint: str) -> bool:
+    """Compare release/prerelease precedence with comma-joined constraints.
+
+    Omitted minor/patch numbers are zero. Build metadata is unsupported; ~= uses
+    the next major (one/two release parts) or minor (three parts) release series
+    as its exclusive upper bound, including prereleases of that series. This is
+    the plugin protocol's bounded syntax, not a general SemVer/PEP 440 resolver.
+    """
     candidate = _parse_version(value)
     for clause in constraint.split(","):
         matched = _SPECIFIER_PATTERN.fullmatch(clause)
@@ -136,7 +151,7 @@ def version_satisfies(value: str, constraint: str) -> bool:
                 if len(release_parts) < 3
                 else (required[0], required[1] + 1, 0)
             )
-            if candidate < required or candidate >= upper:
+            if candidate < required or candidate[:3] >= upper:
                 return False
     return True
 
