@@ -5,12 +5,37 @@ the first stable release.
 
 ## Unreleased
 
+## 0.1.2 - 2026-10-31 (Alpha)
+
+- Raise the PostgreSQL adapter's psycopg floor to 3.2.10 for Python 3.13/3.14
+  binary-wheel availability, and test minimum direct dependencies from project
+  metadata in isolated environments on both Python versions.
+
 ### Fixed
 
 - Compare plugin core prerelease versions by precedence instead of treating them
   as stable releases. Preserve existing constraint syntax and compatible-release
   bounds; build metadata remains unsupported in core constraints. No API or schema
   version change is required.
+- Fail release scans on unreadable ZIP members and skipped oversized inputs;
+  a zero archive-member limit now scans every member instead of silently scanning none.
+- Include the full LICENSE in every extension wheel and source distribution.
+- Bind container publication to the exact Git version tag, refuse version/source
+  tag replacement, and promote only the tested candidate digest. Older releases
+  cannot move latest backwards under the new workflow.
+
+### Added
+
+- Hashed container dependency locks and a pinned base image, OS/Python vulnerability
+  checks before promotion, and persistent-volume upgrade/restart, isolation,
+  deletion and HTTP-authentication smoke checks against the candidate image.
+- Independent core/extension installation checks on Python 3.13 and 3.14,
+  source/license/archive manifest verification, and draft Release attachment
+  download verification before publication. Existing assets are never clobbered.
+
+These are engineering and release checks; real-model QA, independent business
+fact-selection and full-lifecycle cost acceptance remain open. No default retrieval
+policy, model benchmark score or API budget changes are included.
 
 ## 0.1.1 - 2026-10-29 (Alpha)
 

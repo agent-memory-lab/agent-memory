@@ -4,14 +4,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-memory-postgres"
-version = "0.1.1"
+version = "0.1.2"
 description = "PostgreSQL and pgvector provider for agent-memory"
 readme = "README.md"
 requires-python = ">=3.13"
 license = { text = "Apache-2.0" }
 dependencies = [
   "agent-memory>=0.1,<0.2",
-  "psycopg[binary,pool]>=3.2,<4",
+  "psycopg[binary,pool]>=3.2.10,<4",
 ]
 
 [project.optional-dependencies]

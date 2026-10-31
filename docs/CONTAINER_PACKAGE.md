@@ -1,7 +1,7 @@
 # GitHub Packages container
 
-Image: `ghcr.io/agent-memory-lab/agent-memory:0.1.1` (Alpha).
-The image includes Python 3.13, the core library and MCP integration, with SQLite
+Image: `ghcr.io/agent-memory-lab/agent-memory:0.1.2` (Alpha).
+The image uses Alpine Linux 3.24 (musl) with Python 3.13, the core library and MCP integration, with SQLite
 storage. It does not include model weights or optional PostgreSQL/LangGraph adapters.
 It requires neither a model API key nor a running model service.
 
@@ -16,7 +16,7 @@ For clients accepting a `mcpServers` configuration:
       "command": "docker",
       "args": [
         "run", "--rm", "-i", "-v", "agent-memory-data:/data",
-        "ghcr.io/agent-memory-lab/agent-memory:0.1.1",
+        "ghcr.io/agent-memory-lab/agent-memory:0.1.2",
         "--tenant-id", "demo", "--database", "/data/memory.sqlite3"
       ]
     }
@@ -34,12 +34,13 @@ Do not remove the volume when restarting the container if its memory is needed.
 
 ## Versions and reproducibility
 
-The workflow publishes Linux amd64 and arm64 images. `0.1.1` identifies this
-software release; `latest` follows published releases and `sha-<commit>` identifies
-the built source. For a deployment, pin the published `sha256` digest:
+The workflow publishes Linux amd64 and arm64 images. `0.1.2` identifies this
+software release; `latest` advances only for a newer version and `sha-<commit>`
+identifies the built source. Publication rejects existing version/source tags.
+For a deployment, pin the published `sha256` digest:
 
 ```sh
-docker buildx imagetools inspect ghcr.io/agent-memory-lab/agent-memory:0.1.1
+docker buildx imagetools inspect ghcr.io/agent-memory-lab/agent-memory:0.1.2
 # Use the digest printed by the command above:
 docker pull ghcr.io/agent-memory-lab/agent-memory@sha256:<digest>
 ```
@@ -63,13 +64,45 @@ The Docker build uses an explicit source allowlist and installs freshly built
 core and MCP wheels. Repository databases, credentials and benchmark artifacts
 are excluded from the build context. The final runtime contains the installed
 packages, not the source checkout.
+Build-only pip/ensurepip and their vendored dependencies are removed from the
+runtime; install optional adapters in a custom build rather than inside a running image.
 
-The container workflow builds and tests pull requests. Publishing is restricted
-to a trusted main/manual run or a version tag matching package metadata, using
-the repository's `GITHUB_TOKEN` with `packages: write`. Tests verify installed
-dependencies, non-root execution and a real MCP stdio write/recall round trip;
-the published image is pulled by digest and verified again.
+The container workflow builds and tests pull requests. Publication requires the
+exact version tag to point to the source commit on main history, including manual
+main runs. A repository-wide publication lock serializes releases. The workflow
+builds a candidate once, verifies its fixed digest on both architectures, and only
+then promotes that same digest to release tags. Candidate tags are not releases.
+It uses the repository's `GITHUB_TOKEN` with `packages: write` only in this job.
+
+The base image is pinned by digest. Build and runtime dependencies are separately
+locked with hashes in `requirements/container-build.lock` and `container.lock`.
+Update these deliberately using the `uv pip compile` commands recorded in their
+headers, and review the resulting versions. Trivy scans OS and Python packages;
+HIGH/CRITICAL findings or scan failures block promotion. Scan reports remain in
+Actions artifacts; a secret-content scan is a separate check.
+
+Runtime checks use the exact candidate digest: non-root execution, a named volume,
+write confirmation in v0.1.1 followed by SIGKILL, a new-version restart reading the
+committed data, identity isolation, authorized deletion and another restart. HTTP
+signatures and tenant isolation are checked over loopback inside the container.
+This does not claim arbitrary mid-transaction power-loss testing or a production
+TLS/reverse-proxy deployment test; those have separate source-level contracts.
+
+Do not rerun legacy v0.1.1 publication workflows: their old code does not contain
+these safeguards. The rules are enforced by this workflow, not registry-level
+immutability against manual administrators. Rerunning an already published version
+fails instead of rebuilding it. A failed Python-release job can be retried alone;
+matching draft assets are reused and conflicting/public assets are never replaced.
 
 Python wheel/sdist distribution remains separate from the container registry.
-The repository package gate builds all seven Python distributions, installs them
-into a clean environment and checks their contents and entry points.
+The repository package gate builds all seven Python distributions, verifies their
+full LICENSE and source contents, and checks core plus each optional package in
+its own clean environment as well as a combined environment. Packaging CI covers
+Python 3.13 and 3.14 on Linux, macOS and Windows. The release job uploads a draft,
+downloads those actual attachments, verifies manifest, checksums and source content,
+then publishes the Alpha release. It never silently replaces existing attachments.
+
+Linux CI additionally installs the declared minimum direct dependencies on Python
+3.13/3.14, deriving constraints from package metadata. Transitive dependencies
+remain resolved normally. The PostgreSQL adapter requires psycopg >=3.2.10,
+which provides binary wheels for both supported Python versions.

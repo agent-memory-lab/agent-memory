@@ -30,7 +30,7 @@ Agent Memory 为 Agent 保存来源、组织当前事实与历史，并返回带
 
 **基础写入与检索无需 API Key、向量数据库或后台服务。** 核心运行时默认零第三方依赖；模型辅助抽取和其他集成按需安装。
 
-> **Alpha · v0.1.1。** 已有本地运行时和可选集成包；整体生产验收与真实领域质量校准尚未完成。当前范围见[能力状态与路线图](#能力状态与路线图)。
+> **Alpha · v0.1.2。** 已有本地运行时和可选集成包；整体生产验收与真实领域质量校准尚未完成。当前范围见[能力状态与路线图](#能力状态与路线图)。
 
 ## 记忆会变化，依据要留下
 
@@ -79,9 +79,9 @@ macOS 或 Linux 开发环境可使用 `./setup.sh`；`./setup.sh --all` 同时�
 包含核心库和 MCP 服务，支持 Linux amd64/arm64：
 
 ```bash
-docker pull ghcr.io/agent-memory-lab/agent-memory:0.1.1
+docker pull ghcr.io/agent-memory-lab/agent-memory:0.1.2
 docker run --rm -i -v agent-memory-data:/data \
-  ghcr.io/agent-memory-lab/agent-memory:0.1.1 \
+  ghcr.io/agent-memory-lab/agent-memory:0.1.2 \
   --tenant-id demo --database /data/memory.sqlite3
 ```
 
@@ -231,7 +231,7 @@ agent-memory-mcp --transport stdio --database memory.sqlite3 \
 
 ## 能力状态与路线图
 
-当前文档交付基线为 **[v7.2：原文项目闭环与派生演化](docs/design/v7.2.0/validation.md)**，承接 [V7-B6](docs/design/v7.0.0/batch-b6.md) 与 [v7.1 运行时](docs/design/v7.1.0/validation.md)。本轮定向工程验证与真实业务质量、成本验收分开。软件包仍为 **v0.1.1 / Alpha**；架构、协议和软件版本分别管理。
+当前文档交付基线为 **[v7.2：原文项目闭环与派生演化](docs/design/v7.2.0/validation.md)**，承接 [V7-B6](docs/design/v7.0.0/batch-b6.md) 与 [v7.1 运行时](docs/design/v7.1.0/validation.md)。本轮定向工程验证与真实业务质量、成本验收分开。软件包仍为 **v0.1.2 / Alpha**；架构、协议和软件版本分别管理。
 
 显式启用的 [v7.3 扩展](docs/design/AGENT_MEMORY_DESIGN_V7.3.0.md) 增加有界证据补查、
 可恢复原文片段、共享政策回执、基于观测的刷新决策，以及可撤回的程序经验 Skill。

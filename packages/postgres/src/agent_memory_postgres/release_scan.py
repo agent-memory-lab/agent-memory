@@ -24,7 +24,7 @@ class ReleaseScanPolicy:
     max_findings: int | None = 0
     max_reported_hits: int = 100
     max_file_bytes: int = 2 * 1024 * 1024
-    max_archive_members: int = 10_000
+    max_archive_members: int = 10_000  # Zero disables the member-count limit.
 
 
 @dataclass(frozen=True, slots=True)
@@ -166,7 +166,8 @@ def _decode_text(payload: bytes) -> str | None:
 def _read_limited(stream: BinaryIO, size: int, max_file_bytes: int) -> bytes | None:
     if size > max_file_bytes:
         return None
-    return stream.read(max_file_bytes + 1)
+    payload = stream.read(max_file_bytes + 1)
+    return payload if len(payload) <= max_file_bytes else None
 
 
 def _archive_members(
@@ -179,33 +180,24 @@ def _archive_members(
             file_infos = [info for info in infos if not info.is_dir()]
             if policy.max_archive_members > 0 and len(file_infos) > policy.max_archive_members:
                 raise ValueError(f"archive member cap reached: {path}")
-            for index, info in enumerate(file_infos):
-                if index >= policy.max_archive_members:
-                    break
+            for info in file_infos:
+                if info.flag_bits & 1:
+                    raise ValueError(f"encrypted archive member: {path}:{info.filename}")
                 if info.file_size > policy.max_file_bytes:
                     yield info.filename, None
                     continue
-                try:
-                    with archive.open(info) as stream:
-                        yield (
-                            info.filename,
-                            _read_limited(
-                                stream,
-                                info.file_size,
-                                policy.max_file_bytes,
-                            ),
-                        )
-                except (OSError, zipfile.BadZipFile, zipfile.LargeZipFile):
-                    continue
+                with archive.open(info) as stream:
+                    yield (
+                        info.filename,
+                        _read_limited(stream, info.file_size, policy.max_file_bytes),
+                    )
         return
 
     with tarfile.open(path, mode="r:*") as archive:
         members = list(archive)
         if policy.max_archive_members > 0 and len(members) > policy.max_archive_members:
             raise ValueError(f"archive member cap reached: {path}")
-        for index, info in enumerate(members):
-            if index >= policy.max_archive_members:
-                break
+        for info in members:
             if not info.isfile():
                 continue
             if info.size > policy.max_file_bytes:
@@ -292,6 +284,10 @@ def scan_release_paths(
                     for member_name, payload in _archive_members(target, selected_policy):
                         if payload is None:
                             skipped_large_files += 1
+                            violations.append(
+                                f"archive member exceeds byte cap: {target}:{member_name}"
+                            )
+                            scan_complete = False
                             continue
                         text = _decode_text(payload)
                         if text is not None:
@@ -303,7 +299,8 @@ def scan_release_paths(
                                     patterns=selected_patterns,
                                 )
                             )
-                except (OSError, tarfile.TarError, zipfile.BadZipFile):
+                except (OSError, EOFError, tarfile.TarError, zipfile.BadZipFile,
+                        zipfile.LargeZipFile, NotImplementedError):
                     violations.append(f"cannot scan archive: {target}")
                     scan_complete = False
                     continue
@@ -314,12 +311,15 @@ def scan_release_paths(
 
             try:
                 size = target.stat().st_size
-                if size > selected_policy.max_file_bytes:
-                    skipped_large_files += 1
-                    continue
-                payload = target.read_bytes()
+                with target.open("rb") as stream:
+                    payload = _read_limited(stream, size, selected_policy.max_file_bytes)
             except OSError:
                 violations.append(f"cannot read file: {target}")
+                scan_complete = False
+                continue
+            if payload is None:
+                skipped_large_files += 1
+                violations.append(f"file exceeds byte cap: {target}")
                 scan_complete = False
                 continue
             scanned_files += 1
@@ -411,7 +411,8 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-findings", type=int, default=0)
     parser.add_argument("--max-reported-hits", type=int, default=100)
     parser.add_argument("--max-file-bytes", type=int, default=2 * 1024 * 1024)
-    parser.add_argument("--max-archive-members", type=int, default=10_000)
+    parser.add_argument("--max-archive-members", type=int, default=10_000,
+                        help="Maximum archive members; 0 scans all members")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--fail-on-violation", action="store_true")
     return parser.parse_args(argv)
