@@ -11,8 +11,13 @@ import os
 import runpy
 import subprocess
 import sys
+import tomllib
 import venv
 from pathlib import Path
+
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
+from packaging.version import Version
 
 package_inventory = runpy.run_path(str(Path(__file__).with_name("package_inventory.py")))[
     "package_inventory"
@@ -34,7 +39,37 @@ def checked_json(command, *, cwd):
     return json.loads(result.stdout)
 
 
-def run(source_root: Path, work_dir: Path, *, no_build_isolation=False, build_only=False):
+def minimum_direct_constraints(source_root, inventory):
+    """Pin declared external direct floors only, not optional extras or transitives."""
+    internal = {canonicalize_name(package["distribution"]) for package in inventory}
+    floors = {}
+    for package in inventory:
+        project = source_root / package["path"] / "pyproject.toml"
+        metadata = tomllib.loads(project.read_text(encoding="utf-8"))
+        for text in metadata["project"].get("dependencies", []):
+            requirement = Requirement(text)
+            name = canonicalize_name(requirement.name)
+            if name in internal:
+                continue
+            lower = [part for part in requirement.specifier if part.operator == ">="]
+            if (requirement.marker or requirement.url or len(lower) != 1
+                    or any(part.operator not in {">=", "<", "<="}
+                           for part in requirement.specifier)):
+                raise ValueError(
+                    f"Explicit unambiguous >= floor required for {text!r} in {project}"
+                )
+            floor = Version(lower[0].version)
+            if (floor.is_prerelease or floor.is_devrelease or floor.local
+                    or floor not in requirement.specifier):
+                raise ValueError(f"Unsupported or excluded direct dependency floor: {text!r}")
+            if name in floors and floors[name] != floor:
+                raise ValueError(f"Conflicting direct dependency floors for {name}")
+            floors[name] = floor
+    return [f"{name}=={floor}" for name, floor in sorted(floors.items())]
+
+
+def run(source_root: Path, work_dir: Path, *, no_build_isolation=False, build_only=False,
+        minimum_direct_dependencies=False):
     source_root, work_dir = source_root.resolve(), work_dir.resolve()
     if work_dir.is_relative_to(source_root):
         raise ValueError("Use a fresh work directory outside the source checkout")
@@ -42,6 +77,13 @@ def run(source_root: Path, work_dir: Path, *, no_build_isolation=False, build_on
     work_dir.mkdir(parents=True, exist_ok=False)
     artifacts = work_dir / "artifacts"
     inventory = package_inventory(source_root)
+    direct_constraints = (minimum_direct_constraints(source_root, inventory)
+                          if minimum_direct_dependencies else [])
+    constraint_args = []
+    if minimum_direct_dependencies:
+        constraints = work_dir / "minimum-direct-constraints.txt"
+        constraints.write_text("\n".join(direct_constraints) + "\n", encoding="utf-8")
+        constraint_args = ["--constraint", str(constraints)]
     wheels = []
     for package in inventory:
         output = artifacts / package["distribution"]
@@ -70,7 +112,8 @@ def run(source_root: Path, work_dir: Path, *, no_build_isolation=False, build_on
         isolated_python = str(environment_python(directory))
         isolated_pip = [sys.executable, "-m", "pip", "--python", isolated_python]
         selected = [core_wheel] if wheel == core_wheel else [core_wheel, wheel]
-        subprocess.run([*isolated_pip, "install", *map(str, selected)], check=True, cwd=work_dir)
+        subprocess.run([*isolated_pip, "install", *constraint_args, *map(str, selected)],
+                       check=True, cwd=work_dir)
         subprocess.run([*isolated_pip, "check"], check=True, cwd=work_dir)
         independent.append(checked_json([
             isolated_python, "-I", str(source_root / "tests/operational/v7_installed_smoke.py"),
@@ -83,7 +126,8 @@ def run(source_root: Path, work_dir: Path, *, no_build_isolation=False, build_on
     # pip --python works even when the target venv has no pip/ensurepip. Do not
     # use --no-deps: the ordinary install must have satisfiable base dependencies.
     pip = [sys.executable, "-m", "pip", "--python", python]
-    subprocess.run([*pip, "install", *(str(path) for path in wheels)], check=True, cwd=work_dir)
+    subprocess.run([*pip, "install", *constraint_args, *(str(path) for path in wheels)],
+                   check=True, cwd=work_dir)
     subprocess.run([*pip, "check"], check=True, cwd=work_dir)
     evidence = checked_json([
         python, "-I", str(source_root / "tests/operational/v7_installed_smoke.py"),
@@ -101,6 +145,8 @@ def run(source_root: Path, work_dir: Path, *, no_build_isolation=False, build_on
     evidence["release_scan"] = report
     evidence["archive_verification"] = archive_evidence
     evidence["independent_installs"] = independent
+    evidence["minimum_direct_dependencies"] = minimum_direct_dependencies
+    evidence["direct_constraints"] = direct_constraints
     evidence["archive_count"] = 2 * len(inventory)
     (work_dir / "evidence.json").write_text(
         json.dumps(evidence, sort_keys=True, indent=2) + "\n", encoding="utf-8"
@@ -114,7 +160,10 @@ if __name__ == "__main__":
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--no-build-isolation", action="store_true")
     parser.add_argument("--build-only", action="store_true")
+    parser.add_argument("--minimum-direct-dependencies", action="store_true",
+                        help="Test declared external direct >= floors; leave transitives resolved")
     args = parser.parse_args()
     result = run(args.source_root, args.work_dir, no_build_isolation=args.no_build_isolation,
-                 build_only=args.build_only)
+                 build_only=args.build_only,
+                 minimum_direct_dependencies=args.minimum_direct_dependencies)
     print(json.dumps({"status": result["status"], "package_count": len(result["packages"])}))

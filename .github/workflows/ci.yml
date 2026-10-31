@@ -90,6 +90,34 @@ jobs:
           path: ${{ runner.temp }}/package-gate/evidence.json
           if-no-files-found: error
 
+  packages-minimum-direct:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: python -m pip install 'pip>=22.3' build
+      - name: Check declared minimum direct dependencies in isolated installs
+        run: >-
+          python tools/package_gate.py --minimum-direct-dependencies
+          --work-dir "${{ runner.temp }}/minimum-direct"
+      - name: Preserve direct dependency constraints and installed evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-minimum-direct-py${{ matrix.python }}
+          path: |
+            ${{ runner.temp }}/minimum-direct/evidence.json
+            ${{ runner.temp }}/minimum-direct/minimum-direct-constraints.txt
+          if-no-files-found: error
+
   postgres-live:
     runs-on: ubuntu-latest
     services:

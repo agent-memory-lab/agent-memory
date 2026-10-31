@@ -68,8 +68,50 @@ def test_gate_rejects_source_internal_or_reused_work_directory(tmp_path):
         GATE["run"](ROOT, tmp_path)
 
 
+def dependency_projects(tmp_path, core_dependencies, adapter_dependencies):
+    packages = [{"path": ".", "distribution": "agent-memory"},
+                {"path": "packages/adapter", "distribution": "agent-memory-adapter"}]
+    dependencies_by_project = (core_dependencies, adapter_dependencies)
+    for package, dependencies in zip(packages, dependencies_by_project, strict=True):
+        project = tmp_path / package["path"]
+        project.mkdir(parents=True, exist_ok=True)
+        (project / "pyproject.toml").write_text(
+            "[project]\ndependencies = " + json.dumps(dependencies)
+            + '\n[project.optional-dependencies]\ninference = ["heavy-model>=99"]\n',
+            encoding="utf-8",
+        )
+    return packages
+
+
+def test_minimum_floors_come_from_metadata_without_internal_or_optional_dependencies(tmp_path):
+    projects = dependency_projects(tmp_path, ["agent_memory_adapter>=0.1"], [
+        "agent-memory>=0.1,<0.2", "Database[binary,pool]>=3.2.10,<4", "other-lib>=2,<=3",
+    ])
+    assert GATE["minimum_direct_constraints"](tmp_path, projects) == [
+        "database==3.2.10", "other-lib==2",
+    ]
+
+
+@pytest.mark.parametrize("requirement", [
+    "external", "external>1", "external~=1.2", "external==1.2", "external>=1,!=1",
+    "external>=1,>=2", "external>=2,<2", "external>=1.0rc1",
+    "external>=1; python_version>='3.13'", "external @ https://example.invalid/external.whl",
+])
+def test_minimum_floors_reject_ambiguous_or_unsupported_declarations(tmp_path, requirement):
+    projects = dependency_projects(tmp_path, [], [requirement])
+    with pytest.raises(ValueError, match="floor"):
+        GATE["minimum_direct_constraints"](tmp_path, projects)
+
+
+def test_minimum_floors_do_not_silently_raise_a_conflicting_package_minimum(tmp_path):
+    projects = dependency_projects(tmp_path, ["external>=1"], ["external>=2"])
+    with pytest.raises(ValueError, match="Conflicting"):
+        GATE["minimum_direct_constraints"](tmp_path, projects)
+
+
+@pytest.mark.parametrize("minimum_direct", [False, True])
 def test_gate_builds_scans_and_installs_same_inventory_with_normal_dependencies(
-    tmp_path, monkeypatch,
+    tmp_path, monkeypatch, minimum_direct,
 ):
     commands = []
     packages = inventory(ROOT)
@@ -95,11 +137,23 @@ def test_gate_builds_scans_and_installs_same_inventory_with_normal_dependencies(
         "status": "passed", "licenses_verified": 14,
     })
     work = tmp_path / "new-gate"
-    evidence = GATE["run"](ROOT, work, no_build_isolation=True)
+    evidence = GATE["run"](ROOT, work, no_build_isolation=True,
+                           minimum_direct_dependencies=minimum_direct)
     builds = [args for args in commands if "build" in args]
     assert {args[-1] for args in builds} == {str(ROOT / p["path"]) for p in packages}
     installs = [args for args in commands if "install" in args]
     assert len(installs) == len(packages) + 1
+    if minimum_direct:
+        constraint_file = work / "minimum-direct-constraints.txt"
+        expected = GATE["minimum_direct_constraints"](ROOT, packages)
+        assert constraint_file.read_text().splitlines() == expected
+        assert evidence["direct_constraints"] == expected
+        assert all(args[args.index("--constraint") + 1] == str(constraint_file)
+                   for args in installs)
+    else:
+        assert all("--constraint" not in args for args in installs)
+        assert evidence["direct_constraints"] == []
+    assert evidence["minimum_direct_dependencies"] is minimum_direct
     assert len([arg for arg in installs[0] if arg.endswith(".whl")]) == 1
     assert all(len([arg for arg in args if arg.endswith(".whl")]) == 2
                for args in installs[1:-1])

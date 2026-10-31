@@ -7,6 +7,10 @@ the first stable release.
 
 ## 0.1.2 - 2026-10-31 (Alpha)
 
+- Raise the PostgreSQL adapter's psycopg floor to 3.2.10 for Python 3.13/3.14
+  binary-wheel availability, and test minimum direct dependencies from project
+  metadata in isolated environments on both Python versions.
+
 ### Fixed
 
 - Compare plugin core prerelease versions by precedence instead of treating them

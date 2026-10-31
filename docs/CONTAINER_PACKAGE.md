@@ -101,3 +101,8 @@ its own clean environment as well as a combined environment. Packaging CI covers
 Python 3.13 and 3.14 on Linux, macOS and Windows. The release job uploads a draft,
 downloads those actual attachments, verifies manifest, checksums and source content,
 then publishes the Alpha release. It never silently replaces existing attachments.
+
+Linux CI additionally installs the declared minimum direct dependencies on Python
+3.13/3.14, deriving constraints from package metadata. Transitive dependencies
+remain resolved normally. The PostgreSQL adapter requires psycopg >=3.2.10,
+which provides binary wheels for both supported Python versions.
