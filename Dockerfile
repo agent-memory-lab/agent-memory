@@ -1,4 +1,4 @@
-FROM python:3.13-slim-bookworm@sha256:281d39ff02e3b389401586134ff9e6572954687822a58055ec07a60ded4e0b7f AS builder
+FROM python:3.13-alpine3.24@sha256:7984cf56ceaddebe4fefeb75d64000b9f45d8b77b11a09b24524da6cdc3af0c8 AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
@@ -18,9 +18,10 @@ RUN python -m pip install --require-hashes -r /requirements/container-build.lock
     && python -m venv /opt/venv \
     && /opt/venv/bin/python -m pip install --require-hashes --only-binary=:all: -r /requirements/container.lock \
     && /opt/venv/bin/python -m pip install --no-deps /wheels/*.whl \
-    && /opt/venv/bin/python -m pip check
+    && /opt/venv/bin/python -m pip check \
+    && /opt/venv/bin/python -m pip uninstall --yes pip
 
-FROM python:3.13-slim-bookworm@sha256:281d39ff02e3b389401586134ff9e6572954687822a58055ec07a60ded4e0b7f AS runtime
+FROM python:3.13-alpine3.24@sha256:7984cf56ceaddebe4fefeb75d64000b9f45d8b77b11a09b24524da6cdc3af0c8 AS runtime
 
 LABEL org.opencontainers.image.source="https://github.com/agent-memory-lab/agent-memory" \
       org.opencontainers.image.licenses="Apache-2.0" \
@@ -32,8 +33,11 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
-RUN groupadd --gid 10001 app \
-    && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /data app \
+# Installers are build tools; keep their vendored dependencies out of the server.
+RUN /usr/local/bin/python -m pip uninstall --yes pip \
+    && /usr/local/bin/python -c "import ensurepip, pathlib, shutil; shutil.rmtree(pathlib.Path(ensurepip.__file__).parent)" \
+    && addgroup -S -g 10001 app \
+    && adduser -S -D -H -u 10001 -G app -h /data app \
     && install -d -m 0750 -o app -g app /data
 COPY --from=builder /opt/venv /opt/venv
 

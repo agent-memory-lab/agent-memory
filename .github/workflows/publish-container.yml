@@ -203,6 +203,8 @@ jobs:
       - name: Download the draft attachments and verify their complete contents
         run: |
           gh release download "v$VERSION" --dir "$RUNNER_TEMP/downloaded-release"
+          cmp "$RUNNER_TEMP/python-release/artifacts/release-manifest.json" \
+            "$RUNNER_TEMP/downloaded-release/release-manifest.json"
           python tools/verify_release_artifacts.py --source-root . --artifacts "$RUNNER_TEMP/downloaded-release" --require-manifest
       - name: Publish the verified Alpha release
         run: gh release edit "v$VERSION" --draft=false --prerelease

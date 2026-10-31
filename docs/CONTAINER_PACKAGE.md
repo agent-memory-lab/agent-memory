@@ -1,7 +1,7 @@
 # GitHub Packages container
 
 Image: `ghcr.io/agent-memory-lab/agent-memory:0.1.2` (Alpha).
-The image includes Python 3.13, the core library and MCP integration, with SQLite
+The image uses Alpine Linux 3.24 (musl) with Python 3.13, the core library and MCP integration, with SQLite
 storage. It does not include model weights or optional PostgreSQL/LangGraph adapters.
 It requires neither a model API key nor a running model service.
 
@@ -64,6 +64,8 @@ The Docker build uses an explicit source allowlist and installs freshly built
 core and MCP wheels. Repository databases, credentials and benchmark artifacts
 are excluded from the build context. The final runtime contains the installed
 packages, not the source checkout.
+Build-only pip/ensurepip and their vendored dependencies are removed from the
+runtime; install optional adapters in a custom build rather than inside a running image.
 
 The container workflow builds and tests pull requests. Publication requires the
 exact version tag to point to the source commit on main history, including manual
