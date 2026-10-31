@@ -35,14 +35,24 @@ async def sqlite_roundtrip():
             assert any(claim.value == "concise" for claim in bundle.current_state)
 
 
-def run(source_root):
+def run(source_root, distribution=None):
     assert sys.flags.isolated, "use Python -I to exclude PYTHONPATH and the current directory"
-    assert sys.version_info[:2] == (3, 13), "release acceptance is pinned to Python 3.13"
+    assert sys.version_info[:2] in ((3, 13), (3, 14)), "release acceptance uses Python 3.13/3.14"
     installed = Path(sysconfig.get_paths()["purelib"]).resolve()
     assert not installed.is_relative_to(source_root), "install in a fresh external virtualenv"
     inventory = runpy.run_path(str(source_root / "tools/package_inventory.py"))[
         "package_inventory"
     ](source_root)
+    if distribution is not None:
+        assert distribution in {item["distribution"] for item in inventory}
+        inventory = tuple(item for item in inventory
+                          if item["distribution"] in {"agent-memory", distribution})
+    selected = {item["distribution"] for item in inventory}
+    installed_packages = {item.metadata["Name"] for item in importlib.metadata.distributions()
+                          if item.metadata["Name"].startswith("agent-memory")}
+    assert installed_packages == selected, (
+        "unselected memory packages can mask missing dependencies"
+    )
     evidence = []
     for package in inventory:
         distribution_name, module_name = package["distribution"], package["module"]
@@ -65,17 +75,22 @@ def run(source_root):
     # A base wheel install must not pull heavy inference dependencies or weights.
     for dependency in ("torch", "transformers", "tokenizers", "safetensors"):
         assert importlib.util.find_spec(dependency) is None, dependency
-    for name in ("agent_memory_local_models.models", "agent_memory_local_models.smoke"):
-        module = importlib.import_module(name)
-        assert Path(module.__file__).resolve().is_relative_to(installed), name
+    if "agent-memory-local-models" in selected:
+        for name in ("agent_memory_local_models.models", "agent_memory_local_models.smoke"):
+            module = importlib.import_module(name)
+            assert Path(module.__file__).resolve().is_relative_to(installed), name
     assert not {"torch", "transformers", "tokenizers", "safetensors"} & sys.modules.keys()
-    source_migrations = source_root / "packages/postgres/migrations"
-    packaged_migrations = installed / "agent_memory_postgres/migrations"
-    expected = {path.name: sha256(path.read_bytes()).hexdigest()
-                for path in source_migrations.glob("*.sql")}
-    actual = {path.name: sha256(path.read_bytes()).hexdigest()
-              for path in packaged_migrations.glob("*.sql")}
-    assert expected and actual == expected, "wheel migration contents differ from the tested source"
+    actual = {}
+    if "agent-memory-postgres" in selected:
+        source_migrations = source_root / "packages/postgres/migrations"
+        packaged_migrations = installed / "agent_memory_postgres/migrations"
+        expected = {path.name: sha256(path.read_bytes()).hexdigest()
+                    for path in source_migrations.glob("*.sql")}
+        actual = {path.name: sha256(path.read_bytes()).hexdigest()
+                  for path in packaged_migrations.glob("*.sql")}
+        assert expected and actual == expected, (
+            "wheel migration contents differ from the tested source"
+        )
     asyncio.run(sqlite_roundtrip())
     from agent_memory.evaluation.resources import ProcessResourceProbe
 
@@ -96,5 +111,6 @@ def run(source_root):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-root", required=True, type=Path)
+    parser.add_argument("--distribution", help="Test only core plus this optional distribution")
     args = parser.parse_args()
-    print(json.dumps(run(args.source_root.resolve()), sort_keys=True, indent=2))
+    print(json.dumps(run(args.source_root.resolve(), args.distribution), sort_keys=True, indent=2))

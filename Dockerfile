@@ -1,9 +1,10 @@
-FROM python:3.13-slim-bookworm AS builder
+FROM python:3.13-slim-bookworm@sha256:281d39ff02e3b389401586134ff9e6572954687822a58055ec07a60ded4e0b7f AS builder
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1
 
 WORKDIR /build/core
+COPY requirements/container-build.lock requirements/container.lock /requirements/
 COPY pyproject.toml README.md LICENSE ./
 COPY src/ ./src/
 COPY packages/mcp-server/pyproject.toml packages/mcp-server/README.md /build/mcp/
@@ -11,14 +12,15 @@ COPY LICENSE /build/mcp/LICENSE
 COPY packages/mcp-server/src/ /build/mcp/src/
 
 # Resolve both local wheels together so MCP cannot select an older registry core.
-RUN python -m pip install build \
-    && python -m build --wheel --outdir /wheels /build/core \
-    && python -m build --wheel --outdir /wheels /build/mcp \
+RUN python -m pip install --require-hashes -r /requirements/container-build.lock \
+    && python -m build --no-isolation --wheel --outdir /wheels /build/core \
+    && python -m build --no-isolation --wheel --outdir /wheels /build/mcp \
     && python -m venv /opt/venv \
-    && /opt/venv/bin/python -m pip install /wheels/*.whl \
+    && /opt/venv/bin/python -m pip install --require-hashes --only-binary=:all: -r /requirements/container.lock \
+    && /opt/venv/bin/python -m pip install --no-deps /wheels/*.whl \
     && /opt/venv/bin/python -m pip check
 
-FROM python:3.13-slim-bookworm AS runtime
+FROM python:3.13-slim-bookworm@sha256:281d39ff02e3b389401586134ff9e6572954687822a58055ec07a60ded4e0b7f AS runtime
 
 LABEL org.opencontainers.image.source="https://github.com/agent-memory-lab/agent-memory" \
       org.opencontainers.image.licenses="Apache-2.0" \

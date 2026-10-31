@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-memory-postgres"
-version = "0.1.1"
+version = "0.1.2"
 description = "PostgreSQL and pgvector provider for agent-memory"
 readme = "README.md"
 requires-python = ">=3.13"

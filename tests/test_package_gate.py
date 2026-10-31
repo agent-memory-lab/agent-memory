@@ -23,7 +23,7 @@ def test_inventory_covers_every_project_and_includes_seventh_local_models():
     }
     assert next(p for p in packages if p["distribution"] == "agent-memory-local-models") == {
         "path": "packages/local-models", "distribution": "agent-memory-local-models",
-        "module": "agent_memory_local_models", "version": "0.1.1",
+        "module": "agent_memory_local_models", "version": "0.1.2",
     }
 
 
@@ -89,13 +89,21 @@ def test_gate_builds_scans_and_installs_same_inventory_with_normal_dependencies(
 
     monkeypatch.setattr(GATE["subprocess"], "run", command)
     monkeypatch.setattr(GATE["venv"], "EnvBuilder", lambda **kwargs: SimpleNamespace(
-        create=lambda directory: directory.mkdir(),
+        create=lambda directory: directory.mkdir(parents=True),
     ))
+    monkeypatch.setitem(GATE["run"].__globals__, "verify_artifacts", lambda *args, **kwargs: {
+        "status": "passed", "licenses_verified": 14,
+    })
     work = tmp_path / "new-gate"
     evidence = GATE["run"](ROOT, work, no_build_isolation=True)
     builds = [args for args in commands if "build" in args]
     assert {args[-1] for args in builds} == {str(ROOT / p["path"]) for p in packages}
-    install = next(args for args in commands if "install" in args)
+    installs = [args for args in commands if "install" in args]
+    assert len(installs) == len(packages) + 1
+    assert len([arg for arg in installs[0] if arg.endswith(".whl")]) == 1
+    assert all(len([arg for arg in args if arg.endswith(".whl")]) == 2
+               for args in installs[1:-1])
+    install = installs[-1]
     assert len([arg for arg in install if arg.endswith(".whl")]) == len(packages)
     assert "--no-deps" not in install
     assert any("check" in args for args in commands)
@@ -104,4 +112,6 @@ def test_gate_builds_scans_and_installs_same_inventory_with_normal_dependencies(
     assert "--fail-on-violation" in commands[-1]
     assert "--max-findings" not in commands[-1]
     assert evidence["archive_count"] == 2 * len(packages)
+    assert len(evidence["independent_installs"]) == len(packages)
+    assert evidence["archive_verification"]["licenses_verified"] == 14
     assert json.loads((work / "evidence.json").read_text())["status"] == "passed"

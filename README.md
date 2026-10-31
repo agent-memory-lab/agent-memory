@@ -30,7 +30,7 @@ Agent Memory gives your agent **current facts, evidence, and a history of what c
 
 **The basic memory loop runs locally with zero third-party runtime dependencies—no model key, vector database, or background service required.** Extraction, integrations, and workers are opt-in.
 
-> **Alpha · v0.1.1.** Try the local examples below. Supported slices and remaining acceptance work are documented in [capability status](#capability-status-and-roadmap).
+> **Alpha · v0.1.2.** Try the local examples below. Supported slices and remaining acceptance work are documented in [capability status](#capability-status-and-roadmap).
 
 ## Memory changes. The evidence stays connected.
 
@@ -79,9 +79,9 @@ The [GitHub Packages image](https://github.com/users/agent-memory-lab/packages?r
 includes the core library and MCP server for Linux amd64/arm64:
 
 ```bash
-docker pull ghcr.io/agent-memory-lab/agent-memory:0.1.1
+docker pull ghcr.io/agent-memory-lab/agent-memory:0.1.2
 docker run --rm -i -v agent-memory-data:/data \
-  ghcr.io/agent-memory-lab/agent-memory:0.1.1 \
+  ghcr.io/agent-memory-lab/agent-memory:0.1.2 \
   --tenant-id demo --database /data/memory.sqlite3
 ```
 
@@ -233,7 +233,7 @@ The public boundary is `MemoryProvider`. Optional packages use lazy discovery; i
 
 ## Capability status and roadmap
 
-The current documented delivery baseline is **[v7.2: raw project lifecycle and derived evolution](docs/design/v7.2.0/validation.md)**, building on [V7-B6](docs/design/v7.0.0/batch-b6.md) and the [v7.1 runtime](docs/design/v7.1.0/validation.md). Its targeted engineering validation is separate from real business quality and cost acceptance. The software package is **v0.1.1 / Alpha**; architecture, protocol, and package versions are tracked separately.
+The current documented delivery baseline is **[v7.2: raw project lifecycle and derived evolution](docs/design/v7.2.0/validation.md)**, building on [V7-B6](docs/design/v7.0.0/batch-b6.md) and the [v7.1 runtime](docs/design/v7.1.0/validation.md). Its targeted engineering validation is separate from real business quality and cost acceptance. The software package is **v0.1.2 / Alpha**; architecture, protocol, and package versions are tracked separately.
 
 The opt-in [v7.3 extension](docs/design/AGENT_MEMORY_DESIGN_V7.3.0.md) adds bounded
 evidence research, recoverable source excerpts, shared policy receipts, observed

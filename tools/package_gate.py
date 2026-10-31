@@ -17,6 +17,9 @@ from pathlib import Path
 package_inventory = runpy.run_path(str(Path(__file__).with_name("package_inventory.py")))[
     "package_inventory"
 ]
+verify_artifacts = runpy.run_path(str(Path(__file__).with_name("verify_release_artifacts.py")))[
+    "verify"
+]
 
 
 def environment_python(directory: Path) -> Path:
@@ -55,6 +58,25 @@ def run(source_root: Path, work_dir: Path, *, no_build_isolation=False, build_on
     if build_only:
         return {"status": "built_only_unverified", "packages": inventory}
 
+    archive_evidence = verify_artifacts(source_root, artifacts, write_manifest=True)
+
+    # Each adapter must work with only its declared dependencies and the local core.
+    # A combined environment alone can hide dependencies provided by another adapter.
+    independent = []
+    core_wheel = next(path for path in wheels if path.parent.name == "agent-memory")
+    for package, wheel in zip(inventory, wheels, strict=True):
+        directory = work_dir / "independent" / package["distribution"]
+        venv.EnvBuilder(with_pip=False).create(directory)
+        isolated_python = str(environment_python(directory))
+        isolated_pip = [sys.executable, "-m", "pip", "--python", isolated_python]
+        selected = [core_wheel] if wheel == core_wheel else [core_wheel, wheel]
+        subprocess.run([*isolated_pip, "install", *map(str, selected)], check=True, cwd=work_dir)
+        subprocess.run([*isolated_pip, "check"], check=True, cwd=work_dir)
+        independent.append(checked_json([
+            isolated_python, "-I", str(source_root / "tests/operational/v7_installed_smoke.py"),
+            "--source-root", str(source_root), "--distribution", package["distribution"],
+        ], cwd=work_dir))
+
     install_dir = work_dir / "installed"
     venv.EnvBuilder(with_pip=False).create(install_dir)
     python = str(environment_python(install_dir))
@@ -77,6 +99,8 @@ def run(source_root: Path, work_dir: Path, *, no_build_isolation=False, build_on
     if report["scanned_archives"] < 2 * len(inventory):
         raise RuntimeError("Not every built wheel and sdist was scanned")
     evidence["release_scan"] = report
+    evidence["archive_verification"] = archive_evidence
+    evidence["independent_installs"] = independent
     evidence["archive_count"] = 2 * len(inventory)
     (work_dir / "evidence.json").write_text(
         json.dumps(evidence, sort_keys=True, indent=2) + "\n", encoding="utf-8"

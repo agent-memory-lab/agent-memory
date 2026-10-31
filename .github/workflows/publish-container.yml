@@ -9,26 +9,78 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: container-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
   verify:
-    if: >-
-      github.event_name == 'pull_request' ||
-      (github.repository == 'agent-memory-lab/agent-memory' &&
-       (startsWith(github.ref, 'refs/tags/v') ||
-        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')))
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        platform: [linux/amd64, linux/arm64]
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Validate package versions
+        id: metadata
+        run: python tools/container_release.py metadata
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          load: true
+          tags: agent-memory-smoke:ci
+      - name: Installed MCP, HTTP authentication, restart, isolation and deletion
+        run: >-
+          python tools/container_lifecycle_smoke.py --image agent-memory-smoke:ci
+          --platform linux/${{ matrix.arch }} --expected-version ${{ steps.metadata.outputs.version }}
+          --seed-image ghcr.io/agent-memory-lab/agent-memory@sha256:c4d1c54dcbc56205e62dd6770ed420ed30d74820110f7d14408c37bc4f1b1704
+          --seed-version 0.1.1
+      - name: Scan OS and Python dependencies
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: agent-memory-smoke:ci
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          format: json
+          output: trivy-${{ matrix.arch }}.json
+          timeout: 10m
+      - name: Preserve vulnerability evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: container-scan-${{ matrix.arch }}
+          path: trivy-${{ matrix.arch }}.json
+          if-no-files-found: warn
+
+  publish:
+    if: >-
+      github.repository == 'agent-memory-lab/agent-memory' &&
+      github.event_name != 'pull_request' &&
+      (startsWith(github.ref, 'refs/tags/v') ||
+       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
+    concurrency:
+      group: agent-memory-container-publication
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
     outputs:
       version: ${{ steps.metadata.outputs.version }}
-      image: ${{ steps.metadata.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -37,69 +89,11 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
-      - name: Validate release version and source
+      - name: Require the exact version tag on main history
         id: metadata
-        env:
-          SOURCE_REF: ${{ github.ref }}
-        run: |
-          python - <<'PY'
-          import os
-          import re
-          import tomllib
-          from pathlib import Path
-
-          version = tomllib.loads(Path("pyproject.toml").read_text())["project"]["version"]
-          mcp = tomllib.loads(Path("packages/mcp-server/pyproject.toml").read_text())["project"]
-          assert re.fullmatch(r"\d+\.\d+\.\d+", version), "Expected a numeric package version"
-          assert mcp["version"] == version, "Core and MCP versions must agree"
-          ref = os.environ["SOURCE_REF"]
-          if ref.startswith("refs/tags/"):
-              assert ref == f"refs/tags/v{version}", "Tag must match the Python package version"
-          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-              output.write(f"version={version}\n")
-              output.write(f"image=ghcr.io/{os.environ['GITHUB_REPOSITORY'].lower()}\n")
-          PY
-      - name: Require published source to belong to main
-        if: github.event_name != 'pull_request'
-        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
-      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
-        with:
-          platforms: arm64
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      - name: Build the image for runtime verification
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          platforms: ${{ matrix.platform }}
-          load: true
-          push: false
-          tags: agent-memory-smoke:ci
-      - name: Check installed dependencies, CLI, and real stdio write/read
-        env:
-          PLATFORM: ${{ matrix.platform }}
-          VERSION: ${{ steps.metadata.outputs.version }}
-        run: |
-          docker run --rm --network none --platform "$PLATFORM" --entrypoint python agent-memory-smoke:ci -m pip check
-          docker run --rm --network none --platform "$PLATFORM" agent-memory-smoke:ci --help
-          docker run --rm -i --network none --platform "$PLATFORM" --entrypoint python agent-memory-smoke:ci \
-            -I - --expected-version "$VERSION" < tools/container_smoke.py
-
-  publish:
-    needs: verify
-    if: >-
-      github.repository == 'agent-memory-lab/agent-memory' &&
-      github.event_name != 'pull_request' &&
-      (startsWith(github.ref, 'refs/tags/v') ||
-       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+        run: python tools/container_release.py metadata --published
+      - name: Reject an existing version or source tag
+        run: python tools/container_release.py preflight --published
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
         with:
           platforms: arm64
@@ -109,82 +103,115 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Publish the verified source for both platforms
+      - name: Build a candidate once without changing release tags
         id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ${{ needs.verify.outputs.image }}:${{ needs.verify.outputs.version }}
-            ${{ needs.verify.outputs.image }}:sha-${{ github.sha }}
-            ${{ needs.verify.outputs.image }}:latest
+          provenance: mode=max
+          tags: ${{ steps.metadata.outputs.image }}:candidate-${{ github.run_id }}-${{ github.run_attempt }}
           labels: |
-            org.opencontainers.image.version=${{ needs.verify.outputs.version }}
+            org.opencontainers.image.version=${{ steps.metadata.outputs.version }}
             org.opencontainers.image.revision=${{ github.sha }}
-      - name: Pull and verify the published digest on both platforms
+      - name: Verify the candidate digest on both platforms
         env:
-          IMAGE: ${{ needs.verify.outputs.image }}
+          IMAGE: ${{ steps.metadata.outputs.image }}
           DIGEST: ${{ steps.build.outputs.digest }}
-          VERSION: ${{ needs.verify.outputs.version }}
+          VERSION: ${{ steps.metadata.outputs.version }}
         run: |
           for platform in linux/amd64 linux/arm64; do
             docker pull --platform "$platform" "$IMAGE@$DIGEST"
-            docker run --rm --network none --platform "$platform" --entrypoint python "$IMAGE@$DIGEST" -m pip check
-            docker run --rm --network none --platform "$platform" "$IMAGE@$DIGEST" --help
-            docker run --rm -i --network none --platform "$platform" --entrypoint python "$IMAGE@$DIGEST" \
-              -I - --expected-version "$VERSION" < tools/container_smoke.py
+            python tools/container_lifecycle_smoke.py --image "$IMAGE@$DIGEST" --platform "$platform" --expected-version "$VERSION" \
+              --seed-image ghcr.io/agent-memory-lab/agent-memory@sha256:c4d1c54dcbc56205e62dd6770ed420ed30d74820110f7d14408c37bc4f1b1704 --seed-version 0.1.1
           done
-          printf 'Published `%s@%s`\n' "$IMAGE" "$DIGEST" >> "$GITHUB_STEP_SUMMARY"
-      - name: Record the published GitHub package visibility
-        if: always() && steps.build.outcome == 'success'
+      - name: Scan amd64 candidate before promotion
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          IMAGE: ${{ needs.verify.outputs.image }}
+          TRIVY_PLATFORM: linux/amd64
+        with:
+          image-ref: ${{ steps.metadata.outputs.image }}@${{ steps.build.outputs.digest }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          format: json
+          output: trivy-amd64.json
+          timeout: 10m
+      - name: Scan arm64 candidate before promotion
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/arm64
+        with:
+          skip-setup-trivy: true
+          image-ref: ${{ steps.metadata.outputs.image }}@${{ steps.build.outputs.digest }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          format: json
+          output: trivy-arm64.json
+          timeout: 10m
+      - name: Recheck registry state before promoting the tested digest
+        id: promote
+        run: python tools/container_release.py preflight --published
+      - name: Publish immutable release tags, advance latest only for a newer version
+        env:
+          IMAGE: ${{ steps.metadata.outputs.image }}
           DIGEST: ${{ steps.build.outputs.digest }}
+          VERSION: ${{ steps.metadata.outputs.version }}
+          ADVANCE_LATEST: ${{ steps.promote.outputs.advance_latest }}
         run: |
-          python3 - <<'PY'
-          import json
-          import os
-          import urllib.error
-          import urllib.request
-          from pathlib import Path
-
-          owner = os.environ["GITHUB_REPOSITORY_OWNER"]
-          url = f"https://api.github.com/users/{owner}/packages/container/agent-memory"
-          request = urllib.request.Request(url, headers={
-              "Accept": "application/vnd.github+json",
-              "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-              "X-GitHub-Api-Version": "2022-11-28",
-          })
-          report = {"image": os.environ["IMAGE"], "digest": os.environ["DIGEST"]}
-          try:
-              with urllib.request.urlopen(request, timeout=30) as response:
-                  package = json.load(response)
-              report.update({
-                  "status": "verified",
-                  "html_url": package["html_url"],
-                  "visibility": package["visibility"],
-              })
-          except (urllib.error.URLError, KeyError) as error:
-              report.update({
-                  "status": "unavailable",
-                  "http_status": getattr(error, "code", None),
-              })
-          evidence = Path(os.environ["RUNNER_TEMP"]) / "published-package.json"
-          evidence.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
-              if report["status"] == "verified":
-                  summary.write(f"\nPackage: {report['html_url']}\n\nVisibility: **{report['visibility']}**\n")
-              else:
-                  summary.write("\nPackage visibility could not be read; inspect the metadata artifact.\n")
-          assert report["status"] == "verified", "Published package visibility is unverified"
-          PY
-      - name: Preserve published package metadata
-        if: always() && steps.build.outcome == 'success'
+          docker buildx imagetools create --tag "$IMAGE:$VERSION" --tag "$IMAGE:sha-$GITHUB_SHA" "$IMAGE@$DIGEST"
+          if [ "$ADVANCE_LATEST" = true ]; then
+            docker buildx imagetools create --tag "$IMAGE:latest" "$IMAGE@$DIGEST"
+            python tools/container_release.py verify --published --digest "$DIGEST" --verify-latest
+          else
+            python tools/container_release.py verify --published --digest "$DIGEST"
+          fi
+      - name: Preserve publication and vulnerability evidence
+        if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: published-package-metadata
-          path: ${{ runner.temp }}/published-package.json
-          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/published-package.json
+            trivy-*.json
+          if-no-files-found: warn
+
+  python-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VERSION: ${{ needs.publish.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - run: python -m pip install --require-hashes -r requirements/container-build.lock
+      - name: Build and independently install all seven distributions
+        run: python tools/package_gate.py --no-build-isolation --work-dir "$RUNNER_TEMP/python-release"
+      - name: Stage the exact tested archives in a new draft release
+        run: |
+          python tools/publish_python_release.py stage --artifacts "$RUNNER_TEMP/python-release/artifacts" --version "$VERSION"
+      - name: Download the draft attachments and verify their complete contents
+        run: |
+          gh release download "v$VERSION" --dir "$RUNNER_TEMP/downloaded-release"
+          python tools/verify_release_artifacts.py --source-root . --artifacts "$RUNNER_TEMP/downloaded-release" --require-manifest
+      - name: Publish the verified Alpha release
+        run: gh release edit "v$VERSION" --draft=false --prerelease
+      - name: Preserve packaging verification evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: published-python-verification
+          path: |
+            ${{ runner.temp }}/python-release/evidence.json
+            ${{ runner.temp }}/python-release/artifacts/release-manifest.json
+          if-no-files-found: warn
