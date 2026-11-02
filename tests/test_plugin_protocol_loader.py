@@ -530,3 +530,95 @@ def test_loader_closes_plugins_in_reverse_order():
         assert loader.loaded == ()
 
     run(scenario())
+
+
+@pytest.mark.parametrize("phase", ["initialize", "health"])
+@pytest.mark.parametrize("batch", [False, True])
+def test_load_cancellation_closes_partial_plugin(phase, batch):
+    async def scenario():
+        entered = asyncio.Event()
+        log = []
+
+        class WaitingRetriever(FakeRetriever):
+            async def initialize(self, ctx):
+                await super().initialize(ctx)
+                if phase == "initialize":
+                    entered.set()
+                    await asyncio.Event().wait()
+
+            async def health(self):
+                result = await super().health()
+                if phase == "health":
+                    entered.set()
+                    await asyncio.Event().wait()
+                return result
+
+        loader = PluginLoader(core_version="0.1.0")
+        first = FakeRetriever(manifest("first"), label="first", log=log)
+        partial = WaitingRetriever(manifest("partial"), label="partial", log=log)
+        for name, plugin in (("first", first), ("partial", partial)):
+            loader.register(name=name, kind=PluginKind.RETRIEVER,
+                            factory=lambda plugin=plugin: plugin)
+        operation = (
+            loader.load_many(tuple(PluginLoadRequest(name, PluginKind.RETRIEVER, context())
+                                   for name in ("first", "partial")))
+            if batch else loader.load("partial", PluginKind.RETRIEVER, context())
+        )
+        task = asyncio.create_task(operation)
+        await entered.wait()
+        task.cancel("caller stopped load")
+        with pytest.raises(asyncio.CancelledError, match="caller stopped load"):
+            await task
+        assert task.cancelled()
+        assert loader.loaded == ()
+        assert log[-(2 if batch else 1):] == (
+            ["close:partial", "close:first"] if batch else ["close:partial"]
+        )
+        await loader.close()
+        assert log.count("close:partial") == 1
+
+    run(scenario())
+
+
+@pytest.mark.parametrize("close_mode", ["error", "timeout", "cancel", "repeated_cancel"])
+def test_load_cancellation_preserved_during_cleanup(close_mode):
+    async def scenario():
+        entered = asyncio.Event()
+        closing = asyncio.Event()
+        release = asyncio.Event()
+        finished = asyncio.Event()
+
+        class WaitingRetriever(FakeRetriever):
+            async def initialize(self, ctx):
+                entered.set()
+                await asyncio.Event().wait()
+
+            async def close(self):
+                closing.set()
+                try:
+                    if close_mode == "error":
+                        raise RuntimeError("cleanup failed")
+                    if close_mode == "cancel":
+                        raise asyncio.CancelledError("cleanup cancelled itself")
+                    await release.wait()
+                finally:
+                    finished.set()
+
+        loader = PluginLoader(core_version="0.1.0")
+        plugin = WaitingRetriever(manifest("partial", limits=PluginResourceLimits(timeout_ms=50)))
+        loader.register(name="partial", kind=PluginKind.RETRIEVER, factory=lambda: plugin)
+        task = asyncio.create_task(loader.load("partial", PluginKind.RETRIEVER, context()))
+        await entered.wait()
+        task.cancel("original cancellation")
+        if close_mode == "repeated_cancel":
+            await asyncio.wait_for(closing.wait(), timeout=1)
+            task.cancel("second cancellation")
+            await asyncio.sleep(0)
+            release.set()
+        with pytest.raises(asyncio.CancelledError, match="original cancellation"):
+            await asyncio.wait_for(task, timeout=1)
+        assert closing.is_set()
+        assert finished.is_set()
+        assert loader.loaded == ()
+
+    run(scenario())

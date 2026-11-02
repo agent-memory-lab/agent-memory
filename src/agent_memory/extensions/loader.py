@@ -328,6 +328,20 @@ class PluginLoader:
                 raise TypeError("health() did not return PluginHealth")
             if health.status is PluginHealthStatus.UNAVAILABLE:
                 raise RuntimeError("plugin reported unavailable")
+        except asyncio.CancelledError:
+            # The partial instance is not registered yet. Finish its bounded
+            # cleanup even if the caller cancels again, then preserve cancellation.
+            cleanup = asyncio.create_task(self._close_instance(instance, timeout=timeout))
+            while not cleanup.done():
+                try:
+                    await asyncio.shield(cleanup)
+                except asyncio.CancelledError:
+                    pass
+            try:
+                cleanup.result()
+            except asyncio.CancelledError:
+                pass  # A plugin's own close cancellation must not replace ours.
+            raise
         except Exception as error:
             await self._close_instance(instance, timeout=timeout)
             raise PluginError(

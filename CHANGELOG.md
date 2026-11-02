@@ -5,6 +5,16 @@ the first stable release.
 
 ## Unreleased
 
+### Fixed
+
+- Close partially initialized plugins when loading is cancelled, including health
+  checks and batch loads. Preserve cancellation while allowing bounded cooperative
+  cleanup to finish even if the caller cancels again.
+- Require the latest full CI workflow for the exact release commit on main to
+  succeed before container publication and Python release staging/publication.
+  Missing, pending, failed or mismatched CI evidence blocks publication; retry
+  after main CI succeeds. No package, protocol or default runtime changes.
+
 ## 0.1.2 - 2026-10-31 (Alpha)
 
 - Raise the PostgreSQL adapter's psycopg floor to 3.2.10 for Python 3.13/3.14

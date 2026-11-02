@@ -59,6 +59,39 @@ def package_versions(repository):
     return [package for page in pages for package in page]
 
 
+def require_ci(repository, commit):
+    """Require the latest exact-source main CI, never an older green run."""
+    pages = json.loads(command(
+        "gh", "api", f"/repos/{repository}/actions/workflows/ci.yml/runs"
+        f"?head_sha={commit}&branch=main&event=push&per_page=100",
+        "--paginate", "--slurp",
+    ))
+    if not isinstance(pages, list) or not pages:
+        raise ValueError("Missing CI workflow response")
+    runs = []
+    for page in pages:
+        if not isinstance(page, dict) or not isinstance(page.get("workflow_runs"), list):
+            raise ValueError("Invalid CI workflow response")
+        for run in page["workflow_runs"]:
+            if (not isinstance(run, dict)
+                    or run.get("head_sha") != commit
+                    or run.get("head_branch") != "main"
+                    or run.get("event") != "push"
+                    or run.get("path") != ".github/workflows/ci.yml"
+                    or not isinstance(run.get("head_repository"), dict)
+                    or run["head_repository"].get("full_name") != repository
+                    or any(type(run.get(key)) is not int or run[key] < 1
+                           for key in ("id", "run_number", "run_attempt"))):
+                raise ValueError("CI run does not identify the exact source/main workflow")
+            runs.append(run)
+    if not runs:
+        raise ValueError("No main CI run for this exact source; wait for CI and retry")
+    latest = max(runs, key=lambda run: (run["run_number"], run["run_attempt"], run["id"]))
+    if latest.get("status") != "completed" or latest.get("conclusion") != "success":
+        raise ValueError("Latest exact-source main CI is not successful; wait or fix CI and retry")
+    return latest["id"]
+
+
 def output(**values):
     if path := os.environ.get("GITHUB_OUTPUT"):
         with open(path, "a") as stream:
@@ -69,19 +102,23 @@ def output(**values):
 
 def main():
     parser = argparse.ArgumentParser(__doc__)
-    parser.add_argument("action", choices=("metadata", "preflight", "verify"))
+    parser.add_argument("action", choices=("metadata", "preflight", "verify", "ci"))
     parser.add_argument("--published", action="store_true")
     parser.add_argument("--digest")
     parser.add_argument("--verify-latest", action="store_true")
     args = parser.parse_args()
     repository = os.environ["GITHUB_REPOSITORY"]
     commit = os.environ["GITHUB_SHA"]
+    if args.action == "ci":
+        output(ci_run_id=require_ci(repository, commit))
+        return
     version = source_version(Path.cwd(), ref=os.environ["GITHUB_REF"],
                              commit=commit if args.published else None)
     image = f"ghcr.io/{repository.lower()}"
     if args.action == "metadata":
         output(version=version, image=image)
     elif args.action == "preflight":
+        require_ci(repository, commit)
         advance = promotion_plan(version, commit, package_versions(repository))
         output(advance_latest=str(advance).lower())
     else:
