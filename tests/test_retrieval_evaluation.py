@@ -1,4 +1,4 @@
-"""Acceptance tests for deterministic retrieval policy evaluation."""
+"""Acceptance tests for deterministic retrieval policy contracts, not retrieval quality."""
 
 import asyncio
 
@@ -28,9 +28,9 @@ class FixedArm:
         return self._name
 
     async def retrieve(self, case):
-        if case.case_id in self.fail_on:
+        if case.query_text in self.fail_on:
             raise RuntimeError("offline")
-        return self.observations[case.case_id]
+        return self.observations[case.query_text]
 
 
 def snapshot():
@@ -62,17 +62,17 @@ def test_three_arm_report_tracks_quality_cost_failures_and_forbidden_hits():
     lexical = FixedArm(
         "lexical-only",
         {
-            "case-a": RetrievalObservation(("memory-a",), ("event-a",), 10),
-            "case-b": RetrievalObservation(("forbidden-b",), (), 20),
+            "alpha": RetrievalObservation(("memory-a",), ("event-a",), 10),
+            "beta": RetrievalObservation(("forbidden-b",), (), 20),
         },
     )
     hybrid = FixedArm(
         "hybrid",
         {
-            "case-a": RetrievalObservation(("memory-a",), ("event-a",), 12),
-            "case-b": RetrievalObservation(("memory-b",), ("event-b",), 12),
+            "alpha": RetrievalObservation(("memory-a",), ("event-a",), 12),
+            "beta": RetrievalObservation(("memory-b",), ("event-b",), 12),
         },
-        fail_on=("case-b",),
+        fail_on=("beta",),
     )
 
     report = asyncio.run(
@@ -112,3 +112,52 @@ def test_snapshot_rejects_relevant_forbidden_overlap_and_duplicate_cases():
     case = RetrievalEvalCase("duplicate", SCOPE, "query", ("memory",))
     with pytest.raises(ValueError, match="unique"):
         RetrievalDatasetSnapshot("snapshot", "v1", (case, case))
+
+
+def test_arm_input_has_only_query_scope_and_neutral_id_and_gold_echo_fails():
+    from dataclasses import FrozenInstanceError, fields, replace
+
+    from agent_memory import RetrievalEvaluationInput
+
+    seen = []
+
+    class InspectingArm:
+        name = "inspect"
+
+        async def retrieve(self, request):
+            assert type(request) is RetrievalEvaluationInput
+            assert {field.name for field in fields(request)} == {"case_id", "scope", "query_text"}
+            assert not hasattr(request, "__dict__")
+            with pytest.raises(FrozenInstanceError):
+                request.query_text = "mutated"
+            seen.append(request)
+            return RetrievalObservation(("memory-a",), ("event-a",), 10)
+
+    annotated = RetrievalEvalCase(
+        "gold-answer-private", SCOPE, "alpha", ("memory-a",), ("event-a",)
+    )
+    first = RetrievalDatasetSnapshot("isolation", "1", (annotated,))
+    second = replace(first, cases=(replace(annotated, relevant_memory_ids=("other",)),))
+    reports = [
+        asyncio.run(run_retrieval_benchmark(data, (InspectingArm(),), required_arms=("inspect",)))
+        for data in (first, second)
+    ]
+    assert seen[0] == seen[1] == RetrievalEvaluationInput("case-000000", SCOPE, "alpha")
+    assert reports[0].metrics[0].recall == 1
+    assert reports[1].metrics[0].recall == 0
+    assert reports[0].metrics[0].evidence_coverage == 1
+
+    class GoldEchoArm:
+        name = "oracle"
+
+        async def retrieve(self, request):
+            return RetrievalObservation(
+                request.relevant_memory_ids, request.required_source_event_ids, 0
+            )
+
+    report = asyncio.run(
+        run_retrieval_benchmark(first, (GoldEchoArm(),), required_arms=("oracle",))
+    )
+    assert report.metrics[0].recall == 0
+    assert report.failures[0].error_type == "AttributeError"
+    assert report.failures[0].case_id == "gold-answer-private"

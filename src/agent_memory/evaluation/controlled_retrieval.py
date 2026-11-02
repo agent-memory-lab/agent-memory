@@ -17,7 +17,7 @@ from typing import Protocol
 
 from ..retrieval.feature_gate import RetrievalFeatureApproval, checked_digest
 from ..serialization import to_jsonable
-from .retrieval import RetrievalEvalCase
+from .retrieval import RetrievalEvalCase, RetrievalEvaluationInput
 
 ARMS = ("baseline-b3", "b3+rank", "b3+cache", "b3+both")
 REGIMES = ("cold", "warm")
@@ -285,7 +285,7 @@ class ControlledRetrievalArm(Protocol):
     async def prepare(self, regime: str) -> ControlledPreparation: ...
 
     async def run(
-        self, case: ControlledRetrievalCase, regime: str
+        self, case: RetrievalEvaluationInput, regime: str
     ) -> ControlledRetrievalObservation: ...
 
     async def finish(self, regime: str) -> ControlledWorkCost: ...
@@ -393,13 +393,18 @@ async def run_controlled_retrieval(plan, arms, *, expected_protocol_sha256):
                 prepared = None
             preparation_ms = (monotonic() - started) * 1000
             observations = []
-            for case in cases:
+            for index, case in enumerate(cases):
                 observed, error_type = None, None
                 started = monotonic()
                 try:
                     if prepared is None:
                         raise RuntimeError("preparation_failed")
-                    observed = await arm.run(case, regime)
+                    observed = await arm.run(
+                        RetrievalEvaluationInput(
+                            f"case-{index:06d}", case.case.scope, case.case.query_text
+                        ),
+                        regime,
+                    )
                     if type(observed) is not ControlledRetrievalObservation:
                         raise TypeError("invalid controlled observation")
                 except Exception as error:

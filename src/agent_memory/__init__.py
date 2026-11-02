@@ -1,6 +1,7 @@
 from .retrieval.temporal_history import TemporalHistoryUnavailable
 
 from .adapters import AgentLifecycleContext, AgentMemoryAdapter
+from .evaluation.retrieval import RetrievalEvaluationInput
 from .evaluation.benchmark import (
     BenchmarkSkip,
     CallableMemoryBenchmarkArm,
@@ -516,6 +517,7 @@ __all__ = [
     "BenchmarkSkip",
     "CallableMemoryBenchmarkArm",
     "MemoryArmMetrics",
+    "RetrievalEvaluationInput",
     "MemoryBenchmarkCase",
     "MemoryBenchmarkCaseResult",
     "MemoryBenchmarkComparison",

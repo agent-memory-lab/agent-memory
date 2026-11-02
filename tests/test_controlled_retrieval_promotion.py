@@ -39,7 +39,7 @@ def plan():
             RetrievalEvalCase(
                 f"case-{group}-{answerable}",
                 SCOPE,
-                "query",
+                ("known query" if answerable else "unknown query"),
                 ("good",) if answerable else (),
                 forbidden_memory_ids=("forbidden",),
             ),
@@ -62,6 +62,7 @@ def plan():
 
 
 class ContractArm:
+    # Scripted query responses exercise gates only; they are not quality evidence.
     measurement_kind = "contract-only"
 
     def __init__(
@@ -78,7 +79,7 @@ class ContractArm:
         self.name = name
         self.configuration_sha256 = protocol.arm_configuration(name)
         self.model_sha256, self.judge_sha256 = protocol.model_sha256, protocol.judge_sha256
-        self.protocol = protocol
+        self.corpus_sha256 = protocol.corpus_sha256
         self.fail, self.unknown, self.forbidden = fail, unknown, forbidden
         self.maintenance = maintenance
         self.disable_existing_reuse = disable_existing_reuse
@@ -87,11 +88,11 @@ class ContractArm:
     async def prepare(self, regime):
         self.lifecycle.append(("prepare", regime))
         return ControlledPreparation(
-            self.protocol.corpus_sha256, True, not self.disable_existing_reuse, self.maintenance
+            self.corpus_sha256, True, not self.disable_existing_reuse, self.maintenance
         )
 
     async def run(self, case, regime):
-        self.lifecycle.append(("run", regime, case.case.case_id))
+        self.lifecycle.append(("run", regime, case.case_id))
         if self.fail:
             raise RuntimeError("private fault text")
         ids = ("forbidden",) if self.forbidden else ("good",)
@@ -99,7 +100,7 @@ class ContractArm:
             ids,
             ids,
             0.5 if self.name == ARMS[0] else 1.0,
-            not case.answerable,
+            case.query_text == "unknown query",
             ControlledWorkCost() if self.unknown else ZERO,
             supporting_span_coverage=1.0,
             qualifier_fidelity=1.0,
@@ -273,7 +274,7 @@ def test_peak_resource_gate_uses_workload_maxima_not_mean_query_peaks():
     class Peaks(ContractArm):
         async def run(self, case, regime):
             observed = await super().run(case, regime)
-            peak = 100 if self.name == ARMS[0] else (200 if case.answerable else 0)
+            peak = 100 if self.name == ARMS[0] else (200 if case.query_text == "known query" else 0)
             return replace(observed, costs=replace(ZERO, peak_rss_bytes=peak, retained_bytes=peak))
 
     arms = tuple(Peaks(name, protocol) for name in ARMS)
@@ -395,3 +396,56 @@ def test_required_span_annotation_manifest_and_new_limits_must_be_frozen():
         )
     with pytest.raises(ValueError, match="baseline semantics"):
         replace(protocol, schema="controlled-retrieval-plan/1")
+
+
+def test_controlled_arm_receives_no_gold_answerability_group_or_original_identity():
+    from dataclasses import fields
+
+    from agent_memory.evaluation.retrieval import RetrievalEvaluationInput
+
+    protocol = plan()
+    requests = []
+
+    class Inspecting(ContractArm):
+        async def run(self, request, regime):
+            assert type(request) is RetrievalEvaluationInput
+            assert {field.name for field in fields(request)} == {"case_id", "scope", "query_text"}
+            assert not hasattr(request, "case")
+            assert not hasattr(request, "answerable")
+            assert not hasattr(request, "group_id")
+            assert request.case_id not in {value.case.case_id for value in protocol.cases}
+            requests.append((self.name, regime, request))
+            return await super().run(request, regime)
+
+    arms = tuple(Inspecting(name, protocol) for name in ARMS)
+    report = asyncio.run(
+        run_controlled_retrieval(protocol, arms, expected_protocol_sha256=protocol.fingerprint)
+    )
+    assert len(requests) == 48
+    assert all(row.error_type is None for row in report.rows)
+    assert {request.case_id for _, _, request in requests} == {f"case-{i:06d}" for i in range(6)}
+    for row in report.rows:
+        values = dict(row.values)
+        if "True" in row.case_id:
+            assert values["candidate_recall"] == values["final_context_recall"] == 1
+        else:
+            assert values["refusal_correct"] == 1
+    assert all(value.approval is None for value in assess(protocol, report))
+
+
+def test_controlled_gold_echo_is_recorded_as_failed_not_perfect_recall():
+    protocol = plan()
+
+    class GoldEcho(ContractArm):
+        async def run(self, request, regime):
+            ids = request.case.relevant_memory_ids
+            return ControlledRetrievalObservation(ids, ids, 1.0, not request.answerable, ZERO)
+
+    arms = tuple(GoldEcho(name, protocol) for name in ARMS)
+    report = asyncio.run(
+        run_controlled_retrieval(protocol, arms, expected_protocol_sha256=protocol.fingerprint)
+    )
+    assert len(report.rows) == 48
+    assert all(row.error_type == "AttributeError" for row in report.rows)
+    assert all(dict(row.values)["candidate_recall"] is None for row in report.rows)
+    assert all(value.approval is None for value in assess(protocol, report))

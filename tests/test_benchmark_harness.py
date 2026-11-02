@@ -1,4 +1,4 @@
-"""T41 benchmark harness acceptance tests."""
+"""T41 synthetic scoring contracts, not retrieval-quality evidence."""
 
 from __future__ import annotations
 
@@ -48,11 +48,13 @@ def _dataset() -> MemoryBenchmarkDataset:
     )
 
 
-def _observation(case: MemoryBenchmarkCase, *, complete: bool):
-    ids = case.relevant_memory_ids if complete else case.relevant_memory_ids[:1]
+def _observation(case, *, complete: bool):
+    # Deliberately scripted contract fixture: no access to scoring annotations.
+    dimension = case.query_text.removeprefix("query for ")
+    ids = (f"{dimension}-1", f"{dimension}-2") if complete else (f"{dimension}-1",)
     return MemoryBenchmarkObservation(
         memory_ids=ids,
-        source_event_ids=case.required_source_event_ids if complete else (),
+        source_event_ids=(f"source-{dimension}",) if complete else (),
         token_estimate=24 if complete else 12,
     )
 
@@ -110,12 +112,12 @@ def test_failures_skips_and_incomparable_reasons_are_never_hidden():
         )
 
         async def fixed(case):
-            if case.case_id.endswith("temporal"):
+            if case.query_text.endswith("temporal"):
                 raise RuntimeError("backend unavailable")
             return _observation(case, complete=False)
 
         async def candidate(case):
-            if case.case_id.endswith("temporal"):
+            if case.query_text.endswith("temporal"):
                 raise BenchmarkSkip("prospective channel disabled")
             return _observation(case, complete=True)
 
@@ -202,3 +204,45 @@ def test_external_dataset_adapter_contract_and_dataset_validation():
 
     with pytest.raises(TypeError, match="MemoryBenchmarkDataset"):
         asyncio.run(load_benchmark_dataset(InvalidAdapter()))
+
+
+def test_memory_benchmark_isolates_gold_and_preserves_dimension_filtering():
+    from dataclasses import fields, replace
+
+    from agent_memory import RetrievalEvaluationInput
+
+    seen = []
+
+    def inspect(request):
+        assert type(request) is RetrievalEvaluationInput
+        assert {field.name for field in fields(request)} == {"case_id", "scope", "query_text"}
+        assert request.case_id.startswith("case-00000")
+        seen.append(request)
+        return _observation(request, complete=True)
+
+    def gold_echo(request):
+        return MemoryBenchmarkObservation(
+            request.relevant_memory_ids, request.required_source_event_ids, 0
+        )
+
+    dataset = _dataset()
+    dataset = replace(dataset, cases=tuple(
+        replace(case, case_id=f"private-gold-{i}") for i, case in enumerate(dataset.cases)
+    ))
+    report = asyncio.run(run_memory_benchmark(
+        dataset,
+        (
+            NoMemoryBenchmarkArm(),
+            CallableMemoryBenchmarkArm("fixed-policy", "1", gold_echo),
+            CallableMemoryBenchmarkArm("candidate-policy", "2", inspect,
+                                       supported_dimensions=(MemoryBenchmarkDimension.FACTUAL,)),
+        ),
+        MemoryBenchmarkConfig(NOW, "1", {"core": "0.3.0"}),
+    ))
+    assert len(seen) == 1
+    assert len(report.failures) == 6
+    assert all(failure.error_type == "AttributeError" for failure in report.failures)
+    assert len(report.skips) == 5
+    metrics = {value.arm: value for value in report.arms}
+    assert metrics["candidate-policy"].mean_score == 1
+    assert metrics["fixed-policy"].completed_cases == 0

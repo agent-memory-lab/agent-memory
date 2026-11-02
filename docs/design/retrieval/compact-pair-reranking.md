@@ -10,6 +10,9 @@ blocked on an authorized corpus, installed local scorer and reader, frozen judge
 and measured controlled runs. Contract fixtures are not promotion evidence.
 Historical V7 acceptance records are unchanged.
 
+Arms receive query/scope/neutral-ID inputs, never scoring annotations; see the
+[arm input boundary and API migration](../../EVALUATION_INPUT_BOUNDARY.md).
+
 The candidate compact scorer is Qwen3-Reranker-0.6B, if the host has independently
 installed and approved it. An Ollama chat response containing a number is not its
 scoring contract. `FinalTokenPairScorer` receives a host-injected async callable

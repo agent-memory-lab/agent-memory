@@ -15,6 +15,7 @@ from typing import Protocol
 
 from ..domain import MemoryScope
 from ..serialization import to_jsonable
+from .retrieval import RetrievalEvaluationInput
 
 
 _REQUIRED_ARMS = frozenset({"no-memory", "fixed-policy", "candidate-policy"})
@@ -170,7 +171,7 @@ class MemoryBenchmarkArm(Protocol):
     @property
     def version(self) -> str: ...
 
-    async def retrieve(self, case: MemoryBenchmarkCase) -> MemoryBenchmarkObservation: ...
+    async def retrieve(self, case: RetrievalEvaluationInput) -> MemoryBenchmarkObservation: ...
 
 
 class NoMemoryBenchmarkArm:
@@ -182,7 +183,7 @@ class NoMemoryBenchmarkArm:
     def version(self) -> str:
         return "1.0.0"
 
-    async def retrieve(self, case: MemoryBenchmarkCase) -> MemoryBenchmarkObservation:
+    async def retrieve(self, case: RetrievalEvaluationInput) -> MemoryBenchmarkObservation:
         return MemoryBenchmarkObservation((), (), 0)
 
 
@@ -192,7 +193,7 @@ class CallableMemoryBenchmarkArm:
         name: str,
         version: str,
         retriever: Callable[
-            [MemoryBenchmarkCase],
+            [RetrievalEvaluationInput],
             MemoryBenchmarkObservation | Awaitable[MemoryBenchmarkObservation],
         ],
         *,
@@ -220,9 +221,11 @@ class CallableMemoryBenchmarkArm:
     def version(self) -> str:
         return self._version
 
-    async def retrieve(self, case: MemoryBenchmarkCase) -> MemoryBenchmarkObservation:
-        if case.dimension not in self._supported_dimensions:
-            raise BenchmarkSkip(f"{case.dimension.value} dimension is unsupported")
+    @property
+    def supported_dimensions(self) -> frozenset[MemoryBenchmarkDimension]:
+        return self._supported_dimensions
+
+    async def retrieve(self, case: RetrievalEvaluationInput) -> MemoryBenchmarkObservation:
         observation = self._retriever(case)
         if inspect.isawaitable(observation):
             observation = await observation
@@ -403,9 +406,15 @@ async def run_memory_benchmark(
     ordered_cases = sorted(dataset.cases, key=lambda item: item.case_id)
     for arm_name in sorted(by_name):
         arm = by_name[arm_name]
-        for case in ordered_cases:
+        for index, case in enumerate(ordered_cases):
             try:
-                observation = await arm.retrieve(case)
+                # Dimension filtering belongs to the scorer, not the arm input.
+                supported = getattr(arm, "supported_dimensions", tuple(MemoryBenchmarkDimension))
+                if case.dimension not in supported:
+                    raise BenchmarkSkip(f"{case.dimension.value} dimension is unsupported")
+                observation = await arm.retrieve(
+                    RetrievalEvaluationInput(f"case-{index:06d}", case.scope, case.query_text)
+                )
                 if not isinstance(observation, MemoryBenchmarkObservation):
                     raise TypeError("benchmark arm returned an invalid observation")
             except BenchmarkSkip as error:

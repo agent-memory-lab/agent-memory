@@ -1188,11 +1188,25 @@ class SQLiteMemoryRepository:
         if type(enable_query_facets) is not bool:
             raise TypeError("enable_query_facets must be a bool")
         self._path = str(database_path)
+        if self._path in ("", ":memory:"):
+            raise ValueError("SQLiteMemoryRepository requires a persistent file-backed database")
         self._enable_query_facets = enable_query_facets
         self._write_lock = asyncio.Lock()
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self._path, timeout=30)
+        # Some SQLite builds interpret file: URIs even without uri=True. Let
+        # SQLite resolve them rather than attempting to duplicate its URI parser.
+        # A connection-local database disappears when our per-operation connection closes.
+        if self._path.startswith("file:"):
+            try:
+                if not connection.execute("PRAGMA database_list").fetchone()[2]:
+                    raise ValueError(
+                        "SQLiteMemoryRepository requires a persistent file-backed database"
+                    )
+            except BaseException:
+                connection.close()
+                raise
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA busy_timeout = 30000")
         connection.execute("PRAGMA foreign_keys = ON")

@@ -36,6 +36,28 @@ def _ids(values: Sequence[str], field: str, *, maximum: int) -> tuple[str, ...]:
 
 
 @dataclass(frozen=True, slots=True)
+class RetrievalEvaluationInput:
+    """Arm-visible request only; case_id is a runner-assigned neutral ordinal.
+
+    Evaluation annotations and original dataset identities stay with the scorer.
+    This is an API data boundary, not a sandbox against hostile in-process code.
+    """
+
+    case_id: str
+    scope: MemoryScope
+    query_text: str
+
+    def __post_init__(self) -> None:
+        _identifier(self.case_id, "case_id")
+        if not isinstance(self.scope, MemoryScope):
+            raise TypeError("scope must be a MemoryScope")
+        if not isinstance(self.query_text, str) or not self.query_text.strip():
+            raise ValueError("query_text must be non-empty")
+        if len(self.query_text) > 4_096:
+            raise ValueError("query_text cannot exceed 4096 characters")
+
+
+@dataclass(frozen=True, slots=True)
 class RetrievalEvalCase:
     case_id: str
     scope: MemoryScope
@@ -124,7 +146,7 @@ class RetrievalEvaluationArm(Protocol):
     @property
     def name(self) -> str: ...
 
-    async def retrieve(self, case: RetrievalEvalCase) -> RetrievalObservation: ...
+    async def retrieve(self, case: RetrievalEvaluationInput) -> RetrievalObservation: ...
 
 
 class NoMemoryEvaluationArm:
@@ -132,7 +154,7 @@ class NoMemoryEvaluationArm:
     def name(self) -> str:
         return "no-memory"
 
-    async def retrieve(self, case: RetrievalEvalCase) -> RetrievalObservation:
+    async def retrieve(self, case: RetrievalEvaluationInput) -> RetrievalObservation:
         return RetrievalObservation(
             (), (), 0, model_calls=0, cost_microunits=0, candidates_considered=0
         )
@@ -261,14 +283,16 @@ async def run_retrieval_benchmark(
     for name in sorted(by_name):
         arm = by_name[name]
         accumulator = accumulators[name]
-        for case in ordered_cases:
+        for index, case in enumerate(ordered_cases):
             relevant = set(case.relevant_memory_ids)
             required_evidence = set(case.required_source_event_ids)
             accumulator.relevant += len(relevant)
             accumulator.required_evidence += len(required_evidence)
             started = monotonic()
             try:
-                observation = await arm.retrieve(case)
+                observation = await arm.retrieve(
+                    RetrievalEvaluationInput(f"case-{index:06d}", case.scope, case.query_text)
+                )
                 if not isinstance(observation, RetrievalObservation):
                     raise TypeError("arm returned an invalid observation")
             except Exception as error:

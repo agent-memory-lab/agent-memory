@@ -7,6 +7,14 @@ the first stable release.
 
 ### Fixed
 
+- Reject connection-local SQLite databases (empty paths, `:memory:` and ephemeral
+  `file:` URIs) before initialization can appear successful. Persistent file paths
+  and file-backed URIs remain supported.
+- Keep benchmark gold annotations scorer-side across policy, retrieval and
+  controlled-retrieval runners. Arms now receive a frozen query/scope/neutral-ID
+  input instead of annotated cases. This intentionally changes the Python arm
+  callback protocol; see [migration notes](docs/EVALUATION_INPUT_BOUNDARY.md).
+  Dataset/report schemas and scoring formulas are unchanged.
 - Finish bounded cooperative plugin cleanup when cancellation arrives after a
   normal initialization/health failure or during batch rollback. Preserve caller
   cancellation and continue rollback past individual plugin close failures.
