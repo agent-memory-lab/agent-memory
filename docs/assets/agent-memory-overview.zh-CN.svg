@@ -1,0 +1,153 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="2070" viewBox="0 0 1200 2070" role="img" aria-labelledby="title desc" lang="zh-CN">
+<title id="title">Agent Memory — 系统架构与能力边界</title>
+<desc id="desc">分层架构展示可信宿主接入、持久化 L0 证据、默认显式元数据或可选抽取与类型化接纳、双时态 L1 事实，以及受控检索与有界 MemoryBundle 交付。注册派生路径包括语言 Observation 和 L2 页面、项目 QuestionView 和 L2 场景，以及经复核的 L3 Persona。可选研究、模型、本体、上下文恢复与门控演进不替代默认本地闭环。共享运行时与存储负责刷新、恢复、索引和擦除；作用域、来源血缘、双时态与当前删除屏障贯穿所有支持路径。</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1L8 5L1 9" fill="none" stroke="#386b83" stroke-width="1.7" /></marker>
+<style>text{font-family:"Noto Sans CJK SC","Microsoft YaHei","PingFang SC",Arial,sans-serif;fill:#183749}.title{font-size:39px;font-weight:700;letter-spacing:-1px}.subtitle{font-size:21px;fill:#536b79}.section{font-size:25px;font-weight:700}.num{font-size:19px;font-weight:700;fill:#527a90}.kicker{font-size:14px;font-weight:700;letter-spacing:.6px;fill:#496d81}.cardtitle{font-size:25px;font-weight:700;letter-spacing:-.3px}.body{font-size:20px;fill:#425e6d}.small{font-size:17px;fill:#627885}.tiny{font-size:15px;fill:#627885} </style></defs>
+<rect x="0" y="0" width="1200" height="2070" rx="20" fill="#f3f6f8" stroke="#d5e0e5" />
+<rect x="42" y="38" width="7" height="67" rx="3" fill="#cc7b43" stroke="#cc7b43" />
+<text x="68" y="58" class="kicker">AGENT MEMORY  /  系统架构</text>
+<text x="68" y="103" class="title">从来源证据，到可信解释与可用记忆。</text>
+<text x="42" y="145" class="subtitle">本地优先的模块化核心，清晰划分接入方式与能力边界。</text>
+<path d="M44 178H85" fill="none" stroke="#386b83" stroke-width="2" marker-end="url(#arrow)" />
+<text x="98" y="184" class="small">主要数据流</text>
+<path d="M291 178H332" fill="none" stroke="#386b83" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)" />
+<text x="345" y="184" class="small">注册 / 显式启用路径</text>
+<text x="660" y="184" class="small">核心闭环无需模型密钥，也无需后台服务</text>
+<text x="42" y="234" class="num">01</text>
+<text x="82" y="234" class="section">可信宿主与接入边界</text>
+<text x="82" y="261" class="small">应用负责身份、权限、采集策略，以及最终的模型调用。</text>
+<rect x="42" y="280" width="1116" height="96" rx="12" fill="#e8eff3" stroke="#ccdae2" />
+<text x="64" y="314" class="kicker">宿主输入</text>
+<text x="64" y="346" class="body">消息 · 工具 · 文件</text>
+<text x="440" y="314" class="kicker">调用入口</text>
+<text x="440" y="346" class="body">Python 核心 / SDK</text>
+<text x="780" y="314" class="kicker">可选集成</text>
+<text x="780" y="346" class="body">MCP · LangGraph · 远程宿主</text>
+<path d="M218 376V401" fill="none" stroke="#386b83" stroke-width="2" marker-end="url(#arrow)" />
+<text x="42" y="431" class="num">02</text>
+<text x="82" y="431" class="section">采集、解释与历史保留</text>
+<text x="82" y="458" class="small">来源证据与已接纳的解释分别保存；任何摘要都不能提升来源权威。</text>
+<rect x="42" y="477" width="346" height="210" rx="12" fill="#ffffff" stroke="#ccd9df" />
+<text x="64" y="507" class="kicker">L0  /  来源证据</text>
+<text x="64" y="541" class="cardtitle">原始来源的持久化采集</text>
+<text x="64" y="576" class="body">原文内容 + 来源身份</text>
+<text x="64" y="604" class="body">来源修订 + 去重</text>
+<text x="64" y="632" class="body">可选 SDK 发件箱</text>
+<path d="M64 644H366" stroke="#dce4e8" />
+<text x="64" y="669" class="small">持久接收、重放与重新处理</text>
+<rect x="427" y="477" width="346" height="210" rx="12" fill="#ffffff" stroke="#ccd9df" />
+<text x="449" y="507" class="kicker">解释与接纳边界</text>
+<text x="449" y="541" class="cardtitle">抽取与事实接纳</text>
+<text x="449" y="576" class="body">默认：显式元数据</text>
+<text x="449" y="604" class="body">可选：抽取 + 类型化核验</text>
+<text x="449" y="632" class="body">已接纳 / 待决 / 有争议¹</text>
+<path d="M449 644H751" stroke="#dce4e8" />
+<text x="449" y="669" class="small">来源权威与字段证据核验</text>
+<rect x="812" y="477" width="346" height="210" rx="12" fill="#ffffff" stroke="#ccd9df" />
+<text x="834" y="507" class="kicker">L1  /  原子记忆</text>
+<text x="834" y="541" class="cardtitle">版本化事实</text>
+<text x="834" y="576" class="body">来源血缘 + 适用限定</text>
+<text x="834" y="604" class="body">事实修正 + 条件</text>
+<text x="834" y="632" class="body">valid_at × known_at</text>
+<path d="M834 644H1136" stroke="#dce4e8" />
+<text x="834" y="669" class="small">事实状态不等于处理任务完成</text>
+<path d="M388 575H417" fill="none" stroke="#386b83" stroke-width="2" marker-end="url(#arrow)" />
+<path d="M773 575H802" fill="none" stroke="#386b83" stroke-width="2" marker-end="url(#arrow)" />
+<path d="M985 687V716H22V879H33" fill="none" stroke="#386b83" stroke-width="2" marker-end="url(#arrow)" />
+<text x="430" y="707" class="small">L1 事实状态 + L0 来源证据</text>
+<text x="42" y="742" class="num">03</text>
+<text x="82" y="742" class="section">检索、治理与交付</text>
+<text x="82" y="769" class="small">L1 可直接读取；检索始终受宿主作用域、查询时间与当前访问权限约束。</text>
+<rect x="42" y="788" width="346" height="184" rx="12" fill="#ffffff" stroke="#ccd9df" />
+<text x="64" y="818" class="kicker">候选检索</text>
+<text x="64" y="852" class="cardtitle">查找相关证据</text>
+<text x="64" y="887" class="body">时态状态 + 来源读取</text>
+<text x="64" y="915" class="body">可选词法 / 混合检索</text>
+<path d="M64 929H366" stroke="#dce4e8" />
+<text x="64" y="954" class="small">默认 RRF 融合 · 可选重排</text>
+<rect x="427" y="788" width="346" height="184" rx="12" fill="#ffffff" stroke="#ccd9df" />
+<text x="449" y="818" class="kicker">受控交付</text>
+<text x="449" y="852" class="cardtitle">过滤、打包与最终复核</text>
+<text x="449" y="887" class="body">作用域 / 时间 / 证据检查</text>
+<text x="449" y="915" class="body">多样性 + 条目 / Token 预算</text>
+<path d="M449 929H751" stroke="#dce4e8" />
+<text x="449" y="954" class="small">交付前复核权限与擦除屏障</text>
+<rect x="812" y="788" width="346" height="184" rx="12" fill="#16394a" stroke="#16394a" />
+<text x="834" y="818" class="kicker" style="fill:#afcedb">交付宿主的输出</text>
+<text x="834" y="852" class="cardtitle" style="fill:#ffffff">MemoryBundle</text>
+<text x="834" y="887" class="body" style="fill:#e4eff3">事实 + 相关记忆</text>
+<text x="834" y="915" class="body" style="fill:#e4eff3">引用 + 有界上下文</text>
+<path d="M834 929H1136" stroke="#466372" />
+<text x="834" y="954" class="small" style="fill:#c8dce6">由宿主组装模型请求</text>
+<path d="M388 879H417" fill="none" stroke="#386b83" stroke-width="2" marker-end="url(#arrow)" />
+<path d="M773 879H802" fill="none" stroke="#386b83" stroke-width="2" marker-end="url(#arrow)" />
+<text x="42" y="1033" class="num">04</text>
+<text x="82" y="1033" class="section">已注册的知识派生视图</text>
+<text x="82" y="1060" class="small">显式启用，限定支持模板与注册覆盖范围；并非必经的 L1 → L2 → L3 流水线。</text>
+<rect x="42" y="1078" width="1116" height="37" rx="7" fill="#e9eef7" stroke="#d3dceb" />
+<text x="63" y="1103" class="small">输入：已接纳的 L1 / 支持的固定父版本 · 完整血缘 · 受控读取</text>
+<path d="M215 1115V1137" fill="none" stroke="#386b83" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)" />
+<path d="M600 1115V1137" fill="none" stroke="#386b83" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)" />
+<path d="M985 1115V1137" fill="none" stroke="#386b83" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)" />
+<rect x="42" y="1147" width="346" height="214" rx="12" fill="#ffffff" stroke="#ccd9df" />
+<text x="64" y="1177" class="kicker">Observation → L2</text>
+<text x="64" y="1211" class="cardtitle">语言视图</text>
+<text x="64" y="1246" class="body">同作用域的语言侧面</text>
+<text x="64" y="1274" class="body">条件 + 有界历史读取</text>
+<text x="64" y="1302" class="body">支持的父视图 → L2 页面</text>
+<path d="M64 1318H366" stroke="#dce4e8" />
+<text x="64" y="1343" class="small">版本化页面与稳定区块</text>
+<rect x="427" y="1147" width="346" height="214" rx="12" fill="#ffffff" stroke="#ccd9df" />
+<text x="449" y="1177" class="kicker">QuestionView → L2</text>
+<text x="449" y="1211" class="cardtitle">项目问题视图</text>
+<text x="449" y="1246" class="body">已注册的问题与关系</text>
+<text x="449" y="1274" class="body">负责人 / 承诺 / 风险</text>
+<text x="449" y="1302" class="body">场景持续维护 + 历史²</text>
+<path d="M449 1318H751" stroke="#dce4e8" />
+<text x="449" y="1343" class="small">全量 / 增量回答与证明复用</text>
+<rect x="812" y="1147" width="346" height="214" rx="12" fill="#ffffff" stroke="#ccd9df" />
+<text x="834" y="1177" class="kicker">L3  /  Persona 画像</text>
+<text x="834" y="1211" class="cardtitle">经过复核的长期画像</text>
+<text x="834" y="1246" class="body">明确声明 ≠ 推断假设</text>
+<text x="834" y="1274" class="body">独立证据 + 观察跨度</text>
+<text x="834" y="1302" class="body">反例复核 + 撤回</text>
+<path d="M834 1318H1136" stroke="#dce4e8" />
+<text x="834" y="1343" class="small">不可变修订与宿主政策</text>
+<text x="42" y="1420" class="num">05</text>
+<text x="82" y="1420" class="section">可选智能能力与宿主驱动执行</text>
+<text x="82" y="1447" class="small">显式配置适配器与预算；不提供无限自主执行，不新增事实权威，也不默认启用。</text>
+<rect x="42" y="1463" width="539" height="143" rx="12" fill="#ffffff" stroke="#ccd9df" />
+<text x="64" y="1493" class="kicker">有界只读扩展</text>
+<text x="64" y="1527" class="cardtitle">EvidenceResearch / Reflect</text>
+<text x="64" y="1562" class="body">冻结范围 + 有限轮次 + 引用</text>
+<text x="64" y="1590" class="body">复用检索守卫；不发布记忆</text>
+<rect x="619" y="1463" width="539" height="143" rx="12" fill="#ffffff" stroke="#ccd9df" />
+<text x="641" y="1493" class="kicker">可选模型适配器</text>
+<text x="641" y="1527" class="cardtitle">受治理的模型提供方</text>
+<text x="641" y="1562" class="body">抽取 / 核验 / 已注册刷新适配器</text>
+<text x="641" y="1590" class="body">预算预留、精确缓存与费用追踪</text>
+<rect x="42" y="1625" width="346" height="160" rx="12" fill="#ffffff" stroke="#ccd9df" />
+<text x="64" y="1655" class="kicker">上下文 / 显式启用</text>
+<text x="64" y="1689" class="cardtitle">原文恢复</text>
+<text x="64" y="1724" class="body">绑定来源版本的原文片段</text>
+<text x="64" y="1752" class="body">受控恢复，不另建原文副本库</text>
+<rect x="427" y="1625" width="346" height="160" rx="12" fill="#ffffff" stroke="#ccd9df" />
+<text x="449" y="1655" class="kicker">本体 / 扩展</text>
+<text x="449" y="1689" class="cardtitle">类型化关系与插件</text>
+<text x="449" y="1724" class="body">模式定义 + 有界投影</text>
+<text x="449" y="1752" class="body">可信的进程内扩展</text>
+<rect x="812" y="1625" width="346" height="160" rx="12" fill="#ffffff" stroke="#ccd9df" />
+<text x="834" y="1655" class="kicker">Evolution / 门控演进</text>
+<text x="834" y="1689" class="cardtitle">经评估的 Procedure</text>
+<text x="834" y="1724" class="body">离线评估 → 影子 → 灰度</text>
+<text x="834" y="1752" class="body">显式批准 + 回滚</text>
+<text x="42" y="1840" class="num">06</text>
+<text x="82" y="1840" class="section">共享运行时与持久化</text>
+<text x="82" y="1867" class="small">统一协调生命周期；不为每个派生视图另建调度器或数据库。</text>
+<rect x="42" y="1879" width="1116" height="73" rx="12" fill="#e7eef1" stroke="#cbd9e0" />
+<text x="64" y="1909" class="body">RefreshHost · 持久任务 · 租约 · 重试 / 重放 · 发布 · 索引覆盖 / 修复</text>
+<text x="64" y="1935" class="small">SQLite 核心  |  可选 PostgreSQL / 向量支持  |  受控备份与删除日志重放</text>
+<rect x="42" y="1971" width="1116" height="55" rx="12" fill="#16394a" stroke="#16394a" />
+<text x="64" y="2005" class="body" style="fill:#ffffff">贯穿所有支持路径    作用域与权威 · 来源血缘 · 双时态 · 擦除</text>
+<text x="42" y="2050" class="tiny">¹ 类型化接纳结果。  ² 仅限已注册的历史覆盖范围。  Alpha：生产与真实领域验收仍待完成。</text>
+</svg>

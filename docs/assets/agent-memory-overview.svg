@@ -1,127 +1,153 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="660" viewBox="0 0 1280 660" role="img" aria-labelledby="title desc">
-  <title id="title">Agent Memory: from source evidence to usable memory</title>
-  <desc id="desc">Trusted host bindings connect L0 sources, typed admission and independent project verification to versioned L1 facts. L1 supports current and historical fact reads into a bounded MemoryBundle. Optional Observations and QuestionViews feed registered L2 scenarios and independently reviewed L3 Persona hypotheses. Registered admitted_l1 project questions and scenarios can rebuild bitemporal history from their opt-in registration floor; Persona preserves immutable revisions. Evidence, current permissions, time and erasure govern every path. Publication-manifest continuous history and cross-scope composition remain outside this capability.</desc>
-  <defs>
-    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
-      <path d="M24 0H0V24" fill="none" stroke="#d9d2c5" stroke-width=".7"/>
-    </pattern>
-    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M1 1L7 4L1 7" fill="none" stroke="#1f5b45" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-    </marker>
-    <marker id="planned-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
-      <path d="M1 1L7 4L1 7" fill="none" stroke="#868a7d" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-    </marker>
-    <style>
-      text{font-family:Arial,Helvetica,sans-serif}
-      .eyebrow{font-size:12px;font-weight:700;letter-spacing:1.8px;fill:#5d6258}
-      .heading{font-size:40px;font-weight:700;letter-spacing:-1.2px;fill:#171f19}
-      .subtitle{font-size:18px;fill:#596255}
-      .step{font-size:12px;font-weight:700;letter-spacing:1.3px;fill:#1f5b45}
-      .card-title{font-size:22px;font-weight:700;letter-spacing:-.5px;fill:#171f19}
-      .body{font-size:16px;fill:#596255}
-      .small{font-size:14px;fill:#596255}
-      .mono{font-family:'Courier New',monospace;font-size:14px;fill:#1f5b45}
-      .guard{font-size:16px;font-weight:700;fill:#f6f2e9}
-      .guard-note{font-size:12px;fill:#bfd0c1}
-      .connection{fill:none;stroke:#1f5b45;stroke-width:2;marker-end:url(#arrow)}
-    </style>
-  </defs>
-
-  <!-- Opaque paper keeps the same contrast in GitHub light and dark themes. -->
-  <rect width="1280" height="660" rx="18" fill="#f5f0e7"/>
-  <rect x="1" y="1" width="1278" height="658" rx="17" fill="url(#grid)" opacity=".3"/>
-  <rect x="1" y="1" width="1278" height="658" rx="17" fill="none" stroke="#d6d1c5"/>
-
-  <path d="M56 52H82" stroke="#e65d3f" stroke-width="4" stroke-linecap="round"/>
-  <text x="94" y="56" class="eyebrow">AGENT MEMORY / SYSTEM OVERVIEW</text>
-  <text x="56" y="115" class="heading">From evidence to usable memory.</text>
-  <text x="56" y="149" class="subtitle">Traceable facts. Bounded context. Explicit control.</text>
-
-  <!-- The direct L1 read path is independent of optional derived layers. -->
-  <path d="M188 280H218" class="connection"/>
-  <path d="M420 280H450" class="connection"/>
-  <path d="M626 280H656" class="connection"/>
-  <path d="M908 280H938" class="connection"/>
-
-  <g transform="translate(56 198)">
-    <rect width="132" height="172" rx="12" fill="#ebe8df" stroke="#c8c9bd"/>
-    <text x="18" y="30" class="step">HOST</text>
-    <text x="18" y="70" class="card-title">Agent</text>
-    <text x="18" y="111" class="body">Messages</text>
-    <text x="18" y="137" class="body">Tools · files</text>
-  </g>
-
-  <g transform="translate(230 198)">
-    <rect width="190" height="172" rx="12" fill="#fffdf8" stroke="#b9c4b8"/>
-    <text x="20" y="30" class="step">L0 / SOURCE</text>
-    <text x="20" y="70" class="card-title">Evidence</text>
-    <text x="20" y="111" class="body">Original + versions</text>
-    <text x="20" y="137" class="body">Durable intake</text>
-  </g>
-
-  <g transform="translate(462 211)">
-    <rect width="164" height="146" rx="12" fill="#f5e0d6" stroke="#d89b83"/>
-    <text x="20" y="29" class="step" style="fill:#9b452d">ADMISSION</text>
-    <text x="20" y="68" class="card-title" style="font-size:20px">Typed review</text>
-    <text x="20" y="108" class="small">Evidence → decision</text>
-  </g>
-
-  <g transform="translate(668 198)">
-    <rect width="240" height="172" rx="12" fill="#e5ede2" stroke="#1f5b45" stroke-width="1.5"/>
-    <rect x="20" y="23" width="5" height="12" rx="2.5" fill="#1f5b45"/>
-    <text x="35" y="33" class="step">L1 / ATOM</text>
-    <text x="20" y="70" class="card-title">Versioned facts</text>
-    <text x="20" y="111" class="body">Evidence + decisions</text>
-    <text x="20" y="138" class="mono">valid_at · known_at</text>
-  </g>
-
-  <g transform="translate(950 198)">
-    <rect width="274" height="172" rx="12" fill="#1f5b45"/>
-    <text x="22" y="30" class="step" style="fill:#bed5c2">DIRECT FACT READS</text>
-    <text x="22" y="70" class="card-title" style="fill:#fffdf8">MemoryBundle</text>
-    <text x="22" y="111" class="body" style="fill:#e4ede0">Current + historical facts</text>
-    <text x="22" y="137" class="body" style="fill:#e4ede0">Bounded context for the host</text>
-  </g>
-
-  <!-- Observation is a facet projection, not a new product layer. -->
-  <path d="M788 370V397" class="connection"/>
-  <g transform="translate(556 408)">
-    <rect width="352" height="102" rx="12" fill="#fffdf8" stroke="#b9c4b8"/>
-    <text x="20" y="25" class="step">REGISTERED VIEWS / OPTIONAL</text>
-    <text x="20" y="55" class="card-title">Language + project views</text>
-    <text x="20" y="80" class="small">Same scope · explicit history coverage</text>
-  </g>
-
-  <path d="M908 459H938" fill="none" stroke="#868a7d" stroke-width="1.7" marker-end="url(#planned-arrow)"/>
-  <g transform="translate(950 408)">
-    <rect width="274" height="102" rx="12" fill="#eeece3" stroke="#9ba08f"/>
-    <text x="20" y="25" class="step" style="fill:#6d745f">DERIVED KNOWLEDGE</text>
-    <text x="20" y="56" class="body" style="font-weight:700;fill:#485142">Registered L2 scenarios</text>
-    <text x="20" y="81" class="body" style="font-weight:700;fill:#485142">L3 Persona · reviewed</text>
-  </g>
-
-  <g transform="translate(56 429)">
-    <path d="M0 0V55H22" fill="none" stroke="#c5c9bb" stroke-width="1.5"/>
-    <text x="18" y="7" class="eyebrow">FACTS STAY TRACEABLE</text>
-    <text x="18" y="32" class="small">Derived views keep their input dependencies.</text>
-    <text x="34" y="60" class="small">The same evidence and permissions still apply.</text>
-  </g>
-
-  <!-- The controls apply across intake, publication, reads and derived views. -->
-  <g transform="translate(56 540)">
-    <rect width="1168" height="70" rx="12" fill="#223a2e"/>
-    <text x="22" y="39" class="eyebrow" style="fill:#bfd0c1">ACROSS EVERY PATH</text>
-    <path d="M221 17V53M449 17V53M677 17V53M905 17V53" stroke="#496150"/>
-    <text x="247" y="29" class="guard">Evidence</text>
-    <text x="247" y="49" class="guard-note">Source-backed decisions</text>
-    <text x="475" y="29" class="guard">Time</text>
-    <text x="475" y="49" class="guard-note">Validity + knowledge history</text>
-    <text x="703" y="29" class="guard">Scope</text>
-    <text x="703" y="49" class="guard-note">Host-bound permissions</text>
-    <text x="931" y="29" class="guard">Erasure</text>
-    <text x="931" y="49" class="guard-note">Deletion + restore barriers</text>
-  </g>
-  <circle cx="62" cy="634" r="3" fill="#e65d3f"/>
-  <text x="76" y="638" class="eyebrow" style="font-size:11px;letter-spacing:1px">RELIABLE EXECUTION</text>
-  <text x="266" y="638" class="small">Durable tasks · Replay and retry · Staged readiness · Recoverable operations</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="2070" viewBox="0 0 1200 2070" role="img" aria-labelledby="title desc">
+<title id="title">Agent Memory — system architecture and capability boundaries</title>
+<desc id="desc">A layered architecture of trusted host integrations, durable L0 evidence, explicit metadata or opt-in typed extraction and admission, temporal L1 facts, scoped retrieval and bounded MemoryBundle delivery. Registered derived paths include language Observations and L2 pages, project QuestionViews and L2 scenes, and reviewed L3 Persona. Optional research and model extensions do not replace the default local loop. Shared runtime and storage provide durable refresh, recovery, indexing and erasure. Scope, provenance, two clocks and current deletion guards apply across supported paths.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1L8 5L1 9" fill="none" stroke="#386b83" stroke-width="1.7"/></marker>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#183749}.title{font-size:39px;font-weight:700;letter-spacing:-1px}.subtitle{font-size:21px;fill:#536b79}.section{font-size:25px;font-weight:700}.num{font-size:19px;font-weight:700;fill:#527a90}.kicker{font-size:14px;font-weight:700;letter-spacing:1.2px;fill:#496d81}.cardtitle{font-size:25px;font-weight:700;letter-spacing:-.3px}.body{font-size:20px;fill:#425e6d}.small{font-size:17px;fill:#627885}.tiny{font-size:15px;fill:#627885} </style></defs>
+<rect x="0" y="0" width="1200" height="2070" rx="20" fill="#f3f6f8" stroke="#d5e0e5"/>
+<rect x="42" y="38" width="7" height="67" rx="3" fill="#cc7b43" stroke="#cc7b43"/>
+<text x="68" y="58" class="kicker">AGENT MEMORY  /  SYSTEM ARCHITECTURE</text>
+<text x="68" y="103" class="title">Evidence, interpretation, and usable memory.</text>
+<text x="42" y="145" class="subtitle">A local-first modular core, with explicit integration and capability boundaries.</text>
+<path d="M44 178H85" fill="none" stroke="#386b83" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="98" y="184" class="small">Primary data flow</text>
+<path d="M291 178H332" fill="none" stroke="#386b83" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+<text x="345" y="184" class="small">Registered / opt-in path</text>
+<text x="660" y="184" class="small">Core loop: no model key or background service required</text>
+<text x="42" y="234" class="num">01</text>
+<text x="82" y="234" class="section">Trusted host &amp; integration boundary</text>
+<text x="82" y="261" class="small">The application owns identity, permissions, capture policy and model invocation.</text>
+<rect x="42" y="280" width="1116" height="96" rx="12" fill="#e8eff3" stroke="#ccdae2"/>
+<text x="64" y="314" class="kicker">HOST INPUTS</text>
+<text x="64" y="346" class="body">Messages · Tools · Files</text>
+<text x="440" y="314" class="kicker">ENTRY POINTS</text>
+<text x="440" y="346" class="body">Python core / SDK</text>
+<text x="780" y="314" class="kicker">OPTIONAL INTEGRATIONS</text>
+<text x="780" y="346" class="body">MCP · LangGraph · Remote host</text>
+<path d="M218 376V401" fill="none" stroke="#386b83" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="42" y="431" class="num">02</text>
+<text x="82" y="431" class="section">Capture, interpret &amp; preserve history</text>
+<text x="82" y="458" class="small">Source evidence and accepted interpretations remain distinct; summaries never elevate authority.</text>
+<rect x="42" y="477" width="346" height="210" rx="12" fill="#ffffff" stroke="#ccd9df"/>
+<text x="64" y="507" class="kicker">L0  /  EVIDENCE</text>
+<text x="64" y="541" class="cardtitle">Durable source capture</text>
+<text x="64" y="576" class="body">Content + source identity</text>
+<text x="64" y="604" class="body">Revisions + deduplication</text>
+<text x="64" y="632" class="body">Optional SDK outbox</text>
+<path d="M64 644H366" stroke="#dce4e8"/>
+<text x="64" y="669" class="small">Durable receive, replay &amp; reprocess</text>
+<rect x="427" y="477" width="346" height="210" rx="12" fill="#ffffff" stroke="#ccd9df"/>
+<text x="449" y="507" class="kicker">INTERPRETATION BOUNDARY</text>
+<text x="449" y="541" class="cardtitle">Extraction &amp; admission</text>
+<text x="449" y="576" class="body">Default: explicit metadata</text>
+<text x="449" y="604" class="body">Opt-in: extract + typed review</text>
+<text x="449" y="632" class="body">Accepted / pending / contested¹</text>
+<path d="M449 644H751" stroke="#dce4e8"/>
+<text x="449" y="669" class="small">Authority + field evidence checks</text>
+<rect x="812" y="477" width="346" height="210" rx="12" fill="#ffffff" stroke="#ccd9df"/>
+<text x="834" y="507" class="kicker">L1  /  ATOMIC MEMORY</text>
+<text x="834" y="541" class="cardtitle">Versioned facts</text>
+<text x="834" y="576" class="body">Provenance + qualifications</text>
+<text x="834" y="604" class="body">Corrections + conditions</text>
+<text x="834" y="632" class="body">valid_at × known_at</text>
+<path d="M834 644H1136" stroke="#dce4e8"/>
+<text x="834" y="669" class="small">Fact state is not task completion</text>
+<path d="M388 575H417" fill="none" stroke="#386b83" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M773 575H802" fill="none" stroke="#386b83" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M985 687V716H22V879H33" fill="none" stroke="#386b83" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="430" y="707" class="small">L1 state + L0 source evidence</text>
+<text x="42" y="742" class="num">03</text>
+<text x="82" y="742" class="section">Retrieve, govern &amp; deliver</text>
+<text x="82" y="769" class="small">L1 supports direct reads. Retrieval remains bounded by host scope, query time and current access.</text>
+<rect x="42" y="788" width="346" height="184" rx="12" fill="#ffffff" stroke="#ccd9df"/>
+<text x="64" y="818" class="kicker">CANDIDATE RETRIEVAL</text>
+<text x="64" y="852" class="cardtitle">Find relevant evidence</text>
+<text x="64" y="887" class="body">Temporal state + source reads</text>
+<text x="64" y="915" class="body">Optional lexical / hybrid search</text>
+<path d="M64 929H366" stroke="#dce4e8"/>
+<text x="64" y="954" class="small">Default RRF · optional rerank</text>
+<rect x="427" y="788" width="346" height="184" rx="12" fill="#ffffff" stroke="#ccd9df"/>
+<text x="449" y="818" class="kicker">CONTROLLED DELIVERY</text>
+<text x="449" y="852" class="cardtitle">Filter, pack &amp; recheck</text>
+<text x="449" y="887" class="body">Scope / time / evidence checks</text>
+<text x="449" y="915" class="body">Diversity + item / token budgets</text>
+<path d="M449 929H751" stroke="#dce4e8"/>
+<text x="449" y="954" class="small">Final permission &amp; erasure guard</text>
+<rect x="812" y="788" width="346" height="184" rx="12" fill="#16394a" stroke="#16394a"/>
+<text x="834" y="818" class="kicker" style="fill:#afcedb">HOST-READY OUTPUT</text>
+<text x="834" y="852" class="cardtitle" style="fill:#ffffff">MemoryBundle</text>
+<text x="834" y="887" class="body" style="fill:#e4eff3">Facts + relevant memory</text>
+<text x="834" y="915" class="body" style="fill:#e4eff3">Citations + bounded context</text>
+<path d="M834 929H1136" stroke="#466372"/>
+<text x="834" y="954" class="small" style="fill:#c8dce6">Host assembles the model request</text>
+<path d="M388 879H417" fill="none" stroke="#386b83" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M773 879H802" fill="none" stroke="#386b83" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="42" y="1033" class="num">04</text>
+<text x="82" y="1033" class="section">Registered knowledge projections</text>
+<text x="82" y="1060" class="small">Opt-in, supported templates and registered coverage — not a mandatory L1 → L2 → L3 pipeline.</text>
+<rect x="42" y="1078" width="1116" height="37" rx="7" fill="#e9eef7" stroke="#d3dceb"/>
+<text x="63" y="1103" class="small">INPUTS: admitted L1 / supported fixed parent revisions · complete lineage · guarded reads</text>
+<path d="M215 1115V1137" fill="none" stroke="#386b83" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+<path d="M600 1115V1137" fill="none" stroke="#386b83" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+<path d="M985 1115V1137" fill="none" stroke="#386b83" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+<rect x="42" y="1147" width="346" height="214" rx="12" fill="#ffffff" stroke="#ccd9df"/>
+<text x="64" y="1177" class="kicker">OBSERVATION → L2</text>
+<text x="64" y="1211" class="cardtitle">Language views</text>
+<text x="64" y="1246" class="body">Same-scope language facets</text>
+<text x="64" y="1274" class="body">Conditions + bounded history</text>
+<text x="64" y="1302" class="body">Supported parents → L2 pages</text>
+<path d="M64 1318H366" stroke="#dce4e8"/>
+<text x="64" y="1343" class="small">Versioned pages &amp; stable blocks</text>
+<rect x="427" y="1147" width="346" height="214" rx="12" fill="#ffffff" stroke="#ccd9df"/>
+<text x="449" y="1177" class="kicker">QUESTIONVIEWS → L2</text>
+<text x="449" y="1211" class="cardtitle">Project questions</text>
+<text x="449" y="1246" class="body">Registered questions + relations</text>
+<text x="449" y="1274" class="body">Owners / commitments / risks</text>
+<text x="449" y="1302" class="body">Maintained scenes + history²</text>
+<path d="M449 1318H751" stroke="#dce4e8"/>
+<text x="449" y="1343" class="small">Full / delta answers &amp; proof reuse</text>
+<rect x="812" y="1147" width="346" height="214" rx="12" fill="#ffffff" stroke="#ccd9df"/>
+<text x="834" y="1177" class="kicker">L3  /  PERSONA</text>
+<text x="834" y="1211" class="cardtitle">Reviewed Persona</text>
+<text x="834" y="1246" class="body">Declarations ≠ hypotheses</text>
+<text x="834" y="1274" class="body">Independent evidence + spans</text>
+<text x="834" y="1302" class="body">Counterexamples + withdrawal</text>
+<path d="M834 1318H1136" stroke="#dce4e8"/>
+<text x="834" y="1343" class="small">Immutable revisions &amp; host policy</text>
+<text x="42" y="1420" class="num">05</text>
+<text x="82" y="1420" class="section">Optional intelligence &amp; host-driven execution</text>
+<text x="82" y="1447" class="small">Explicit adapters and budgets; no unbounded autonomy, new fact authority or implicit default enablement.</text>
+<rect x="42" y="1463" width="539" height="143" rx="12" fill="#ffffff" stroke="#ccd9df"/>
+<text x="64" y="1493" class="kicker">BOUNDED READ EXTENSION</text>
+<text x="64" y="1527" class="cardtitle">EvidenceResearch / Reflect</text>
+<text x="64" y="1562" class="body">Frozen scope + finite rounds + citations</text>
+<text x="64" y="1590" class="body">Reuses retrieval guards; no memory publication</text>
+<rect x="619" y="1463" width="539" height="143" rx="12" fill="#ffffff" stroke="#ccd9df"/>
+<text x="641" y="1493" class="kicker">OPTIONAL MODEL ADAPTERS</text>
+<text x="641" y="1527" class="cardtitle">Governed providers</text>
+<text x="641" y="1562" class="body">Extraction / review / registered refresh adapters</text>
+<text x="641" y="1590" class="body">Reservations, exact cache &amp; accountable costs</text>
+<rect x="42" y="1625" width="346" height="160" rx="12" fill="#ffffff" stroke="#ccd9df"/>
+<text x="64" y="1655" class="kicker">CONTEXT / OPT-IN</text>
+<text x="64" y="1689" class="cardtitle">Source recovery</text>
+<text x="64" y="1724" class="body">Version-bound source excerpts</text>
+<text x="64" y="1752" class="body">Guarded recovery, not a copy store</text>
+<rect x="427" y="1625" width="346" height="160" rx="12" fill="#ffffff" stroke="#ccd9df"/>
+<text x="449" y="1655" class="kicker">ONTOLOGY / EXTENSIONS</text>
+<text x="449" y="1689" class="cardtitle">Typed relations &amp; plugins</text>
+<text x="449" y="1724" class="body">Schema + bounded projections</text>
+<text x="449" y="1752" class="body">Trusted in-process extensions</text>
+<rect x="812" y="1625" width="346" height="160" rx="12" fill="#ffffff" stroke="#ccd9df"/>
+<text x="834" y="1655" class="kicker">EVOLUTION / GATED</text>
+<text x="834" y="1689" class="cardtitle">Evaluated procedures</text>
+<text x="834" y="1724" class="body">Offline → shadow → canary</text>
+<text x="834" y="1752" class="body">Explicit approval + rollback</text>
+<text x="42" y="1840" class="num">06</text>
+<text x="82" y="1840" class="section">Shared runtime &amp; persistence</text>
+<text x="82" y="1867" class="small">One coordinated lifecycle — not a separate scheduler or database for each projection.</text>
+<rect x="42" y="1879" width="1116" height="73" rx="12" fill="#e7eef1" stroke="#cbd9e0"/>
+<text x="64" y="1909" class="body">RefreshHost · Durable tasks · Leases · Retry / replay · Publication · Index coverage / repair</text>
+<text x="64" y="1935" class="small">SQLite core  |  Optional PostgreSQL / vector support  |  Controlled backup + deletion-log replay</text>
+<rect x="42" y="1971" width="1116" height="55" rx="12" fill="#16394a" stroke="#16394a"/>
+<text x="64" y="2005" class="body" style="fill:#ffffff">ACROSS SUPPORTED PATHS   Scope &amp; authority  ·  Provenance  ·  Two clocks  ·  Erasure</text>
+<text x="42" y="2050" class="tiny">¹ Typed admission outcomes.   ² Registered historical coverage only.   Alpha: production/domain acceptance remains open.</text>
 </svg>

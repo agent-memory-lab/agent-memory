@@ -137,7 +137,7 @@ source event: <event-id>
 ## 从原始证据到可用知识
 
 <p align="center">
-  <img src="docs/assets/agent-memory-overview.svg" alt="可信宿主原文、L0 来源与核验 L1 事实支持记忆包、注册 L2 场景和经独立复核的 L3 画像；依据、时间、当前权限与擦除约束每条路径" width="100%">
+  <img src="docs/assets/agent-memory-overview.zh-CN.svg" alt="Agent Memory 完整系统架构：可信宿主接入、L0 来源采集、类型化接纳、双时态 L1 事实、受控检索与 MemoryBundle 交付；注册派生视图、可选扩展及共享运行时受作用域、来源血缘、时间与擦除约束" width="100%">
 </p>
 
 [v7.2 总体架构与数据流](docs/design/AGENT_MEMORY_DESIGN_V7.2.0.md) 分别组织原始来源、被接纳的解释和基于它们构建的视图：
