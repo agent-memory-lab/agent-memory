@@ -622,3 +622,139 @@ def test_load_cancellation_preserved_during_cleanup(close_mode):
         assert loader.loaded == ()
 
     run(scenario())
+
+
+@pytest.mark.parametrize("phase", ["initialize", "health"])
+@pytest.mark.parametrize("repeat_cancel", [False, True])
+def test_normal_load_failure_cleanup_finishes_before_caller_cancellation(phase, repeat_cancel):
+    async def scenario():
+        closing, release, finished = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+        class FailingRetriever(FakeRetriever):
+            async def initialize(self, ctx):
+                if phase == "initialize":
+                    raise RuntimeError("initialization failed")
+
+            async def health(self):
+                raise RuntimeError("health failed")
+
+            async def close(self):
+                closing.set()
+                await release.wait()
+                finished.set()
+
+        loader = PluginLoader(core_version="0.1.0")
+        plugin = FailingRetriever(manifest("partial"))
+        loader.register(name="partial", kind=PluginKind.RETRIEVER, factory=lambda: plugin)
+        task = asyncio.create_task(loader.load("partial", PluginKind.RETRIEVER, context()))
+        await asyncio.wait_for(closing.wait(), timeout=1)
+        task.cancel("caller cancellation")
+        await asyncio.sleep(0)
+        if repeat_cancel:
+            task.cancel("second cancellation")
+            await asyncio.sleep(0)
+        release.set()
+        with pytest.raises(asyncio.CancelledError, match="caller cancellation"):
+            await asyncio.wait_for(task, timeout=1)
+        assert finished.is_set()
+        assert loader.loaded == ()
+
+    run(scenario())
+
+
+@pytest.mark.parametrize("failure", ["error", "cancel"])
+def test_batch_rollback_finishes_despite_cancellation(failure):
+    async def scenario():
+        entered, closing, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+        log = []
+
+        class SlowClose(FakeRetriever):
+            async def close(self):
+                closing.set()
+                await release.wait()
+                log.append("close:second")
+
+        class FailingRetriever(FakeRetriever):
+            async def initialize(self, ctx):
+                entered.set()
+                if failure == "cancel":
+                    await asyncio.Event().wait()
+                raise RuntimeError("initialization failed")
+
+        loader = PluginLoader(core_version="0.1.0")
+        plugins = (
+            FakeRetriever(manifest("first"), label="first", log=log),
+            SlowClose(manifest("second"), log=log),
+            FailingRetriever(manifest("partial"), label="partial", log=log),
+        )
+        for name, plugin in zip(("first", "second", "partial"), plugins):
+            loader.register(name=name, kind=PluginKind.RETRIEVER,
+                            factory=lambda plugin=plugin: plugin)
+        task = asyncio.create_task(loader.load_many(tuple(
+            PluginLoadRequest(name, PluginKind.RETRIEVER, context())
+            for name in ("first", "second", "partial")
+        )))
+        await asyncio.wait_for(entered.wait(), timeout=1)
+        if failure == "cancel":
+            task.cancel("original cancellation")
+        await asyncio.wait_for(closing.wait(), timeout=1)
+        task.cancel("rollback cancellation")
+        await asyncio.sleep(0)
+        task.cancel("repeated rollback cancellation")
+        await asyncio.sleep(0)
+        release.set()
+        message = "original cancellation" if failure == "cancel" else "rollback cancellation"
+        with pytest.raises(asyncio.CancelledError, match=message):
+            await asyncio.wait_for(task, timeout=1)
+        assert log[-3:] == ["close:partial", "close:second", "close:first"]
+        assert loader.loaded == ()
+
+    run(scenario())
+
+
+@pytest.mark.parametrize("close_mode", ["error", "timeout", "cancel"])
+@pytest.mark.parametrize("batch", [False, True])
+def test_failed_load_cleanup_preserves_error_and_continues_rollback(close_mode, batch):
+    async def scenario():
+        finished = asyncio.Event()
+        log = []
+
+        class UnsuccessfulClose(FakeRetriever):
+            async def close(self):
+                try:
+                    if close_mode == "error":
+                        raise RuntimeError("close failed")
+                    if close_mode == "cancel":
+                        raise asyncio.CancelledError("plugin cancelled its close")
+                    await asyncio.Event().wait()
+                finally:
+                    finished.set()
+
+        loader = PluginLoader(core_version="0.1.0")
+        first = FakeRetriever(manifest("first"), label="first", log=log)
+        sticky = UnsuccessfulClose(
+            manifest("sticky", limits=PluginResourceLimits(timeout_ms=20)),
+            initialize_error=None if batch else RuntimeError("original failure"),
+        )
+        failing = FakeRetriever(manifest("failing"), initialize_error=RuntimeError("original failure"))
+        for name, plugin in (("first", first), ("sticky", sticky), ("failing", failing)):
+            loader.register(name=name, kind=PluginKind.RETRIEVER,
+                            factory=lambda plugin=plugin: plugin)
+        with pytest.raises(PluginError) as caught:
+            if batch:
+                await loader.load_many(tuple(
+                    PluginLoadRequest(name, PluginKind.RETRIEVER, context())
+                    for name in ("first", "sticky", "failing")
+                ))
+            else:
+                await loader.load("sticky", PluginKind.RETRIEVER, context())
+        assert str(caught.value.__cause__) == "original failure"
+        assert finished.is_set()
+        if batch:
+            assert log[-1] == "close:first"
+            assert tuple(item.manifest.name for item in loader.loaded) == ("sticky",)
+            assert caught.value.__notes__ == ["plugin rollback also failed for: sticky"]
+        else:
+            assert loader.loaded == ()
+
+    run(scenario())

@@ -59,6 +59,14 @@ def _token_estimate(text: str) -> int:
     return max(1, (ascii_count + 3) // 4 + non_ascii_count)
 
 
+def _state_visible(source: MemoryScope, query: MemoryScope) -> bool:
+    # Match native repository visibility: ancestors are visible, siblings are not.
+    return (source.tenant_id == query.tenant_id and source.namespace == query.namespace
+            and all(getattr(source, field) is None
+                    or getattr(source, field) == getattr(query, field)
+                    for field in ("user_id", "agent_id", "workspace_id", "session_id")))
+
+
 def pack_memory_bundle(
     scope: MemoryScope,
     candidates: Sequence[FusedCandidate],
@@ -69,8 +77,15 @@ def pack_memory_bundle(
     request_id: str | None = None,
     policy_version: str = "candidate-policy-v1",
     diversity_budget: DiversityBudget | None = None,
+    bound_current_state: bool = False,
 ) -> PackedMemoryBundle:
-    """Pack candidates without truncating individual memory text or provenance."""
+    """Pack candidates without truncating individual memory text or provenance.
+
+    Visible ancestor state is permitted using native repository scope semantics.
+    By default oversized state fails closed. Governed recall may explicitly opt
+    into whole-claim budget selection, preserving provider priority order and
+    reporting omissions rather than cutting assertions into incomplete facts.
+    """
     if not isinstance(scope, MemoryScope):
         raise TypeError("scope must be a MemoryScope")
     if not isinstance(candidates, Sequence) or isinstance(candidates, (str, bytes)):
@@ -82,9 +97,23 @@ def pack_memory_bundle(
     if len(current_state) > 64:
         raise ValueError("current_state cannot exceed 64 claims")
     claims = tuple(current_state)
-    if any(not isinstance(claim, Claim) or claim.scope != scope for claim in claims):
+    if any(not isinstance(claim, Claim) or not _state_visible(claim.scope, scope) for claim in claims):
         raise ValueError("all current-state claims must belong to the bundle scope")
     limits = budget or BundleBudget()
+
+    state_considered = len(claims)
+    if bound_current_state:
+        # Retain whole assertions in provider priority order. Validate every
+        # scope above, including claims that do not fit; never truncate a fact.
+        selected = []
+        used_chars = used_tokens = 0
+        for claim in claims:
+            chars, tokens = len(claim.text), _token_estimate(claim.text)
+            if used_chars + chars <= limits.max_characters and used_tokens + tokens <= limits.max_tokens:
+                selected.append(claim)
+                used_chars += chars
+                used_tokens += tokens
+        claims = tuple(selected)
 
     state_chars = sum(len(claim.text) for claim in claims)
     state_tokens = sum(_token_estimate(claim.text) for claim in claims)
@@ -193,6 +222,8 @@ def pack_memory_bundle(
             "dropped_character_budget": trace.dropped_character_budget,
             "dropped_token_budget": trace.dropped_token_budget,
             "character_count": trace.character_count,
+            "state_considered_count": state_considered,
+            "state_dropped_budget": state_considered - len(claims),
         },
         capability_snapshot=capabilities or MemoryCapabilities(),
         request_id=request_id,

@@ -690,8 +690,19 @@ class MCPMemoryClient(_Operations):
             )
         except TimeoutError as error:
             raise MemoryClientError("capture deadline exceeded", code="capture_timeout") from error
+        except MemoryClientError:
+            raise
+        except Exception as error:
+            # Protocol, transport and response-validation failures must remain
+            # best-effort for try_capture, without changing ordinary SDK calls.
+            # Caller cancellation is a BaseException and still propagates.
+            raise MemoryClientError(
+                "capture transport failed", code="capture_transport_failed"
+            ) from error
 
     async def try_capture(self, event: Mapping[str, Any]) -> dict[str, Any]:
+        """Skip failed remote capture; preserve cancellation of the host task."""
+
         try:
             return await self.capture(event)
         except MemoryClientError as error:

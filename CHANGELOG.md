@@ -7,6 +7,18 @@ the first stable release.
 
 ### Fixed
 
+- Finish bounded cooperative plugin cleanup when cancellation arrives after a
+  normal initialization/health failure or during batch rollback. Preserve caller
+  cancellation and continue rollback past individual plugin close failures.
+- Normalize remote capture protocol, transport, and response-validation failures
+  into a stable SDK error so `try_capture` remains best-effort. Preserve existing
+  tool error codes, timeout behavior, and caller cancellation without changing
+  ordinary SDK operations.
+- Accept visible ancestor-scope current-state claims during governed recall while
+  continuing to reject sibling and foreign scopes. Select whole current-state
+  claims within token and character budgets, report omitted claims, and mark the
+  result degraded instead of failing recall; standalone bundle packing remains
+  strict by default.
 - Close partially initialized plugins when loading is cancelled, including health
   checks and batch loads. Preserve cancellation while allowing bounded cooperative
   cleanup to finish even if the caller cancels again.

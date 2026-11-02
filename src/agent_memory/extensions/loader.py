@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Coroutine
 from dataclasses import dataclass
 from importlib.metadata import EntryPoint, PackageNotFoundError, entry_points, version
 import inspect
@@ -331,19 +331,14 @@ class PluginLoader:
         except asyncio.CancelledError:
             # The partial instance is not registered yet. Finish its bounded
             # cleanup even if the caller cancels again, then preserve cancellation.
-            cleanup = asyncio.create_task(self._close_instance(instance, timeout=timeout))
-            while not cleanup.done():
-                try:
-                    await asyncio.shield(cleanup)
-                except asyncio.CancelledError:
-                    pass
-            try:
-                cleanup.result()
-            except asyncio.CancelledError:
-                pass  # A plugin's own close cancellation must not replace ours.
+            await self._finish_cleanup(self._close_instance(instance, timeout=timeout))
             raise
         except Exception as error:
-            await self._close_instance(instance, timeout=timeout)
+            cancellation = await self._finish_cleanup(
+                self._close_instance(instance, timeout=timeout)
+            )
+            if cancellation is not None:
+                raise cancellation
             raise PluginError(
                 f"plugin {name!r} failed initialization or health checks",
                 code=PluginErrorCode.PLUGIN_LOAD_FAILED,
@@ -369,16 +364,9 @@ class PluginLoader:
                     )
                 )
         except BaseException as error:
-            rollback_failures: list[str] = []
-            for loaded in reversed(loaded_now):
-                try:
-                    await self._close_loaded(loaded)
-                except Exception:
-                    rollback_failures.append(loaded.manifest.name)
-            if rollback_failures:
-                error.add_note(
-                    "plugin rollback also failed for: " + ", ".join(rollback_failures)
-                )
+            cancellation = await self._finish_cleanup(self._rollback(loaded_now, error))
+            if cancellation is not None and not isinstance(error, asyncio.CancelledError):
+                raise cancellation
             raise
         return tuple(loaded_now)
 
@@ -512,6 +500,36 @@ class PluginLoader:
                 field="capabilities",
             )
 
+    @staticmethod
+    async def _finish_cleanup(
+        operation: Coroutine[Any, Any, None],
+    ) -> asyncio.CancelledError | None:
+        # Cleanup has its own per-plugin timeout. Caller cancellation must not
+        # interrupt it, including a second cancellation during shutdown.
+        cleanup = asyncio.create_task(operation)
+        cancellation: asyncio.CancelledError | None = None
+        while not cleanup.done():
+            try:
+                await asyncio.shield(cleanup)
+            except asyncio.CancelledError as error:
+                if cancellation is None:
+                    cancellation = error
+        cleanup.result()
+        return cancellation
+
+    async def _rollback(
+        self, loaded_now: Collection[LoadedPlugin], error: BaseException,
+    ) -> None:
+        failures: list[str] = []
+        for loaded in reversed(tuple(loaded_now)):
+            try:
+                await self._close_loaded(loaded)
+            except (Exception, asyncio.CancelledError):
+                # A plugin cancelling its own close must not skip the others.
+                failures.append(loaded.manifest.name)
+        if failures:
+            error.add_note("plugin rollback also failed for: " + ", ".join(failures))
+
     async def _close_loaded(self, loaded: LoadedPlugin) -> None:
         timeout = loaded.context.resource_limits.timeout_ms / 1_000
         await asyncio.wait_for(loaded.instance.close(), timeout=timeout)
@@ -522,5 +540,5 @@ class PluginLoader:
     async def _close_instance(instance: Any, *, timeout: float) -> None:
         try:
             await asyncio.wait_for(instance.close(), timeout=timeout)
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             return None

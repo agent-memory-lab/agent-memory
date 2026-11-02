@@ -148,6 +148,7 @@ class GovernedRecallPipeline:
             query.scope,
             packing_candidates,
             current_state=current_state if query.include_current_state else (),
+            bound_current_state=True,
             budget=bundle_budget,
             diversity_budget=diversity_budget,
             capabilities=self._capabilities,
@@ -163,6 +164,7 @@ class GovernedRecallPipeline:
             degraded=(
                 parallel.degraded
                 or bool(guarded.rejected)
+                or bool(packed.bundle.retrieval_metadata["state_dropped_budget"])
                 or rank_trace is not None
                 and rank_trace.status == "degraded"
             ),
