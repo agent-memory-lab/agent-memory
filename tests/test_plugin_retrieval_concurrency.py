@@ -5,10 +5,10 @@ from dataclasses import replace
 from datetime import timedelta
 
 import pytest
+from test_plugin_protocol_loader import FakeRetriever, context, manifest
 
 from agent_memory import MemoryQuery, PluginKind, PluginLoader, PluginResourceLimits
 from agent_memory.retrieval.parallel import ParallelRetrieverOrchestrator
-from test_plugin_protocol_loader import FakeRetriever, context, manifest
 
 
 async def load(plugin, *, host_limits=None, deadline=None):
@@ -27,7 +27,9 @@ def request(entry):
 
 @pytest.mark.parametrize("host_cap,plugin_cap", [(1, 3), (3, 1), (2, 3)])
 @pytest.mark.parametrize("separate_orchestrators", [False, True])
-def test_shared_loaded_plugin_honors_effective_capacity(host_cap, plugin_cap, separate_orchestrators):
+def test_shared_loaded_plugin_honors_effective_capacity(
+    host_cap, plugin_cap, separate_orchestrators,
+):
     async def scenario():
         class CountingRetriever(FakeRetriever):
             active = 0
@@ -45,7 +47,9 @@ def test_shared_loaded_plugin_honors_effective_capacity(host_cap, plugin_cap, se
         plugin = CountingRetriever(manifest(
             "counting", limits=PluginResourceLimits(max_concurrency=plugin_cap)
         ))
-        loader, entry = await load(plugin, host_limits=PluginResourceLimits(max_concurrency=host_cap))
+        loader, entry = await load(
+            plugin, host_limits=PluginResourceLimits(max_concurrency=host_cap)
+        )
         shared = ParallelRetrieverOrchestrator()
         try:
             results = await asyncio.gather(*(
@@ -137,7 +141,9 @@ def test_cancelled_waiter_never_dispatches_and_does_not_lose_capacity():
                 await release.wait()
                 return ()
 
-        plugin = WaitingRetriever(manifest("waiting", limits=PluginResourceLimits(max_concurrency=1)))
+        plugin = WaitingRetriever(manifest(
+            "waiting", limits=PluginResourceLimits(max_concurrency=1)
+        ))
         loader, entry = await load(plugin)
         orchestrator = ParallelRetrieverOrchestrator()
         first = asyncio.create_task(orchestrator.retrieve(request(entry), (entry,)))
