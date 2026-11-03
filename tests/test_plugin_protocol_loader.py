@@ -758,3 +758,83 @@ def test_failed_load_cleanup_preserves_error_and_continues_rollback(close_mode, 
             assert loader.loaded == ()
 
     run(scenario())
+
+
+@pytest.mark.parametrize("close_mode", ["error", "timeout", "cancel"])
+def test_normal_close_continues_after_individual_failure_and_can_retry(close_mode):
+    async def scenario():
+        log = []
+
+        class FailsOnce(FakeRetriever):
+            failing = True
+
+            async def close(self):
+                log.append("close:second")
+                if self.failing:
+                    if close_mode == "error":
+                        raise RuntimeError("close failed")
+                    if close_mode == "cancel":
+                        raise asyncio.CancelledError("plugin cancelled itself")
+                    await asyncio.Event().wait()
+
+        loader = PluginLoader(core_version="0.1.2")
+        first = FakeRetriever(manifest("first"), label="first", log=log)
+        second = FailsOnce(manifest("second", limits=PluginResourceLimits(timeout_ms=30)))
+        for name, plugin in (("first", first), ("second", second)):
+            loader.register(name=name, kind=PluginKind.RETRIEVER, factory=lambda p=plugin: p)
+            await loader.load(name, PluginKind.RETRIEVER, context())
+        with pytest.raises(PluginError, match="second"):
+            await loader.close()
+        assert log[-2:] == ["close:second", "close:first"]
+        assert [entry.manifest.name for entry in loader.loaded] == ["second"]
+        second.failing = False
+        await loader.close()
+        assert loader.loaded == ()
+        assert log.count("close:first") == 1
+
+    run(scenario())
+
+
+@pytest.mark.parametrize("repeat_cancel", [False, True])
+@pytest.mark.parametrize("plugin_failure", [False, True])
+def test_normal_close_finishes_cleanup_before_propagating_host_cancellation(
+    repeat_cancel, plugin_failure,
+):
+    async def scenario():
+        entered, release, finished = asyncio.Event(), asyncio.Event(), asyncio.Event()
+        log = []
+
+        class SlowClose(FakeRetriever):
+            async def close(self):
+                entered.set()
+                await release.wait()
+                log.append("close:second")
+                finished.set()
+                if plugin_failure:
+                    raise asyncio.CancelledError("plugin cancelled itself")
+
+        loader = PluginLoader(core_version="0.1.2")
+        first = FakeRetriever(manifest("first"), label="first", log=log)
+        second = SlowClose(manifest("second"))
+        for name, plugin in (("first", first), ("second", second)):
+            loader.register(name=name, kind=PluginKind.RETRIEVER, factory=lambda p=plugin: p)
+            await loader.load(name, PluginKind.RETRIEVER, context())
+        closing = asyncio.create_task(loader.close())
+        await asyncio.wait_for(entered.wait(), 1)
+        closing.cancel("host shutdown cancellation")
+        await asyncio.sleep(0)
+        if repeat_cancel:
+            closing.cancel("repeated host cancellation")
+            await asyncio.sleep(0)
+        release.set()
+        with pytest.raises(asyncio.CancelledError, match="host shutdown cancellation") as caught:
+            await asyncio.wait_for(closing, 1)
+        assert finished.is_set()
+        assert log[-2:] == ["close:second", "close:first"]
+        assert [entry.manifest.name for entry in loader.loaded] == (
+            ["second"] if plugin_failure else []
+        )
+        if plugin_failure:
+            assert "second" in " ".join(caught.value.__notes__)
+
+    run(scenario())

@@ -35,7 +35,8 @@ def test_connection_local_uris_are_rejected_before_initialization(path, tmp_path
     assert list(tmp_path.iterdir()) == []
 
 
-def test_rejected_uri_connection_is_closed(monkeypatch):
+def test_rejected_uri_connection_is_closed(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
     connect = sqlite3.connect
     connections = []
 
@@ -46,15 +47,19 @@ def test_rejected_uri_connection_is_closed(monkeypatch):
 
     monkeypatch.setattr(sqlite3, "connect", tracked_connect)
     repository = SQLiteMemoryRepository("file::memory:?cache=shared")
-    with pytest.raises(ValueError, match="persistent file-backed database"):
-        repository._connect()
-    assert len(connections) == 1
-    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
-        connections[0].execute("SELECT 1")
+    try:
+        with pytest.raises(ValueError, match="persistent file-backed database"):
+            repository._connect()
+        assert len(connections) == 1
+        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+            connections[0].execute("SELECT 1")
+    finally:
+        for connection in connections:
+            connection.close()
 
 
 @pytest.mark.parametrize("path_kind", [
-    "relative", "absolute", "path", "memory_filename", "whitespace", "uri",
+    "relative", "absolute", "path", "memory_filename", "whitespace", "uri", "escaped_uri",
 ])
 def test_persistent_paths_preserve_remember_across_reopen(path_kind, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
@@ -66,6 +71,7 @@ def test_persistent_paths_preserve_remember_across_reopen(path_kind, tmp_path, m
         "memory_filename": "./:memory:",
         "whitespace": " ",
         "uri": database.as_uri() + "?mode=rwc",
+        "escaped_uri": (tmp_path / "memory ?# 中文.db").as_uri() + "?mode=rwc",
     }[path_kind]
 
     async def run():
