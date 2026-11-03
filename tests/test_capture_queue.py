@@ -208,3 +208,90 @@ def test_interrupted_staging_discards_orphan_artifact(tmp_path, monkeypatch):
     assert queue.status(scope, "interrupted").status == "dead"
     with pytest.raises(FileNotFoundError):
         _run(store.get(plan.artifact_id, scope=scope))
+
+
+@pytest.mark.parametrize("scoped", [False, True])
+def test_drain_skips_multiple_expired_exhausted_leases(tmp_path, monkeypatch, scoped):
+    from agent_memory.capture import queue as queue_module
+
+    clock = [1_000_000.0]
+    monkeypatch.setattr(queue_module.time, "time", lambda: clock[0])
+    scope = _scope("a")
+    path = tmp_path / "capture.db"
+    limits = CaptureQueueLimits(max_attempts=1, lease_seconds=1)
+    queue = SQLiteCaptureQueue(path, sanitizer=CaptureSanitizer(), limits=limits)
+    for event_id in ("exhausted-1", "exhausted-2"):
+        _run(queue.enqueue(_event(scope, event_id)))
+        assert _run(queue.claim(scope=scope)) is not None
+    for event_id in ("ready-1", "ready-2"):
+        _run(queue.enqueue(_event(scope, event_id)))
+    clock[0] += 2
+    restarted = SQLiteCaptureQueue(path, sanitizer=CaptureSanitizer(), limits=limits)
+    seen = []
+
+    class Provider:
+        async def ingest_event(self, event):
+            seen.append(event.metadata["lifecycle"]["event_id"])
+            return SimpleNamespace(event_id=event.id, duplicate=False)
+
+    async def drain():
+        receipts = []
+        while (receipt := await restarted.process_one(
+            Provider(), scope=scope if scoped else None,
+        )) is not None:
+            receipts.append(receipt.event_id)
+        return receipts
+
+    assert _run(drain()) == ["ready-1", "ready-2"]
+    assert seen == ["ready-1", "ready-2"]
+    with closing(sqlite3.connect(path)) as connection:
+        rows = connection.execute(
+            "SELECT status, last_error, lease_token, lease_until FROM capture_queue "
+            "WHERE event_id LIKE 'exhausted-%' ORDER BY id"
+        ).fetchall()
+    assert rows == [("dead", "attempts_exhausted", None, None)] * 2
+    assert queue.status(scope, "ready-1").status == "done"
+    assert queue.status(scope, "ready-2").status == "done"
+
+
+def test_exhausted_cleanup_preserves_other_scopes_and_unready_work(tmp_path, monkeypatch):
+    from agent_memory.capture import queue as queue_module
+
+    clock = [1_000_000.0]
+    monkeypatch.setattr(queue_module.time, "time", lambda: clock[0])
+    a, b = _scope("a"), _scope("b")
+    path = tmp_path / "capture.db"
+    initial_limits = CaptureQueueLimits(max_attempts=2, lease_seconds=10, retry_seconds=10)
+    first = SQLiteCaptureQueue(path, sanitizer=CaptureSanitizer(), limits=initial_limits)
+    _run(first.enqueue(_event(a, "live-lease")))
+    initial = _run(first.claim(scope=a))
+    assert initial is not None
+    _run(first.fail(initial))
+    _run(first.enqueue(_event(b, "other-expired")))
+    assert _run(first.claim(scope=b)) is not None
+    clock[0] += 11
+    live = _run(first.claim(scope=a))
+    assert live is not None and live.event.event_id == "live-lease" and live.attempt == 2
+    _run(first.enqueue(_event(a, "future-retry")))
+    retry = _run(first.claim(scope=a))
+    assert retry is not None and retry.event.event_id == "future-retry"
+    _run(first.fail(retry))
+    _run(first.enqueue(_event(a, "ready")))
+    # Lowering the attempt limit must not retire live leases or future retries.
+    second = SQLiteCaptureQueue(
+        path, sanitizer=CaptureSanitizer(),
+        limits=CaptureQueueLimits(max_attempts=1, lease_seconds=10, retry_seconds=10),
+    )
+    lease = _run(second.claim(scope=a))
+    assert lease is not None and lease.event.event_id == "ready"
+    assert second.status(b, "other-expired").status == "leased"
+    assert second.status(a, "live-lease").status == "leased"
+    assert second.status(a, "future-retry").status == "pending"
+    clock[0] += 11
+    assert _run(second.claim(scope=a)) is None
+    assert second.status(a, "live-lease").status == "dead"
+    assert second.status(a, "future-retry").status == "dead"
+    assert second.status(a, "ready").status == "dead"
+    assert second.status(b, "other-expired").status == "leased"
+    assert _run(second.claim(scope=b)) is None
+    assert second.status(b, "other-expired").status == "dead"

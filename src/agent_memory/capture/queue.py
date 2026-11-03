@@ -207,22 +207,27 @@ class SQLiteCaptureQueue:
             now = time.time()
             scope_filter = " AND partition_key=?" if scope is not None else ""
             arguments = (now, now, scope.partition_key()) if scope is not None else (now, now)
-            row = connection.execute(
-                "SELECT * FROM capture_queue WHERE "
+            ready_filter = (
                 "((status='pending' AND available_at<=?) "
                 "OR (status='leased' AND lease_until<=?))"
                 + scope_filter
+            )
+            # Retire exhausted ready rows before selecting work. Returning None
+            # for only the first dead row would prematurely end a worker drain.
+            connection.execute(
+                "UPDATE capture_queue SET status='dead', last_error='attempts_exhausted', "
+                "lease_token=NULL, lease_until=NULL WHERE "
+                + ready_filter
+                + " AND attempts>=?",
+                (*arguments, self._limits.max_attempts),
+            )
+            row = connection.execute(
+                "SELECT * FROM capture_queue WHERE "
+                + ready_filter
                 + " ORDER BY id LIMIT 1",
                 arguments,
             ).fetchone()
             if row is None:
-                return None
-            if row["attempts"] >= self._limits.max_attempts:
-                connection.execute(
-                    "UPDATE capture_queue SET status='dead', last_error='attempts_exhausted', "
-                    "lease_token=NULL, lease_until=NULL WHERE id=?",
-                    (row["id"],),
-                )
                 return None
             token = str(uuid4())
             connection.execute(

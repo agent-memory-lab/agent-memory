@@ -7,6 +7,10 @@ the first stable release.
 
 ### Fixed
 
+- Prevent stale worker leases from overwriting cancellation or a replacement lease.
+- Continue capture queue selection after retiring exhausted items.
+- Reject nonfinite resource evaluation inputs and treat duplicate release evidence
+  conservatively and independently of ordering.
 - Validate forget argument types and require an unambiguous deletion target before
   dispatch. Reject malformed whole-scope flags instead of coercing them to true;
   preserve authorization checks and valid explicit-ID or whole-scope requests.

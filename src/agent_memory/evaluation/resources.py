@@ -42,6 +42,23 @@ def _identifier(value: object, field_name: str) -> str:
     return value
 
 
+def _finite_nonnegative(value: object, field_name: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{field_name} must be finite and non-negative")
+    try:
+        finite = math.isfinite(value)
+    except OverflowError:
+        finite = False
+    if not finite or value < 0:
+        raise ValueError(f"{field_name} must be finite and non-negative")
+
+
+def _tolerance(value: object, field_name: str) -> None:
+    _finite_nonnegative(value, field_name)
+    if value > 10:
+        raise ValueError(f"{field_name} must be between 0 and 10")
+
+
 @dataclass(frozen=True, slots=True)
 class ResourceHardware:
     operating_system: str
@@ -90,8 +107,7 @@ class ResourceProfileConfig:
             ("rss_tolerance_ratio", self.rss_tolerance_ratio),
             ("storage_tolerance_ratio", self.storage_tolerance_ratio),
         ):
-            if not isinstance(value, (int, float)) or not 0 <= float(value) <= 10:
-                raise ValueError(f"{name} must be between 0 and 10")
+            _tolerance(value, name)
             object.__setattr__(self, name, float(value))
 
 
@@ -209,6 +225,21 @@ class ResourcePhaseMetrics:
     queue_growth: int
     storage_growth_bytes: int
 
+    def __post_init__(self) -> None:
+        for name in ("latency_p50_ms", "latency_p95_ms", "latency_max_ms"):
+            _finite_nonnegative(getattr(self, name), name)
+        for name in (
+            "sample_count", "rss_start_bytes", "rss_peak_bytes", "rss_delta_bytes",
+            "token_count", "model_calls", "queue_growth", "storage_growth_bytes",
+        ):
+            value = getattr(self, name)
+            if type(value) is not int:
+                raise ValueError(f"{name} must be an integer")
+            if name not in ("queue_growth", "storage_growth_bytes") and value < 0:
+                raise ValueError(f"{name} must be non-negative")
+        if self.sample_count == 0:
+            raise ValueError("sample_count must be positive")
+
 
 @dataclass(frozen=True, slots=True)
 class ResourceProfileReport:
@@ -217,6 +248,11 @@ class ResourceProfileReport:
     cold_start_latency_ms: float
     cold_start_rss_delta_bytes: int
     phases: tuple[ResourcePhaseMetrics, ...]
+
+    def __post_init__(self) -> None:
+        _finite_nonnegative(self.cold_start_latency_ms, "cold_start_latency_ms")
+        if type(self.cold_start_rss_delta_bytes) is not int or self.cold_start_rss_delta_bytes < 0:
+            raise ValueError("cold_start_rss_delta_bytes must be a non-negative integer")
 
 
 @dataclass(frozen=True, slots=True)
@@ -453,8 +489,6 @@ def compare_resource_reports(
     baseline: ResourceEvaluationReport,
     candidate: ResourceEvaluationReport,
 ) -> ResourceComparisonReport:
-    baseline_profiles = {item.profile: item for item in baseline.profiles}
-    candidate_profiles = {item.profile: item for item in candidate.profiles}
     global_reasons: list[str] = []
     if baseline.python_version != candidate.python_version:
         global_reasons.append("Python version differs")
@@ -473,15 +507,34 @@ def compare_resource_reports(
                 )
             )
             continue
-        before = baseline_profiles.get(profile)
-        after = candidate_profiles.get(profile)
-        if before is None or after is None:
+        before_profiles = [item for item in baseline.profiles if item.profile == profile]
+        after_profiles = [item for item in candidate.profiles if item.profile == profile]
+        if len(before_profiles) > 1 or len(after_profiles) > 1:
+            gates.append(
+                ResourceProfileGate(
+                    profile,
+                    ResourceGateStatus.FAIL,
+                    ("profile has duplicate measurement evidence",),
+                )
+            )
+            continue
+        if not before_profiles or not after_profiles:
             gates.append(
                 ResourceProfileGate(
                     profile,
                     ResourceGateStatus.INCOMPARABLE,
                     ("profile was not measured in both reports",),
                 )
+            )
+            continue
+        before, after = before_profiles[0], after_profiles[0]
+        invalid_reasons = (
+            _invalid_profile_reasons(before, "baseline")
+            + _invalid_profile_reasons(after, "candidate")
+        )
+        if invalid_reasons:
+            gates.append(
+                ResourceProfileGate(profile, ResourceGateStatus.FAIL, tuple(invalid_reasons))
             )
             continue
         if before.config != after.config:
@@ -506,6 +559,27 @@ def compare_resource_reports(
         candidate_plan_id=candidate.plan_id,
         profiles=tuple(gates),
     )
+
+
+def _invalid_profile_reasons(report: ResourceProfileReport, source: str) -> list[str]:
+    # Revalidate at the gate as reports may come from persisted or otherwise
+    # unchecked evidence rather than the measurement runner.
+    try:
+        report.__post_init__()
+        for name in (
+            "latency_tolerance_ratio", "rss_tolerance_ratio", "storage_tolerance_ratio",
+        ):
+            _tolerance(getattr(report.config, name), name)
+        if report.config.profile != report.profile:
+            raise ValueError("profile configuration does not match the measured profile")
+        phases = tuple(item.phase for item in report.phases)
+        if len(phases) != len(ResourcePhase) or set(phases) != set(ResourcePhase):
+            raise ValueError("phases must contain exactly construction, retrieval, and generation")
+        for phase in report.phases:
+            phase.__post_init__()
+    except (AttributeError, TypeError, ValueError) as error:
+        return [f"{source} measurement evidence is invalid: {error}"]
+    return []
 
 
 def _regression_reasons(

@@ -253,3 +253,105 @@ def test_peak_rss_keeps_platform_units(monkeypatch, platform, expected):
     ))
     monkeypatch.setattr(sys, "platform", platform)
     assert ProcessResourceProbe().rss_bytes() == expected
+
+
+def _measured_report():
+    return asyncio.run(run_resource_evaluation(
+        _plan(), {profile: _scenario() for profile in ResourceProfile},
+        clock=StepClock(), probe=StepProbe(),
+    ))
+
+
+INVALID_MEASUREMENTS = (float("nan"), float("inf"), float("-inf"), True, False, "1", -1, 10**400)
+
+
+@pytest.mark.parametrize("value", INVALID_MEASUREMENTS)
+@pytest.mark.parametrize("name", ("latency_p50_ms", "latency_p95_ms", "latency_max_ms"))
+def test_phase_latencies_require_finite_nonnegative_numbers(name, value):
+    phase = _measured_report().profiles[0].phases[0]
+    with pytest.raises(ValueError, match=f"{name} must be finite and non-negative"):
+        replace(phase, **{name: value})
+
+
+@pytest.mark.parametrize("value", INVALID_MEASUREMENTS)
+def test_cold_start_latency_requires_finite_nonnegative_number(value):
+    profile = _measured_report().profiles[0]
+    with pytest.raises(ValueError, match="cold_start_latency_ms must be finite and non-negative"):
+        replace(profile, cold_start_latency_ms=value)
+
+
+@pytest.mark.parametrize("value", INVALID_MEASUREMENTS)
+@pytest.mark.parametrize("name", (
+    "latency_tolerance_ratio", "rss_tolerance_ratio", "storage_tolerance_ratio",
+))
+def test_resource_tolerances_reject_invalid_numeric_evidence(name, value):
+    with pytest.raises(ValueError, match=name):
+        replace(_plan().profiles[0], **{name: value})
+
+
+@pytest.mark.parametrize("value", (float("nan"), float("inf"), float("-inf"), True))
+@pytest.mark.parametrize("source", ("baseline", "candidate"))
+@pytest.mark.parametrize("name", (
+    "cold_start_latency_ms", "latency_p50_ms", "latency_p95_ms", "latency_max_ms",
+    "latency_tolerance_ratio", "rss_peak_bytes", "storage_growth_bytes",
+))
+def test_resource_gate_revalidates_unchecked_evidence(source, name, value):
+    baseline, candidate = _measured_report(), _measured_report()
+    report = baseline if source == "baseline" else candidate
+    profile = report.profiles[0]
+    if name == "cold_start_latency_ms":
+        target = profile
+    elif name == "latency_tolerance_ratio":
+        target = profile.config
+    else:
+        target = profile.phases[0]
+    # Model persisted/unchecked evidence that bypassed constructor validation.
+    object.__setattr__(target, name, value)
+    result = compare_resource_reports(baseline, candidate)
+    assert result.profiles[0].status is ResourceGateStatus.FAIL
+    assert source in result.profiles[0].reasons[0]
+    assert name in result.profiles[0].reasons[0]
+    assert all(gate.status is ResourceGateStatus.PASS for gate in result.profiles[1:])
+
+
+@pytest.mark.parametrize("source", ("baseline", "candidate"))
+@pytest.mark.parametrize("malformed", ("duplicate-profile", "duplicate-phase", "missing-phase"))
+def test_resource_gate_rejects_ambiguous_or_incomplete_measurements(source, malformed):
+    baseline, candidate = _measured_report(), _measured_report()
+    report = baseline if source == "baseline" else candidate
+    profile = report.profiles[0]
+    if malformed == "duplicate-profile":
+        report = replace(report, profiles=(*report.profiles, profile))
+    else:
+        phases = profile.phases[:-1]
+        if malformed == "duplicate-phase":
+            phases = (*phases, phases[0])
+        report = replace(report, profiles=(replace(profile, phases=phases), *report.profiles[1:]))
+    baseline, candidate = (report, candidate) if source == "baseline" else (baseline, report)
+    result = compare_resource_reports(baseline, candidate)
+    assert result.profiles[0].status is ResourceGateStatus.FAIL
+    assert all(gate.status is ResourceGateStatus.PASS for gate in result.profiles[1:])
+
+
+def test_zero_latency_and_negative_resource_growth_remain_valid():
+    report = _measured_report()
+    minimal = report.profiles[0]
+    phase = replace(
+        minimal.phases[0], latency_p50_ms=0, latency_p95_ms=0.0, latency_max_ms=0,
+        queue_growth=-1, storage_growth_bytes=-10,
+    )
+    valid = replace(report, profiles=(
+        replace(minimal, cold_start_latency_ms=0, phases=(phase, *minimal.phases[1:])),
+        *report.profiles[1:],
+    ))
+    assert all(
+        gate.status is ResourceGateStatus.PASS
+        for gate in compare_resource_reports(valid, valid).profiles
+    )
+    regressed = replace(valid, profiles=(
+        replace(valid.profiles[0], phases=(
+            replace(phase, storage_growth_bytes=-5), *minimal.phases[1:],
+        )),
+        *valid.profiles[1:],
+    ))
+    assert compare_resource_reports(valid, regressed).profiles[0].status is ResourceGateStatus.FAIL

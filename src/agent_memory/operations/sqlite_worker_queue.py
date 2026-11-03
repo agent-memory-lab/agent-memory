@@ -319,46 +319,52 @@ class SQLiteWorkerQueue:
             ).fetchone()
             if row is None:
                 raise WorkerQueueError("worker lease is no longer active", code="stale_lease")
+            # Another queue instance can cancel or replace this lease after the
+            # read. Every write must compare the current status and token too.
+            lease_identity = (lease.task.id, WorkerTaskStatus.LEASED, lease.token)
             if action == "checkpoint":
                 if not isinstance(value, Mapping):
                     raise TypeError("checkpoint must be a mapping")
                 encoded = json.dumps(to_jsonable(dict(value)), ensure_ascii=False, separators=(",", ":"))
                 if len(encoded.encode("utf-8")) > 64_000:
                     raise ValueError("checkpoint exceeds 64000 bytes")
-                connection.execute(
-                    "UPDATE agent_memory_worker_tasks SET checkpoint_json=?, updated_at=? WHERE id=?",
-                    (encoded, _iso(now), lease.task.id),
+                cursor = connection.execute(
+                    "UPDATE agent_memory_worker_tasks SET checkpoint_json=?, updated_at=? "
+                    "WHERE id=? AND status=? AND lease_token=?",
+                    (encoded, _iso(now), *lease_identity),
                 )
-                return
-            if action == "complete":
-                connection.execute(
+            elif action == "complete":
+                cursor = connection.execute(
                     """
                     UPDATE agent_memory_worker_tasks SET status=?, leased_by=NULL,
                     lease_token=NULL, lease_expires_at=NULL, last_error_code=NULL,
-                    updated_at=? WHERE id=?
+                    updated_at=? WHERE id=? AND status=? AND lease_token=?
                     """,
-                    (WorkerTaskStatus.COMPLETED, _iso(now), lease.task.id),
+                    (WorkerTaskStatus.COMPLETED, _iso(now), *lease_identity),
                 )
-                return
-            if action != "fail" or error is None:
+            elif action == "fail" and error is not None:
+                terminal = row["attempts"] >= row["max_attempts"]
+                delay = min(3_600, self._limits.retry_base_seconds * (2 ** min(row["attempts"], 10)))
+                retry_at = datetime.fromtimestamp(now.timestamp() + delay, timezone.utc)
+                cursor = connection.execute(
+                    """
+                    UPDATE agent_memory_worker_tasks SET status=?, next_attempt_at=?,
+                    leased_by=NULL, lease_token=NULL, lease_expires_at=NULL,
+                    last_error_code=?, updated_at=?
+                    WHERE id=? AND status=? AND lease_token=?
+                    """,
+                    (
+                        WorkerTaskStatus.DEAD if terminal else WorkerTaskStatus.PENDING,
+                        _iso(retry_at),
+                        type(error).__name__[:128],
+                        _iso(now),
+                        *lease_identity,
+                    ),
+                )
+            else:
                 raise ValueError("unsupported worker lease action")
-            terminal = row["attempts"] >= row["max_attempts"]
-            delay = min(3_600, self._limits.retry_base_seconds * (2 ** min(row["attempts"], 10)))
-            retry_at = datetime.fromtimestamp(now.timestamp() + delay, timezone.utc)
-            connection.execute(
-                """
-                UPDATE agent_memory_worker_tasks SET status=?, next_attempt_at=?,
-                leased_by=NULL, lease_token=NULL, lease_expires_at=NULL,
-                last_error_code=?, updated_at=? WHERE id=?
-                """,
-                (
-                    WorkerTaskStatus.DEAD if terminal else WorkerTaskStatus.PENDING,
-                    _iso(retry_at),
-                    type(error).__name__[:128],
-                    _iso(now),
-                    lease.task.id,
-                ),
-            )
+            if cursor.rowcount != 1:
+                raise WorkerQueueError("worker lease is no longer active", code="stale_lease")
 
     async def cancel(self, task_id: str, scope: MemoryScope) -> bool:
         async with self._write_lock:

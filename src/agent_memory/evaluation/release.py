@@ -210,32 +210,37 @@ def evaluate_release_acceptance(
     checked = tuple(outcomes)
     if any(not isinstance(item, ReleaseCheckOutcome) for item in checked):
         raise TypeError("outcomes contains an invalid value")
-    by_kind: dict[ReleaseCheckKind, ReleaseCheckOutcome] = {}
-    duplicate_kinds: set[ReleaseCheckKind] = set()
+    # Keep all evidence, including conflicts with the same ID. A complete
+    # tiebreaker makes diagnostics and serialized reports independent of arrival
+    # order, rather than allowing the first result to speak for its entire kind.
+    checked = tuple(sorted(
+        checked,
+        key=lambda item: (
+            item.kind.value, item.check_id, json.dumps(to_jsonable(item), sort_keys=True),
+        ),
+    ))
+    by_kind: dict[ReleaseCheckKind, list[ReleaseCheckOutcome]] = {}
     for outcome in checked:
-        if outcome.kind in by_kind:
-            duplicate_kinds.add(outcome.kind)
-        else:
-            by_kind[outcome.kind] = outcome
+        by_kind.setdefault(outcome.kind, []).append(outcome)
     reasons: list[str] = []
     for kind in ReleaseCheckKind:
-        outcome = by_kind.get(kind)
-        if outcome is None:
+        evidence = by_kind.get(kind, [])
+        if not evidence:
             reasons.append(f"{kind.value} check is unmeasured")
             continue
-        if kind in duplicate_kinds:
+        if len(evidence) > 1:
             reasons.append(f"{kind.value} check has duplicate evidence")
-        if outcome.status is not ReleaseCheckStatus.PASS:
-            reasons.append(f"{kind.value} check is {outcome.status.value}")
-        if outcome.failures:
-            reasons.append(f"{kind.value} check reports {outcome.failures} failures")
-        if outcome.skipped:
-            reasons.append(f"{kind.value} check reports {outcome.skipped} skipped")
-        if outcome.findings:
-            reasons.append(f"{kind.value} check reports {outcome.findings} findings")
+        for outcome in evidence:
+            if outcome.status is not ReleaseCheckStatus.PASS:
+                reasons.append(f"{kind.value} check is {outcome.status.value}")
+            if outcome.failures:
+                reasons.append(f"{kind.value} check reports {outcome.failures} failures")
+            if outcome.skipped:
+                reasons.append(f"{kind.value} check reports {outcome.skipped} skipped")
+            if outcome.findings:
+                reasons.append(f"{kind.value} check reports {outcome.findings} findings")
 
-    build = by_kind.get(ReleaseCheckKind.BUILD_INSTALL)
-    if build is not None:
+    for build in by_kind.get(ReleaseCheckKind.BUILD_INSTALL, []):
         missing_packages = sorted(set(plan.required_packages) - set(build.subjects))
         if missing_packages:
             reasons.append(
@@ -247,11 +252,13 @@ def evaluate_release_acceptance(
         missing_or_failed = tuple(
             kind
             for kind in claim.required_checks
-            if kind not in by_kind or not _outcome_passes(by_kind[kind])
+            if len(by_kind.get(kind, [])) != 1 or not _outcome_passes(by_kind[kind][0])
         )
-        evidence_ids = tuple(
-            by_kind[kind].check_id for kind in claim.required_checks if kind in by_kind
-        )
+        evidence_ids = tuple(dict.fromkeys(
+            outcome.check_id
+            for kind in claim.required_checks
+            for outcome in by_kind.get(kind, [])
+        ))
         claim_results.append(
             ReleaseClaimResult(
                 claim_id=claim.claim_id,
@@ -274,7 +281,7 @@ def evaluate_release_acceptance(
             if unique_reasons
             else ReleaseAcceptanceStatus.READY
         ),
-        checks=tuple(sorted(checked, key=lambda item: item.kind.value)),
+        checks=checked,
         claims=tuple(claim_results),
         reasons=unique_reasons,
     )

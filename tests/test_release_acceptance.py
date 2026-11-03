@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from datetime import datetime, timezone
+from itertools import permutations
 from pathlib import Path
 import zipfile
+
+import pytest
 
 from agent_memory import (
     ReleaseAcceptancePlan,
@@ -215,3 +219,83 @@ def test_reports_are_machine_and_human_readable():
     assert "# Agent Memory Release Acceptance" in markdown
     assert "READY" in markdown
     assert "agent-memory-postgres" in markdown
+
+
+@pytest.mark.parametrize("same_check_id", (False, True))
+def test_conflicting_release_evidence_is_conservative_and_order_independent(same_check_id):
+    passing = next(item for item in _passing_outcomes() if item.kind is ReleaseCheckKind.SQLITE)
+    conflicting = (
+        passing,
+        replace(
+            passing, check_id=passing.check_id if same_check_id else "sqlite-failure",
+            status=ReleaseCheckStatus.FAIL, failures=2, summary="failed validation",
+        ),
+        replace(
+            passing, check_id=passing.check_id if same_check_id else "sqlite-skipped",
+            status=ReleaseCheckStatus.SKIPPED, skipped=1, findings=3, summary="incomplete",
+        ),
+    )
+    others = tuple(item for item in _passing_outcomes() if item.kind is not passing.kind)
+    reports = [
+        evaluate_release_acceptance(_plan(), (*ordered, *reversed(others)))
+        for ordered in permutations(conflicting)
+    ]
+    first = reports[0]
+    assert all(report == first for report in reports)
+    assert len({report.to_json() for report in reports}) == 1
+    assert len({report.to_markdown() for report in reports}) == 1
+    assert first.status is ReleaseAcceptanceStatus.BLOCKED
+    assert {
+        "sqlite check has duplicate evidence", "sqlite check is fail",
+        "sqlite check reports 2 failures", "sqlite check is skipped",
+        "sqlite check reports 1 skipped", "sqlite check reports 3 findings",
+        "release claim sqlite-ready lacks passing evidence",
+    }.issubset(first.reasons)
+    sqlite_claim = next(item for item in first.claims if item.claim_id == "sqlite-ready")
+    assert not sqlite_claim.supported
+    assert sqlite_claim.missing_or_failed_checks == (ReleaseCheckKind.SQLITE,)
+    assert sqlite_claim.evidence_check_ids == tuple(sorted({item.check_id for item in conflicting}))
+    assert next(item for item in first.claims if item.claim_id == "plugin-api-ready").supported
+
+
+def test_duplicate_passing_evidence_cannot_support_a_release_claim():
+    outcomes = _passing_outcomes()
+    sqlite = next(item for item in outcomes if item.kind is ReleaseCheckKind.SQLITE)
+    report = evaluate_release_acceptance(_plan(), (*outcomes, sqlite))
+    assert report.status is ReleaseAcceptanceStatus.BLOCKED
+    claim = next(item for item in report.claims if item.claim_id == "sqlite-ready")
+    assert not claim.supported
+    assert claim.evidence_check_ids == (sqlite.check_id,)
+    assert claim.missing_or_failed_checks == (ReleaseCheckKind.SQLITE,)
+
+
+def test_duplicate_build_evidence_preserves_missing_package_diagnostics_in_any_order():
+    plan = replace(_plan(), claims=(ReleaseClaim(
+        "packages-ready", "All packages were built and installed",
+        (ReleaseCheckKind.BUILD_INSTALL,),
+    ),))
+    build = next(
+        item for item in _passing_outcomes() if item.kind is ReleaseCheckKind.BUILD_INSTALL
+    )
+    incomplete = replace(build, check_id="incomplete-build", subjects=("agent-memory",))
+    others = tuple(item for item in _passing_outcomes() if item.kind is not build.kind)
+    reports = [
+        evaluate_release_acceptance(plan, (*ordered, *others))
+        for ordered in permutations((build, incomplete))
+    ]
+    assert reports[0] == reports[1]
+    assert not reports[0].claims[0].supported
+    assert reports[0].claims[0].missing_or_failed_checks == (ReleaseCheckKind.BUILD_INSTALL,)
+    assert any(
+        "build/install evidence is missing packages:" in reason for reason in reports[0].reasons
+    )
+
+
+def test_valid_release_evidence_remains_ready_in_any_order():
+    outcomes = _passing_outcomes()
+    expected = evaluate_release_acceptance(_plan(), outcomes)
+    for reordered in (tuple(reversed(outcomes)), (*outcomes[3:], *outcomes[:3])):
+        actual = evaluate_release_acceptance(_plan(), reordered)
+        assert actual == expected
+        assert actual.status is ReleaseAcceptanceStatus.READY
+        assert all(claim.supported for claim in actual.claims)
