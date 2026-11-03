@@ -142,10 +142,21 @@ class ParallelRetrieverOrchestrator:
         # Keep every caller constraint and correlation field when tightening only
         # the per-plugin result budget, including future MemoryQuery additions.
         bounded_query = replace(query, limit=min(query.limit, limits.max_candidates))
-        values = await asyncio.wait_for(
-            loaded.instance.retrieve(bounded_query, loaded.context),
-            timeout=limits.timeout_ms / 1_000,
-        )
+        timeout = limits.timeout_ms / 1_000
+        if loaded.context.deadline is not None:
+            remaining = (loaded.context.deadline - loaded.context.clock.now()).total_seconds()
+            timeout = min(timeout, remaining)
+        if timeout <= 0:
+            raise TimeoutError("retriever context deadline exceeded")
+        # Queueing spends the same request budget as execution. Cancellation,
+        # timeout and plugin errors all release capacity via the context manager.
+        async with asyncio.timeout(timeout):
+            async with loaded._retrieval_slots:
+                if loaded.context.expired:
+                    raise TimeoutError("retriever context deadline exceeded")
+                if loaded.context.cancelled:
+                    raise asyncio.CancelledError("retriever context cancelled")
+                values = await loaded.instance.retrieve(bounded_query, loaded.context)
         if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
             raise TypeError("retriever returned a non-sequence")
         if len(values) > bounded_query.limit:

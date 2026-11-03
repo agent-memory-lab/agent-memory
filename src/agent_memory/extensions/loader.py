@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Collection, Coroutine
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.metadata import EntryPoint, PackageNotFoundError, entry_points, version
 import inspect
 import re
@@ -82,6 +82,15 @@ class LoadedPlugin:
     instance: Any
     context: PluginContext
     health: PluginHealth
+    _retrieval_slots: asyncio.BoundedSemaphore = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        # The loaded handle owns capacity, so all pipelines using it share the
+        # same limit rather than creating independent per-request semaphores.
+        object.__setattr__(
+            self, "_retrieval_slots",
+            asyncio.BoundedSemaphore(self.context.resource_limits.max_concurrency),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -389,11 +398,21 @@ class PluginLoader:
 
     async def close(self) -> None:
         failures: list[str] = []
-        for loaded in reversed(tuple(self._loaded)):
-            try:
-                await self._close_loaded(loaded)
-            except Exception:
-                failures.append(loaded.manifest.name)
+
+        async def close_all() -> None:
+            for loaded in reversed(tuple(self._loaded)):
+                try:
+                    await self._close_loaded(loaded)
+                except (Exception, asyncio.CancelledError):
+                    # Plugin self-cancellation is a close failure, not a request
+                    # to abandon the remaining plugins. Failed handles can retry.
+                    failures.append(loaded.manifest.name)
+
+        cancellation = await self._finish_cleanup(close_all())
+        if cancellation is not None:
+            if failures:
+                cancellation.add_note("plugin cleanup also failed for: " + ", ".join(failures))
+            raise cancellation
         if failures:
             raise PluginError(
                 f"failed to close plugins: {', '.join(failures)}",

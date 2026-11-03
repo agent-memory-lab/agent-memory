@@ -7,6 +7,13 @@ the first stable release.
 
 ### Fixed
 
+- Parse SQLite file URIs explicitly across builds with different URI defaults;
+  retain ephemeral-database rejection and test paths on every CI platform.
+- Share retriever concurrency capacity across requests using the same loaded
+  plugin, including different orchestrators. Queueing and execution share one
+  timeout bounded by the host deadline; cancellation releases capacity.
+- Finish normal plugin shutdown despite host cancellation or individual plugin
+  close failures, preserving the original cancellation and retryable failed handles.
 - Prevent stale worker leases from overwriting cancellation or a replacement lease.
 - Continue capture queue selection after retiring exhausted items.
 - Reject nonfinite resource evaluation inputs and treat duplicate release evidence

@@ -1194,9 +1194,11 @@ class SQLiteMemoryRepository:
         self._write_lock = asyncio.Lock()
 
     def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self._path, timeout=30)
-        # Some SQLite builds interpret file: URIs even without uri=True. Let
-        # SQLite resolve them rather than attempting to duplicate its URI parser.
+        connection = sqlite3.connect(
+            self._path, timeout=30, uri=self._path.startswith("file:")
+        )
+        # Explicit URI parsing must not depend on SQLite's compile-time defaults.
+        # Let SQLite resolve paths rather than duplicating its URI parser.
         # A connection-local database disappears when our per-operation connection closes.
         if self._path.startswith("file:"):
             try:

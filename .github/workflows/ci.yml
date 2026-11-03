@@ -21,9 +21,10 @@ jobs:
         with:
           python-version: "3.13"
       - run: python -m pip install -e '.[dev]'
-      - name: Atomic schema, rollback, process concurrency, and feedback idempotency
+      - name: SQLite paths, atomic schema, process concurrency, and feedback idempotency
         run: >-
           python -m pytest -q tests/test_sqlite_initialization.py
+          tests/test_sqlite_database_paths.py
           tests/test_feedback_storage_contract.py
 
   core:
