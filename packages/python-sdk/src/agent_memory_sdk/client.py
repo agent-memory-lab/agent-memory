@@ -299,7 +299,7 @@ class _Operations(RecoveryClientOperations):
         return await self._call(
             "memory_forget",
             {
-                "memory_ids": memory_ids or [],
+                "memory_ids": [] if memory_ids is None else memory_ids,
                 "all_in_scope": all_in_scope,
                 "mode": mode,
             },

@@ -7,6 +7,12 @@ the first stable release.
 
 ### Fixed
 
+- Validate forget argument types and require an unambiguous deletion target before
+  dispatch. Reject malformed whole-scope flags instead of coercing them to true;
+  preserve authorization checks and valid explicit-ID or whole-scope requests.
+- Reject nonfinite evaluation metrics and retrieval replay utilities before
+  promotion or policy activation. Validate stored evidence and use strict metric
+  serialization so NaN and infinity cannot silently pass quality/safety gates.
 - Reject connection-local SQLite databases (empty paths, `:memory:` and ephemeral
   `file:` URIs) before initialization can appear successful. Persistent file paths
   and file-backed URIs remain supported.

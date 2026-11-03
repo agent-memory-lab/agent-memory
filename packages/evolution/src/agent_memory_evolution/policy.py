@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 
+from ._numbers import require_count, require_finite
 from .domain import EvaluationReport, EvaluationStage, GateDecision, PromotionApproval
 
 
@@ -11,6 +12,13 @@ class GateProfile:
     minimum_samples: int
     minimum_metrics: Mapping[str, float] = field(default_factory=dict)
     maximum_metrics: Mapping[str, float] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.validate_numbers()
+    def validate_numbers(self) -> None:
+        require_count(self.minimum_samples, "minimum_samples")
+        for name, value in (*self.minimum_metrics.items(), *self.maximum_metrics.items()):
+            require_finite(value, f"threshold {name}")
 
 
 class DeterministicPromotionPolicy:
@@ -57,6 +65,11 @@ class DeterministicPromotionPolicy:
     def evaluate(self, report: EvaluationReport) -> GateDecision:
         profile = self._profiles[report.stage]
         reasons: list[str] = []
+        try:
+            report.validate_numbers()
+            profile.validate_numbers()
+        except ValueError as exc:
+            return GateDecision(False, (str(exc),))
         if report.sample_size < profile.minimum_samples:
             reasons.append(f"sample_size {report.sample_size} is below {profile.minimum_samples}")
         if report.safety_violations:

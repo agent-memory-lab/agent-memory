@@ -228,6 +228,10 @@ class EvolutionEngine:
         if report is None or report.passed is not True:
             raise EvolutionGateError(f"passing {evaluation_stage} evaluation is required")
         self._validate_evaluation_binding(candidate, report)
+        try:
+            report.validate_numbers()
+        except ValueError as exc:
+            raise EvolutionGateError(str(exc)) from exc
         if target == EvolutionState.ACTIVATING:
             approval_decision = self._policy.authorize_active(approval)
             if not approval_decision.passed:

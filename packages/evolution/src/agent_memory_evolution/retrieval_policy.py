@@ -6,6 +6,8 @@ from uuid import NAMESPACE_URL, uuid5
 
 from agent_memory.domain import MemoryChannel, MemoryScope
 
+from ._numbers import require_count, require_finite
+
 
 @dataclass(frozen=True, slots=True)
 class RetrievalPolicyCandidate:
@@ -17,8 +19,8 @@ class RetrievalPolicyCandidate:
     token_budget: int
     baseline_token_budget: int
     id: str = field(init=False)
-
     def __post_init__(self) -> None:
+        self.validate_numbers()
         if not self.baseline_version.strip() or not self.version.strip():
             raise ValueError("policy versions are required")
         if not self.channel_weights or any(value < 0 for value in self.channel_weights.values()):
@@ -41,6 +43,14 @@ class RetrievalPolicyCandidate:
         )
         object.__setattr__(self, "id", str(uuid5(NAMESPACE_URL, identity)))
 
+    def validate_numbers(self) -> None:
+        for value in self.channel_weights.values():
+            require_finite(value, "channel weight")
+        require_finite(sum(self.channel_weights.values()), "total channel weight")
+        require_finite(self.state_budget_ratio, "state_budget_ratio")
+        require_count(self.token_budget, "token_budget")
+        require_count(self.baseline_token_budget, "baseline_token_budget")
+
 
 @dataclass(frozen=True, slots=True)
 class RetrievalReplaySample:
@@ -51,6 +61,13 @@ class RetrievalReplaySample:
     baseline_tokens: int
     candidate_tokens: int
     cross_scope_leakage: bool = False
+    def __post_init__(self) -> None:
+        self.validate_numbers()
+    def validate_numbers(self) -> None:
+        require_finite(self.baseline_utility, "baseline_utility")
+        require_finite(self.candidate_utility, "candidate_utility")
+        require_count(self.baseline_tokens, "baseline_tokens")
+        require_count(self.candidate_tokens, "candidate_tokens")
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,11 +82,21 @@ class RetrievalPolicyReport:
     passed: bool
     reasons: tuple[str, ...]
 
+    def __post_init__(self) -> None:
+        self.validate_numbers()
+    def validate_numbers(self) -> None:
+        require_count(self.sample_size, "sample_size")
+        for name in (
+            "baseline_utility", "candidate_utility", "baseline_mean_tokens", "candidate_mean_tokens"
+        ):
+            require_finite(getattr(self, name), name)
+        if self.baseline_mean_tokens < 0 or self.candidate_mean_tokens < 0:
+            raise ValueError("mean tokens cannot be negative")
+
 
 class DeterministicRetrievalPolicyEvaluator:
     def __init__(self, *, minimum_samples: int = 30) -> None:
-        if minimum_samples < 1:
-            raise ValueError("minimum_samples must be positive")
+        require_count(minimum_samples, "minimum_samples", minimum=1)
         self._minimum_samples = minimum_samples
 
     def evaluate(
@@ -77,6 +104,9 @@ class DeterministicRetrievalPolicyEvaluator:
         candidate: RetrievalPolicyCandidate,
         samples: Sequence[RetrievalReplaySample],
     ) -> RetrievalPolicyReport:
+        candidate.validate_numbers()
+        for sample in samples:
+            sample.validate_numbers()
         reasons: list[str] = []
         partition = candidate.scope.partition_key()
         versions = {sample.feedback_version for sample in samples}
@@ -128,6 +158,8 @@ class RetrievalPolicyPointer:
     def activate(
         self, candidate: RetrievalPolicyCandidate, report: RetrievalPolicyReport
     ) -> None:
+        candidate.validate_numbers()
+        report.validate_numbers()
         if candidate.baseline_version != self._active_version:
             raise ValueError("candidate baseline is not currently active")
         if report.candidate_id != candidate.id or not report.passed:

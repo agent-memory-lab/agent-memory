@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from agent_memory.domain import MemoryScope, Procedure, utc_now
 
+from ._numbers import require_count, require_finite
 from .evidence import EpisodeRevision, validate_evidence
 
 
@@ -90,8 +91,7 @@ class EvaluationReport:
     created_at: datetime = field(default_factory=utc_now)
 
     def __post_init__(self) -> None:
-        if self.sample_size < 0:
-            raise ValueError("sample_size cannot be negative")
+        self.validate_numbers()
         provenance = (
             self.scope_partition_key,
             self.dataset_id,
@@ -104,10 +104,13 @@ class EvaluationReport:
         )
         if not all(value.strip() for value in provenance):
             raise ValueError("evaluation provenance fields are required")
-        if self.candidate_version < 1:
-            raise ValueError("candidate_version must be positive")
-        if self.safety_violations < 0:
-            raise ValueError("safety_violations cannot be negative")
+
+    def validate_numbers(self) -> None:
+        require_count(self.sample_size, "sample_size")
+        require_count(self.candidate_version, "candidate_version", minimum=1)
+        require_count(self.safety_violations, "safety_violations")
+        for name, value in self.metrics.items():
+            require_finite(value, f"metric {name}")
 
 
 @dataclass(frozen=True, slots=True)

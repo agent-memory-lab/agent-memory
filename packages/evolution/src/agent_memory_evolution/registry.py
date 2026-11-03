@@ -263,6 +263,7 @@ class SQLiteEvolutionRegistry:
         return await asyncio.to_thread(self._append_evaluation, report)
 
     def _append_evaluation(self, report: EvaluationReport) -> str:
+        report.validate_numbers()
         if report.passed is None:
             raise ValueError("policy decision must be attached before storing evaluation")
         with self._connection() as connection:
@@ -287,7 +288,7 @@ class SQLiteEvolutionRegistry:
                     report.rubric_id,
                     report.rubric_version,
                     report.sample_size,
-                    json.dumps(dict(report.metrics), sort_keys=True),
+                    json.dumps(dict(report.metrics), sort_keys=True, allow_nan=False),
                     report.evidence_digest,
                     report.safety_violations,
                     int(report.passed),

@@ -682,16 +682,28 @@ class MCPMemoryTools:
             return to_jsonable(result)
 
         if name == "memory_forget":
-            mode = ForgetMode(str(arguments.get("mode", ForgetMode.ARCHIVE)))
+            raw_mode = arguments.get("mode", ForgetMode.ARCHIVE)
+            if not isinstance(raw_mode, str) or raw_mode not in (ForgetMode.ARCHIVE, ForgetMode.ERASE):
+                raise MCPToolError("mode must be archive or erase", field="mode")
+            mode = ForgetMode(raw_mode)
             if mode == ForgetMode.ERASE and not context.can_erase:
                 raise MCPToolError("legal erase requires an authorized request context")
             raw_ids = arguments.get("memory_ids", [])
-            if not isinstance(raw_ids, list) or not all(isinstance(item, str) for item in raw_ids):
-                raise MCPToolError("memory_ids must be an array of strings")
+            if not isinstance(raw_ids, list) or not all(
+                isinstance(item, str) and item.strip() for item in raw_ids
+            ):
+                raise MCPToolError(
+                    "memory_ids must be an array of non-empty strings", field="memory_ids"
+                )
+            all_in_scope = arguments.get("all_in_scope", False)
+            if not isinstance(all_in_scope, bool):
+                raise MCPToolError("all_in_scope must be a boolean", field="all_in_scope")
+            if bool(raw_ids) == all_in_scope:
+                raise MCPToolError("provide either memory_ids or all_in_scope=true, not both")
             request = ForgetRequest(
                 scope=context.scope,
                 memory_ids=tuple(raw_ids),
-                all_in_scope=bool(arguments.get("all_in_scope", False)),
+                all_in_scope=all_in_scope,
                 mode=mode,
             )
             if self._deletion_auditor is not None:
