@@ -111,6 +111,9 @@ class AdmissionEngine:
         if not callable(reader):
             return ()
         self._require_support()
+        state_reader = getattr(self.repository, "admission_state_snapshot", None)
+        if callable(state_reader):
+            return await state_reader(scope, known_at=known_at)
         rows = await self.repository.admission_snapshot(scope)
         from ..retrieval.atom_state import select_record_snapshots
 

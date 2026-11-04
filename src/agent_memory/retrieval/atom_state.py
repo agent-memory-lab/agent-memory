@@ -33,6 +33,25 @@ def _claim(payload: dict[str, Any]) -> Claim:
     return Claim(**values)
 
 
+def current_snapshot_versions(records, known_at):
+    """Reuse current payloads only when they are already known at the read point.
+
+    Publication versions are monotonic within a record, including same-transaction
+    updates. Historical reads and future-dated publications still load their history.
+    Deletion barriers are current authority regardless of the requested known time.
+    """
+    if known_at is None:
+        return {}
+    return {
+        row["id"]: ([] if "contribution_barrier" in row["payload"] else [{
+            "version": row["version"], "payload": row["payload"],
+            "recorded_at": row["recorded_at"],
+        }])
+        for row in records
+        if "contribution_barrier" in row["payload"] or _time(row["recorded_at"]) <= known_at
+    }
+
+
 def select_record_snapshots(records, known_at):
     """Select system snapshots without I/O, including current deletion barriers."""
     selected = []

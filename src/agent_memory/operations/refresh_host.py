@@ -47,6 +47,7 @@ class RefreshHost:
             {p.task_type: self._apply for p in queue.processors.values()},
             worker_id=worker_id,
             limits=self.limits,
+            lease_renewal_managed=True,
         )
 
     @property

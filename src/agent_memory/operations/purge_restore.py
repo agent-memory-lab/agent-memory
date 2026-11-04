@@ -95,6 +95,8 @@ class PurgeRestore:
     checkpoint. Restore must pin the latest checkpoint independently, including
     when upgrading an old backup without scheduler tables. Legacy /1 journals
     remain usable only when no scheduler clock has yet been observed locally.
+    For growing journals, export_stream/replay_stream use bounded JSONL pages
+    and a signed /3 checkpoint without the legacy aggregate capacity limits.
     No MCP tool, background task or automatic serving gate is installed here.
     """
 
@@ -119,7 +121,7 @@ class PurgeRestore:
         return hmac.new(self.secret, canonical_json(body).encode(), sha256).hexdigest()
 
     async def export(self):
-        """Export a complete finite journal under the same scope lock as deletion."""
+        """Export legacy /1-/2 JSON (4,096 entries); use export_stream for growth."""
         async with self.repository.unit_of_work() as uow:
             await self._open(uow)
             entries, epoch = await read_journal(uow, self.scope)
@@ -142,6 +144,189 @@ class PurgeRestore:
             if len(canonical_json(snapshot).encode()) > MAX_BYTES:
                 raise RetentionError("purge_restore_capacity")
             return snapshot
+
+    async def export_stream(self, destination):
+        """Write a complete binary JSONL journal with bounded memory, returning its pin.
+
+        The host must finish durable storage of the output before publishing the
+        returned checkpoint outside the content backup. Output is not complete
+        on an exception. Keep this offline maintenance stream on trusted storage.
+        """
+        from .purge_restore_stream import (
+            CHECKPOINT_SCHEMA,
+            STREAM_SCHEMA,
+            JournalCheck,
+            journal_pages,
+            write_frame,
+        )
+
+        async with self.repository.unit_of_work() as uow:
+            await self._open(uow)
+            head, epoch = await uow.purge_head(self.scope), await uow.retention_epoch(self.scope)
+            check = JournalCheck()
+            async for page in journal_pages(uow, self.scope, head, epoch):
+                check.page(page, len(page))
+            checkpoint = {
+                "schema": CHECKPOINT_SCHEMA, "authority_id": self.authority_id,
+                "scope_key": self.scope.partition_key(), "head": head, "scope_epoch": epoch,
+                "entries_sha256": check.finish(head, epoch),
+                "scheduler_clock_floor": await scheduler_clock_floor(uow, self.scope),
+            }
+            body = {"schema": STREAM_SCHEMA, "checkpoint": checkpoint}
+            write_frame(destination, {**body, "signature": self._sign(body)})
+            # The scope lock spans both passes, so the manifest and every page
+            # refer to the same journal. Verify again for custom backend faults.
+            check = JournalCheck()
+            async for page in journal_pages(uow, self.scope, head, epoch):
+                check.page(page, len(page))
+                write_frame(destination, page)
+            if (await uow.purge_head(self.scope) != head
+                    or await uow.retention_epoch(self.scope) != epoch
+                    or check.finish(head, epoch) != checkpoint["entries_sha256"]):
+                raise RetentionError("purge_restore_history_conflict")
+            destination.flush()
+            return checkpoint
+
+    def _verify_stream_manifest(self, manifest, expected_checkpoint):
+        from .purge_restore_stream import CHECKPOINT_SCHEMA, STREAM_SCHEMA, check_position
+
+        if (not isinstance(manifest, dict)
+                or set(manifest) != {"schema", "checkpoint", "signature"}
+                or manifest["schema"] != STREAM_SCHEMA):
+            raise RetentionError("purge_restore_snapshot_invalid")
+        checkpoint = manifest["checkpoint"]
+        if (not isinstance(checkpoint, dict) or set(checkpoint) != {
+            "schema", "authority_id", "scope_key", "head", "scope_epoch",
+            "entries_sha256", "scheduler_clock_floor",
+        } or checkpoint["schema"] != CHECKPOINT_SCHEMA):
+            raise RetentionError("purge_restore_snapshot_invalid")
+        check_position(checkpoint["head"], checkpoint["scope_epoch"])
+        floor = checkpoint["scheduler_clock_floor"]
+        if floor is not None:
+            try:
+                if not isinstance(floor, str) or stamp(floor) != floor:
+                    raise ValueError("invalid scheduler clock floor")
+            except (TypeError, ValueError) as error:
+                raise RetentionError("purge_restore_snapshot_invalid") from error
+        if (checkpoint["authority_id"] != self.authority_id
+                or checkpoint["scope_key"] != self.scope.partition_key()):
+            raise RetentionError("purge_restore_authority_mismatch")
+        if checkpoint != expected_checkpoint:
+            raise RetentionError("purge_restore_checkpoint_mismatch")
+        body = {key: manifest[key] for key in ("schema", "checkpoint")}
+        signature = manifest["signature"]
+        if (not isinstance(signature, str) or len(signature) != 64
+                or any(c not in "0123456789abcdef" for c in signature)
+                or not hmac.compare_digest(signature, self._sign(body))):
+            raise RetentionError("purge_restore_integrity_unavailable")
+        return checkpoint
+
+    async def replay_stream(self, source, *, expected_checkpoint, restore_id, reason):
+        """Verify the *whole* stream, then replay atomically into an offline backup.
+
+        Only bounded frames enter memory. A private temporary file isolates the
+        verified input from caller mutation. Temporary disk and transaction/WAL
+        space grow with history; failures leave the backup unpromoted and roll
+        back any replay. Even an idempotent receipt requires full verification.
+        """
+        import asyncio
+        from tempfile import TemporaryFile
+
+        from .purge_restore_stream import (
+            PAGE_ENTRIES,
+            JournalCheck,
+            copy_checkpoint,
+            read_frame,
+            write_frame,
+        )
+
+        _identity(restore_id)
+        _identity(reason)
+        pinned = copy_checkpoint(expected_checkpoint)
+        checkpoint = self._verify_stream_manifest(read_frame(source), pinned)
+        head, epoch = checkpoint["head"], checkpoint["scope_epoch"]
+        with TemporaryFile(mode="w+b") as verified:
+            check = JournalCheck()
+            while check.cursor < head:
+                page = read_frame(source)
+                check.page(page, min(PAGE_ENTRIES, head - check.cursor))
+                write_frame(verified, page)
+                await asyncio.sleep(0)
+            if (source.read(1) != b""
+                    or check.finish(head, epoch) != checkpoint["entries_sha256"]):
+                raise RetentionError("purge_restore_integrity_unavailable")
+            verified.seek(0)
+            return await self._replay_verified_stream(verified, checkpoint, restore_id, reason)
+
+    async def _replay_verified_stream(self, verified, checkpoint, restore_id, reason):
+        from .purge_restore_stream import JournalCheck, check_position, journal_pages, read_frame
+
+        operation = "purge-restore:" + digest([self.scope.partition_key(), restore_id])
+        contract = digest([checkpoint, self.actor, reason])
+        head, epoch = checkpoint["head"], checkpoint["scope_epoch"]
+        async with self.repository.unit_of_work() as uow:
+            await self._open(uow)
+            local_head = await uow.purge_head(self.scope)
+            local_epoch = await uow.retention_epoch(self.scope)
+            check_position(local_head, local_epoch)
+            if local_head > head or local_epoch > epoch:
+                raise RetentionError("purge_restore_history_conflict")
+            local = JournalCheck()
+            async for page in journal_pages(uow, self.scope, local_head, local_epoch):
+                local.page(page, len(page))
+            local_hash = local.finish(local_head, local_epoch)
+            existing = await uow.purge_restore_get(self.scope, operation)
+            if existing is not None:
+                if existing["contract_sha256"] != contract:
+                    raise RetentionError("purge_restore_idempotency_conflict")
+                if (local_head != head or local_epoch != epoch
+                        or local_hash != checkpoint["entries_sha256"]):
+                    raise RetentionError("purge_restore_history_conflict")
+                await restore_clock_floor(uow, self.scope, checkpoint)
+                return existing
+            if await uow.purge_restore_count(self.scope) >= 1000:
+                raise RetentionError("purge_restore_capacity")
+            prefix = JournalCheck()
+            counts = {"events": 0, "claims": 0, "artifacts": 0}
+            cursor = 0
+            while cursor < head:
+                for entry in read_frame(verified):
+                    cursor = entry["cursor"]
+                    if cursor <= local_head:
+                        prefix.page([entry], 1)
+                        continue
+                    if cursor == local_head + 1:
+                        if prefix.finish(local_head, local_epoch) != local_hash:
+                            raise RetentionError("purge_restore_history_conflict")
+                    result = await uow.forget_for_restore(ForgetRequest(
+                        self.scope,
+                        memory_ids=() if entry["all_in_scope"] else (entry["source_event_id"],),
+                        all_in_scope=entry["all_in_scope"], mode=ForgetMode(entry["mode"]),
+                    ))
+                    if await uow.retention_epoch(self.scope) != entry["epoch"]:
+                        raise RetentionError("purge_restore_history_conflict")
+                    await uow.purge_import(self.scope, entry)
+                    for name in counts:
+                        counts[name] += getattr(result, "affected_" + name)
+            if prefix.finish(local_head, local_epoch) != local_hash:
+                raise RetentionError("purge_restore_history_conflict")
+            await restore_clock_floor(uow, self.scope, checkpoint)
+            final = JournalCheck()
+            async for page in journal_pages(uow, self.scope, head, epoch):
+                final.page(page, len(page))
+            if (await uow.purge_head(self.scope) != head
+                    or await uow.retention_epoch(self.scope) != epoch
+                    or final.finish(head, epoch) != checkpoint["entries_sha256"]):
+                raise RetentionError("purge_restore_history_conflict")
+            receipt = {
+                "schema": "purge-restore-receipt/1", "id": operation,
+                "checkpoint": checkpoint, "contract_sha256": contract,
+                "actor": self.actor, "reason": reason, "from_cursor": local_head,
+                "replayed_entries": head - local_head, "affected": counts,
+                "committed_at": _time(self.clock()).isoformat(), "state": "replayed",
+            }
+            await uow.purge_restore_put(self.scope, operation, receipt)
+            return receipt
 
     def _verify(self, snapshot, expected_checkpoint):
         # Copy JSON before awaiting: caller-owned mutable input cannot change the checked contract.

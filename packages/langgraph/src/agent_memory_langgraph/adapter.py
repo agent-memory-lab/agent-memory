@@ -4,6 +4,8 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from langchain_core.runnables import RunnableConfig
+
 from agent_memory.adapters import AgentLifecycleContext, AgentMemoryAdapter
 from agent_memory.domain import MemoryScope
 from agent_memory.ports import MemoryProvider
@@ -101,7 +103,7 @@ class LangGraphMemoryAdapter:
     async def before_model(
         self,
         state: Mapping[str, Any],
-        config: Mapping[str, Any],
+        config: RunnableConfig,
     ) -> dict[str, Any]:
         bundle = await self._adapter.before_model(
             self._context(state, config),
@@ -114,7 +116,7 @@ class LangGraphMemoryAdapter:
     async def after_tool(
         self,
         state: Mapping[str, Any],
-        config: Mapping[str, Any],
+        config: RunnableConfig,
     ) -> dict[str, Any]:
         event = state.get(self._keys.tool_event)
         if not isinstance(event, Mapping):
@@ -133,7 +135,7 @@ class LangGraphMemoryAdapter:
     async def after_model(
         self,
         state: Mapping[str, Any],
-        config: Mapping[str, Any],
+        config: RunnableConfig,
     ) -> dict[str, Any]:
         response = state.get(self._keys.response)
         claims: Any = ()

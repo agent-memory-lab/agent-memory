@@ -1267,6 +1267,19 @@ class PostgresMemoryRepository:
                 )
                 return await admission.read_snapshot(connection, scope)
 
+    async def admission_state_snapshot(self, scope, *, known_at):
+        from agent_memory.retrieval.atom_state import select_record_snapshots
+        from agent_memory.retrieval.temporal_history import aware
+
+        known_at = aware(known_at, "known_at")
+        async with self.pool.connection() as connection:
+            async with connection.transaction():
+                await connection.execute(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+                )
+                rows = await admission.read_snapshot(connection, scope, known_at=known_at)
+                return select_record_snapshots(rows, known_at)
+
     async def admission_record(self, scope: MemoryScope, record_id: str):
         async with self.pool.connection() as connection:
             rows = await admission.read_records(
@@ -1293,6 +1306,20 @@ class PostgresMemoryRepository:
                     "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
                 )
                 return await PostgresClaimHistory(self).read(connection, scope, valid_at, known_at)
+
+    async def bounded_legacy_claims(
+        self, scope, *, limit, valid_at, known_at,
+    ):
+        async with self.pool.connection() as connection:
+            async with connection.transaction():
+                await connection.execute(
+                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+                )
+                protected_sources = await admission.protected_sources(connection, scope)
+                return await PostgresClaimHistory(self).read(
+                    connection, scope, valid_at, known_at, limit=limit,
+                    legacy_only=True, protected_sources=protected_sources,
+                )
 
     async def current_claims(self, scope: MemoryScope) -> Sequence[Claim]:
         now = utc_now()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import sqlite3
 import time
@@ -55,6 +56,7 @@ from .operations.artifact_dependencies import (
 )
 from .operations.artifact_temporal import sqlite_current_claim_ids
 from .operations.block_updates import resolve_block_dependencies
+from .operations.sqlite_transaction import SQLiteTransactionWorker, transaction_methods
 from .retrieval.analyzer import lexical_terms
 from .retrieval.temporal_history import SQLiteClaimHistory, temporal_candidates
 
@@ -96,6 +98,7 @@ def _provenance(value: str) -> Provenance:
     return Provenance(**payload)
 
 
+@transaction_methods
 class SQLiteMemoryUnitOfWork:
     derived_coverage_contract = "write-hooks/1"
     refresh_scheduler_contract = "durable-coalescing/1"
@@ -109,19 +112,37 @@ class SQLiteMemoryUnitOfWork:
     def __init__(self, repository: SQLiteMemoryRepository) -> None:
         self._repository = repository
         self._connection: sqlite3.Connection | None = None
+        self._worker: SQLiteTransactionWorker | None = None
+        self._state = "inactive"
         self._admission_batch_times: dict[tuple[str, str], str] = {}
 
     async def __aenter__(self) -> SQLiteMemoryUnitOfWork:
-        await self._repository._write_lock.acquire()
+        if self._state != "inactive":
+            raise RuntimeError("Unit of Work is already active")
+        self._state = "entering"
         try:
-            self._connection = self._repository._connect()
-            self._connection.execute("BEGIN IMMEDIATE")
-            self._admission_batch_times = {}
-            self._refresh_scheduler_namespace = None
+            await self._repository._write_lock.acquire()
+        except BaseException:
+            self._state = "inactive"
+            raise
+        try:
+            self._worker = SQLiteTransactionWorker()
+            await self._worker.run(self._begin)
+            self._state = "active"
             return self
         except BaseException:
-            self._repository._write_lock.release()
+            try:
+                if self._worker is not None:
+                    await self._worker.run(lambda: self._finish(commit=False))
+            finally:
+                await self._release()
             raise
+
+    def _begin(self):
+        self._connection = self._repository._connect()
+        self._connection.execute("BEGIN IMMEDIATE")
+        self._admission_batch_times = {}
+        self._refresh_scheduler_namespace = None
 
     async def __aexit__(
         self,
@@ -129,25 +150,86 @@ class SQLiteMemoryUnitOfWork:
         exc: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
-        assert self._connection is not None
+        worker = self._require_worker(allow_cancelled=True)
+        self._state = "closing"
+        cancelled = worker.cancelled.is_set()
         try:
-            if exc_type is None:
+            await worker.run(lambda: self._finish(commit=exc_type is None))
+            if exc_type is None and cancelled:
+                raise RuntimeError("Cancelled SQLite transaction cannot commit")
+        finally:
+            await self._release()
+
+    def _finish(self, *, commit):
+        connection = self._connection
+        if connection is None:
+            return
+        try:
+            if commit and not self._worker.cancelled.is_set():
                 from .retrieval import sqlite_lexical_index
 
-                sqlite_lexical_index.synchronize(self._connection)
-                self._connection.commit()
+                sqlite_lexical_index.synchronize(connection)
+                # Cancellation before COMMIT poisons the whole transaction. Once
+                # COMMIT has started, drain its outcome rather than racing rollback.
+                if self._worker.cancelled.is_set():
+                    connection.rollback()
+                else:
+                    connection.commit()
             else:
-                self._connection.rollback()
+                connection.rollback()
+        except BaseException:
+            connection.rollback()
+            raise
         finally:
-            self._connection.close()
-            self._connection = None
+            try:
+                connection.close()
+            finally:
+                self._connection = None
+
+    async def _release(self):
+        try:
+            if self._worker is not None:
+                await self._worker.close()
+        finally:
+            self._worker = None
+            self._state = "inactive"
             self._repository._write_lock.release()
 
-    @property
-    def connection(self) -> sqlite3.Connection:
-        if self._connection is None:
+    def _require_worker(self, *, allow_cancelled=False):
+        if self._worker is None or self._state != "active":
             raise RuntimeError("Unit of Work is not active")
-        return self._connection
+        if not allow_cancelled and self._worker.cancelled.is_set():
+            raise RuntimeError("Cancelled SQLite transaction cannot continue")
+        return self._worker
+
+    async def run_sync(self, callback, /, *args, **kwargs):
+        """Run callback(connection, ...) on this transaction's SQLite thread.
+
+        Return materialized data. SQLite cursors/connections returned directly
+        or inside lists/tuples/dicts become blocking compatibility handles.
+        """
+        worker = self._require_worker()
+        nested = worker.owns_thread()
+
+        def invoke():
+            result = callback(self.connection, *args, **kwargs)
+            if inspect.isawaitable(result):
+                if inspect.iscoroutine(result):
+                    result.close()
+                raise TypeError("run_sync requires a synchronous callback")
+            return result if nested else worker.export(result)
+
+        return await worker.run(invoke)
+
+    @property
+    def connection(self):
+        """Synchronous compatibility access; use run_sync for async maintenance."""
+        if self._connection is None or self._worker is None:
+            raise RuntimeError("Unit of Work is not active")
+        if self._worker.owns_thread():
+            return self._connection
+        self._require_worker()
+        return self._worker.export(self._connection)
 
     async def find_event_by_idempotency(
         self, scope: MemoryScope, idempotency_key: str
@@ -1684,8 +1766,9 @@ class SQLiteMemoryRepository:
         from .operations import sqlite_consolidation_outbox
 
         async with self.unit_of_work() as uow:
-            return sqlite_consolidation_outbox.claim(
-                uow.connection, self, scope=scope, event_id=event_id, lease_seconds=lease_seconds,
+            return await uow.run_sync(
+                sqlite_consolidation_outbox.claim, self, scope=scope, event_id=event_id,
+                lease_seconds=lease_seconds,
                 exclude_event_ids=exclude_event_ids,
             )
 
@@ -1693,63 +1776,72 @@ class SQLiteMemoryRepository:
         from .operations import sqlite_consolidation_outbox
 
         async with self.unit_of_work() as uow:
-            return sqlite_consolidation_outbox.source_is_live(uow.connection, delivery)
+            return await uow.run_sync(
+                sqlite_consolidation_outbox.source_is_live, delivery)
 
     async def consolidation_delivery_is_current(self, delivery):
         from .operations import sqlite_consolidation_outbox
 
         async with self.unit_of_work() as uow:
-            return sqlite_consolidation_outbox.delivery_is_current(uow.connection, delivery)
+            return await uow.run_sync(
+                sqlite_consolidation_outbox.delivery_is_current, delivery)
 
     async def complete_consolidation_intent(self, delivery):
         from .operations import sqlite_consolidation_outbox
 
         async with self.unit_of_work() as uow:
-            return sqlite_consolidation_outbox.complete(uow.connection, delivery)
+            return await uow.run_sync(
+                sqlite_consolidation_outbox.complete, delivery)
 
     async def fail_consolidation_intent(self, delivery, error_code):
         from .operations import sqlite_consolidation_outbox
 
         async with self.unit_of_work() as uow:
-            return sqlite_consolidation_outbox.fail(uow.connection, delivery, error_code)
+            return await uow.run_sync(
+                sqlite_consolidation_outbox.fail, delivery, error_code)
 
     async def consolidation_outbox_status(self, scope=None):
         from .operations import sqlite_consolidation_outbox
 
         async with self.unit_of_work() as uow:
-            return sqlite_consolidation_outbox.status(uow.connection, scope)
+            return await uow.run_sync(
+                sqlite_consolidation_outbox.status, scope)
 
     async def consolidation_intent_state(self, scope, event_id):
         from .operations import sqlite_consolidation_outbox
 
         async with self.unit_of_work() as uow:
-            return sqlite_consolidation_outbox.intent_state(uow.connection, scope, event_id)
+            return await uow.run_sync(
+                sqlite_consolidation_outbox.intent_state, scope, event_id)
 
     async def pending_consolidation_cancellations(self, *, scope=None, limit=64):
         from .operations import sqlite_consolidation_outbox
 
         async with self.unit_of_work() as uow:
-            return sqlite_consolidation_outbox.pending_cancellations(
-                uow.connection, scope=scope, limit=limit
+            return await uow.run_sync(
+                sqlite_consolidation_outbox.pending_cancellations, scope=scope, limit=limit
             )
 
     async def request_consolidation_cancellation(self, scope, event_id):
         from .operations import sqlite_consolidation_outbox
 
         async with self.unit_of_work() as uow:
-            return sqlite_consolidation_outbox.request_cancellation(uow.connection, scope, event_id)
+            return await uow.run_sync(
+                sqlite_consolidation_outbox.request_cancellation, scope, event_id)
 
     async def ack_consolidation_cancellation(self, cancellation):
         from .operations import sqlite_consolidation_outbox
 
         async with self.unit_of_work() as uow:
-            return sqlite_consolidation_outbox.ack_cancellation(uow.connection, cancellation)
+            return await uow.run_sync(
+                sqlite_consolidation_outbox.ack_cancellation, cancellation)
 
     async def fail_consolidation_cancellation(self, cancellation):
         from .operations import sqlite_consolidation_outbox
 
         async with self.unit_of_work() as uow:
-            return sqlite_consolidation_outbox.fail_cancellation(uow.connection, cancellation)
+            return await uow.run_sync(
+                sqlite_consolidation_outbox.fail_cancellation, cancellation)
 
     def unit_of_work(self) -> SQLiteMemoryUnitOfWork:
         return SQLiteMemoryUnitOfWork(self)
@@ -1868,23 +1960,39 @@ class SQLiteMemoryRepository:
                 return self._admission_snapshot(connection, scope)
         return await asyncio.to_thread(read)
 
-    def _admission_snapshot(self, connection, scope):
+    async def admission_state_snapshot(self, scope, *, known_at):
+        from .retrieval.atom_state import select_record_snapshots
+        from .retrieval.temporal_history import aware
+
+        known_at = aware(known_at, "known_at")
+        def read():
+            with self._connection() as connection:
+                connection.execute("BEGIN")
+                rows = self._admission_snapshot(connection, scope, known_at=known_at)
+                return select_record_snapshots(rows, known_at)
+        return await asyncio.to_thread(read)
+
+    def _admission_snapshot(self, connection, scope, *, known_at=None):
+        from .retrieval.atom_state import current_snapshot_versions
+
         records = self._read_admission_records(connection, scope, barriers=True)
         if not records:
             return ()
-        ids = tuple(record["id"] for record in records)
-        placeholders = ",".join("?" for _ in ids)
-        versions = connection.execute(
-            "SELECT record_id, version, payload_json, recorded_at FROM admission_versions "
-            f"WHERE record_id IN ({placeholders}) ORDER BY record_id, version", ids,
-        ).fetchall()
-        by_id: dict[str, list[dict[str, Any]]] = {identity: [] for identity in ids}
-        for version in versions:
-            by_id[version["record_id"]].append({
-                "version": version["version"],
-                "payload": json.loads(version["payload_json"]),
-                "recorded_at": version["recorded_at"],
-            })
+        by_id = current_snapshot_versions(records, known_at)
+        ids = tuple(record["id"] for record in records if record["id"] not in by_id)
+        if ids:
+            placeholders = ",".join("?" for _ in ids)
+            versions = connection.execute(
+                "SELECT record_id, version, payload_json, recorded_at FROM admission_versions "
+                f"WHERE record_id IN ({placeholders}) ORDER BY record_id, version", ids,
+            ).fetchall()
+            by_id.update({identity: [] for identity in ids})
+            for version in versions:
+                by_id[version["record_id"]].append({
+                    "version": version["version"],
+                    "payload": json.loads(version["payload_json"]),
+                    "recorded_at": version["recorded_at"],
+                })
         return tuple({**record, "versions": by_id[record["id"]]} for record in records)
 
     async def admission_record(
@@ -2034,6 +2142,19 @@ class SQLiteMemoryRepository:
         with self._connection() as connection:
             connection.execute("BEGIN")
             return SQLiteClaimHistory(self).read(connection, scope, valid_at, known_at)
+
+    async def bounded_legacy_claims(
+        self, scope, *, limit, valid_at, known_at,
+    ):
+        def read():
+            with self._connection() as connection:
+                connection.execute("BEGIN")
+                protected_sources = self._admission_protected_sources(connection, scope)
+                return SQLiteClaimHistory(self).read(
+                    connection, scope, valid_at, known_at, limit=limit,
+                    legacy_only=True, protected_sources=protected_sources,
+                )
+        return await asyncio.to_thread(read)
 
     async def current_claims(self, scope: MemoryScope) -> Sequence[Claim]:
         return await asyncio.to_thread(self._current_claims_sync, scope)
@@ -2446,8 +2567,8 @@ class SQLiteMemoryRepository:
             return tuple(self._block_from_row(row) for row, _, _ in rows[:limit])
 
     async def forget(self, request: ForgetRequest) -> ForgetResult:
-        async with self._write_lock:
-            return await asyncio.to_thread(self._forget_sync, request)
+        async with self.unit_of_work() as uow:
+            return await uow.run_sync(self._forget_on_connection, request)
 
     def _forget_admission_records(
         self, connection: sqlite3.Connection, request: ForgetRequest

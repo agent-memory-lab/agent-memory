@@ -27,15 +27,15 @@ async def guard_delivery(repository, query, bundle, *, pipeline=False):
     async with repository.pool.connection() as connection:
         async with connection.transaction():
             await connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+            claim_ids = requested_claim_ids(bundle)
             claims = await PostgresClaimHistory(repository).read(
-                connection, query.scope, valid_at, known_at,
+                connection, query.scope, valid_at, known_at, claim_ids=claim_ids,
             )
-            snapshot = await admission.read_snapshot(connection, query.scope)
+            snapshot = await admission.read_snapshot(connection, query.scope, known_at=known_at)
             atoms, info = project_records(select_record_snapshots(snapshot, known_at), valid_at)
             protected = await admission.protected_sources(connection, query.scope)
             where, params = repository._visible_scope_clause(query.scope)
             identities = selected_source_ids(bundle) | diagnostic_ids(bundle, (MemoryKind.EVENT,))
-            claim_ids = requested_claim_ids(bundle)
             claim_sources = {source for claim in (*claims, *atoms) if claim.id in claim_ids
                              for source in claim.provenance.source_event_ids}
             identities.update(claim_sources)

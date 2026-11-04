@@ -52,15 +52,31 @@ def pause_at(kernel, phase, mutation, monkeypatch):
         kernel._reranker = PausedReranker()
     else:
         factory = kernel._repository.unit_of_work
+        fired = False
 
         @asynccontextmanager
         async def unit_of_work():
+            nonlocal fired
+            traced = False
             async with factory() as uow:
+                save_trace = uow.save_retrieval_trace
+
+                async def observed_trace(*args, **kwargs):
+                    nonlocal traced
+                    traced = True
+                    return await save_trace(*args, **kwargs)
+
+                uow.save_retrieval_trace = observed_trace
                 yield uow
-            # Run after the trace transaction commits, while retrieve is still
-            # awaiting __aexit__. This is its last pre-delivery await window.
-            calls.append(phase)
-            await mutation()
+            # Forget now also uses a UoW. Only count actual trace transactions,
+            # preserving the assertion against delivery retries below.
+            if traced:
+                calls.append(phase)
+                if not fired:
+                    # Mark before awaiting the mutation's nested transaction.
+                    fired = True
+                    # This remains retrieve's last pre-delivery await window.
+                    await mutation()
 
         monkeypatch.setattr(kernel._repository, "unit_of_work", unit_of_work)
     return calls

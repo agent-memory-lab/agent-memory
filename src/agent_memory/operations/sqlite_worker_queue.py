@@ -282,6 +282,22 @@ class SQLiteWorkerQueue:
         finally:
             connection.close()
 
+    async def validate_lease(self, lease: WorkerLease) -> None:
+        """Reject cancelled, replaced, or expired work before handler entry."""
+        if not isinstance(lease, WorkerLease):
+            raise TypeError("lease must be a WorkerLease")
+        await asyncio.to_thread(self._validate_lease_sync, lease)
+
+    def _validate_lease_sync(self, lease: WorkerLease) -> None:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT lease_expires_at FROM agent_memory_worker_tasks "
+                "WHERE id=? AND status=? AND lease_token=?",
+                (lease.task.id, WorkerTaskStatus.LEASED, lease.token),
+            ).fetchone()
+            if row is None or row["lease_expires_at"] <= _iso(_now()):
+                raise WorkerQueueError("worker lease is no longer active", code="stale_lease")
+
     async def checkpoint(self, lease: WorkerLease, value: Mapping[str, Any]) -> None:
         await self._update_lease(lease, "checkpoint", value=value)
 
@@ -320,8 +336,9 @@ class SQLiteWorkerQueue:
             if row is None:
                 raise WorkerQueueError("worker lease is no longer active", code="stale_lease")
             # Another queue instance can cancel or replace this lease after the
-            # read. Every write must compare the current status and token too.
-            lease_identity = (lease.task.id, WorkerTaskStatus.LEASED, lease.token)
+            # read. Expiry alone also invalidates the owner, before any reclaim.
+            now = _now()
+            lease_identity = (lease.task.id, WorkerTaskStatus.LEASED, lease.token, _iso(now))
             if action == "checkpoint":
                 if not isinstance(value, Mapping):
                     raise TypeError("checkpoint must be a mapping")
@@ -330,7 +347,7 @@ class SQLiteWorkerQueue:
                     raise ValueError("checkpoint exceeds 64000 bytes")
                 cursor = connection.execute(
                     "UPDATE agent_memory_worker_tasks SET checkpoint_json=?, updated_at=? "
-                    "WHERE id=? AND status=? AND lease_token=?",
+                    "WHERE id=? AND status=? AND lease_token=? AND lease_expires_at>?",
                     (encoded, _iso(now), *lease_identity),
                 )
             elif action == "complete":
@@ -338,7 +355,7 @@ class SQLiteWorkerQueue:
                     """
                     UPDATE agent_memory_worker_tasks SET status=?, leased_by=NULL,
                     lease_token=NULL, lease_expires_at=NULL, last_error_code=NULL,
-                    updated_at=? WHERE id=? AND status=? AND lease_token=?
+                    updated_at=? WHERE id=? AND status=? AND lease_token=? AND lease_expires_at>?
                     """,
                     (WorkerTaskStatus.COMPLETED, _iso(now), *lease_identity),
                 )
@@ -351,7 +368,7 @@ class SQLiteWorkerQueue:
                     UPDATE agent_memory_worker_tasks SET status=?, next_attempt_at=?,
                     leased_by=NULL, lease_token=NULL, lease_expires_at=NULL,
                     last_error_code=?, updated_at=?
-                    WHERE id=? AND status=? AND lease_token=?
+                    WHERE id=? AND status=? AND lease_token=? AND lease_expires_at>?
                     """,
                     (
                         WorkerTaskStatus.DEAD if terminal else WorkerTaskStatus.PENDING,

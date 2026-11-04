@@ -7,6 +7,15 @@ the first stable release.
 
 ### Fixed
 
+- Isolate SQLite async Unit of Work transactions on one owner thread, including
+  outbox operations, forget, index synchronization and cancellation-safe cleanup.
+  Keep legacy synchronous maintenance access as a blocking proxy and add async
+  `run_sync` callbacks; document commit-cancellation and compatibility boundaries in
+  [SQLite async transactions](docs/SQLITE_ASYNC_TRANSACTIONS.md).
+- Bound runtime legacy state hydration after authorization and source validation,
+  remove per-claim source queries, and avoid historical admission payload reads for
+  current snapshots. Keep complete conflict checks and document remaining scans in
+  [bounded state reads](docs/BOUNDED_STATE_READS.md); older providers retain a compatible fallback.
 - Add host-authorized, opt-in searchable tool evidence while preserving metadata-only defaults.
 - Report planned-denominator benchmark scores and paired comparisons alongside legacy
   completed-case metrics; clarify cluster interval limitations.
