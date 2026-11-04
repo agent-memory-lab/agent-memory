@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
+
+from langchain_core.runnables import RunnableConfig
 
 from agent_memory.adapters import AgentLifecycleContext, AgentMemoryAdapter
 from agent_memory.domain import MemoryScope
@@ -58,8 +60,14 @@ class LangGraphMemoryAdapter:
         keys: LangGraphKeys | None = None,
         token_budget: int = 1200,
         limit: int = 8,
+        tool_result_projector: Callable[[str, Any], str | None] | None = None,
+        tool_result_max_bytes: int = 4096,
     ) -> None:
-        self._adapter = AgentMemoryAdapter(provider)
+        self._adapter = AgentMemoryAdapter(
+            provider,
+            tool_result_projector=tool_result_projector,
+            tool_result_max_bytes=tool_result_max_bytes,
+        )
         self._scope_resolver = scope_resolver
         self._keys = keys or LangGraphKeys()
         self._token_budget = token_budget
@@ -95,7 +103,7 @@ class LangGraphMemoryAdapter:
     async def before_model(
         self,
         state: Mapping[str, Any],
-        config: Mapping[str, Any],
+        config: RunnableConfig,
     ) -> dict[str, Any]:
         bundle = await self._adapter.before_model(
             self._context(state, config),
@@ -108,7 +116,7 @@ class LangGraphMemoryAdapter:
     async def after_tool(
         self,
         state: Mapping[str, Any],
-        config: Mapping[str, Any],
+        config: RunnableConfig,
     ) -> dict[str, Any]:
         event = state.get(self._keys.tool_event)
         if not isinstance(event, Mapping):
@@ -127,7 +135,7 @@ class LangGraphMemoryAdapter:
     async def after_model(
         self,
         state: Mapping[str, Any],
-        config: Mapping[str, Any],
+        config: RunnableConfig,
     ) -> dict[str, Any]:
         response = state.get(self._keys.response)
         claims: Any = ()

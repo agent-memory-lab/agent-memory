@@ -23,6 +23,7 @@ from ..extensions.registry import (
     PluginManifest,
     PluginResourceLimits,
 )
+from .vector_math import normalize_l2
 
 _IDENTIFIER = re.compile(r"[a-z0-9][a-z0-9._/-]{0,127}\Z")
 
@@ -128,7 +129,13 @@ def _validated_vector(
                 "embedder returned a non-numeric vector component",
                 code=PluginErrorCode.INVALID_IMPLEMENTATION,
             )
-        component = float(value)
+        try:
+            component = float(value)
+        except OverflowError:
+            raise PluginError(
+                "embedder returned a non-finite vector component",
+                code=PluginErrorCode.INVALID_IMPLEMENTATION,
+            ) from None
         if not math.isfinite(component):
             raise PluginError(
                 "embedder returned a non-finite vector component",
@@ -136,13 +143,12 @@ def _validated_vector(
             )
         vector.append(component)
     if spec.normalization is VectorNormalization.L2:
-        norm = math.sqrt(sum(value * value for value in vector))
-        if norm == 0:
+        if not any(vector):
             raise PluginError(
                 "embedder returned a zero vector for l2 normalization",
                 code=PluginErrorCode.INVALID_IMPLEMENTATION,
             )
-        vector = [value / norm for value in vector]
+        return normalize_l2(vector)
     return tuple(vector)
 
 

@@ -4,7 +4,7 @@ from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime
-from math import isfinite, sqrt
+from math import fsum, isfinite
 
 from .domain import ClaimDraft, MemoryEvent, MemoryItem, MemoryQuery, Provenance, ScopeLevel
 from .extraction_result import (
@@ -16,6 +16,7 @@ from .extraction_result import (
     ExtractionReport,
 )
 from .ports import ClaimExtractor, ClaimGenerator, EmbeddingProvider, Reranker
+from .retrieval.vector_math import normalize_l2
 
 
 def _claim_time(value: object, fallback=None):
@@ -431,6 +432,8 @@ class EmbeddingReranker:
     """Bounded hybrid reranking over a caller-provided embedding provider.
 
     Vectors are used only for the active request and are never retained by the core.
+    Only supplied candidates are reranked; independent semantic recall requires
+    a separately configured retriever.
     """
 
     def __init__(
@@ -443,16 +446,28 @@ class EmbeddingReranker:
         max_candidates: int = 48,
         fail_open: bool = True,
     ) -> None:
-        if lexical_weight < 0.0 or semantic_weight < 0.0:
-            raise ValueError("reranking weights must be non-negative")
-        if lexical_weight + semantic_weight <= 0.0:
+        weights = (lexical_weight, semantic_weight)
+        if any(
+            isinstance(weight, bool) or not isinstance(weight, (int, float)) for weight in weights
+        ):
+            raise ValueError("reranking weights must be finite non-negative numbers")
+        try:
+            weights = tuple(float(weight) for weight in weights)
+        except OverflowError:
+            raise ValueError("reranking weights must be finite non-negative numbers") from None
+        if any(not isfinite(weight) or weight < 0.0 for weight in weights):
+            raise ValueError("reranking weights must be finite non-negative numbers")
+        scale = max(weights)
+        if scale == 0.0:
             raise ValueError("at least one reranking weight must be positive")
-        if not 1 <= max_candidates <= 500:
+        if type(max_candidates) is not int or not 1 <= max_candidates <= 500:
             raise ValueError("max_candidates must be between 1 and 500")
         self._embedding_provider = embedding_provider
         self._fallback = fallback or ReciprocalRankFusionReranker()
-        self._lexical_weight = lexical_weight
-        self._semantic_weight = semantic_weight
+        # Preserve the ratio without overflowing the sum or underflowing both
+        # weighted rank terms when valid weights are near either float limit.
+        self._lexical_weight = weights[0] / scale
+        self._semantic_weight = weights[1] / scale
         self._max_candidates = max_candidates
         self._fail_open = fail_open
 
@@ -539,11 +554,10 @@ class EmbeddingReranker:
         right_values = tuple(float(value) for value in right)
         if not all(isfinite(value) for value in (*left_values, *right_values)):
             raise ValueError("embedding vectors must contain finite values")
-        left_norm = sqrt(sum(value * value for value in left_values))
-        right_norm = sqrt(sum(value * value for value in right_values))
-        if left_norm == 0.0 or right_norm == 0.0:
+        if not any(left_values) or not any(right_values):
             raise ValueError("embedding vectors must not be zero vectors")
-        similarity = sum(
-            left * right for left, right in zip(left_values, right_values, strict=True)
+        similarity = fsum(
+            left * right
+            for left, right in zip(normalize_l2(left_values), normalize_l2(right_values), strict=True)
         )
-        return max(-1.0, min(1.0, similarity / (left_norm * right_norm)))
+        return max(-1.0, min(1.0, similarity))

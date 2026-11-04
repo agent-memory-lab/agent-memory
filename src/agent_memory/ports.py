@@ -525,6 +525,18 @@ class MemoryProvider(Protocol):
     def manifest(self) -> ProviderManifest: ...
 
 
+class BoundedStateProvider(Protocol):
+    """Optional output bound; authorization and conflicts must precede truncation.
+
+    This does not promise bounded scans for atom conflicts or protected sources.
+    Legacy providers without this extension retain their full-read behavior.
+    """
+
+    async def get_state_bounded(
+        self, scope: MemoryScope, *, limit: int,
+    ) -> tuple[Claim, ...]: ...
+
+
 class BitemporalMemoryRepository(Protocol):
     """Optional Claim history port; advertised by bitemporal_claims capability."""
 

@@ -130,25 +130,31 @@ async def read_versions(connection: Any, scope: MemoryScope, record_id: str):
     )
 
 
-async def read_snapshot(connection: Any, scope: MemoryScope) -> tuple[dict[str, Any], ...]:
+async def read_snapshot(
+    connection: Any, scope: MemoryScope, *, known_at=None,
+) -> tuple[dict[str, Any], ...]:
     """Caller holds a REPEATABLE READ transaction for all current and historical rows."""
+    from agent_memory.retrieval.atom_state import current_snapshot_versions
+
     records = await read_records(connection, scope, visible=True, barriers=True)
     if not records:
         return ()
-    ids = [record["id"] for record in records]
-    cursor = await connection.execute(
-        """SELECT record_id, version, payload_json, recorded_at
-           FROM agent_memory_admission_versions WHERE record_id = ANY(%s)
-           ORDER BY record_id, version""",
-        (ids,),
-    )
-    by_id: dict[str, list[dict[str, Any]]] = {identity: [] for identity in ids}
-    for row in await cursor.fetchall():
-        by_id[row["record_id"]].append({
-            "version": row["version"],
-            "payload": row["payload_json"],
-            "recorded_at": row["recorded_at"].isoformat(),
-        })
+    by_id = current_snapshot_versions(records, known_at)
+    ids = [record["id"] for record in records if record["id"] not in by_id]
+    if ids:
+        cursor = await connection.execute(
+            """SELECT record_id, version, payload_json, recorded_at
+               FROM agent_memory_admission_versions WHERE record_id = ANY(%s)
+               ORDER BY record_id, version""",
+            (ids,),
+        )
+        by_id.update({identity: [] for identity in ids})
+        for row in await cursor.fetchall():
+            by_id[row["record_id"]].append({
+                "version": row["version"],
+                "payload": row["payload_json"],
+                "recorded_at": row["recorded_at"].isoformat(),
+            })
     return tuple({**record, "versions": by_id[record["id"]]} for record in records)
 
 

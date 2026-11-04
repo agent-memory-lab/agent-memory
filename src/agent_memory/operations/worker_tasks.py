@@ -96,7 +96,12 @@ class WorkerQueueError(RuntimeError):
 
 
 class WorkerExecutionQueue(Protocol):
-    """Minimal lease contract consumed by BoundedWorker, independent of submission."""
+    """Minimal lease contract consumed by BoundedWorker, independent of submission.
+
+    Implementations remain compatible without WorkerLeaseValidator. They must
+    fence publication themselves; the runner cannot make external side effects
+    exactly once, or undo effects after a cancellation.
+    """
 
     async def claim(self, worker_id: str, *, lease_seconds: int) -> WorkerLease | None: ...
     async def checkpoint(self, lease: WorkerLease, value: Mapping[str, Any]) -> None: ...
@@ -104,6 +109,17 @@ class WorkerExecutionQueue(Protocol):
     async def fail(
         self, lease: WorkerLease, error: BaseException
     ) -> WorkerFailureDisposition | None: ...
+
+
+class WorkerLeaseValidator(Protocol):
+    """Optional additive pre-start check, using the queue's authoritative clock.
+
+    Return normally only while this token is active and unexpired; otherwise
+    raise WorkerQueueError(code="stale_lease"). This does not replace a fence in
+    the transaction that publishes effects, or renew a running handler's lease.
+    """
+
+    async def validate_lease(self, lease: WorkerLease) -> None: ...
 
 
 class WorkerQueue(WorkerExecutionQueue, Protocol):

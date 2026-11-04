@@ -37,6 +37,7 @@ from .evidence_research_contracts import (
 from .packing import token_estimate
 from .semantic import SemanticVectorSpec
 from .sqlite_delivery_guard import guard_delivery_snapshot
+from .vector_math import normalize_l2
 
 
 def _bundle(items=(), *, request_id=None, metadata=None):
@@ -295,11 +296,16 @@ def _vector(values, dimension):
     if (
         not isinstance(values, (tuple, list))
         or len(values) != dimension
-        or any(type(v) not in (int, float) or not math.isfinite(v) for v in values)
+        or any(type(v) not in (int, float) for v in values)
     ):
         raise ValueError("invalid_semantic_vector")
-    norm = math.hypot(*values)
-    return tuple(float(v) / norm if norm else 0.0 for v in values)
+    try:
+        vector = tuple(float(value) for value in values)
+    except OverflowError:
+        raise ValueError("invalid_semantic_vector") from None
+    if not all(math.isfinite(value) for value in vector):
+        raise ValueError("invalid_semantic_vector")
+    return normalize_l2(vector)
 
 
 class SQLiteVectorResearchRoute:

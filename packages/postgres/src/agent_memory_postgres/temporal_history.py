@@ -141,7 +141,12 @@ class PostgresClaimHistory:
                 ),
             )
 
-    async def read(self, connection, scope, valid_at, known_at):
+    async def read(
+        self, connection, scope, valid_at, known_at, *, limit=None,
+        legacy_only=False, protected_sources=(), claim_ids=None,
+    ):
+        if limit is not None and (type(limit) is not int or limit < 1):
+            raise ValueError("state limit must be a positive integer")
         valid_at, known_at = aware(valid_at, "valid_at"), aware(known_at, "known_at")
         where, params = self.repository._visible_scope_clause(scope)
         authorized = f"SELECT id FROM agent_memory_claims WHERE {where} AND archived_at IS NULL"
@@ -155,26 +160,43 @@ class PostgresClaimHistory:
             raise TemporalHistoryUnavailable(
                 "knowledge time predates the available temporal history"
             )
+        live_sources = (
+            "SELECT evidence.value FROM jsonb_array_elements_text("
+            "v.payload_json->'provenance'->'source_event_ids') "
+            "WITH ORDINALITY evidence(value, position) "
+            "JOIN agent_memory_events e ON e.id=evidence.value "
+            "WHERE e.archived_at IS NULL"
+        )
+        eligibility, extra = "", ()
+        if legacy_only:
+            eligibility = (
+                "AND left(v.claim_key, 5) != 'atom:' "
+                "AND left(v.claim_id, 11) != 'atom-claim:' "
+                f"AND NOT EXISTS ({live_sources} AND evidence.value = ANY(%s)) "
+            )
+            extra = (list(protected_sources),)
+        if claim_ids is not None:
+            eligibility += "AND v.claim_id = ANY(%s) "
+            extra += (list(claim_ids),)
+        bound = " LIMIT %s" if limit is not None else ""
         cursor = await connection.execute(
             f"""
-            SELECT * FROM agent_memory_claim_versions WHERE claim_id IN ({authorized})
+            SELECT v.*, ARRAY({live_sources} ORDER BY evidence.position) AS live_sources
+            FROM agent_memory_claim_versions v WHERE claim_id IN ({authorized})
             AND system_from <= %s AND (system_to IS NULL OR %s < system_to)
             AND valid_from <= %s AND (valid_to IS NULL OR %s < valid_to)
-            ORDER BY system_from DESC, revision_id
+            AND EXISTS ({live_sources}) {eligibility}
+            ORDER BY (v.payload_json->>'importance')::double precision DESC,
+                     (v.payload_json->>'confidence')::double precision DESC,
+                     v.claim_id COLLATE "C", system_from DESC, revision_id{bound}
         """,
-            (*params, known_at, known_at, valid_at, valid_at),
+            (*params, known_at, known_at, valid_at, valid_at, *extra,
+             *((limit,) if limit is not None else ())),
         )
         claims = []
         for row in await cursor.fetchall():
             claim = load_claim(row["payload_json"])
-            cursor = await connection.execute(
-                "SELECT id FROM agent_memory_events WHERE id = ANY(%s) AND archived_at IS NULL",
-                (list(claim.provenance.source_event_ids),),
-            )
-            live = {event["id"] for event in await cursor.fetchall()}
-            sources = tuple(
-                source for source in claim.provenance.source_event_ids if source in live
-            )
+            sources = tuple(row["live_sources"])
             if sources:
                 claims.append(
                     replace(

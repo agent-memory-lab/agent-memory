@@ -32,13 +32,15 @@ def guard_delivery_snapshot(repository, connection, query, bundle, *, pipeline=F
     bundle = snapshot_delivery_bundle(bundle)
     now = utc_now()
     valid_at, known_at = query.valid_at or now, query.known_at or now
-    claims = SQLiteClaimHistory(repository).read(connection, query.scope, valid_at, known_at)
-    snapshot = repository._admission_snapshot(connection, query.scope)
+    claim_ids = requested_claim_ids(bundle)
+    claims = SQLiteClaimHistory(repository).read(
+        connection, query.scope, valid_at, known_at, claim_ids=claim_ids,
+    )
+    snapshot = repository._admission_snapshot(connection, query.scope, known_at=known_at)
     atoms, info = project_records(select_record_snapshots(snapshot, known_at), valid_at)
     protected = repository._admission_protected_sources(connection, query.scope)
     where, params = repository._visible_scope_clause(query.scope)
     identities = selected_source_ids(bundle) | diagnostic_ids(bundle, (MemoryKind.EVENT,))
-    claim_ids = requested_claim_ids(bundle)
     claim_sources = {source for claim in (*claims, *atoms) if claim.id in claim_ids
                      for source in claim.provenance.source_event_ids}
     identities.update(claim_sources)

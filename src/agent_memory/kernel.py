@@ -456,6 +456,22 @@ class MemoryKernel:
         legacy = await self._repository.current_claims(scope)
         return (await self._legacy_state(scope, legacy)) + atoms
 
+    async def get_state_bounded(self, scope: MemoryScope, *, limit: int) -> tuple[Claim, ...]:
+        """Bound output only after complete atom conflicts and legacy visibility checks.
+
+        Stores may bound legacy hydration, but atom projection and protected-source
+        closure remain complete. Older repositories retain the exact full-read path.
+        """
+        if type(limit) is not int or limit < 1:
+            raise ValueError("state limit must be a positive integer")
+        reader = getattr(self._repository, "bounded_legacy_claims", None)
+        if not callable(reader):
+            return (await self.get_state(scope))[:limit]
+        now = utc_now()
+        atoms, _ = await AdmissionEngine(self._repository).state(scope, valid_at=now, known_at=now)
+        legacy = tuple(await reader(scope, limit=limit, valid_at=now, known_at=now))
+        return (legacy + atoms)[:limit]
+
     async def extract_event(
         self, event: MemoryEvent, *, pipeline: AtomExtractionPipeline,
         authority: SourceAuthority, policy: AdmissionPolicy,

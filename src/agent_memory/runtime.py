@@ -224,11 +224,8 @@ class AgentMemory:
         )
         if self._recall_pipeline is None or valid_at is not None or known_at is not None:
             return await self._provider.retrieve(query)
-        current_state = await self._provider.get_state(self.scope)
-        bundle = await self._recall_pipeline.retrieve(
-            query,
-            tuple(current_state[: self.limits.max_state_claims]),
-        )
+        current_state = await self.state()
+        bundle = await self._recall_pipeline.retrieve(query, current_state)
         final_guard = getattr(self._provider, "guard_pipeline_delivery", None)
         if callable(final_guard):
             return await final_guard(query, bundle)
@@ -380,7 +377,11 @@ class AgentMemory:
 
     async def state(self) -> tuple[Claim, ...]:
         self._require_initialized()
-        claims = await self._provider.get_state(self.scope)
+        reader = getattr(self._provider, "get_state_bounded", None)
+        claims = (
+            await reader(self.scope, limit=self.limits.max_state_claims)
+            if callable(reader) else await self._provider.get_state(self.scope)
+        )
         return tuple(claims[: self.limits.max_state_claims])
 
     async def record_decision(

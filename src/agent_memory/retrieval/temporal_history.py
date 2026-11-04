@@ -265,7 +265,12 @@ class SQLiteClaimHistory:
                 ),
             )
 
-    def read(self, connection, scope, valid_at, known_at):
+    def read(
+        self, connection, scope, valid_at, known_at, *, limit=None,
+        legacy_only=False, protected_sources=(), claim_ids=None,
+    ):
+        if limit is not None and (type(limit) is not int or limit < 1):
+            raise ValueError("state limit must be a positive integer")
         valid_at, known_at = aware(valid_at, "valid_at"), aware(known_at, "known_at")
         where, params = self.repository._visible_scope_clause(scope)
         authorized = f"SELECT id FROM claims WHERE {where} AND archived_at IS NULL"
@@ -278,33 +283,48 @@ class SQLiteClaimHistory:
             raise TemporalHistoryUnavailable(
                 "knowledge time predates the available temporal history"
             )
+        # Validate sources and authorization before applying the output bound.
+        # The JSON aggregate preserves provenance order, including repeated IDs,
+        # without issuing a source SELECT for every returned claim.
+        live_sources = (
+            "SELECT evidence.value FROM json_each(v.payload_json, "
+            "'$.provenance.source_event_ids') evidence "
+            "JOIN events e ON e.id=evidence.value WHERE e.archived_at IS NULL"
+        )
+        eligibility, extra = "", ()
+        if legacy_only:
+            eligibility = (
+                "AND substr(v.claim_key, 1, 5) != 'atom:' "
+                "AND substr(v.claim_id, 1, 11) != 'atom-claim:' "
+                f"AND NOT EXISTS ({live_sources} AND evidence.value IN "
+                "(SELECT value FROM json_each(?))) "
+            )
+            extra = (json.dumps(tuple(protected_sources)),)
+        if claim_ids is not None:
+            eligibility += "AND v.claim_id IN (SELECT value FROM json_each(?)) "
+            extra += (json.dumps(tuple(claim_ids)),)
+        bound = " LIMIT ?" if limit is not None else ""
         rows = connection.execute(
             f"""
-            SELECT * FROM claim_versions WHERE claim_id IN ({authorized})
+            SELECT v.*, (SELECT json_group_array(value) FROM (
+                {live_sources} ORDER BY CAST(evidence.key AS INTEGER)
+            )) AS live_sources_json
+            FROM claim_versions v WHERE claim_id IN ({authorized})
             AND system_from <= ? AND (system_to IS NULL OR ? < system_to)
             AND valid_from <= ? AND (valid_to IS NULL OR ? < valid_to)
-            ORDER BY system_from DESC, revision_id
+            AND EXISTS ({live_sources}) {eligibility}
+            ORDER BY json_extract(v.payload_json, '$.importance') DESC,
+                     json_extract(v.payload_json, '$.confidence') DESC,
+                     v.claim_id COLLATE BINARY, system_from DESC, revision_id{bound}
         """,
-            (
-                *params,
-                known_at.isoformat(),
-                known_at.isoformat(),
-                valid_at.isoformat(),
-                valid_at.isoformat(),
-            ),
+            (*params, known_at.isoformat(), known_at.isoformat(),
+             valid_at.isoformat(), valid_at.isoformat(), *extra,
+             *((limit,) if limit is not None else ())),
         ).fetchall()
         claims = []
         for row in rows:
             claim = load_claim(row["payload_json"])
-            sources = tuple(
-                event_id
-                for event_id in claim.provenance.source_event_ids
-                if connection.execute(
-                    "SELECT 1 FROM events WHERE id = ? AND archived_at IS NULL", (event_id,)
-                ).fetchone()
-            )
-            if not sources:
-                continue
+            sources = tuple(json.loads(row["live_sources_json"]))
             claims.append(
                 replace(
                     claim,
