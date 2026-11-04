@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import sqlite3
 from contextlib import closing
+from datetime import UTC, datetime
+
+import pytest
 
 from agent_memory import (
     ForgetMode,
@@ -147,7 +151,10 @@ def test_forget_targeted_event_removes_orphan_claim(tmp_path) -> None:
     run(scenario())
 
 
-def test_multiple_kernels_can_ingest_same_key_without_multiple_active_claims(tmp_path) -> None:
+@pytest.mark.parametrize("reverse_commit_order", [False, True])
+def test_multiple_kernels_can_ingest_same_key_without_multiple_active_claims(
+    tmp_path, reverse_commit_order
+) -> None:
     async def scenario() -> None:
         db_path = tmp_path / "memory.db"
         left = build_local_kernel(db_path)
@@ -157,12 +164,19 @@ def test_multiple_kernels_can_ingest_same_key_without_multiple_active_claims(tmp
 
         scope = MemoryScope("tenant-a", user_id="user-a", session_id="session-a")
 
+        right_finished = asyncio.Event()
+        right_completed = 0
+
         async def ingest_with(kernel, value: str) -> None:
+            nonlocal right_completed
+            if reverse_commit_order and kernel is left:
+                await right_finished.wait()
             await kernel.ingest_event(
                 MemoryEvent(
                     scope,
                     "agent.message",
                     f"Value: {value}",
+                    occurred_at=datetime(2025, 1, 1, 0, 0, int(value), tzinfo=UTC),
                     metadata={
                         "claims": [
                             {
@@ -176,6 +190,11 @@ def test_multiple_kernels_can_ingest_same_key_without_multiple_active_claims(tmp
                 )
             )
 
+            if kernel is right:
+                right_completed += 1
+                if right_completed == 3:
+                    right_finished.set()
+
         await asyncio.gather(
             *(ingest_with(left, str(index)) for index in range(1, 4)),
             *(ingest_with(right, str(index)) for index in range(4, 7)),
@@ -183,7 +202,24 @@ def test_multiple_kernels_can_ingest_same_key_without_multiple_active_claims(tmp
 
         state = await left.get_state(scope)
         assert len(state) == 1
-        assert state[0].version == 6
+        # Effective-time order need not match concurrent transaction order.
+        assert state[0].value == "6"
+        if reverse_commit_order:
+            assert state[0].version == 3
+        with closing(sqlite3.connect(db_path)) as connection:
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(
+                "SELECT * FROM claims WHERE claim_key = ? ORDER BY version",
+                ("contact.preference",),
+            ).fetchall()
+        assert [row["version"] for row in rows] == list(range(1, 7))
+        assert {json.loads(row["value_json"]) for row in rows} == set("123456")
+        assert [row["status"] for row in rows] == ["superseded"] * 5 + ["active"]
+        assert rows[0]["supersedes"] is None
+        assert rows[-1]["superseded_by"] is None
+        for previous, current in zip(rows, rows[1:], strict=False):
+            assert current["supersedes"] == previous["id"]
+            assert previous["superseded_by"] == current["id"]
 
     run(scenario())
 
