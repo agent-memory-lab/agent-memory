@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -58,8 +58,14 @@ class LangGraphMemoryAdapter:
         keys: LangGraphKeys | None = None,
         token_budget: int = 1200,
         limit: int = 8,
+        tool_result_projector: Callable[[str, Any], str | None] | None = None,
+        tool_result_max_bytes: int = 4096,
     ) -> None:
-        self._adapter = AgentMemoryAdapter(provider)
+        self._adapter = AgentMemoryAdapter(
+            provider,
+            tool_result_projector=tool_result_projector,
+            tool_result_max_bytes=tool_result_max_bytes,
+        )
         self._scope_resolver = scope_resolver
         self._keys = keys or LangGraphKeys()
         self._token_budget = token_budget

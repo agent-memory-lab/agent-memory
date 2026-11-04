@@ -245,4 +245,7 @@ def test_memory_benchmark_isolates_gold_and_preserves_dimension_filtering():
     assert len(report.skips) == 5
     metrics = {value.arm: value for value in report.arms}
     assert metrics["candidate-policy"].mean_score == 1
+    assert metrics["candidate-policy"].planned_mean_score == 1 / 6
+    assert metrics["candidate-policy"].planned_success_rate == 1 / 6
+    assert metrics["candidate-policy"].planned_cases == 6
     assert metrics["fixed-policy"].completed_cases == 0

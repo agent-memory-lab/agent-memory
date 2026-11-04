@@ -7,6 +7,11 @@ the first stable release.
 
 ### Fixed
 
+- Add host-authorized, opt-in searchable tool evidence while preserving metadata-only defaults.
+- Report planned-denominator benchmark scores and paired comparisons alongside legacy
+  completed-case metrics; clarify cluster interval limitations.
+- Stabilize vector normalization and cosine similarity for extreme finite values and
+  reject invalid reranker weights.
 - Prevent stale worker leases from overwriting cancellation or a replacement lease.
 - Continue capture queue selection after retiring exhausted items.
 - Reject nonfinite resource evaluation inputs and treat duplicate release evidence

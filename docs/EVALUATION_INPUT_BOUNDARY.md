@@ -30,7 +30,10 @@ thresholds, dimensions, answerability and group labels remain scorer-side.
 `CallableMemoryBenchmarkArm.supported_dimensions` is still supported: the runner
 applies the dimension filter before invoking the callable; the callable no longer
 receives a dimension. Direct `retrieve` calls take the new input and do not perform
-that scorer-side filter. Dataset/report schemas and scoring formulas are unchanged.
+that scorer-side filter. Retrieval scoring formulas are unchanged. The generic
+memory benchmark separately adds planned-case metrics and optional scorer-only
+cluster metadata; see [denominators and uncertainty](EVALUATION_DENOMINATORS.md)
+for schema compatibility and the conditional legacy fields.
 Controlled answer/evidence scores still require the host's independent pinned
 judge; the harness does not manufacture or authenticate those judgments.
 

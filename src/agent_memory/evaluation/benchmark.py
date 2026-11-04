@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 import inspect
@@ -31,7 +31,7 @@ class MemoryBenchmarkDimension(StrEnum):
 
 
 class BenchmarkSkip(RuntimeError):
-    """An explicit, reportable skip rather than a hidden success or failure."""
+    """A reportable skip; retained with zero credit in planned-case metrics."""
 
 
 def _identifier(value: object, field_name: str) -> str:
@@ -73,9 +73,12 @@ class MemoryBenchmarkCase:
     forbidden_memory_ids: tuple[str, ...] = ()
     expected_order: tuple[str, ...] = ()
     success_threshold: float = 0.75
+    cluster_id: str | None = None
 
     def __post_init__(self) -> None:
         _identifier(self.case_id, "case_id")
+        if self.cluster_id is not None:
+            _identifier(self.cluster_id, "cluster_id")
         if not isinstance(self.scope, MemoryScope):
             raise TypeError("scope must be a MemoryScope")
         if not isinstance(self.query_text, str) or not self.query_text.strip():
@@ -259,6 +262,7 @@ class MemoryBenchmarkCaseResult:
     evidence_coverage: float
     forbidden_hits: int
     token_estimate: int
+    cluster_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -266,6 +270,7 @@ class MemoryBenchmarkFailure:
     arm: str
     case_id: str
     error_type: str
+    cluster_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -273,6 +278,7 @@ class MemoryBenchmarkSkip:
     arm: str
     case_id: str
     reason: str
+    cluster_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -282,6 +288,18 @@ class MemoryDimensionMetrics:
     completed_cases: int
     successful_cases: int
     mean_score: float
+    planned_mean_score: float | None = None
+    planned_success_rate: float | None = None
+    planned_cases: int = field(init=False)
+    completed_mean_score: float = field(init=False)
+    completed_success_rate: float = field(init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "planned_cases", self.sample_count)
+        object.__setattr__(self, "completed_mean_score", self.mean_score)
+        object.__setattr__(self, "completed_success_rate", (
+            self.successful_cases / self.completed_cases if self.completed_cases else 0.0
+        ))
 
 
 @dataclass(frozen=True, slots=True)
@@ -302,6 +320,27 @@ class MemoryArmMetrics:
     success_confidence_low: float
     success_confidence_high: float
     dimensions: tuple[MemoryDimensionMetrics, ...]
+    planned_mean_score: float | None = None
+    planned_success_rate: float | None = None
+    planned_success_confidence_low: float | None = None
+    planned_success_confidence_high: float | None = None
+    planned_cluster_count: int | None = None
+    planned_confidence_method: str | None = None
+    planned_uncertainty_reason: str | None = None
+    planned_cases: int = field(init=False)
+    completed_mean_score: float = field(init=False)
+    completed_success_rate: float = field(init=False)
+    completed_success_confidence_low: float = field(init=False)
+    completed_success_confidence_high: float = field(init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "planned_cases", self.sample_count)
+        object.__setattr__(self, "completed_mean_score", self.mean_score)
+        object.__setattr__(self, "completed_success_rate", (
+            self.successful_cases / self.completed_cases if self.completed_cases else 0.0
+        ))
+        object.__setattr__(self, "completed_success_confidence_low", self.success_confidence_low)
+        object.__setattr__(self, "completed_success_confidence_high", self.success_confidence_high)
 
 
 @dataclass(frozen=True, slots=True)
@@ -313,6 +352,23 @@ class MemoryBenchmarkComparison:
     confidence_low: float | None
     confidence_high: float | None
     incomparable_reason: str | None = None
+    planned_cases: int = 0
+    planned_mean_score_delta: float | None = None
+    planned_confidence_low: float | None = None
+    planned_confidence_high: float | None = None
+    planned_cluster_count: int | None = None
+    planned_confidence_method: str | None = None
+    planned_uncertainty_reason: str | None = None
+    jointly_completed_cases: int = field(init=False)
+    jointly_completed_mean_score_delta: float | None = field(init=False)
+    jointly_completed_confidence_low: float | None = field(init=False)
+    jointly_completed_confidence_high: float | None = field(init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "jointly_completed_cases", self.comparable_cases)
+        object.__setattr__(self, "jointly_completed_mean_score_delta", self.mean_score_delta)
+        object.__setattr__(self, "jointly_completed_confidence_low", self.confidence_low)
+        object.__setattr__(self, "jointly_completed_confidence_high", self.confidence_high)
 
 
 @dataclass(frozen=True, slots=True)
@@ -329,6 +385,11 @@ class MemoryBenchmarkReport:
     case_results: tuple[MemoryBenchmarkCaseResult, ...]
     failures: tuple[MemoryBenchmarkFailure, ...]
     skips: tuple[MemoryBenchmarkSkip, ...]
+    metric_policy: str = "planned_cases_zero_credit_for_failures_and_skips"
+    legacy_metric_policy: str = (
+        "mean_* and success_confidence_* are completed-only diagnostics; comparison "
+        "mean_score_delta/confidence_* use jointly completed cases. Not primary metrics."
+    )
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "plugin_versions", _versions(self.plugin_versions))
@@ -356,14 +417,72 @@ class MemoryBenchmarkReport:
             f"Failures: {len(self.failures)}",
             f"Skipped: {len(self.skips)}",
             "",
-            "| Arm | Completed | Success | Mean score | 95% confidence |",
-            "| --- | ---: | ---: | ---: | --- |",
+            "Primary metrics use every planned case. Failures and skips receive zero credit; "
+            "they remain separately reported, not measured zero-score observations.",
+            "",
+            "| Arm | Completed/planned | Successes | Planned mean score | "
+            "Planned success rate | Approx. 95% success interval |",
+            "| --- | ---: | ---: | ---: | ---: | --- |",
         ]
         for arm in self.arms:
+            interval = _format_interval(
+                arm.planned_success_confidence_low, arm.planned_success_confidence_high
+            )
             lines.append(
                 f"| {arm.arm}@{arm.version} | {arm.completed_cases}/{arm.sample_count} | "
-                f"{arm.successful_cases} | {arm.mean_score:.4f} | "
-                f"[{arm.success_confidence_low:.4f}, {arm.success_confidence_high:.4f}] |"
+                f"{arm.successful_cases} | {_format_number(arm.planned_mean_score)} | "
+                f"{_format_number(arm.planned_success_rate)} | "
+                f"{interval} |"
+            )
+        lines.extend([
+            "", "## Planned paired comparisons", "",
+            "| Baseline → candidate | Planned cases | Mean score delta | Approx. 95% interval |",
+            "| --- | ---: | ---: | --- |",
+        ])
+        for comparison in self.comparisons:
+            interval = _format_interval(
+                comparison.planned_confidence_low, comparison.planned_confidence_high
+            )
+            lines.append(
+                f"| {comparison.baseline_arm} → {comparison.candidate_arm} | "
+                f"{comparison.planned_cases} | "
+                f"{_format_number(comparison.planned_mean_score_delta)} | "
+                f"{interval} |"
+            )
+        lines.extend(["", "## Uncertainty", ""])
+        for arm in self.arms:
+            lines.append(
+                f"- {arm.arm}: {arm.planned_confidence_method}; "
+                f"clusters={arm.planned_cluster_count}. {arm.planned_uncertainty_reason or ''}"
+            )
+        for comparison in self.comparisons:
+            lines.append(
+                f"- {comparison.baseline_arm} → {comparison.candidate_arm}: "
+                f"{comparison.planned_confidence_method}; "
+                f"clusters={comparison.planned_cluster_count}. "
+                f"{comparison.planned_uncertainty_reason or ''}"
+            )
+        lines.extend([
+            "", "## Completed-only diagnostics (conditional, not primary)", "",
+            "These exclude failures/skips and may have survivor bias. Legacy mean_*, "
+            "success_confidence_* and comparison mean_score_delta/confidence_* retain "
+            "these conditional meanings. Conditional intervals assume independent cases "
+            "and are not cluster-adjusted.",
+            "",
+            "| Arm | Completed mean score | Completed success rate |",
+            "| --- | ---: | ---: |",
+        ])
+        for arm in self.arms:
+            lines.append(
+                f"| {arm.arm} | {arm.completed_mean_score:.4f} | "
+                f"{arm.completed_success_rate:.4f} |"
+            )
+        for comparison in self.comparisons:
+            lines.append(
+                f"- {comparison.baseline_arm} → {comparison.candidate_arm}: "
+                f"jointly completed={comparison.jointly_completed_cases}, "
+                f"conditional mean score delta="
+                f"{_format_number(comparison.jointly_completed_mean_score_delta)}."
             )
         if self.failures:
             lines.extend(["", "## Failures"])
@@ -418,11 +537,15 @@ async def run_memory_benchmark(
                 if not isinstance(observation, MemoryBenchmarkObservation):
                     raise TypeError("benchmark arm returned an invalid observation")
             except BenchmarkSkip as error:
-                skips.append(MemoryBenchmarkSkip(arm_name, case.case_id, str(error)))
+                skips.append(
+                    MemoryBenchmarkSkip(arm_name, case.case_id, str(error), case.cluster_id)
+                )
                 continue
             except Exception as error:
                 failures.append(
-                    MemoryBenchmarkFailure(arm_name, case.case_id, type(error).__name__)
+                    MemoryBenchmarkFailure(
+                        arm_name, case.case_id, type(error).__name__, case.cluster_id
+                    )
                 )
                 continue
             case_results.append(_score_case(arm_name, case, observation))
@@ -439,7 +562,7 @@ async def run_memory_benchmark(
         for name in sorted(by_name)
     )
     comparisons = tuple(
-        _comparison(baseline, "candidate-policy", case_results)
+        _comparison(baseline, "candidate-policy", ordered_cases, case_results)
         for baseline in ("fixed-policy", "no-memory")
     )
     return MemoryBenchmarkReport(
@@ -496,6 +619,7 @@ def _score_case(
         evidence_coverage=evidence,
         forbidden_hits=forbidden_hits,
         token_estimate=observation.token_estimate,
+        cluster_id=case.cluster_id,
     )
 
 
@@ -526,6 +650,14 @@ def _arm_metrics(
     selected = [item for item in results if item.arm == arm]
     successful = sum(item.successful for item in selected)
     low, high = _wilson_interval(successful, len(selected))
+    by_case = {item.case_id: item for item in selected}
+    planned_successes = [
+        float(by_case[case.case_id].successful) if case.case_id in by_case else 0.0
+        for case in cases
+    ]
+    planned_low, planned_high, clusters, method, reason = _planned_interval(
+        cases, planned_successes, success_rate=True
+    )
     dimensions: list[MemoryDimensionMetrics] = []
     for dimension in MemoryBenchmarkDimension:
         dimension_cases = [case for case in cases if case.dimension is dimension]
@@ -539,6 +671,12 @@ def _arm_metrics(
                 completed_cases=len(dimension_results),
                 successful_cases=sum(item.successful for item in dimension_results),
                 mean_score=_mean(item.score for item in dimension_results),
+                planned_mean_score=(
+                    math.fsum(item.score for item in dimension_results) / len(dimension_cases)
+                ),
+                planned_success_rate=(
+                    sum(item.successful for item in dimension_results) / len(dimension_cases)
+                ),
             )
         )
     return MemoryArmMetrics(
@@ -558,12 +696,20 @@ def _arm_metrics(
         success_confidence_low=low,
         success_confidence_high=high,
         dimensions=tuple(dimensions),
+        planned_mean_score=math.fsum(item.score for item in selected) / len(cases),
+        planned_success_rate=successful / len(cases),
+        planned_success_confidence_low=planned_low,
+        planned_success_confidence_high=planned_high,
+        planned_cluster_count=clusters,
+        planned_confidence_method=method,
+        planned_uncertainty_reason=reason,
     )
 
 
 def _comparison(
     baseline_arm: str,
     candidate_arm: str,
+    cases: Sequence[MemoryBenchmarkCase],
     results: Sequence[MemoryBenchmarkCaseResult],
 ) -> MemoryBenchmarkComparison:
     by_key = {(item.arm, item.case_id): item for item in results}
@@ -576,36 +722,116 @@ def _comparison(
         by_key[(candidate_arm, case_id)].score - by_key[(baseline_arm, case_id)].score
         for case_id in case_ids
     ]
-    if not deltas:
-        return MemoryBenchmarkComparison(
-            baseline_arm,
-            candidate_arm,
-            0,
-            None,
-            None,
-            None,
-            "no jointly completed cases",
-        )
-    mean_delta = fmean(deltas)
+    mean_delta = fmean(deltas) if deltas else None
+    low = high = None
+    reason = None
     if len(deltas) < 2:
-        return MemoryBenchmarkComparison(
-            baseline_arm,
-            candidate_arm,
-            len(deltas),
-            mean_delta,
-            None,
-            None,
-            "fewer than 2 comparable cases",
+        reason = "fewer than 2 comparable cases" if deltas else "no jointly completed cases"
+    else:
+        margin = 1.96 * stdev(deltas) / math.sqrt(len(deltas))
+        low, high = mean_delta - margin, mean_delta + margin
+    planned_deltas = []
+    for case in cases:
+        candidate = by_key.get((candidate_arm, case.case_id))
+        baseline = by_key.get((baseline_arm, case.case_id))
+        planned_deltas.append(
+            (candidate.score if candidate else 0.0) - (baseline.score if baseline else 0.0)
         )
-    margin = 1.96 * stdev(deltas) / math.sqrt(len(deltas))
-    return MemoryBenchmarkComparison(
-        baseline_arm,
-        candidate_arm,
-        len(deltas),
-        mean_delta,
-        mean_delta - margin,
-        mean_delta + margin,
+    planned_low, planned_high, clusters, method, planned_reason = _planned_interval(
+        cases, planned_deltas, success_rate=False
     )
+    return MemoryBenchmarkComparison(
+        baseline_arm=baseline_arm,
+        candidate_arm=candidate_arm,
+        comparable_cases=len(deltas),
+        mean_score_delta=mean_delta,
+        confidence_low=low,
+        confidence_high=high,
+        incomparable_reason=reason,
+        planned_cases=len(cases),
+        planned_mean_score_delta=fmean(planned_deltas),
+        planned_confidence_low=planned_low,
+        planned_confidence_high=planned_high,
+        planned_cluster_count=clusters,
+        planned_confidence_method=method,
+        planned_uncertainty_reason=planned_reason,
+    )
+
+
+def _planned_interval(
+    cases: Sequence[MemoryBenchmarkCase],
+    values: Sequence[float],
+    *,
+    success_rate: bool,
+) -> tuple[float | None, float | None, int | None, str, str]:
+    """Case-weighted intervals; cluster IDs are supplied by the evaluator, never guessed."""
+    known_clusters = [case.cluster_id for case in cases if case.cluster_id is not None]
+    if known_clusters and len(known_clusters) != len(cases):
+        return (
+            None, None, None, "unavailable_incomplete_cluster_metadata",
+            "Some planned cases lack cluster IDs; no partial-cluster interval is reported.",
+        )
+    mean = fmean(values)
+    if known_clusters:
+        grouped: dict[str, list[float]] = {}
+        for cluster, value in zip(known_clusters, values, strict=True):
+            grouped.setdefault(cluster, []).append(value)
+        count = len(grouped)
+        method = "cluster_robust_normal_approximation"
+        if count < 2:
+            return (
+                None, None, count, method,
+                "Fewer than 2 independent clusters; interval unavailable.",
+            )
+        residuals = []
+        for group in grouped.values():
+            group_mean = fmean(group)
+            difference = group_mean - mean
+            # fmean uses a stable sum; suppress residuals at floating-point
+            # resolution, not at the arbitrary precision used to display reports.
+            roundoff = 4 * max(math.ulp(mean), math.ulp(group_mean))
+            residuals.append(0.0 if abs(difference) <= roundoff else len(group) * difference)
+        # Cluster sandwich variance for the case-weighted mean, with G/(G-1) correction.
+        variance = count / (count - 1) * math.fsum(value * value for value in residuals)
+        if variance == 0:
+            return (
+                None, None, count, method,
+                "Zero empirical cluster variance (within floating-point resolution); "
+                "a degenerate interval would overstate certainty.",
+            )
+        margin = 1.96 * math.sqrt(variance) / len(values)
+        lower_bound = 0.0 if success_rate else -1.0
+        return (
+            max(lower_bound, mean - margin), min(1.0, mean + margin), count, method,
+            "Approximation assumes independent clusters; few clusters or zero empirical "
+            "variance can understate uncertainty. Not a confirmatory significance test.",
+        )
+    limitation = "Cluster IDs unavailable; within-source dependence is not accounted for."
+    if success_rate:
+        low, high = _wilson_interval(int(sum(values)), len(values))
+        return low, high, None, "wilson_case_independence_assumed", limitation
+    method = "normal_case_independence_assumed"
+    if len(values) < 2:
+        return None, None, None, method, f"Fewer than 2 planned cases. {limitation}"
+    deviation = stdev(values)
+    if deviation == 0:
+        return (
+            None, None, None, method,
+            "Zero empirical variance; a degenerate interval would overstate certainty. "
+            f"{limitation}",
+        )
+    margin = 1.96 * deviation / math.sqrt(len(values))
+    return max(-1.0, mean - margin), min(1.0, mean + margin), None, method, limitation
+
+
+def _format_number(value: float | None) -> str:
+    return "unavailable" if value is None else f"{value:.4f}"
+
+
+def _format_interval(low: float | None, high: float | None) -> str:
+    if low is None or high is None:
+        return "unavailable"
+    return f"[{low:.4f}, {high:.4f}]"
 
 
 def _wilson_interval(successes: int, total: int) -> tuple[float, float]:

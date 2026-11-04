@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from hashlib import sha256
 from typing import Any
 
+from .capture.policy import DefaultCaptureRedactor
 from .domain import (
     ArtifactStatus,
     DecisionRecord,
@@ -37,8 +38,49 @@ class AgentLifecycleContext:
 class AgentMemoryAdapter:
     """Generic lifecycle hooks usable by LangGraph, AutoGen, custom agents, or SDKs."""
 
-    def __init__(self, provider: MemoryProvider) -> None:
+    def __init__(
+        self,
+        provider: MemoryProvider,
+        *,
+        tool_result_projector: Callable[[str, Any], str | None] | None = None,
+        tool_result_max_bytes: int = 4096,
+    ) -> None:
+        """Configure host-approved tool evidence; raw results stay metadata-only.
+
+        A projector must select and sanitize text that the host allows retrieval
+        to expose. Built-in redaction is defense in depth, not a privacy policy.
+        A zero byte budget disables evidence projection, including explicit text.
+        """
+        if tool_result_projector is not None and not callable(tool_result_projector):
+            raise TypeError("tool_result_projector must be callable")
+        if type(tool_result_max_bytes) is not int or not (
+            tool_result_max_bytes == 0 or 32 <= tool_result_max_bytes <= 65_536
+        ):
+            raise ValueError("tool_result_max_bytes must be 0 or between 32 and 65536")
         self._provider = provider
+        self._tool_result_projector = tool_result_projector
+        self._tool_result_max_bytes = tool_result_max_bytes
+
+    def _tool_evidence(self, tool_name: str, result: Any, evidence_text: str | None) -> str:
+        if evidence_text is not None and not isinstance(evidence_text, str):
+            raise TypeError("evidence_text must be a string or None")
+        if self._tool_result_max_bytes == 0:
+            return ""
+        if evidence_text is None and self._tool_result_projector is not None:
+            evidence_text = self._tool_result_projector(tool_name, result)
+            if evidence_text is not None and not isinstance(evidence_text, str):
+                raise TypeError("tool_result_projector must return a string or None")
+        if not evidence_text or not evidence_text.strip():
+            return ""
+        # Redact the full selected text before truncating: cutting a credential
+        # first could hide its recognizable prefix/suffix from the redactor.
+        safe = DefaultCaptureRedactor().redact(evidence_text)
+        encoded = safe.encode("utf-8")
+        if len(encoded) > self._tool_result_max_bytes:
+            marker = "\n[truncated]"
+            budget = self._tool_result_max_bytes - len(marker.encode("utf-8"))
+            safe = encoded[:budget].decode("utf-8", errors="ignore") + marker
+        return safe
 
     async def initialize(self) -> None:
         await self._provider.initialize()
@@ -88,12 +130,23 @@ class AgentMemoryAdapter:
         result: Any,
         success: bool,
         claims: Sequence[Mapping[str, Any]] = (),
+        evidence_text: str | None = None,
     ) -> IngestResult:
+        """Record a tool event and optional host-approved, searchable evidence.
+
+        ``evidence_text`` overrides the configured projector; an empty string
+        suppresses it for this call. Neither results nor arguments are projected
+        automatically. Evidence remains tool output, not an accepted user fact.
+        """
+        content = f"Tool {tool_name} {'succeeded' if success else 'failed'}."
+        evidence = self._tool_evidence(tool_name, result, evidence_text)
+        if evidence:
+            content += f"\nResult evidence:\n{evidence}"
         return await self._provider.ingest_event(
             MemoryEvent(
                 scope=context.scope,
                 event_type="agent.tool.completed" if success else "agent.tool.failed",
-                content=f"Tool {tool_name} {'succeeded' if success else 'failed'}.",
+                content=content,
                 idempotency_key=context.idempotency_key("after_tool", tool_call_id),
                 actor=context.actor,
                 metadata={
