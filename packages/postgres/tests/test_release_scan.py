@@ -286,3 +286,18 @@ def test_source_that_grows_after_stat_is_still_bounded(tmp_path, monkeypatch):
     assert report.scan_complete is False
     assert report.skipped_large_files == 1
     assert report.violations
+
+
+def test_tool_evidence_redaction_fixture_is_release_scan_safe(tmp_path):
+    # Synthetic credential tests must not embed a scanner-triggering literal in
+    # either the source tree or the source distribution.
+    root = Path(__file__).resolve().parents[3]
+    source = root / "tests/test_adapter_tool_evidence.py"
+    archive_path = tmp_path / "agent_memory-fixture.tar.gz"
+    with tarfile.open(archive_path, "w:gz") as archive:
+        archive.add(source, arcname="agent_memory/tests/test_adapter_tool_evidence.py")
+    report = scan_release_paths([source, archive_path])
+    assert report.scan_complete
+    assert report.scanned_archives == 1
+    assert report.total_findings == 0
+    assert not report.violations
