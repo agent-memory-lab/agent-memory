@@ -39,16 +39,18 @@ def store(request, tmp_path):
             pytest.fail("proposal PostgreSQL tests require a database named test")
         from agent_memory_postgres import build_postgres_kernel
 
-        kernel = build_postgres_kernel(dsn)
     else:
-        kernel = build_local_kernel(tmp_path / "memory.db")
+        local_kernel = build_local_kernel(tmp_path / "memory.db")
     scope = MemoryScope(f"proposal-{uuid4().hex}", user_id="user", agent_id="agent",
                         workspace_id="workspace", session_id="session")
 
     @asynccontextmanager
     async def open_store():
-        await kernel.initialize()
+        # Closed psycopg pools cannot reopen. Each PostgreSQL context owns a
+        # fresh pool against the same database; SQLite keeps its reopen contract.
+        kernel = build_postgres_kernel(dsn) if request.param == "postgres" else local_kernel
         try:
+            await kernel.initialize()
             yield kernel, scope
         finally:
             await kernel.close()
@@ -153,8 +155,9 @@ def test_independent_same_value_is_visible_after_proposal_source_forget(store, m
                     assert evidence.id in state[0].provenance.source_event_ids
             # Durability and migration/reinitialization must not revive the old claim.
             await kernel.close()
-            await kernel.initialize()
-            assert (await kernel.get_state(scope))[0].id == first[0]
+            async with store() as (reopened, reopened_scope):
+                assert reopened_scope == scope
+                assert (await reopened.get_state(scope))[0].id == first[0]
     asyncio.run(run())
 
 
@@ -268,4 +271,61 @@ def test_concurrent_identical_replays_share_one_result(store):
             assert first == second
             assert first.status == ProposalStatus.ACCEPTED
             assert len(await kernel.get_state(scope)) == 1
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("failure", [None, "initialize", "body"])
+def test_postgres_store_reopen_owns_fresh_pool_and_cleans_up(monkeypatch, tmp_path, failure):
+    from types import SimpleNamespace
+
+    postgres = pytest.importorskip("agent_memory_postgres")
+    dsn = "postgresql://localhost/proposal_fixture_test?application_name=reopen"
+    monkeypatch.setenv("AGENT_MEMORY_TEST_POSTGRES_DSN", dsn)
+    kernels = []
+    destinations = []
+
+    class Kernel:
+        def __init__(self):
+            self.initialized = False
+            self.closed = False
+
+        async def initialize(self):
+            assert not self.closed, "a closed PostgreSQL pool cannot reopen"
+            self.initialized = True
+            if failure == "initialize" and len(kernels) == 2:
+                raise RuntimeError("initialize failed")
+
+        async def close(self):
+            self.closed = True
+
+    def build(destination):
+        destinations.append(destination)
+        kernel = Kernel()
+        kernels.append(kernel)
+        return kernel
+
+    monkeypatch.setattr(postgres, "build_postgres_kernel", build)
+    open_store = store.__wrapped__(SimpleNamespace(param="postgres"), tmp_path)
+
+    async def run():
+        async with open_store() as (first, scope):
+            await first.close()
+
+            async def reopen():
+                async with open_store() as (second, reopened_scope):
+                    assert second is not first
+                    assert second.initialized and not second.closed
+                    assert reopened_scope == scope
+                    if failure == "body":
+                        raise RuntimeError("body failed")
+
+            if failure is None:
+                await reopen()
+            else:
+                with pytest.raises(RuntimeError, match=f"{failure} failed"):
+                    await reopen()
+            assert kernels[1].closed
+        assert len(kernels) == 2 and all(kernel.closed for kernel in kernels)
+        assert destinations == [dsn, dsn]
+
     asyncio.run(run())
