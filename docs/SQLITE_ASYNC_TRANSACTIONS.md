@@ -90,3 +90,25 @@ cancellation during entry/statements/index synchronization/commit/rollback/close
 rollback-only behavior, lifecycle failures, independent writers and WAL readers.
 Existing lexical, bounded-state, outbox, maintenance and purge-restore suites
 exercise the unchanged storage contracts.
+
+
+## Independent optional capture queue and worker leases
+
+The legacy optional `SQLiteCaptureQueue` (used by `QueuedCaptureSink`) now runs
+its async queue transactions on worker threads. Each transaction creates, uses,
+commits or rolls back, and closes its connection on the same thread. Repeated
+cancellation waits for that complete transaction before returning; it does not
+prove the write rolled back. A cancelled enqueue may leave an accepted pending
+row or a staged row for `recover_staged()`, and a cancelled claim may leave a lease
+for expiry-based recovery. Retry enqueues with the same event identity. Staging
+recovery finishes its selected artifact cleanup before propagating cancellation.
+The constructor and `status()` are still synchronous and can block the calling
+thread. These guarantees do not concern `UnifiedMemory.enqueue_capture()`, which
+uses the separate recovery store.
+
+`SQLiteWorkerQueue` obtains `BEGIN IMMEDIATE` before computing claim deadlines
+and before checking a lease for checkpoint, completion or failure. SQLite writer
+lock waits therefore do not consume the granted lease or use pre-wait time to
+accept an expired owner. Identity and expiry predicates remain in every lease
+UPDATE. This is not an exactly-once or unbounded-lease guarantee: a handler must
+still finish within its lease or use host-managed renewal and publication fences.

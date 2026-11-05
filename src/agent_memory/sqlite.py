@@ -17,6 +17,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any
 
+from .consolidation.proposal_identity import validate_proposal_replay
 from .domain import (
     ArtifactStatus,
     Claim,
@@ -265,6 +266,17 @@ class SQLiteMemoryUnitOfWork:
             (*params, *event_ids),
         ).fetchone()
         return bool(row and row["count"] == len(set(event_ids)))
+
+    async def find_proposal_result_for(self, proposal: MemoryProposal) -> ProposalResult | None:
+        row = self.connection.execute(
+            "SELECT * FROM proposals WHERE id = ?", (proposal.id,)
+        ).fetchone()
+        if row is None:
+            return None
+        validate_proposal_replay(
+            proposal, self._repository._scope_from_row(row), json.loads(row["payload_json"]),
+        )
+        return await self.find_proposal_result(proposal.id)
 
     async def find_proposal_result(self, proposal_id: str) -> ProposalResult | None:
         row = self.connection.execute(
@@ -988,8 +1000,20 @@ class SQLiteMemoryUnitOfWork:
         return self._repository._claim_from_row(row) if row else None
 
     async def claim_is_effective(self, claim: Claim, valid_at: datetime) -> bool:
+        # A projected user/workspace claim can depend on session-scoped
+        # evidence. Include those owners when checking protected lineage.
+        rows = self.connection.execute(
+            "SELECT DISTINCT tenant_id, namespace, user_id, agent_id, workspace_id, session_id "
+            "FROM events WHERE id IN (SELECT value FROM json_each(?))",
+            (json.dumps(claim.provenance.source_event_ids),),
+        ).fetchall()
+        scopes = {claim.scope, *(self._repository._scope_from_row(row) for row in rows)}
+        protected = set()
+        for scope in scopes:
+            protected.update(self._repository._admission_protected_sources(self.connection, scope))
         claims = SQLiteClaimHistory(self._repository).read(
-            self.connection, claim.scope, valid_at, utc_now()
+            self.connection, claim.scope, valid_at, utc_now(), legacy_only=True,
+            protected_sources=protected, claim_ids=(claim.id,), limit=1,
         )
         return any(current.id == claim.id for current in claims)
 
@@ -2866,7 +2890,83 @@ class SQLiteMemoryRepository:
                 )
         return len(dependent)
 
+    def _erase_proposals(self, connection, request, claim_ids, rows):
+        pending = []
+        if request.mode != ForgetMode.ERASE:
+            return pending
+        event_ids = {row["id"] for row in rows if row["table"] == "events"
+                     and row["partition_key"] == request.scope.partition_key()
+                     and (request.all_in_scope or row["id"] in request.memory_ids)}
+        claim_ids = set(claim_ids) | {row["id"] for row in rows if row["table"] == "claims"
+                     and row["partition_key"] == request.scope.partition_key()
+                     and (request.all_in_scope or row["id"] in request.memory_ids)}
+        # Repeated erasure must also clean pre-upgrade residual proposals after
+        # their source or projected Claim row is gone. Only exact-scope targeted
+        # tombstones establish authority for cross-scope dependency propagation.
+        tombstones = connection.execute(
+            "SELECT id,memory_table FROM memory_tombstones WHERE partition_key=? "
+            "AND memory_table IN ('events','claims') "
+            "AND (? OR id IN (SELECT value FROM json_each(?)))",
+            (request.scope.partition_key(), request.all_in_scope, json.dumps(request.memory_ids)),
+        ).fetchall()
+        event_ids.update(row["id"] for row in tombstones if row["memory_table"] == "events")
+        claim_ids.update(row["id"] for row in tombstones if row["memory_table"] == "claims")
+        # Keep terminal identity/result metadata, but no proposed text, value or
+        # free-form reason. Exact-scope references also cover already missing
+        # sources; cross-scope propagation requires a verified deleted source.
+        cursor = connection.execute("""SELECT * FROM proposals p
+            WHERE tenant_id=? AND namespace=? AND json_extract(payload_json,'$.erased') IS NOT 1
+              AND ((partition_key=? AND (? OR id IN (SELECT value FROM json_each(?))
+                  OR claim_id IN (SELECT value FROM json_each(?))
+                  OR EXISTS (SELECT 1 FROM json_each(p.payload_json,'$.source_event_ids') s
+                      JOIN json_each(?) targets ON s.value=targets.value)))
+                OR claim_id IN (SELECT value FROM json_each(?))
+                OR EXISTS (SELECT 1 FROM json_each(p.payload_json,'$.source_event_ids') s
+                    JOIN json_each(?) targets ON s.value=targets.value))""",
+            (request.scope.tenant_id, request.scope.namespace, request.scope.partition_key(),
+             request.all_in_scope, json.dumps(request.memory_ids), json.dumps(request.memory_ids),
+             json.dumps(request.memory_ids), json.dumps(sorted(claim_ids)),
+             json.dumps(sorted(event_ids))))
+        selected = cursor.fetchall()
+        for row in selected:
+            connection.execute(
+                "UPDATE proposals SET payload_json=?,reason=NULL WHERE id=?",
+                (canonical_json({"erased": True}), row["id"]),
+            )
+        for row in selected:
+            # Accepted audit events duplicate proposal.text and appear in claim
+            # provenance. Delete them through the normal dependency pipeline,
+            # not merely their content, so they cannot keep an erased claim alive.
+            audit_ids = tuple(event["id"] for event in connection.execute(
+                "SELECT id FROM events WHERE partition_key=? "
+                "AND event_type='memory.proposal.accepted' "
+                "AND json_extract(metadata_json,'$.proposal_id')=?",
+                (row["partition_key"], row["id"]),
+            ).fetchall() if not (row["partition_key"] == request.scope.partition_key()
+                and (request.all_in_scope or event["id"] in request.memory_ids)))
+            if audit_ids:
+                pending.append(replace(request, scope=self._scope_from_row(row),
+                                       memory_ids=audit_ids, all_in_scope=False))
+        return pending
+
     def _forget_on_connection(self, connection, request, *, replay=False):
+        # Drain derived proposal-audit dependencies without recursive calls.
+        # Tombstoning each proposal before queueing its audit events also makes
+        # cycles/repeated references terminal within this same transaction.
+        pending = deque([(request, replay)])
+        total = ForgetResult(0, 0, 0, request.mode)
+        while pending:
+            target, target_replay = pending.popleft()
+            result = self._forget_once(connection, target, replay=target_replay,
+                                       proposal_deletions=pending)
+            total = ForgetResult(
+                total.affected_events + result.affected_events,
+                total.affected_claims + result.affected_claims,
+                total.affected_artifacts + result.affected_artifacts, request.mode,
+            )
+        return total
+
+    def _forget_once(self, connection, request, *, replay, proposal_deletions):
         from .operations import sqlite_consolidation_outbox, sqlite_derived
 
         sqlite_consolidation_outbox.forget(connection, request)
@@ -2875,6 +2975,9 @@ class SQLiteMemoryRepository:
         sqlite_retention.forget(connection, request, journal=not replay)
         dependency_rows = self._artifact_dependency_rows(connection, request.scope)
         dependent_claim_ids = self._forget_admission_records(connection, request)
+        proposal_deletions.extend((target, True) for target in self._erase_proposals(
+            connection, request, dependent_claim_ids, dependency_rows
+        ))
         # Primary deletion also changes admitted projections in broader scopes.
         # Translate only actually changed candidates, never the all-in-scope flag.
         affected_scopes = {request.scope}

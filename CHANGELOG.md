@@ -7,6 +7,33 @@ the first stable release.
 
 ### Fixed
 
+- Erase proposal payloads and free-form reasons in SQLite and PostgreSQL, retaining
+  terminal identity/results only. Delete accepted-proposal audit copies and their
+  dependent memory in the same transaction, including targeted and repeated erasure.
+- Settle recovery-store and deletion-journal SQLite work before propagating cancellation,
+  including repeated cancellation, and recheck live same-run capture receipts inside
+  derivative write transactions so a first-time identity cannot bypass source deletion.
+- Bind native proposal replay to its exact owner and request, reject erased IDs,
+  and fail closed on cached results from legacy adapters without identity checks.
+  Preserve reconstructed retries and legacy row defaults without a schema migration;
+  see [proposal compatibility](docs/PROPOSAL_REPLAY_AND_RELEARNING.md).
+- Keep independently relearned same-value claims visible after proposal source
+  archive/erasure, including projected user/workspace claims. Preserve healthy
+  corroboration and reject merges into non-effective targets.
+- Read SQLite worker lease and retry clocks only after acquiring the write
+  transaction, so lock contention cannot consume a new lease or admit an expired
+  owner. Retain token/status fences and cover real lock-wait windows.
+- Move the optional standalone SQLite capture queue's async transactions off the
+  event loop and drain them on cancellation, including staged artifact cleanup.
+  Construction and the legacy `status()` method remain synchronous.
+- Deterministically unwind PostgreSQL UoW contexts when transaction construction
+  or entry fails or is cancelled; shield rollback and pool return against repeated
+  cancellation and clear references after cleanup.
+- Capture completed LangGraph messages from both legacy 1.x node updates and v2
+  envelopes, including subgraph namespaces, without changing graph output. Add
+  real graph minimum/latest compatibility tests and an optional SDK `langgraph` extra.
+- Correct the MCP PostgreSQL example to initialize, serve, and close its provider
+  on one event loop; generate a valid gateway secret and clarify SDK transport extras.
 - Isolate SQLite async Unit of Work transactions on one owner thread, including
   outbox operations, forget, index synchronization and cancellation-safe cleanup.
   Keep legacy synchronous maintenance access as a blocking proxy and add async

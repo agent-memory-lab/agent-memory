@@ -151,10 +151,10 @@ class SQLiteWorkerQueue:
         payload_json = json.dumps(to_jsonable(dict(payload)), ensure_ascii=False, separators=(",", ":"))
         if len(payload_json.encode("utf-8")) > 256_000:
             raise ValueError("worker payload exceeds 256000 bytes")
-        now = _now()
         partition_key = scope.partition_key()
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            now = _now()
             existing = connection.execute(
                 "SELECT id FROM agent_memory_worker_tasks WHERE partition_key=? AND task_key=?",
                 (partition_key, task_key),
@@ -214,12 +214,13 @@ class SQLiteWorkerQueue:
             raise ValueError("worker_id must contain 1 to 128 characters")
         if type(lease_seconds) is not int or not 5 <= lease_seconds <= 86_400:
             raise ValueError("lease_seconds must be between 5 and 86400")
-        now = _now()
-        expires = datetime.fromtimestamp(now.timestamp() + lease_seconds, timezone.utc)
         token = str(uuid4())
         connection = self._connect()
         try:
             connection.execute("BEGIN IMMEDIATE")
+            # Lock waits must not consume the new lease or hide expired work.
+            now = _now()
+            expires = datetime.fromtimestamp(now.timestamp() + lease_seconds, timezone.utc)
             connection.execute(
                 """
                 UPDATE agent_memory_worker_tasks
@@ -327,16 +328,18 @@ class SQLiteWorkerQueue:
         value: Mapping[str, Any] | None,
         error: BaseException | None,
     ) -> None:
-        now = _now()
         with self._connection() as connection:
+            # Reserve the writer before reading time: an implicit UPDATE can
+            # otherwise wait past expiry while retaining an earlier timestamp.
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 "SELECT * FROM agent_memory_worker_tasks WHERE id=? AND status=? AND lease_token=?",
                 (lease.task.id, WorkerTaskStatus.LEASED, lease.token),
             ).fetchone()
             if row is None:
                 raise WorkerQueueError("worker lease is no longer active", code="stale_lease")
-            # Another queue instance can cancel or replace this lease after the
-            # read. Expiry alone also invalidates the owner, before any reclaim.
+            # Retain identity and expiry predicates even under the write lock.
+            # Expiry alone invalidates the owner, before any reclaim.
             now = _now()
             lease_identity = (lease.task.id, WorkerTaskStatus.LEASED, lease.token, _iso(now))
             if action == "checkpoint":

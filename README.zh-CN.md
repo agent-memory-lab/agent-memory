@@ -218,6 +218,12 @@ October 6: unknown
 | [PostgreSQL](packages/postgres/README.md) | PostgreSQL Provider 与可选向量能力 | `python -m pip install -e packages/postgres` |
 | [Evolution](packages/evolution/README.md) | 流程候选评估与受控晋升 | `python -m pip install -e packages/evolution` |
 
+上表中的基础 SDK 安装支持嵌入式使用。stdio 或 HTTP 客户端需安装
+`python -m pip install -e 'packages/python-sdk[mcp]'`；远程 MCP 服务需单独部署。
+SDK 的 LangGraph 1.x updates 捕获桥接使用 `'packages/python-sdk[langgraph]'`，
+同时需要远程客户端时使用 `'packages/python-sdk[mcp,langgraph]'`。
+此捕获桥接与上表中的 LangGraph 生命周期适配器包不同。
+
 安装 MCP 包后，启动绑定作用域的本地 stdio 服务：
 
 ```bash

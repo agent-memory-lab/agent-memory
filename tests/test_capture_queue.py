@@ -295,3 +295,191 @@ def test_exhausted_cleanup_preserves_other_scopes_and_unready_work(tmp_path, mon
     assert second.status(b, "other-expired").status == "leased"
     assert _run(second.claim(scope=b)) is None
     assert second.status(b, "other-expired").status == "dead"
+
+
+@pytest.mark.parametrize("action", ["enqueue", "claim", "ack", "fail", "recover_staged"])
+def test_async_capture_transactions_do_not_block_loop_on_writer_lock(tmp_path, action):
+    import threading
+    import time
+
+    async def scenario():
+        path = tmp_path / "capture.db"
+        scope = _scope("async")
+        queue = SQLiteCaptureQueue(path, sanitizer=CaptureSanitizer())
+        await queue.enqueue(_event(scope, "first"))
+        lease = await queue.claim() if action in {"ack", "fail"} else None
+        acquired, release = threading.Event(), threading.Event()
+
+        def hold_writer():
+            with closing(sqlite3.connect(path)) as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                acquired.set()
+                # The timeout prevents an old blocking implementation deadlocking
+                # its event loop, while the separate thread still releases SQLite.
+                release.wait(2)
+                connection.rollback()
+
+        holder = asyncio.create_task(asyncio.to_thread(hold_writer))
+        assert await asyncio.to_thread(acquired.wait, 5)
+        operations = {
+            "enqueue": lambda: queue.enqueue(_event(scope, "second")),
+            "claim": queue.claim,
+            "ack": lambda: queue.ack(lease, SimpleNamespace(event_id="stored")),
+            "fail": lambda: queue.fail(lease),
+            "recover_staged": queue.recover_staged,
+        }
+        task = asyncio.create_task(operations[action]())
+        try:
+            start, ticks = time.monotonic(), 0
+            while time.monotonic() - start < 0.12:
+                ticks += 1
+                await asyncio.sleep(0.005)
+            assert ticks >= 8
+            assert not task.done()
+        finally:
+            release.set()
+            await holder
+            await task
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("phase", ["begin", "commit", "rollback", "close"])
+def test_cancelled_capture_transaction_drains_before_returning(tmp_path, monkeypatch, phase):
+    import threading
+
+    from agent_memory.capture import queue as queue_module
+
+    async def scenario():
+        path = tmp_path / "capture.db"
+        scope = _scope("cancel")
+        queue = SQLiteCaptureQueue(path, sanitizer=CaptureSanitizer())
+        started, release = threading.Event(), threading.Event()
+        calls = []
+        original_connect = sqlite3.connect
+
+        class ObservedConnection(sqlite3.Connection):
+            def record(self, action):
+                calls.append((action, threading.get_ident()))
+                if action == phase:
+                    started.set()
+                    assert release.wait(5), "transaction was not released"
+
+            def execute(self, sql, parameters=()):
+                self.record("begin" if sql == "BEGIN IMMEDIATE" else "execute")
+                if phase == "rollback" and sql.lstrip().startswith("INSERT"):
+                    raise sqlite3.OperationalError("injected write failure")
+                return super().execute(sql, parameters)
+
+            def commit(self):
+                self.record("commit")
+                return super().commit()
+
+            def rollback(self):
+                self.record("rollback")
+                return super().rollback()
+
+            def close(self):
+                self.record("close")
+                return super().close()
+
+        def connect(*args, **kwargs):
+            calls.append(("connect", threading.get_ident()))
+            return original_connect(*args, **kwargs, factory=ObservedConnection)
+
+        monkeypatch.setattr(queue_module.sqlite3, "connect", connect)
+        task = asyncio.create_task(queue.enqueue(_event(scope, "cancelled")))
+        try:
+            assert await asyncio.to_thread(started.wait, 5)
+            for _ in range(3):
+                task.cancel()
+                await asyncio.sleep(0.01)
+                assert not task.done()
+        finally:
+            release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert calls[-1][0] == "close"
+        threads = {thread for _, thread in calls}
+        assert len(threads) == 1 and threading.get_ident() not in threads
+        with closing(original_connect(path)) as connection:
+            count = connection.execute("SELECT count(*) FROM capture_queue").fetchone()[0]
+            assert count == (0 if phase == "rollback" else 1)
+            # No transaction is left running after cancellation propagates.
+            connection.execute("BEGIN IMMEDIATE")
+            connection.rollback()
+
+    asyncio.run(scenario())
+
+
+def test_cancelled_staging_recovery_finishes_orphan_cleanup(tmp_path, monkeypatch):
+    from agent_memory.capture import queue as queue_module
+
+    async def scenario():
+        scope = _scope("recovery-cancel")
+        store = FileCaptureArtifactStore(tmp_path / "artifacts")
+        sanitizer = CaptureSanitizer(artifact_store=store)
+        queue = SQLiteCaptureQueue(tmp_path / "capture.db", sanitizer=sanitizer)
+        plan = sanitizer.plan(_event(scope, "staged", large=True))
+        queue._reserve(plan)
+        await sanitizer.materialize(plan)
+        monkeypatch.setattr(queue_module.time, "time", lambda: 10_000_000_000.0)
+        started, release = asyncio.Event(), asyncio.Event()
+        discard = store.discard
+
+        async def blocked_discard(artifact_id, *, scope):
+            started.set()
+            await release.wait()
+            await discard(artifact_id, scope=scope)
+
+        monkeypatch.setattr(store, "discard", blocked_discard)
+        task = asyncio.create_task(queue.recover_staged())
+        await asyncio.wait_for(started.wait(), 2)
+        try:
+            for _ in range(3):
+                task.cancel()
+                await asyncio.sleep(0)
+                assert not task.done()
+        finally:
+            release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert queue.status(scope, "staged").status == "dead"
+        with pytest.raises(FileNotFoundError):
+            await store.get(plan.artifact_id, scope=scope)
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("fail_artifact", [False, True])
+def test_staging_transition_runs_off_loop(tmp_path, monkeypatch, fail_artifact):
+    import threading
+
+    async def scenario():
+        scope = _scope("staging")
+        store = FileCaptureArtifactStore(tmp_path / "artifacts")
+        sanitizer = CaptureSanitizer(artifact_store=store)
+        queue = SQLiteCaptureQueue(tmp_path / "capture.db", sanitizer=sanitizer)
+        owner_threads = []
+        finish = queue._finish_staging
+
+        def record_finish(*args, **kwargs):
+            owner_threads.append(threading.get_ident())
+            return finish(*args, **kwargs)
+
+        async def broken_materialize(plan):
+            raise OSError("artifact unavailable")
+
+        monkeypatch.setattr(queue, "_finish_staging", record_finish)
+        if fail_artifact:
+            monkeypatch.setattr(sanitizer, "materialize", broken_materialize)
+            with pytest.raises(OSError, match="artifact unavailable"):
+                await queue.enqueue(_event(scope, "large", large=True))
+            assert queue.status(scope, "large").status == "dead"
+        else:
+            receipt = await queue.enqueue(_event(scope, "large", large=True))
+            assert receipt.status == "pending"
+        assert len(owner_threads) == 1
+        assert owner_threads[0] != threading.get_ident()
+
+    asyncio.run(scenario())

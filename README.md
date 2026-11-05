@@ -220,6 +220,12 @@ Start with the core and install the integration packages you need:
 | [PostgreSQL](packages/postgres/README.md) | PostgreSQL provider and optional vector support | `python -m pip install -e packages/postgres` |
 | [Evolution](packages/evolution/README.md) | Evaluated Procedure candidates and promotion | `python -m pip install -e packages/evolution` |
 
+The base SDK installation above supports embedded use. For stdio or HTTP clients,
+install `python -m pip install -e 'packages/python-sdk[mcp]'`; the remote MCP server is
+a separate deployment. For the SDK's LangGraph 1.x update-capture bridge, use
+`'packages/python-sdk[langgraph]'` (or `'packages/python-sdk[mcp,langgraph]'` for both).
+This bridge is separate from the LangGraph lifecycle adapter package listed above.
+
 For a local MCP host, install the MCP package above and start a scope-bound stdio server:
 
 ```bash

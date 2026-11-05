@@ -1,7 +1,6 @@
 """Optional bounded persistence port for recovery artifacts and capture receipts."""
 from __future__ import annotations
 
-import asyncio
 from contextlib import contextmanager
 from dataclasses import dataclass
 import json
@@ -12,6 +11,7 @@ from hashlib import sha256
 from typing import Protocol
 
 from ..domain import MemoryScope
+from ..operations.sqlite_transaction import offload_sqlite
 
 
 class RecoveryConflict(ValueError):
@@ -30,6 +30,9 @@ class RecoveryStore(Protocol):
 
     Invalidated identities must never be reactivated. Reads omit tombstones.
     sources() returns active capture receipts covering the requested evidence.
+    Derivative writes must verify live same-run receipts in their commit
+    transaction. Async methods must settle in-flight synchronous writes before
+    propagating cancellation, so the owner's lifecycle gate is not released early.
     All participants sharing a store must use the same deployment limits.
     """
     async def initialize(self) -> None: ...
@@ -114,7 +117,7 @@ class SQLiteRecoveryStore:
                     expires_at TEXT, PRIMARY KEY(scope,run_id))""")
                 db.execute("CREATE INDEX IF NOT EXISTS recovery_run_idx "
                            "ON recovery_records_v1(scope,run_id)")
-        await asyncio.to_thread(create)
+        await offload_sqlite(create)
 
     @staticmethod
     def _run_open(db, scope_key, run_id):
@@ -138,7 +141,7 @@ class SQLiteRecoveryStore:
                 if row and not self._run_open(db, scope.partition_key(), row[3]):
                     return None
                 return self._decode(row) if row else None
-        return await asyncio.to_thread(read)
+        return await offload_sqlite(read)
 
     async def compression_current(self, scope, summary_id, expected):
         """Final snapshot of this DB only; external source/strategy gates run first."""
@@ -175,7 +178,29 @@ class SQLiteRecoveryStore:
                     and state.payload.get("run_id") == run_id
                 )
 
-        return await asyncio.to_thread(current)
+        return await offload_sqlite(current)
+
+    def _require_live_receipts(self, db, scope_key, run_id, refs):
+        """Recheck local evidence under the same write lock as derivative commit."""
+        _key("state", run_id)
+        rows = db.execute("""SELECT revision,payload,sources,run_id
+            FROM recovery_records_v1 r
+            WHERE scope=? AND kind='receipt' AND payload IS NOT NULL AND run_id=?
+              AND EXISTS (SELECT 1 FROM json_each(r.sources) s
+                  JOIN json_each(?) wanted ON s.value=wanted.value) LIMIT 257""",
+            (scope_key, run_id, json.dumps(refs))).fetchall()
+        if len(rows) > 256:
+            raise RecoveryConflict("ambiguous or excessive source receipts")
+        captured = set()
+        for row in rows:
+            receipt = self._decode(row)
+            payload = receipt.payload
+            source = payload.get("provider_event_id")
+            if (payload.get("persisted") is True and payload.get("run_id") == run_id
+                    and source in receipt.source_event_ids):
+                captured.add(source)
+        if not set(refs) <= captured:
+            raise RecoveryConflict("recovery evidence requires live capture receipts")
 
     async def write(self, scope, kind, identity, payload, source_event_ids, *, expected_revision):
         _key(kind, identity)
@@ -201,6 +226,8 @@ class SQLiteRecoveryStore:
                     raise RecoveryConflict("deleted recovery identity cannot be reused")
                 if (old[0] if old else 0) != expected_revision:
                     raise RecoveryConflict("recovery revision changed")
+                if kind in ("state", "summary", "feedback", "state_history"):
+                    self._require_live_receipts(db, key[0], run_id, refs)
                 needed = int(old is None or kind == "state")
                 if db.execute("SELECT count(*) FROM recovery_records_v1").fetchone()[0] + needed > self.max_records:
                     raise ValueError("recovery store capacity exceeded")
@@ -217,7 +244,7 @@ class SQLiteRecoveryStore:
                     revision=excluded.revision,payload=excluded.payload,sources=excluded.sources""",
                     (*key, revision, encoded, json.dumps(refs), run_id))
                 return revision
-        return await asyncio.to_thread(write)
+        return await offload_sqlite(write)
 
     async def sources(self, scope, source_event_ids):
         refs = _refs(source_event_ids)
@@ -232,7 +259,7 @@ class SQLiteRecoveryStore:
                     raise ValueError("ambiguous or excessive source receipts")
                 return tuple(self._decode(row) for row in rows
                              if self._run_open(db, scope.partition_key(), row[3]))
-        return await asyncio.to_thread(read)
+        return await offload_sqlite(read)
 
     async def forget_sources(self, request):
         if not request.all_in_scope:
@@ -254,7 +281,7 @@ class SQLiteRecoveryStore:
                                  json.dumps(request.memory_ids)))
                 return db.execute("UPDATE recovery_records_v1 SET payload=NULL, "
                                   "revision=revision+1 WHERE " + condition, args).rowcount
-        return await asyncio.to_thread(write)
+        return await offload_sqlite(write)
 
     async def ensure_run(self, scope, run_id):
         _key("state", run_id)
@@ -269,7 +296,7 @@ class SQLiteRecoveryStore:
                 if db.execute("SELECT count(*) FROM recovery_runs_v1").fetchone()[0] >= self.max_records:
                     raise ValueError("recovery run registry capacity exceeded")
                 db.execute("INSERT INTO recovery_runs_v1 VALUES (?,?,'active',NULL)", key)
-        await asyncio.to_thread(write)
+        await offload_sqlite(write)
 
     async def configure_run(self, scope, run_id, *, completed=False, expires_at=None):
         _key("state", run_id)
@@ -292,7 +319,7 @@ class SQLiteRecoveryStore:
                 else:
                     db.execute("UPDATE recovery_runs_v1 SET expires_at=? WHERE scope=? AND run_id=?",
                                (expiry, scope.partition_key(), run_id))
-        await asyncio.to_thread(write)
+        await offload_sqlite(write)
 
     async def cleanup(self, scope, *, limit=100):
         if type(limit) is not int or not 1 <= limit <= 1000:
@@ -305,7 +332,7 @@ class SQLiteRecoveryStore:
                     WHERE r.scope=? AND (lifecycle.state!='active' OR lifecycle.expires_at<=?)
                     ORDER BY r.rowid LIMIT ?)""",
                     (scope.partition_key(), datetime.now(UTC).isoformat(), limit)).rowcount
-        return await asyncio.to_thread(write)
+        return await offload_sqlite(write)
 
     async def stats(self, scope):
         def read():
@@ -319,7 +346,7 @@ class SQLiteRecoveryStore:
                 return dict(records=row[0], retained_payloads=row[1], payload_bytes=row[2],
                             run_fences=runs[0], active_runs=runs[1],
                             record_capacity=self.max_records, run_capacity=self.max_records)
-        return await asyncio.to_thread(read)
+        return await offload_sqlite(read)
 
     async def next_job(self, scope):
         def read():
@@ -333,7 +360,7 @@ class SQLiteRecoveryStore:
                     ORDER BY r.rowid LIMIT 1""",
                     (scope.partition_key(), datetime.now(UTC).isoformat())).fetchone()
                 return (row[0], self._decode(row[1:])) if row else None
-        return await asyncio.to_thread(read)
+        return await offload_sqlite(read)
 
     @staticmethod
     def _run_status(db, scope_key, row, now):
@@ -378,7 +405,7 @@ class SQLiteRecoveryStore:
                     ORDER BY run_id LIMIT ?""", (scope_key, after, after, limit + 1)).fetchall()
                 items = [self._run_status(db, scope_key, row, now) for row in rows[:limit]]
                 return dict(items=items, next_cursor=items[-1]["run_id"] if len(rows) > limit else None)
-        return await asyncio.to_thread(read)
+        return await offload_sqlite(read)
 
     async def run_status(self, scope, run_id):
         _key("state", run_id)
@@ -389,7 +416,7 @@ class SQLiteRecoveryStore:
                 row = db.execute("SELECT run_id,state,expires_at FROM recovery_runs_v1 "
                                  "WHERE scope=? AND run_id=?", (key, run_id)).fetchone()
                 return self._run_status(db, key, row, datetime.now(UTC).isoformat()) if row else None
-        return await asyncio.to_thread(read)
+        return await offload_sqlite(read)
 
     async def cancel_job(self, scope, event_id):
         """Atomically scrub a queued/failed envelope and mark its receipt.
@@ -428,7 +455,7 @@ class SQLiteRecoveryStore:
                             (json.dumps(receipt), key, event_id))
                 return dict(event_id=event_id, cancelled=True, status="cancelled",
                             source_may_be_persisted=attempts > 0, source_rollback=False)
-        return await asyncio.to_thread(write)
+        return await offload_sqlite(write)
 
     @staticmethod
     def _history_id(run_id, version):
@@ -457,7 +484,7 @@ class SQLiteRecoveryStore:
                     (scope.partition_key(), run_id, before, before, limit+1)).fetchall()
                 items = [self._decode(row) for row in rows[:limit]]
                 return dict(items=items, next_cursor=items[-1].revision if len(rows)>limit else None)
-        return await asyncio.to_thread(read)
+        return await offload_sqlite(read)
 
     async def feedback_page(self, scope, *, limit=100, after=None):
         if type(limit) is not int or not 1 <= limit <= 500:
@@ -477,4 +504,4 @@ class SQLiteRecoveryStore:
                     (scope.partition_key(), after, after, datetime.now(UTC).isoformat(), limit+1)).fetchall()
                 return dict(items=[self._decode(row[1:]) for row in rows[:limit]],
                             next_cursor=rows[limit-1][0] if len(rows)>limit else None)
-        return await asyncio.to_thread(read)
+        return await offload_sqlite(read)

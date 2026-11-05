@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import contextmanager
 from dataclasses import dataclass
 import json
@@ -13,6 +14,7 @@ from .policy import CapturePlan, CaptureSanitizer
 from ..domain import IngestResult, MemoryScope
 from ..lifecycle import LifecycleEvent
 from ..ports import MemoryProvider
+from ..operations.sqlite_transaction import offload_sqlite, settle
 from ..serialization import to_jsonable
 
 
@@ -57,7 +59,12 @@ class CaptureLease:
 
 
 class SQLiteCaptureQueue:
-    """Optional durable, scoped capture admission and at-least-once processing."""
+    """Optional durable, scoped capture admission and at-least-once processing.
+
+    Async methods keep each complete SQLite transaction on a worker thread and
+    drain it before propagating cancellation. Construction and ``status`` remain
+    synchronous. A cancelled write may have committed; retry by event identity.
+    """
 
     def __init__(
         self,
@@ -157,31 +164,44 @@ class SQLiteCaptureQueue:
             )
             return CaptureReceipt(cursor.lastrowid, event.event_id, status)
 
+    def _finish_staging(self, queue_id: int, *, failed: bool = False) -> None:
+        with self._connection() as connection:
+            if failed:
+                connection.execute(
+                    "UPDATE capture_queue SET status='dead', last_error='artifact_write_failed' "
+                    "WHERE id=? AND status='staged'",
+                    (queue_id,),
+                )
+            else:
+                connection.execute(
+                    "UPDATE capture_queue SET status='pending' WHERE id=? AND status='staged'",
+                    (queue_id,),
+                )
+
     async def enqueue(self, event: LifecycleEvent) -> CaptureReceipt:
         plan = self._sanitizer.plan(event)
-        receipt = self._reserve(plan)
+        receipt = await offload_sqlite(self._reserve, plan)
         if receipt.duplicate or plan.artifact_id is None:
             return receipt
         try:
             await self._sanitizer.materialize(plan)
         except Exception:
-            with self._connection() as connection:
-                connection.execute(
-                    "UPDATE capture_queue SET status='dead', last_error='artifact_write_failed' "
-                    "WHERE id=? AND status='staged'",
-                    (receipt.queue_id,),
-                )
-            raise
-        with self._connection() as connection:
-            connection.execute(
-                "UPDATE capture_queue SET status='pending' WHERE id=? AND status='staged'",
-                (receipt.queue_id,),
+            await offload_sqlite(
+                self._finish_staging, receipt.queue_id, failed=True
             )
+            raise
+        await offload_sqlite(self._finish_staging, receipt.queue_id)
         return CaptureReceipt(receipt.queue_id, receipt.event_id, "pending")
 
     async def recover_staged(self) -> int:
         """Mark interrupted staging and remove deterministic orphan references."""
 
+        # Once rows are marked dead, finish their artifact cleanup even when the
+        # caller cancels; those rows will no longer be selected by another pass.
+        task = asyncio.create_task(self._recover_staged())
+        return await settle(task, cancelled=lambda: None)
+
+    def _recover_staged_sync(self) -> list[sqlite3.Row]:
         with self._connection() as connection:
             cutoff = time.time() - self._limits.stage_seconds
             rows = connection.execute(
@@ -195,6 +215,10 @@ class SQLiteCaptureQueue:
                     "WHERE id=? AND status='staged'",
                     (row["id"],),
                 )
+        return rows
+
+    async def _recover_staged(self) -> int:
+        rows = await offload_sqlite(self._recover_staged_sync)
         store = self._sanitizer.artifact_store
         for row in rows:
             if store is not None and row["artifact_id"] is not None:
@@ -203,6 +227,9 @@ class SQLiteCaptureQueue:
         return len(rows)
 
     async def claim(self, *, scope: MemoryScope | None = None) -> CaptureLease | None:
+        return await offload_sqlite(self._claim_sync, scope)
+
+    def _claim_sync(self, scope: MemoryScope | None) -> CaptureLease | None:
         with self._connection() as connection:
             now = time.time()
             scope_filter = " AND partition_key=?" if scope is not None else ""
@@ -244,6 +271,9 @@ class SQLiteCaptureQueue:
             return CaptureLease(row["id"], event, token, row["attempts"] + 1)
 
     async def ack(self, lease: CaptureLease, result: IngestResult) -> None:
+        await offload_sqlite(self._ack_sync, lease, result)
+
+    def _ack_sync(self, lease: CaptureLease, result: IngestResult) -> None:
         with self._connection() as connection:
             cursor = connection.execute(
                 "UPDATE capture_queue SET status='done', result_event_id=?, "
@@ -255,6 +285,9 @@ class SQLiteCaptureQueue:
                 raise CaptureQueueError("capture lease is no longer active", code="stale_lease")
 
     async def fail(self, lease: CaptureLease, *, error_code: str = "provider_failure") -> None:
+        await offload_sqlite(self._fail_sync, lease, error_code)
+
+    def _fail_sync(self, lease: CaptureLease, error_code: str) -> None:
         if not isinstance(error_code, str) or not error_code.isidentifier():
             raise CaptureQueueError("invalid sanitized failure code", code="invalid_error_code")
         with self._connection() as connection:

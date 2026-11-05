@@ -48,6 +48,17 @@ async def settle(future, *, cancelled):
     return result
 
 
+async def offload_sqlite(callback, *args, **kwargs):
+    """Settle one self-contained SQLite operation before propagating cancellation.
+
+    The caller keeps its lifecycle/deletion gate until the real thread commits
+    or rolls back. Shielding without settling would release that gate early.
+    This does not promise rollback on cancellation or fence unrelated writers.
+    """
+    future = asyncio.create_task(asyncio.to_thread(callback, *args, **kwargs))
+    return await settle(future, cancelled=lambda: None)
+
+
 class SQLiteTransactionWorker:
     """One executor thread and one private event loop for a transaction's life."""
 

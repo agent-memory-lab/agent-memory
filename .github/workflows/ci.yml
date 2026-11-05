@@ -65,6 +65,35 @@ jobs:
           tests/test_derived_observations.py::test_readonly_transports_and_final_delivery_recheck
           tests/test_publication_batches.py::test_every_token_and_continuous_prefix_must_be_covered
 
+  langgraph-compatibility:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: minimum
+            dependencies: "langgraph==1.0.0 langchain-core==0.3.67"
+          - name: latest-1x
+            dependencies: "langgraph>=1,<2 langchain-core>=0.3.67,<2"
+    name: LangGraph compatibility (${{ matrix.name }})
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install the SDK capture bridge and lifecycle adapter
+        env:
+          GRAPH_DEPENDENCIES: ${{ matrix.dependencies }}
+        run: |
+          python -m pip install -e '.[dev]' -e 'packages/python-sdk[langgraph]' -e packages/langgraph $GRAPH_DEPENDENCIES
+          python -m pip check
+      - name: Real graph streams and capture/lifecycle contracts
+        run: >-
+          python -m pytest -q packages/langgraph/tests
+          packages/python-sdk/tests/test_langgraph_capture.py
+          packages/python-sdk/tests/test_langgraph_capture_real_graph.py
+
   packages:
     strategy:
       fail-fast: false
