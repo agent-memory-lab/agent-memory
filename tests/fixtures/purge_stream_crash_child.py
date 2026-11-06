@@ -33,8 +33,17 @@ async def main(config):
         repository, MemoryScope(**config["scope"]), authority_id="authority", actor="operator",
         secret=config["test_secret"].encode(), clock=lambda: datetime.fromisoformat(config["clock"]),
     )
+    cls = type(repository.unit_of_work())
+    original_import = cls.purge_import
+
+    async def import_with_progress(uow, scope, entry):
+        result = await original_import(uow, scope, entry)
+        if entry["cursor"] % 128 == 0:
+            print(f"progress {entry['cursor']}", flush=True)
+        return result
+
+    cls.purge_import = import_with_progress
     if config["boundary"] == "before_commit":
-        cls = type(repository.unit_of_work())
         original = cls.purge_restore_put
 
         async def before_commit(uow, *args):

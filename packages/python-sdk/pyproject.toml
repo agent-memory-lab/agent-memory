@@ -13,6 +13,7 @@ dependencies = ["agent-memory>=0.1,<0.2"]
 
 [project.optional-dependencies]
 mcp = ["mcp>=2,<3"]
+langgraph = ["langgraph>=1,<2"]
 dev = ["pytest>=8,<9", "mcp>=2,<3"]
 
 [tool.hatch.build.targets.wheel]

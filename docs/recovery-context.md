@@ -139,6 +139,20 @@ blocks unified reads/writes until `resume_deletion()` succeeds. Restart with the
 same recovery and deletion-target configuration. Verification exceptions fail
 closed and propagate; missing evidence invalidates dependent artifacts.
 
+SQLite recovery and deletion-journal operations settle their real worker thread
+before propagating cancellation, including repeated cancellation and timeouts.
+Cancellation does not promise rollback: a started write may commit, but the owner
+gate remains held until it has committed or rolled back. A concurrent deletion
+therefore cannot report completion before an older write finishes. Derivative
+state, summary, feedback and history writes also verify live, persisted receipts
+from the same scope and run inside their write transaction. This rejects a
+late first write even when that derivative identity has no tombstone yet.
+
+No table/schema migration is required for these guards. Custom `RecoveryStore`
+adapters must provide the same cancellation-settling and transactional receipt
+checks; method signatures are unchanged. Neither guard makes source evidence in
+a separate provider database part of one atomic distributed transaction.
+
 One host-owned `UnifiedMemory` instance exclusively owns a scope. Its gate is
 not a distributed transaction: do not bypass it via provider/store calls or use
 multiple independent writers for the same scope. Direct external deletion is
@@ -156,7 +170,8 @@ the recovery store's `initialize()` call.
 
 ## Validation status
 
-This change has not yet been executed or tested. Acceptance should cover restart,
-version conflicts, duplicate capture, failed extraction, missing readiness,
-cross-scope/run references, generation timeout, budget overflow, host rejection,
-source archive/erase, interrupted deletion, stale proposals and capacity limits.
+Core recovery acceptance coverage lives in `tests/test_recovery_context_acceptance.py`.
+`tests/test_recovery_erasure_cancellation.py` adds real SQLite thread scheduling
+controls for cancellation, repeated cancellation, timeouts, first/updated states,
+summaries, feedback, source commit guards, journal interruption and restart.
+These local tests do not verify distributed writer fencing or custom store adapters.

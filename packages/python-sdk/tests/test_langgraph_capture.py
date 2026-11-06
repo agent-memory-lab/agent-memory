@@ -217,3 +217,40 @@ def test_history_limit_stays_bounded_and_still_allows_failed_admission_retry():
         assert await adapter.observe(_update(messages[:2048])) == ()
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("namespaced", [False, True])
+def test_legacy_updates_capture_and_deduplicate_against_v2_replay(namespaced):
+    async def scenario():
+        capture = RecordingCapture()
+        adapter = _adapter(capture)
+        # "type" is also a legal legacy graph node name, not a discriminator.
+        updates = {"type": {"messages": [_tool("tool", "Result")]}}
+        part = (("child:run",), updates) if namespaced else updates
+        assert len(await adapter.observe(part)) == 1
+        assert capture.events[0]["payload"] == {
+            "node": "type",
+            "namespace": ["child:run"] if namespaced else [],
+            "result": "Result",
+        }
+        assert await adapter.observe({"type": "updates", "ns": (), "data": updates}) == ()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("part", [
+    {"type": "values", "data": {"reply": {"messages": [_tool("t", "Ignored")]}}},
+    {"type": "messages", "data": [{"role": "assistant", "content": "Token"}, {}]},
+    {"type": "updates", "data": "not a node update"},
+    ("updates", {"reply": {"messages": [_tool("t", "Ignored")]}}),
+    ((123,), {"reply": {"messages": [_tool("t", "Ignored")]}}),
+    ((), {}, {}),
+    None,
+])
+def test_non_update_or_malformed_stream_parts_are_not_captured(part):
+    async def scenario():
+        capture = RecordingCapture()
+        assert await _adapter(capture).observe(part) == ()
+        assert capture.events == []
+
+    asyncio.run(scenario())

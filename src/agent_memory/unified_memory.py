@@ -14,6 +14,7 @@ from .context.operations import RecoveryOperations
 from .domain import ForgetMode, ForgetRequest, MemoryQuery
 from .extraction_result import ExtractionDiagnostic, ExtractionFormatError, ExtractionRejection
 from .providers import GeneratedTrajectoryClaimExtractor
+from .operations.sqlite_transaction import offload_sqlite
 
 
 class PendingMemoryDeletion(RuntimeError):
@@ -62,7 +63,7 @@ class SQLiteDeletionJournal:
             with self._db() as db:
                 db.execute("""CREATE TABLE IF NOT EXISTS unified_deletion_v1 (
                     scope TEXT PRIMARY KEY, request TEXT NOT NULL)""")
-        await asyncio.to_thread(create)
+        await offload_sqlite(create)
 
     async def pending(self, scope):
         def read():
@@ -70,7 +71,7 @@ class SQLiteDeletionJournal:
                 row = db.execute("SELECT request FROM unified_deletion_v1 WHERE scope=?",
                                  (scope.partition_key(),)).fetchone()
                 return json.loads(row[0]) if row else None
-        return await asyncio.to_thread(read)
+        return await offload_sqlite(read)
 
     async def begin(self, scope, document):
         payload = json.dumps(document, sort_keys=True)
@@ -83,7 +84,7 @@ class SQLiteDeletionJournal:
                     raise PendingMemoryDeletion("resume the existing deletion first")
                 db.execute("INSERT OR IGNORE INTO unified_deletion_v1 VALUES (?,?)",
                            (scope.partition_key(), payload))
-        await asyncio.to_thread(write)
+        await offload_sqlite(write)
 
     async def complete(self, scope, document):
         payload = json.dumps(document, sort_keys=True)
@@ -93,7 +94,7 @@ class SQLiteDeletionJournal:
                                      (scope.partition_key(), payload)).rowcount
                 if changed != 1:
                     raise PendingMemoryDeletion("deletion journal changed")
-        await asyncio.to_thread(write)
+        await offload_sqlite(write)
 
 
 class ManagedOntologyDeletionTarget:

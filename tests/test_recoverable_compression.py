@@ -243,7 +243,11 @@ def test_summary_replaced_during_final_validation_is_rejected(tmp_path, change):
                 row = await store.read(SCOPE, "summary", proposal.summary_id)
                 payload, refs = dict(row.payload), row.source_event_ids
                 if change == "source_event_ids":
-                    refs = (*refs, "unexpected-source")
+                    # Use valid new evidence so the commit-time receipt fence
+                    # passes; this test isolates the final snapshot comparison.
+                    receipt = await other.capture(event_id="replacement-source", role="user",
+                        content="Additional live source", run_id=row.payload["run_id"])
+                    refs = (*refs, receipt.provider_event_id)
                 else:
                     payload[change] = "changed"
                 await store.write(SCOPE, "summary", proposal.summary_id, payload, refs,

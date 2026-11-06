@@ -1,4 +1,4 @@
-"""Optional LangGraph stream-v2 capture bridge with no LangGraph import.
+"""Optional LangGraph 1.x update-stream capture bridge with no LangGraph import.
 
 Only completed messages are mapped; graph state is not treated as outcome,
 evaluation, reward, or permission-bearing evidence. The authenticated SDK
@@ -60,7 +60,7 @@ def _message_id(message: Any) -> str | None:
 
 
 class LangGraphCaptureAdapter:
-    """Observe v2 update chunks while leaving the graph output unchanged."""
+    """Observe legacy and v2 update chunks without changing graph output."""
 
     def __init__(
         self,
@@ -107,20 +107,37 @@ class LangGraphCaptureAdapter:
         except Exception:
             return {"status": "skipped", "reason": "capture_adapter_failed"}
 
-    async def observe(self, part: Mapping[str, Any]) -> tuple[dict[str, Any], ...]:
+    async def observe(self, part: Any) -> tuple[dict[str, Any], ...]:
         """Capture every new completed message, including batched tool results.
 
         Replayed histories are deduplicated by message identity and content. A
         failed admission can be retried on a later update with its original
         event ID and payload, including after an uncertain capture result.
+        Accepts v2 envelopes, legacy node updates, and legacy (namespace, update)
+        tuples. Legacy chunks must come from stream_mode="updates": they have no
+        mode discriminator, so arbitrary graph state must not be passed here.
         """
 
-        if not isinstance(part, Mapping) or part.get("type") != "updates":
+        namespace: Any = ()
+        if isinstance(part, tuple) and len(part) == 2:
+            namespace, part = part
+            if not isinstance(namespace, (tuple, list)) or any(
+                not isinstance(name, str) for name in namespace
+            ):
+                return ()
+        if not isinstance(part, Mapping):
             return ()
-        updates = part.get("data")
+        # A legacy graph can have a node named "type"; only a string is an
+        # envelope discriminator. Non-update v2 modes remain ineligible.
+        if isinstance(part.get("type"), str):
+            if part["type"] != "updates":
+                return ()
+            updates = part.get("data")
+            namespace = part.get("ns", ())
+        else:
+            updates = part
         if not isinstance(updates, Mapping):
             return ()
-        namespace = part.get("ns", ())
         if not isinstance(namespace, (tuple, list)) or any(
             not isinstance(name, str) for name in namespace
         ):
@@ -186,8 +203,13 @@ class LangGraphCaptureAdapter:
         *,
         config: Any = None,
         subgraphs: bool = False,
-    ) -> AsyncIterator[Mapping[str, Any]]:
-        """Yield the official v2 stream unchanged; capture is best-effort."""
+    ) -> AsyncIterator[Mapping[str, Any] | tuple[tuple[str, ...], Mapping[str, Any]]]:
+        """Yield updates unchanged; capture is best-effort.
+
+        Requests v2 envelopes where supported. Earlier LangGraph 1.x versions
+        accept the option through **kwargs but return legacy node updates (or
+        namespaced tuples with subgraphs=True); both formats are captured.
+        """
 
         await self._safe_capture(self._event("start", "turn.started", "host", "Turn started."))
         options: dict[str, Any] = {

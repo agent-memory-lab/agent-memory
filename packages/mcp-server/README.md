@@ -66,9 +66,13 @@ removes incoming `x-agent-memory-*` identity headers, writes fresh identity head
 and signs them with HMAC-SHA256.
 
 ```bash
-export AGENT_MEMORY_GATEWAY_SECRET='at-least-32-random-bytes-long'
+export AGENT_MEMORY_GATEWAY_SECRET="$(python -c 'import secrets; print(secrets.token_hex(32))')"
 agent-memory-mcp --transport streamable-http --database ./agent-memory.db
 ```
+
+Generate this secret once, store it securely, and configure the trusted gateway with
+exactly the same UTF-8 string (do not hex-decode it). Reuse that shared secret across
+server restarts; do not generate separate values independently at the two ends.
 
 Signed fields are `tenant-id`, `namespace`, `user-id`, `agent-id`, `workspace-id`,
 `session-id`, `actor`, `can-erase`, and `timestamp`. Header names use the
@@ -80,20 +84,44 @@ fixed CLI scope. It must not be used for multi-tenant deployment.
 
 ## Another provider
 
+Install `packages/postgres` in addition to this package. Set
+`AGENT_MEMORY_POSTGRES_DSN` to your database connection string and supply the same
+`AGENT_MEMORY_GATEWAY_SECRET` configured for your trusted gateway above.
+
+`create_server()` registers tools but does not own the supplied provider's lifecycle.
+Initialize and close PostgreSQL on the **same event loop** that serves requests.
+Do not initialize it with one `asyncio.run()` and then call synchronous `server.run()`,
+which creates a separate loop. The `finally` also closes a partially initialized
+provider if startup fails.
+
 ```python
+import asyncio
+import os
+
 from agent_memory_mcp import GatewayHeaderIdentityResolver, create_server
 from agent_memory_postgres import build_postgres_kernel
 
-provider = build_postgres_kernel("postgresql://...")
-resolver = GatewayHeaderIdentityResolver(b"at-least-32-random-bytes-long")
-server = create_server(provider, resolver)
-server.run(
-    transport="streamable-http",
-    host="127.0.0.1",
-    port=8000,
-    stateless_http=True,
-    json_response=True,
-)
+
+async def main():
+    resolver = GatewayHeaderIdentityResolver(
+        os.environ["AGENT_MEMORY_GATEWAY_SECRET"].encode("utf-8")
+    )
+    provider = build_postgres_kernel(os.environ["AGENT_MEMORY_POSTGRES_DSN"])
+    try:
+        await provider.initialize()
+        server = create_server(provider, resolver)
+        await server.run_streamable_http_async(
+            host="127.0.0.1",
+            port=8000,
+            stateless_http=True,
+            json_response=True,
+        )
+    finally:
+        await provider.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
 Hosts can pass `derived=observation_service` to `create_server()` to expose the

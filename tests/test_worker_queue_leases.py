@@ -55,26 +55,15 @@ def test_lease_write_rechecks_identity_after_concurrent_change(
         resume = threading.Event()
         original_connection = first._connection
 
-        class PausedCursor:
-            def __init__(self, cursor):
-                self.cursor = cursor
-
-            def fetchone(self):
-                row = self.cursor.fetchone()
-                self.cursor.close()
-                selected.set()
-                assert resume.wait(10), "lease write was not released"
-                return row
-
         class PausedConnection:
             def __init__(self, connection):
                 self.connection = connection
 
             def execute(self, sql, parameters=()):
-                cursor = self.connection.execute(sql, parameters)
-                if sql.startswith("SELECT") and "lease_token=?" in sql:
-                    return PausedCursor(cursor)
-                return cursor
+                if sql == "BEGIN IMMEDIATE":
+                    selected.set()
+                    assert resume.wait(10), "lease write was not released"
+                return self.connection.execute(sql, parameters)
 
         @contextmanager
         def paused_connection():
@@ -85,8 +74,8 @@ def test_lease_write_rechecks_identity_after_concurrent_change(
         old_write = asyncio.create_task(_write_lease(first, lease, action))
         replacement = None
         try:
-            assert await asyncio.to_thread(selected.wait, 10), "lease was not selected"
-            # Finish the independent writer before resuming the stale UPDATE.
+            assert await asyncio.to_thread(selected.wait, 10), "lease write did not reach lock acquisition"
+            # Finish the independent writer before the old owner acquires its write lock.
             if interleaving == "cancel":
                 assert await second.cancel(task_id, SCOPE)
             elif interleaving == "forget":
@@ -149,5 +138,113 @@ def test_current_lease_writes_preserve_success_and_retry_behavior(
             with pytest.raises(WorkerQueueError) as stale:
                 await _write_lease(queue, lease, action)
             assert stale.value.code == "stale_lease"
+
+    asyncio.run(scenario())
+
+
+async def _contend(path, queue, operation, monkeypatch, *, delay=0.2):
+    """Block a real SQLite write, then return its result and the release time."""
+    started = threading.Event()
+    connect = queue._connect
+
+    def observed_connect():
+        connection = connect()
+        connection.set_trace_callback(
+            lambda statement: started.set() if statement.startswith("BEGIN") else None
+        )
+        return connection
+
+    monkeypatch.setattr(queue, "_connect", observed_connect)
+    with closing(sqlite3.connect(path)) as blocker:
+        blocker.execute("BEGIN IMMEDIATE")
+        task = asyncio.create_task(operation)
+        try:
+            assert await asyncio.to_thread(started.wait, 5), "writer did not start"
+            await asyncio.sleep(delay)
+            assert not task.done()
+        finally:
+            released_at = datetime.now(timezone.utc)
+            blocker.rollback()
+    return task, released_at
+
+
+def test_claim_lease_starts_after_real_sqlite_writer_lock(tmp_path, monkeypatch):
+    async def scenario():
+        path = tmp_path / "worker.db"
+        queue = SQLiteWorkerQueue(path)
+        await queue.initialize()
+        await queue.enqueue("task", SCOPE, "noop", {})
+        task, released_at = await _contend(
+            path, queue, queue.claim("worker", lease_seconds=5), monkeypatch,
+        )
+        lease = await task
+        assert lease is not None
+        assert lease.task.lease_expires_at >= released_at + timedelta(seconds=5)
+        await queue.validate_lease(lease)
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("action", ["checkpoint", "complete", "fail"])
+def test_real_lock_wait_past_expiry_rejects_lease_write(tmp_path, monkeypatch, action):
+    async def scenario():
+        path = tmp_path / "worker.db"
+        queue = SQLiteWorkerQueue(path)
+        await queue.initialize()
+        task_id = await queue.enqueue("task", SCOPE, "noop", {})
+        lease = await queue.claim("worker", lease_seconds=5)
+        with closing(sqlite3.connect(path)) as connection:
+            connection.execute(
+                "UPDATE agent_memory_worker_tasks SET lease_expires_at=? WHERE id=?",
+                ((datetime.now(timezone.utc) + timedelta(seconds=0.1)).isoformat(), task_id),
+            )
+            connection.commit()
+        expected = _task_row(path, task_id)
+        task, _ = await _contend(path, queue, _write_lease(queue, lease, action), monkeypatch)
+        with pytest.raises(WorkerQueueError) as stale:
+            await task
+        assert stale.value.code == "stale_lease"
+        assert _task_row(path, task_id) == expected
+
+    asyncio.run(scenario())
+
+
+def test_claim_recovers_work_that_expired_during_lock_wait(tmp_path, monkeypatch):
+    async def scenario():
+        path = tmp_path / "worker.db"
+        queue = SQLiteWorkerQueue(path)
+        await queue.initialize()
+        task_id = await queue.enqueue("task", SCOPE, "noop", {})
+        old = await queue.claim("old-worker", lease_seconds=5)
+        with closing(sqlite3.connect(path)) as connection:
+            connection.execute(
+                "UPDATE agent_memory_worker_tasks SET lease_expires_at=? WHERE id=?",
+                ((datetime.now(timezone.utc) + timedelta(seconds=0.1)).isoformat(), task_id),
+            )
+            connection.commit()
+        task, released_at = await _contend(
+            path, queue, queue.claim("new-worker", lease_seconds=5), monkeypatch,
+        )
+        lease = await task
+        assert lease is not None and lease.token != old.token
+        assert lease.task.attempts == 2
+        assert lease.task.lease_expires_at >= released_at + timedelta(seconds=5)
+
+    asyncio.run(scenario())
+
+
+def test_retry_deadline_starts_after_real_sqlite_writer_lock(tmp_path, monkeypatch):
+    async def scenario():
+        path = tmp_path / "worker.db"
+        queue = SQLiteWorkerQueue(path)
+        await queue.initialize()
+        task_id = await queue.enqueue("task", SCOPE, "noop", {})
+        lease = await queue.claim("worker", lease_seconds=5)
+        task, released_at = await _contend(
+            path, queue, queue.fail(lease, RuntimeError("retry")), monkeypatch,
+        )
+        await task
+        row = _task_row(path, task_id)
+        assert datetime.fromisoformat(row["next_attempt_at"]) >= released_at + timedelta(seconds=4)
 
     asyncio.run(scenario())

@@ -108,6 +108,18 @@ class MemoryUnitOfWork(Protocol):
     async def save_proposal(self, proposal: MemoryProposal, result: ProposalResult) -> None: ...
 
 
+class ProposalReplayUnitOfWork(MemoryUnitOfWork, Protocol):
+    """Optional owner- and payload-bound proposal idempotency extension."""
+
+    async def find_proposal_result_for(self, proposal: MemoryProposal) -> ProposalResult | None:
+        """Return a matching result, or reject an occupied ID without exposing it.
+
+        Lookup and subsequent save share the write transaction. Implementations
+        serialize requests using the same globally unique proposal ID.
+        """
+        ...
+
+
 class MemoryRepository(Protocol):
     async def initialize(self) -> None: ...
 

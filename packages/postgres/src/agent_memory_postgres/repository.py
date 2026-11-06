@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import json
+from collections import deque
 from collections.abc import Sequence
+from contextlib import AsyncExitStack
 from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime
@@ -13,6 +16,7 @@ from typing import Any
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
+from agent_memory.consolidation.proposal_identity import validate_proposal_replay
 from agent_memory.domain import (
     ArtifactStatus,
     Claim,
@@ -103,16 +107,24 @@ class PostgresMemoryUnitOfWork:
 
     def __init__(self, repository: PostgresMemoryRepository) -> None:
         self._repository = repository
-        self._connection_context: Any = None
-        self._transaction_context: Any = None
+        self._exit_stack: AsyncExitStack | None = None
         self.connection: Any = None
         self._admission_batch_times: dict[tuple[str, str], datetime] = {}
 
     async def __aenter__(self) -> PostgresMemoryUnitOfWork:
-        self._connection_context = self._repository.pool.connection()
-        self.connection = await self._connection_context.__aenter__()
-        self._transaction_context = self.connection.transaction()
-        await self._transaction_context.__aenter__()
+        self._exit_stack = AsyncExitStack()
+        try:
+            self.connection = await self._exit_stack.enter_async_context(
+                self._repository.pool.connection()
+            )
+            await self._exit_stack.enter_async_context(self.connection.transaction())
+        except BaseException as exc:
+            # __aexit__ is not called when __aenter__ fails. Only unwind contexts
+            # whose entry succeeded, including the borrowed connection on BEGIN
+            # failure or cancellation; a partially entered transaction owns its
+            # own entry cleanup, as required by the context-manager protocol.
+            await self.__aexit__(type(exc), exc, exc.__traceback__)
+            raise
         self._admission_batch_times = {}
         self._refresh_scheduler_namespace = None
         return self
@@ -123,11 +135,37 @@ class PostgresMemoryUnitOfWork:
         exc: BaseException | None,
         traceback: TracebackType | None,
     ) -> None:
+        if self._exit_stack is None:
+            return
+        cleanup = asyncio.create_task(self._exit_stack.__aexit__(exc_type, exc, traceback))
+        # Preserve cancellation that brought us here, not just subsequent
+        # cancellation delivered while cleanup is running.
+        cancellation = exc if isinstance(exc, asyncio.CancelledError) else None
         try:
-            await self._transaction_context.__aexit__(exc_type, exc, traceback)
+            # Repeated cancellation must not interrupt rollback or pool return.
+            while True:
+                try:
+                    await asyncio.shield(cleanup)
+                    break
+                except asyncio.CancelledError as cancelled:
+                    if cancellation is None:
+                        cancellation = cancelled
+                    if cleanup.done():
+                        try:
+                            cleanup.result()
+                        except BaseException as cleanup_error:
+                            if cleanup_error is not cancellation:
+                                raise cancellation from cleanup_error
+                        raise cancellation
+                except BaseException as cleanup_error:
+                    if cancellation is not None:
+                        raise cancellation from cleanup_error
+                    raise
+            if cancellation is not None:
+                raise cancellation
         finally:
-            await self._connection_context.__aexit__(exc_type, exc, traceback)
             self.connection = None
+            self._exit_stack = None
 
     async def find_event_by_idempotency(
         self, scope: MemoryScope, idempotency_key: str
@@ -288,6 +326,22 @@ class PostgresMemoryUnitOfWork:
         )
         row = await cursor.fetchone()
         return bool(row and row["count"] == len(set(event_ids)))
+
+    async def find_proposal_result_for(self, proposal: MemoryProposal) -> ProposalResult | None:
+        # Namespace fencing precedes identity/claim locks, as in writes and forget.
+        await self.lock_admission_scope(proposal.scope)
+        await self._lock_idempotency("proposal", "", proposal.id)
+        cursor = await self.connection.execute(
+            "SELECT * FROM agent_memory_proposals WHERE id = %s", (proposal.id,)
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        validate_proposal_replay(
+            proposal, self._repository._scope_from_row(row), _object(row["payload_json"]),
+            serialized=to_jsonable(proposal),
+        )
+        return await self.find_proposal_result(proposal.id)
 
     async def find_proposal_result(self, proposal_id: str) -> ProposalResult | None:
         cursor = await self.connection.execute(
@@ -840,8 +894,19 @@ class PostgresMemoryUnitOfWork:
         return self._repository._claim_from_row(row) if row else None
 
     async def claim_is_effective(self, claim: Claim, valid_at: datetime) -> bool:
+        cursor = await self.connection.execute(
+            "SELECT DISTINCT tenant_id, namespace, user_id, agent_id, workspace_id, session_id "
+            "FROM agent_memory_events WHERE id = ANY(%s)",
+            (list(claim.provenance.source_event_ids),),
+        )
+        scopes = {claim.scope, *(self._repository._scope_from_row(row)
+                                for row in await cursor.fetchall())}
+        protected = set()
+        for scope in scopes:
+            protected.update(await admission.protected_sources(self.connection, scope))
         claims = await PostgresClaimHistory(self._repository).read(
-            self.connection, claim.scope, valid_at, utc_now()
+            self.connection, claim.scope, valid_at, utc_now(), legacy_only=True,
+            protected_sources=protected, claim_ids=(claim.id,), limit=1,
         )
         return any(current.id == claim.id for current in claims)
 
@@ -1715,7 +1780,71 @@ class PostgresMemoryRepository:
                 )
         return len(dependent)
 
+    async def _erase_proposals(self, connection, request, claim_ids, rows):
+        pending = []
+        if request.mode != ForgetMode.ERASE:
+            return pending
+        event_ids = {row["id"] for row in rows if row["table"] == "events"
+                     and row["partition_key"] == request.scope.partition_key()
+                     and (request.all_in_scope or row["id"] in request.memory_ids)}
+        claim_ids = set(claim_ids) | {row["id"] for row in rows if row["table"] == "claims"
+                     and row["partition_key"] == request.scope.partition_key()
+                     and (request.all_in_scope or row["id"] in request.memory_ids)}
+        cursor = await connection.execute(
+            "SELECT id,memory_table FROM agent_memory_memory_tombstones "
+            "WHERE partition_key=%s AND memory_table IN ('events','claims') "
+            "AND (%s OR id=ANY(%s))",
+            (request.scope.partition_key(), request.all_in_scope, list(request.memory_ids)),
+        )
+        tombstones = await cursor.fetchall()
+        event_ids.update(row["id"] for row in tombstones if row["memory_table"] == "events")
+        claim_ids.update(row["id"] for row in tombstones if row["memory_table"] == "claims")
+        cursor = await connection.execute("""SELECT * FROM agent_memory_proposals
+            WHERE tenant_id=%s AND namespace=%s
+              AND NOT (payload_json @> '{"erased": true}'::jsonb)
+              AND ((partition_key=%s AND (%s OR id=ANY(%s) OR claim_id=ANY(%s)
+                    OR payload_json->'source_event_ids' ?| %s))
+                OR claim_id=ANY(%s) OR payload_json->'source_event_ids' ?| %s)
+            FOR UPDATE""",
+            (request.scope.tenant_id, request.scope.namespace, request.scope.partition_key(),
+             request.all_in_scope, list(request.memory_ids), list(request.memory_ids),
+             list(request.memory_ids), sorted(claim_ids), sorted(event_ids)))
+        selected = await cursor.fetchall()
+        for row in selected:
+            await connection.execute(
+                "UPDATE agent_memory_proposals SET payload_json=%s::jsonb,reason=NULL WHERE id=%s",
+                (_json({"erased": True}), row["id"]),
+            )
+        for row in selected:
+            cursor = await connection.execute(
+                "SELECT id FROM agent_memory_events WHERE partition_key=%s "
+                "AND event_type='memory.proposal.accepted' "
+                "AND metadata_json->>'proposal_id'=%s FOR UPDATE",
+                (row["partition_key"], row["id"]),
+            )
+            audit_ids = tuple(event["id"] for event in await cursor.fetchall()
+                if not (row["partition_key"] == request.scope.partition_key()
+                    and (request.all_in_scope or event["id"] in request.memory_ids)))
+            if audit_ids:
+                pending.append(replace(request, scope=self._scope_from_row(row),
+                                       memory_ids=audit_ids, all_in_scope=False))
+        return pending
+
     async def _forget_on_connection(self, connection, request, *, replay=False):
+        pending = deque([(request, replay)])
+        total = ForgetResult(0, 0, 0, request.mode)
+        while pending:
+            target, target_replay = pending.popleft()
+            result = await self._forget_once(connection, target, replay=target_replay,
+                                             proposal_deletions=pending)
+            total = ForgetResult(
+                total.affected_events + result.affected_events,
+                total.affected_claims + result.affected_claims,
+                total.affected_artifacts + result.affected_artifacts, request.mode,
+            )
+        return total
+
+    async def _forget_once(self, connection, request, *, replay, proposal_deletions):
         table_names = (
             "agent_memory_events", "agent_memory_claims", "agent_memory_artifacts",
         )
@@ -1732,6 +1861,9 @@ class PostgresMemoryRepository:
         admission_claim_ids, extra_admission_claims = await admission.forget_records(
             connection, request
         )
+        proposal_deletions.extend((target, True) for target in await self._erase_proposals(
+            connection, request, admission_claim_ids, dependency_rows
+        ))
         # Primary deletion also changes admitted projections in broader scopes.
         # Translate only actually changed candidates, never the all-in-scope flag.
         affected_scopes = {request.scope}

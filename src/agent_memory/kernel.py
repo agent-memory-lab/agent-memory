@@ -770,8 +770,16 @@ class MemoryKernel:
         if proposal.key.startswith(ATOM_PREFIX):
             raise ValueError("atom keys are reserved for typed admission")
         claim_scope = proposal.scope.project(proposal.scope_level)
-        existing = await uow.find_proposal_result(proposal.id)
-        if existing:
+        replay_reader = getattr(uow, "find_proposal_result_for", None)
+        if callable(replay_reader):
+            existing = await replay_reader(proposal)
+        else:
+            existing = await uow.find_proposal_result(proposal.id)
+            if existing is not None:
+                # Legacy adapters cannot prove ownership or payload identity.
+                # New requests still work, but cached results must fail closed.
+                raise ValueError("provider cannot validate proposal replay identity")
+        if existing is not None:
             return existing
 
         if not await uow.events_exist(proposal.scope, proposal.source_event_ids):
@@ -811,8 +819,13 @@ class MemoryKernel:
         same_value = previous is not None and (
             _canonical_value(previous.value) == _canonical_value(proposal.value)
         )
+        merge_effective = same_value
+        effective_check = getattr(uow, "claim_is_effective", None)
+        if (proposal.operation is ClaimProposalOperation.MERGE and same_value
+                and callable(effective_check)):
+            merge_effective = await effective_check(previous, proposal.valid_from or utc_now())
         invalid_operation = (
-            proposal.operation is ClaimProposalOperation.MERGE and not same_value
+            proposal.operation is ClaimProposalOperation.MERGE and not merge_effective
         ) or (
             proposal.operation is ClaimProposalOperation.SUPERSEDE
             and (previous is None or same_value)

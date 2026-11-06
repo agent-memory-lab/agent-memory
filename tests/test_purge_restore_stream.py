@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 import test_atom_admission as base
+from purge_stream_process import kill_at_boundary
 from test_purge_restore import SECRET, backup_copy, erase, restorer
 
 from agent_memory.domain import ForgetMode, ForgetRequest
@@ -474,17 +475,7 @@ def test_large_stream_process_kill_and_retry_preserve_atomic_recovery(store, tmp
                     sys.executable, str(child), str(path),
                     stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
                 )
-                try:
-                    line = await asyncio.wait_for(process.stdout.readline(), timeout=90)
-                    if line != b"ready\n":
-                        error = await process.stderr.read()
-                        pytest.fail(error.decode())
-                    process.kill()
-                    assert await asyncio.wait_for(process.wait(), timeout=10) == -signal.SIGKILL
-                finally:
-                    if process.returncode is None:
-                        process.kill()
-                        await process.wait()
+                await kill_at_boundary(process, checkpoint["head"])
                 committed = boundary == "after_commit"
                 async with backup.unit_of_work() as uow:
                     assert await uow.purge_head(scope) == (4097 if committed else 0)
