@@ -21,6 +21,9 @@ the first stable release.
   unsupported evidence can still reject an L0-only candidate. This correction
   also applies without optional guards; existing cached receipts are not
   rewritten. See [review precedence](docs/ADMISSION_REVIEW_PRECEDENCE.md).
+- Clear aggregated ontology aliases on any supporting source invalidation; legacy
+  rows have no per-alias provenance. Surviving-source reprojection can rebuild
+  aliases. This conservative cleanup can reduce alias candidate recall.
 - Erase proposal payloads and free-form reasons in SQLite and PostgreSQL, retaining
   terminal identity/results only. Delete accepted-proposal audit copies and their
   dependent memory in the same transaction, including targeted and repeated erasure.

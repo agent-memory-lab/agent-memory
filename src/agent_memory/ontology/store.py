@@ -542,6 +542,9 @@ class SQLiteOntologyStore(SQLOntologyQueries):
                         ),
                     )
                 for row in entity_rows:
+                    # Legacy rows have only entity-level provenance, not per-alias
+                    # witnesses. Drop all aliases rather than retain a deleted
+                    # source's identity hint; surviving projections can rebuild.
                     remaining = tuple(
                         value["event_id"]
                         for value in connection.execute(
@@ -562,7 +565,7 @@ class SQLiteOntologyStore(SQLOntologyQueries):
                     connection.execute(
                         """
                         UPDATE ontology_entities
-                        SET source_event_ids_json=?, archived_at=?
+                        SET source_event_ids_json=?, archived_at=?, aliases_json='[]'
                         WHERE partition_key=? AND ontology_id=?
                           AND ontology_version=? AND entity_id=?
                         """,
