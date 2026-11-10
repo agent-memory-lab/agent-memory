@@ -34,6 +34,7 @@ from ..lifecycle import capture_annotation, is_memory_context
 from ..ports import AdmissionRepository, AtomGenerator, AtomReviewer
 from .admission import AdmissionPolicy, authority_to_payload, draft_to_payload
 from .admission_runtime import AdmissionEngine
+from .attribution import ConservativeAttributionGuard
 from .source_audit import SourceAuditUnavailable, SourceOmissionAudit
 
 
@@ -203,6 +204,7 @@ class AtomExtractionPipeline:
         max_candidates: int = 32,
         timeout_seconds: float = 20.0,
         source_audit: SourceOmissionAudit | None = None,
+        attribution_guard: ConservativeAttributionGuard | None = None,
     ) -> None:
         for adapter in (generator, reviewer):
             if not isinstance(adapter.version, str) or not 1 <= len(adapter.version) <= 128:
@@ -217,6 +219,11 @@ class AtomExtractionPipeline:
             raise ValueError("timeout_seconds must be finite and within (0, 30]")
         if source_audit is not None and not isinstance(source_audit, SourceOmissionAudit):
             raise TypeError("source_audit must be a SourceOmissionAudit")
+        if attribution_guard is not None and not isinstance(
+            attribution_guard, ConservativeAttributionGuard
+        ):
+            raise TypeError("attribution_guard must be a ConservativeAttributionGuard")
+        self.attribution_guard = attribution_guard
         self.source_audit = source_audit
         self.generator, self.reviewer = generator, reviewer
         self.scope_level = ScopeLevel(scope_level)
@@ -231,11 +238,15 @@ class AtomExtractionPipeline:
             "max_candidates": self.max_candidates,
             "timeout_seconds": self.timeout_seconds,
             **({"source_audit": self.source_audit.config_payload()} if self.source_audit else {}),
+            **({"attribution_guard": self.attribution_guard.config_payload()}
+               if self.attribution_guard else {}),
         }
 
     def input_fingerprint(
         self, event: MemoryEvent, *, authority: SourceAuthority, policy: AdmissionPolicy
     ) -> str:
+        if self.attribution_guard is not None:
+            self.attribution_guard.validate_event(event)
         if is_memory_context(event):
             raise ValueError("memory context requires its original evidence before extraction")
         if len(event.content) > 32_000:
@@ -274,6 +285,7 @@ class AtomExtractionPipeline:
         """Run generation/review outside storage transactions; return serializable data."""
         event, authority, policy = deepcopy((event, authority, policy))
         config = self.config_payload()
+        attribution_guard = self.attribution_guard
         fingerprint = self.input_fingerprint(event, authority=authority, policy=policy)
         started = perf_counter()
         source_audit = (
@@ -420,6 +432,11 @@ class AtomExtractionPipeline:
                 continue
             candidate, review = candidates[index], reviews_by_index[index]
             action, reasons = _gate(event, candidate, review)
+            if attribution_guard is not None and action == "ACCEPT":
+                attribution_reasons = attribution_guard.reasons(event, candidate)
+                if attribution_reasons:
+                    action = "PENDING_VERIFICATION"
+                    reasons = ("source_attribution_uncertain", *attribution_reasons)
             if source_audit is not None and action == "ACCEPT":
                 targets = {t["target_id"]: t for t in source_audit["targets"]}
                 if any(
@@ -469,6 +486,8 @@ class AtomExtractionPipeline:
             "review_calls": review_calls,
             "elapsed_ms": round((perf_counter() - started) * 1000, 3),
             **({"source_audit": source_audit} if source_audit is not None else {}),
+            **({"attribution_guard": config["attribution_guard"]}
+               if "attribution_guard" in config else {}),
         }
         if processing_inputs:
             audit["processing_inputs"] = processing_inputs
@@ -536,6 +555,8 @@ class AtomExtractionPipeline:
             {
                 "generator_version": self.generator.version,
                 "reviewer_version": self.reviewer.version,
+                **({"attribution_guard": self.attribution_guard.config_payload()}
+                   if self.attribution_guard else {}),
                 **(
                     {"source_audit": self.source_audit.config_payload()}
                     if self.source_audit

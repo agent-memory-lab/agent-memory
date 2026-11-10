@@ -17,6 +17,9 @@ the first stable release.
   spellings yield candidates, not resolved identities; incomplete scans return
   no partial candidate IDs. See
   [identity boundaries](docs/ENTITY_ATTRIBUTION_BOUNDARIES.md).
+- Add an opt-in source-attribution gate to native Atom extraction. It does not
+  resolve quoted speakers or merge same-name identities; see
+  [attribution boundaries](docs/ENTITY_ATTRIBUTION_BOUNDARIES.md).
 
 ### Fixed
 

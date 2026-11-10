@@ -1,9 +1,69 @@
-# Registered identity boundaries
+# Source attribution and registered identity boundaries
 
-Registering an entity ID or alias is a host/input assertion, not automatic
-identity discovery. The ontology remains a projection of accepted structured
-Claims. This lookup does not implement NER, coreference, alias learning or
-name-based identity merging.
+## Scope and status
+
+This optional safeguard does **not** implement natural-language NER, quotation
+speaker recognition, general coreference, alias learning, KB identity linking, or
+fact-relation extraction. The ontology remains a projection of accepted structured
+Claims. Registering an entity ID or alias is a host/input assertion, not automatic
+identity discovery. A supplied speaker label is metadata, not verified real-world
+identity.
+
+## Optional source-attribution gate
+
+```python
+from agent_memory.consolidation.attribution import ConservativeAttributionGuard
+from agent_memory.consolidation.atom_extraction import AtomExtractionPipeline
+
+pipeline = AtomExtractionPipeline(
+    existing_generator,
+    existing_reviewer,
+    attribution_guard=ConservativeAttributionGuard(trusted_scope, "alice"),
+)
+```
+
+The default is `attribution_guard=None`: the new guard leaves existing generation,
+review, fingerprints and model prompts unchanged. No model dependency is added.
+The separate [admission precedence correction](ADMISSION_REVIEW_PRECEDENCE.md)
+always preserves terminal host decisions, including without this guard. Existing
+cached receipts are not retroactively recomputed or repaired.
+
+The opt-in guard is intended for a host-bound self-report path:
+
+- It requires the **exact** host scope and event actor to match before generation.
+  The model cannot supply or override either. Different namespaces, tenants, users,
+  sessions and actor spellings fail before dispatch.
+- It scans the **whole source**, not the model's selected quotation. Recognized
+  quotation marks or a finite English/Chinese reporting-word list make attribution
+  uncertain. Other subject IDs remain unbound; an alias-looking ID does not count
+  as the actor.
+- It can only lower an otherwise `ACCEPT` gate to `PENDING_VERIFICATION`. It never
+  approves an unsupported candidate, assigns a quoted speaker, merges identities,
+  or skips existing source fidelity, retention, admission or authority checks.
+  Final admission preserves host `REJECT` and `L0_ONLY` even if this guard holds
+  the review gate; those terminal candidates cannot enter domain verification.
+  Reviewer `faithfulness` records the reviewer verdict; the final gate and its
+  `source_attribution_uncertain` reasons record the separate guard decision.
+- Its immutable configuration is captured before awaited adapters run, included in
+  the extraction input fingerprint and policy audit, and checked again at publication
+  and cached-result reuse. Disabling/changing it requires a new processing request,
+  not reuse of an earlier result under another policy.
+
+This is deliberately a **finite risk detector**, not a guarantee of attribution
+safety. Colloquial, unpunctuated, nested, multilingual and otherwise unrecognized
+reported speech can escape it. Even a known reporting verb used without a quotation,
+or one quoted word elsewhere in a long source, can block valid candidates. No risk
+signal is not a proof of direct speech. Do not enable this as a general production
+coreference solution. Its independent semantic reviewer/verification path remains
+necessary.
+
+The post-observation GUM regression diagnostic kept the external baseline's mention
+spans and name links fixed. Applying the same risk detector to whole speaker runs
+removed many correct links along with errors: test pair recall fell from 44.97% to
+4.35%; dev pair precision also fell from 97.03% to 83.78%. This is **not a demonstrated
+quality improvement** and must not be used to justify default rollout. These are
+external diagnostic figures, not native model-extraction measurements or a blind
+benchmark.
 
 ## Read-only exact entity candidates
 
