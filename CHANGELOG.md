@@ -13,6 +13,10 @@ the first stable release.
 - Keep exact excerpt construction and authoritative delivery guards unchanged.
   This is an opt-in control, not a claim of better answers. See
   `docs/SOURCE_CONTEXT_SWITCH.md` for compatibility and known trade-offs.
+- Add exact, scope/version-bound SQLite entity candidate lookup. Registered
+  spellings yield candidates, not resolved identities; incomplete scans return
+  no partial candidate IDs. See
+  [identity boundaries](docs/ENTITY_ATTRIBUTION_BOUNDARIES.md).
 
 ### Fixed
 

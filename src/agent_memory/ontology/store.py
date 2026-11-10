@@ -24,6 +24,7 @@ from .model import (
     OntologyAssertionStatus,
     OntologyConflictResolution,
     OntologyEntity,
+    OntologyEntityCandidates,
     OntologyMatch,
     OntologyProjection,
     OntologySchema,
@@ -57,6 +58,49 @@ class SQLiteOntologyStore(SQLOntologyQueries):
 
     async def upsert_projection(self, projection: OntologyProjection) -> None:
         await asyncio.to_thread(self._upsert_projection_sync, projection)
+
+    async def find_entity_candidates(
+        self, scope: MemoryScope, reference: str, *, ontology_id: str,
+        ontology_version: str, max_scan: int = 512,
+    ) -> OntologyEntityCandidates:
+        """Read exact ID/label/alias candidates without selecting or merging one.
+
+        Unlike retrieval, this lookup does not inherit parent scopes. A bounded
+        incomplete scan returns no candidates rather than false uniqueness.
+        """
+        if not isinstance(scope, MemoryScope):
+            raise TypeError("entity lookup scope must be a MemoryScope")
+        for value, name in ((reference, "reference"), (ontology_id, "ontology_id"),
+                            (ontology_version, "ontology_version")):
+            if not isinstance(value, str) or not value.strip() or len(value) > 256:
+                raise ValueError(f"{name} must be a bounded nonempty string")
+        if type(max_scan) is not int or not 1 <= max_scan <= 4096:
+            raise ValueError("max_scan must be between 1 and 4096")
+        return await asyncio.to_thread(
+            self._find_entity_candidates_sync, scope, reference,
+            ontology_id, ontology_version, max_scan,
+        )
+
+    def _find_entity_candidates_sync(self, scope, reference, ontology_id, version, max_scan):
+        connection = self._connect()
+        try:
+            rows = connection.execute(
+                "SELECT entity_id, label, aliases_json "
+                "FROM ontology_entities WHERE partition_key=? AND ontology_id=? "
+                "AND ontology_version=? AND archived_at IS NULL "
+                "ORDER BY entity_id LIMIT ?",
+                (scope.partition_key(), ontology_id, version, max_scan + 1),
+            ).fetchall()
+            if len(rows) > max_scan:
+                return OntologyEntityCandidates(scope, ontology_id, version, (), False)
+            candidates = []
+            for row in rows:
+                aliases = tuple(json.loads(row["aliases_json"]))
+                if reference in (row["entity_id"], row["label"], *aliases):
+                    candidates.append(row["entity_id"])
+            return OntologyEntityCandidates(scope, ontology_id, version, tuple(candidates), True)
+        finally:
+            connection.close()
 
     async def invalidate_sources(
         self,
@@ -440,6 +484,7 @@ class SQLiteOntologyStore(SQLOntologyQueries):
             sources = tuple(
                 dict.fromkeys((*json.loads(existing["source_event_ids_json"]), *sources))
             )
+
         connection.execute(
             """
             INSERT INTO ontology_entities (
