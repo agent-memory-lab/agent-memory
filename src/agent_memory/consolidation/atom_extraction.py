@@ -137,6 +137,10 @@ class _ReviewedPolicy(AdmissionPolicy):
     def evaluate(self, event, draft, authority):
         action, reasons = self.base.evaluate(event, draft, authority)
         gate, gate_reasons = self.gates[_key(draft)]
+        # A review hold must not reopen a terminal host admission decision.
+        # Unsupported evidence may still reject an otherwise L0-only candidate.
+        if action == "REJECT" or (action == "L0_ONLY" and gate != "REJECT"):
+            return action, tuple(dict.fromkeys((*reasons, *gate_reasons)))
         if gate != "ACCEPT":
             return gate, tuple(dict.fromkeys((*gate_reasons, *reasons)))
         return action, tuple(dict.fromkeys((*reasons, *gate_reasons)))
