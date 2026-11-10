@@ -5,6 +5,15 @@ the first stable release.
 
 ## Unreleased
 
+### Added
+
+- Add `enable_source_context=False` to the native kernel and SQLite public
+  factories to skip post-ranking adjacent-source reads. Existing defaults and
+  packing contracts are unchanged; retrieval metadata reports `disabled_config`.
+- Keep exact excerpt construction and authoritative delivery guards unchanged.
+  This is an opt-in control, not a claim of better answers. See
+  `docs/SOURCE_CONTEXT_SWITCH.md` for compatibility and known trade-offs.
+
 ### Fixed
 
 - Preserve terminal host admission decisions when composing extraction review
