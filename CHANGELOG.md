@@ -5,8 +5,32 @@ the first stable release.
 
 ## Unreleased
 
+### Added
+
+- Add `enable_source_context=False` to the native kernel and SQLite public
+  factories to skip post-ranking adjacent-source reads. Existing defaults and
+  packing contracts are unchanged; retrieval metadata reports `disabled_config`.
+- Keep exact excerpt construction and authoritative delivery guards unchanged.
+  This is an opt-in control, not a claim of better answers. See
+  `docs/SOURCE_CONTEXT_SWITCH.md` for compatibility and known trade-offs.
+- Add exact, scope/version-bound SQLite entity candidate lookup. Registered
+  spellings yield candidates, not resolved identities; incomplete scans return
+  no partial candidate IDs. See
+  [identity boundaries](docs/ENTITY_ATTRIBUTION_BOUNDARIES.md).
+- Add an opt-in source-attribution gate to native Atom extraction. It does not
+  resolve quoted speakers or merge same-name identities; see
+  [attribution boundaries](docs/ENTITY_ATTRIBUTION_BOUNDARIES.md).
+
 ### Fixed
 
+- Preserve terminal host admission decisions when composing extraction review
+  gates: a hold cannot promote `REJECT` or `L0_ONLY` to pending verification, and
+  unsupported evidence can still reject an L0-only candidate. This correction
+  also applies without optional guards; existing cached receipts are not
+  rewritten. See [review precedence](docs/ADMISSION_REVIEW_PRECEDENCE.md).
+- Clear aggregated ontology aliases on any supporting source invalidation; legacy
+  rows have no per-alias provenance. Surviving-source reprojection can rebuild
+  aliases. This conservative cleanup can reduce alias candidate recall.
 - Erase proposal payloads and free-form reasons in SQLite and PostgreSQL, retaining
   terminal identity/results only. Delete accepted-proposal audit copies and their
   dependent memory in the same transaction, including targeted and repeated erasure.

@@ -33,8 +33,9 @@ def build_local_kernel(
     enable_query_facets: bool = False,
     packing_version: str = "v2",
     passage_reranker: Reranker | None = None,
+    enable_source_context: bool = True,
 ) -> MemoryKernel:
-    """Build a kernel with stable v2 packing; facets and v3/v4 packing require opt-in."""
+    """Build the native kernel; source-context expansion is independently switchable."""
     base_reranker = reranker or ReciprocalRankFusionReranker()
     return MemoryKernel(
         repository=SQLiteMemoryRepository(database_path, enable_query_facets=enable_query_facets),
@@ -50,6 +51,7 @@ def build_local_kernel(
         trusted_evaluator_ids=trusted_evaluator_ids,
         packing_version=packing_version,
         passage_reranker=passage_reranker,
+        enable_source_context=enable_source_context,
         capabilities=MemoryCapabilities(
             automatic_extraction=extractor is not None,
             memory_blocks=True,

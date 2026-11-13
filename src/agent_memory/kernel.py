@@ -117,12 +117,16 @@ class MemoryKernel:
         trusted_evaluator_ids: Collection[str] | None = None,
         packing_version: str = "v2",
         passage_reranker: Reranker | None = None,
+        enable_source_context: bool = True,
     ) -> None:
         packing_contract(packing_version)  # Fail before opening a repository or invoking a model.
+        if type(enable_source_context) is not bool:
+            raise ValueError("enable_source_context must be a bool")
         if passage_reranker is not None and packing_version != "v5":
             raise ValueError("passage_reranker requires explicit packing_version=v5")
         self._passage_reranker = passage_reranker
         self._packing_version = packing_version
+        self._enable_source_context = enable_source_context
         self._repository = repository
         self._extractor = extractor
         self._policy = policy
@@ -646,6 +650,8 @@ class MemoryKernel:
             context_status = "disabled_historical"
         elif MemoryChannel.SEMANTIC not in query.channels:
             context_status = "disabled_channel"
+        elif not self._enable_source_context:
+            context_status = "disabled_config"
         elif callable(expansion):
             anchors = context_anchors(query, ranked)
             context = tuple(await expansion(query, ranked, MAX_CONTEXT_CANDIDATES))[

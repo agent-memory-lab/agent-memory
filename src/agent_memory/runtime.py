@@ -102,6 +102,7 @@ class AgentMemory:
         embedding_provider: EmbeddingProvider | None = None,
         trusted_evaluator_ids: Collection[str] | None = None,
         recall_pipeline: RecallPipeline | None = None,
+        enable_source_context: bool = True,
     ) -> AgentMemory:
         return cls(
             PluginRegistry().create_provider(
@@ -112,6 +113,7 @@ class AgentMemory:
                 reranker=reranker,
                 embedding_provider=embedding_provider,
                 trusted_evaluator_ids=trusted_evaluator_ids,
+                enable_source_context=enable_source_context,
             ),
             scope or MemoryScope(tenant_id="local", session_id="default"),
             limits=limits,

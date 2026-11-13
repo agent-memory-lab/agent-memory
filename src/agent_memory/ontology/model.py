@@ -206,6 +206,29 @@ class OntologyEntity:
 
 
 @dataclass(frozen=True, slots=True)
+class OntologyEntityCandidates:
+    """Read-only exact registered spelling matches, not an identity proof.
+
+    The scope and ontology version stay attached to otherwise non-global IDs.
+    Even one match is only a candidate, never permission to merge identities.
+    """
+
+    scope: MemoryScope
+    ontology_id: str
+    ontology_version: str
+    entity_ids: tuple[str, ...]
+    complete: bool
+
+    @property
+    def status(self) -> str:
+        if not self.complete:
+            return "incomplete"
+        if not self.entity_ids:
+            return "unknown"
+        return "candidate" if len(self.entity_ids) == 1 else "ambiguous"
+
+
+@dataclass(frozen=True, slots=True)
 class OntologyAssertion:
     assertion_id: str
     scope: MemoryScope

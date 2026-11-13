@@ -336,6 +336,7 @@ def build_sqlite_plugin(
     reranker: Reranker | None = None,
     embedding_provider: EmbeddingProvider | None = None,
     trusted_evaluator_ids: Collection[str] | None = None,
+    enable_source_context: bool = True,
     **_: Any,
 ) -> MemoryProvider:
     return build_local_kernel(
@@ -345,6 +346,7 @@ def build_sqlite_plugin(
         reranker=reranker,
         embedding_provider=embedding_provider,
         trusted_evaluator_ids=trusted_evaluator_ids,
+        enable_source_context=enable_source_context,
     )
 
 
