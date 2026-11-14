@@ -34,6 +34,7 @@ def build_local_kernel(
     packing_version: str = "v2",
     passage_reranker: Reranker | None = None,
     enable_source_context: bool = True,
+    lossless_packing_budget=None,
 ) -> MemoryKernel:
     """Build the native kernel; source-context expansion is independently switchable."""
     base_reranker = reranker or ReciprocalRankFusionReranker()
@@ -52,6 +53,7 @@ def build_local_kernel(
         packing_version=packing_version,
         passage_reranker=passage_reranker,
         enable_source_context=enable_source_context,
+        lossless_packing_budget=lossless_packing_budget,
         capabilities=MemoryCapabilities(
             automatic_extraction=extractor is not None,
             memory_blocks=True,
