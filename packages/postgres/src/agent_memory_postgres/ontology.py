@@ -29,6 +29,9 @@ class _Connection:
             self.raw.rollback()
 
     def execute(self, statement, parameters=()):
+        # _connect already holds the namespace transaction advisory lock.
+        if statement.strip() == "BEGIN IMMEDIATE":
+            statement = "SELECT 1"
         if statement.strip().startswith("PRAGMA table_info("):
             return self.raw.execute(
                 "SELECT column_name AS name FROM information_schema.columns "

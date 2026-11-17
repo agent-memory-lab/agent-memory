@@ -324,6 +324,9 @@ class SQLiteOntologyStore(SQLOntologyQueries):
         connection = self._connect()
         try:
             with connection:
+                # Lock before reading entities so concurrent merges cannot
+                # overwrite aliases or provenance from another committed writer.
+                connection.execute("BEGIN IMMEDIATE")
                 schema_row = connection.execute(
                     "SELECT 1 FROM ontology_schemas WHERE ontology_id=? AND version=?",
                     (projection.schema.ontology_id, projection.schema.version),
@@ -532,6 +535,9 @@ class SQLiteOntologyStore(SQLOntologyQueries):
         connection = self._connect()
         try:
             with connection:
+                # Keep the affected-row snapshot and source deletion together;
+                # a concurrent projection must not enter between those steps.
+                connection.execute("BEGIN IMMEDIATE")
                 now = utc_now().isoformat()
                 placeholders = ",".join("?" for _ in deleted)
                 params = (partition, *sorted(deleted), max_rows + 1)

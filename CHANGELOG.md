@@ -23,6 +23,10 @@ the first stable release.
 
 ### Fixed
 
+- Serialize SQLite ontology projection and source invalidation from the first
+  read through commit, preventing lost alias/provenance updates and live index
+  records whose source links were concurrently deleted. The PostgreSQL adapter
+  preserves its existing namespace transaction lock for these shared operations.
 - Preserve terminal host admission decisions when composing extraction review
   gates: a hold cannot promote `REJECT` or `L0_ONLY` to pending verification, and
   unsupported evidence can still reject an L0-only candidate. This correction
