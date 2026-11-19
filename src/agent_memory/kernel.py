@@ -118,12 +118,18 @@ class MemoryKernel:
         packing_version: str = "v2",
         passage_reranker: Reranker | None = None,
         enable_source_context: bool = True,
+        lossless_packing_budget=None,
     ) -> None:
         packing_contract(packing_version)  # Fail before opening a repository or invoking a model.
         if type(enable_source_context) is not bool:
             raise ValueError("enable_source_context must be a bool")
         if passage_reranker is not None and packing_version != "v5":
             raise ValueError("passage_reranker requires explicit packing_version=v5")
+        from .retrieval.lossless_packing import LosslessBudget
+        if lossless_packing_budget is not None:
+            if not isinstance(lossless_packing_budget, LosslessBudget) or packing_version != "v2" or passage_reranker is not None:
+                raise ValueError("lossless packing requires explicit LosslessBudget and unmodified v2 upstream")
+        self._lossless_packing_budget = lossless_packing_budget
         self._passage_reranker = passage_reranker
         self._packing_version = packing_version
         self._enable_source_context = enable_source_context
@@ -667,7 +673,11 @@ class MemoryKernel:
         if self._passage_reranker is not None:
             from .retrieval.passage_reranking import rerank_passages
             passage_options["passages"] = await rerank_passages(query, packing_input, self._passage_reranker)
-        packed = pack_native_evidence(query, current, packing_input, version=self._packing_version, **passage_options)
+        if self._lossless_packing_budget is None:
+            packed = pack_native_evidence(query, current, packing_input, version=self._packing_version, **passage_options)
+        else:
+            from .retrieval.lossless_packing import pack_preserving_evidence
+            packed = pack_preserving_evidence(query, current, packing_input, budget=self._lossless_packing_budget)
         selected_state = packed.state
         selected = packed.items
         citations = packed.citations
@@ -758,11 +768,25 @@ class MemoryKernel:
         # do not perform more I/O after it or reuse the pre-guard Python objects.
         delivery_guard = getattr(self._repository, "guard_retrieval_delivery", None)
         if callable(delivery_guard):
-            return await delivery_guard(query, bundle)
-        return replace(bundle, retrieval_metadata={
-            **bundle.retrieval_metadata,
-            "delivery_guard": {"status": "unsupported"},
-        })
+            bundle = await delivery_guard(query, bundle)
+        else:
+            bundle = replace(bundle, retrieval_metadata={
+                **bundle.retrieval_metadata,
+                "delivery_guard": {"status": "unsupported"},
+            })
+        if self._lossless_packing_budget is not None:
+            # Authoritative delivery may remove or replace evidence and resets
+            # its legacy text estimate. Recount the FINAL immutable selection
+            # synchronously, without another awaited boundary or restored items.
+            from .retrieval.packing import ordered_bundle_evidence
+            final_tokens = self._lossless_packing_budget.measure(
+                bundle.current_state, ordered_bundle_evidence(bundle))
+            if final_tokens > query.token_budget:
+                raise ValueError("final delivery payload exceeds token budget")
+            bundle = replace(bundle, token_estimate=final_tokens,
+                retrieval_metadata={**bundle.retrieval_metadata,
+                    "packing_final_delivery_recounted": True})
+        return bundle
 
     async def propose(self, proposal: MemoryProposal) -> ProposalResult:
         async with self._repository.unit_of_work() as uow:
