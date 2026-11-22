@@ -22,11 +22,16 @@ another count at the sending boundary; this module does not own model transport.
 
 * Keep retained records whole, preserving upstream ranking. Oversized records are
   omitted with a reason rather than rewritten or silently clipped.
+* Process ranked hits before unmatched state. A matching Claim uses its full
+  authoritative state at that rank when it fits; otherwise its already-retrieved
+  representation remains eligible. Retain only one representation of each Claim.
 * Complete source events can replace derived renderings from the same source;
   current-state claims remain distinct because validity/status matter.
 * Compare with the existing v2 selection. If any previously retained event text
   loses same-source, same-revision, aligned-span containment, explicitly fall back
   to v2. The fallback can contain excerpts and must also fit the supplied budget.
+  Complete legacy events need no index locator: their actual text hash, length,
+  and absolute excerpt offsets must prove the same containment.
 * Fail closed for invalid counters, excess prompt overhead, and over-budget
   fallback or final selection. Counter exceptions propagate.
 * After the authoritative delivery guard, synchronously recount the actual final

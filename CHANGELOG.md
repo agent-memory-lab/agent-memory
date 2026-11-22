@@ -23,6 +23,11 @@ the first stable release.
 
 ### Fixed
 
+- Preserve ranked Claim priority in opt-in lossless packing and deduplicate its
+  state and retrieved representations. Keep a feasible retrieved representation
+  when the full state cannot fit. Validate complete legacy sources by their
+  text hash and excerpt offsets instead of requiring index locators, avoiding
+  false fallback and truncation when the complete source fits the reader budget.
 - Serialize SQLite ontology projection and source invalidation from the first
   read through commit, preventing lost alias/provenance updates and live index
   records whose source links were concurrently deleted. The PostgreSQL adapter

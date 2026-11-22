@@ -4,11 +4,15 @@ The application supplies a deterministic counter for the *complete* reader
 payload (including dates/provenance/prompt overhead). Missing counters fail
 closed. Inputs must already be authorized and carry their final ranking.
 """
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
-from typing import Callable
-from .candidate_identity import candidate_identity
-from .packing import NativePackingResult, source_ids, _indexed_event_span, pack_native_evidence
+from hashlib import sha256
+
 from ..domain import Citation, Claim, MemoryItem, MemoryKind
+from .candidate_identity import candidate_identity
+from .packing import NativePackingResult, _indexed_event_span, pack_native_evidence, source_ids
+
+_INDEX_LOCATORS = ("lexical_chunk_id", "retrieved_lexical_chunk_id", "retrieved_source_span")
 
 
 @dataclass(frozen=True)
@@ -27,6 +31,39 @@ class LosslessBudget:
         return value
 
 
+def _complete_legacy_event(item):
+    return item.kind == MemoryKind.EVENT and not any(
+        key in item.metadata for key in ("source_span", "excerpt", *_INDEX_LOCATORS)
+    )
+
+
+def _preserves_legacy_excerpt(old, full):
+    """Bind a v2 legacy excerpt to complete source bytes and absolute offsets."""
+    span = old.metadata.get("source_span")
+    if not isinstance(span, Mapping) or span.get("unit") != "characters":
+        return False
+    start, end = span.get("start"), span.get("end")
+    size = len(full.text)
+    if (
+        type(start) is not int or type(end) is not int
+        or not 0 <= start < end <= size or end - start != len(old.text)
+        or type(old.metadata.get("source_chars")) is not int
+        or old.metadata["source_chars"] != size
+        or type(full.metadata.get("source_chars", size)) is not int
+        or full.metadata.get("source_chars", size) != size
+    ):
+        return False
+    revision = sha256(full.text.encode("utf-8")).hexdigest()
+    if (
+        old.metadata.get("source_revision") != revision
+        or full.metadata.get("source_revision", revision) != revision
+    ):
+        return False
+    if any(key in old.metadata for key in _INDEX_LOCATORS) and candidate_identity(old) == old.id:
+        return False
+    return full.text[start:end] == old.text
+
+
 def _preserves_event(old, selected):
     """Require verbatim containment in the same source, not a derived claim.
 
@@ -35,6 +72,12 @@ def _preserves_event(old, selected):
     """
     for new in selected:
         if new.kind != MemoryKind.EVENT or new.id != old.id or old.text not in new.text:
+            continue
+        if "source_span" in old.metadata and _complete_legacy_event(new):
+            # Legacy full sources have no index locator. Prove the v2 excerpt
+            # directly without changing the source or trusting metadata alone.
+            if _preserves_legacy_excerpt(old, new):
+                return True
             continue
         if old.metadata.get('source_revision') and new.metadata.get('source_revision') != old.metadata['source_revision']:
             continue
@@ -95,7 +138,7 @@ def pack_lossless_evidence(query, current, ranked, *, budget):
             span = _indexed_event_span(item)
             if span is not None and span['start'] == 0 and span['end'] == item.metadata['source_chars']:
                 result.add(item.id)
-            elif not any(k in item.metadata for k in ('source_span', 'lexical_chunk_id', 'excerpt')):
+            elif _complete_legacy_event(item):
                 result.add(item.id)
         return result
 
@@ -103,13 +146,25 @@ def pack_lossless_evidence(query, current, ranked, *, budget):
         ids = source_ids(item)
         return item.kind == MemoryKind.CLAIM and bool(ids) and set(ids) <= sources
 
-    # Preserve upstream rank among retained records. A full original source
-    # supersedes derived renderings of that same source, never distinct sources.
-    # Current-state claims are not coalesced: validity/status have separate meaning.
+    def logical_identity(value):
+        if isinstance(value, Claim) or value.kind == MemoryKind.CLAIM:
+            return ("claim", value.id)
+        return ("item", candidate_identity(value))
+
+    # Ranked hits allocate budget before unmatched state. Use a Claim's
+    # authoritative state at its ranked position when it fits; otherwise keep
+    # the already-retrieved representation eligible, without rewriting it.
+    current_by_id = {value.id: value for value in current}
+    ordered = (*enumerate(ranked, start=len(current)), *enumerate(current))
     input_positions = {}
-    for input_index, value in enumerate((*current, *ranked)):
+    for input_index, value in ordered:
+        key = logical_identity(value)
+        if not isinstance(value, Claim) and value.kind == MemoryKind.CLAIM and key not in seen:
+            canonical = current_by_id.get(value.id)
+            if (canonical is not None and len(state) < 64
+                    and budget.measure((*state, canonical), items) <= query.token_budget):
+                value = canonical
         is_state = isinstance(value, Claim)
-        key = ('state:' + value.id) if is_state else candidate_identity(value)
         input_positions.setdefault(key, input_index)
         reason = None
         sources = whole_sources(items)
@@ -138,15 +193,18 @@ def pack_lossless_evidence(query, current, ranked, *, budget):
             continue
         seen.add(key)
         if not is_state and len(replacement_items) != len(items):
-            removed = {candidate_identity(v) for v in items if v not in replacement_items}
-            omitted.extend({'input_index': input_positions[k], 'reason': 'covered_by_complete_source'} for k in sorted(removed))
+            removed_items = [v for v in items if v not in replacement_items]
+            removed = {candidate_identity(v) for v in removed_items}
+            omitted.extend({'input_index': input_positions[logical_identity(v)],
+                            'reason': 'covered_by_complete_source'} for v in removed_items)
             proofs = [p for p in proofs if p['candidate_id'] not in removed
                       or any(p is state_proof for state_proof in state_proofs)]
             items = replacement_items
         (state if is_state else items).append(value)
-        # Internal state deduplication is namespaced; public proof identity must
+        # Internal logical deduplication is namespaced; public proof identity must
         # match the native delivery guard's Claim identity contract.
-        proof = {'memory_id': value.id, 'candidate_id': value.id if is_state else key,
+        proof = {'memory_id': value.id,
+                 'candidate_id': value.id if is_state else candidate_identity(value),
                  'source_event_ids': source_ids(value)}
         if not is_state:
             proof.update({k: value.metadata[k] for k in
