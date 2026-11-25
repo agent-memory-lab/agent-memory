@@ -6,6 +6,8 @@ Keep this table frozen; new code imports the owning subsystem directly.
 """
 import sys
 from importlib import import_module
+from importlib.abc import Loader, MetaPathFinder
+from importlib.util import spec_from_loader
 from types import ModuleType
 
 LEGACY_MODULES = {
@@ -81,8 +83,34 @@ LEGACY_MODULES = {
 }
 
 
+class _AliasLoader(Loader):
+    def __init__(self, target):
+        self.target = target
+
+    def create_module(self, spec):
+        return None  # Let importlib create its temporary alias module.
+
+    def exec_module(self, module):
+        # Replacing the alias entry leaves the canonical module's spec intact,
+        # including while another thread imports or reloads the canonical path.
+        sys.modules[module.__name__] = import_module(self.target)
+
+
+class _AliasFinder(MetaPathFinder):
+    def __init__(self, package):
+        self._agent_memory_aliases = package
+        self.targets = {f"{package}.{old}": f"{package}.{new}"
+                        for old, new in LEGACY_MODULES.items()}
+
+    def find_spec(self, fullname, path=None, target=None):
+        canonical = self.targets.get(fullname)
+        if canonical is None:
+            return None
+        return spec_from_loader(fullname, _AliasLoader(canonical))
+
+
 def install_legacy_aliases(package: ModuleType) -> None:
-    for old_name, target in LEGACY_MODULES.items():
-        module = import_module(f".{target}", package.__name__)
-        sys.modules[f"{package.__name__}.{old_name}"] = module
-        setattr(package, old_name, module)
+    """Resolve old paths on demand without loading every optional subsystem."""
+    if not any(getattr(finder, "_agent_memory_aliases", None) == package.__name__
+               for finder in sys.meta_path):
+        sys.meta_path.insert(0, _AliasFinder(package.__name__))

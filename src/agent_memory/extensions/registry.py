@@ -1,17 +1,26 @@
 from __future__ import annotations
 
+import math
+import re
 from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from enum import StrEnum
 from importlib.metadata import entry_points
-import math
 from pathlib import Path
-import re
 from types import MappingProxyType
 from typing import Any, Mapping
 
 from ..composition import build_local_kernel
-from ..ports import ClaimExtractor, EmbeddingProvider, MemoryPolicy, MemoryProvider, Reranker
+from ..ports import (
+    ClaimExtractor,
+    ConsolidationScheduler,
+    EmbeddingProvider,
+    MemoryPolicy,
+    MemoryProvider,
+    Reranker,
+)
+from ..retrieval.lossless_packing import LosslessBudget
+from .provider_contract import validate_provider
 
 PROVIDER_GROUP = "agent_memory.providers"
 INTEGRATION_GROUP = "agent_memory.integrations"
@@ -337,7 +346,12 @@ def build_sqlite_plugin(
     embedding_provider: EmbeddingProvider | None = None,
     trusted_evaluator_ids: Collection[str] | None = None,
     enable_source_context: bool = True,
-    **_: Any,
+    consolidation_scheduler: ConsolidationScheduler | None = None,
+    enable_query_facets: bool = False,
+    packing_version: str = "v2",
+    passage_reranker: Reranker | None = None,
+    lossless_packing_budget: LosslessBudget | None = None,
+    require_delivery_guard: bool = False,
 ) -> MemoryProvider:
     return build_local_kernel(
         database_path,
@@ -347,6 +361,12 @@ def build_sqlite_plugin(
         embedding_provider=embedding_provider,
         trusted_evaluator_ids=trusted_evaluator_ids,
         enable_source_context=enable_source_context,
+        consolidation_scheduler=consolidation_scheduler,
+        enable_query_facets=enable_query_facets,
+        packing_version=packing_version,
+        passage_reranker=passage_reranker,
+        lossless_packing_budget=lossless_packing_budget,
+        require_delivery_guard=require_delivery_guard,
     )
 
 
@@ -386,12 +406,13 @@ class PluginRegistry:
                 )
             factory = matches[0].load()
         provider = factory(**config)
-        required = ("initialize", "ingest_event", "retrieve", "manifest")
-        if any(not hasattr(provider, attribute) for attribute in required):
+        try:
+            validate_provider(provider)
+        except (TypeError, ValueError, AttributeError) as error:
             raise PluginError(
-                f"provider plugin {name!r} does not implement MemoryProvider",
+                f"provider plugin {name!r} does not implement MemoryProvider: {error}",
                 code=PluginErrorCode.INVALID_IMPLEMENTATION,
-            )
+            ) from error
         return provider
 
     def load_integration(self, name: str) -> Any:

@@ -6,14 +6,15 @@ from ..domain import MemoryKind
 from .atom_state import project_records, select_record_snapshots
 from .delivery_guard import (
     bundle_values,
-    diagnostic_ids,
     delivery_evidence_key,
+    diagnostic_ids,
     filter_delivery,
     requested_claim_ids,
     selected_artifact_ids,
     selected_source_ids,
     snapshot_delivery_bundle,
 )
+from .evidence import SourceEvidence, complete_source_metadata_matches
 from .pipeline_delivery import external_candidates, pipeline_reference_ids
 from .temporal_history import SQLiteClaimHistory
 
@@ -109,24 +110,23 @@ def _event_matches(connection, item):
     surviving revision proves even text outside the returned slice unchanged.
     Dirty/unindexed replacements fail closed; this guard never rebuilds indexes.
     """
-    metadata = item.metadata
-    span = metadata.get("source_span")
-    if span is None:
+    if item.metadata.get("source_span") is None:
+        if not complete_source_metadata_matches(item):
+            return False
         return connection.execute(
             "SELECT 1 FROM events WHERE id=? AND content=?", (item.id, item.text),
         ).fetchone() is not None
-    if not isinstance(span, dict) or span.get("unit") != "characters":
+    evidence = SourceEvidence.for_stored_event(item)
+    if evidence is None:
         return False
-    start, end = span.get("start"), span.get("end")
-    if type(start) is not int or type(end) is not int or not 0 <= start < end:
-        return False
+    start, end = evidence.span.start, evidence.span.end
     row = connection.execute(
         "SELECT 1 FROM events e WHERE e.id=? AND "
         "substr(e.content,?,?)=? AND EXISTS (SELECT 1 FROM lexical_chunks c "
         "WHERE c.source_table='events' AND c.source_id=e.id AND c.source_revision=? "
         "AND c.source_chars=? AND c.source_chars>=?)",
-        (item.id, start + 1, end - start, item.text, metadata.get("source_revision"),
-         metadata.get("source_chars"), end),
+        (item.id, start + 1, end - start, item.text, evidence.revision,
+         evidence.source_chars, end),
     ).fetchone()
     return row is not None
 

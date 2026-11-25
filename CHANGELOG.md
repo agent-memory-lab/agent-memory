@@ -23,6 +23,20 @@ the first stable release.
 
 ### Fixed
 
+- Forward native retrieval options through the SQLite plugin and local facade.
+  PostgreSQL accepts lossless packing and rejects explicit source expansion before
+  connecting. Native factories reject unknown options and verify passage rerankers.
+  Provider registration checks the full base protocol and advertised capabilities.
+- Share final delivery authorization and synchronous payload recounting between
+  native and custom recall paths. Hosts can require a validated delivery receipt.
+- Centralize typed source coordinates and evidence validation while retaining
+  existing wire metadata. Isolate budget operations behind a narrow transaction
+  view and give Claim writers and proposals their own ports in the same transaction.
+- Share portable ontology SQL operations independently of SQLite adapters.
+  PostgreSQL readers share a namespace lock and writers take it exclusively.
+  SQLite writers start their transaction before reading rows they may modify.
+- Load public exports and legacy module aliases on demand, preserving module
+  identity, canonical reload targets and historical pickle references.
 - Preserve ranked Claim priority in opt-in lossless packing and deduplicate its
   state and retrieved representations. Keep a feasible retrieved representation
   when the full state cannot fit. Validate complete legacy sources by their

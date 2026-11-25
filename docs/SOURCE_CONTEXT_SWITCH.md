@@ -7,6 +7,11 @@ versions. The default still performs the existing post-ranking adjacent-source
 reads; `False` opts into ranked-only input. Pass an actual boolean, not a string
 or integer. Invalid values fail before opening the SQLite database.
 
+The PostgreSQL factory accepts `False` to explicitly select ranked-only input.
+Omitting the option preserves its `unsupported` diagnostic for eligible current
+queries. Passing `True` raises before connecting because PostgreSQL currently
+lacks adjacent-source lookup.
+
 ```python
 from agent_memory import AgentMemory, MemoryScope
 

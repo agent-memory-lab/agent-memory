@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 from types import TracebackType
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeGuard
 
 from .domain import (
     AtomReview,
@@ -37,7 +37,33 @@ from .domain import (
 )
 
 
-class MemoryUnitOfWork(Protocol):
+class ClaimWriter(Protocol):
+    """The claim update within an existing write transaction."""
+
+    async def find_current_claim(self, scope: MemoryScope, key: str) -> Claim | None: ...
+
+    async def save_claim(self, claim: Claim) -> None: ...
+
+    async def replace_current_claim(self, previous: Claim, current: Claim) -> None: ...
+
+    async def add_claim_source(self, claim_id: str, event_id: str) -> None: ...
+
+
+class ProposalTransaction(ClaimWriter, Protocol):
+    """Persist the proposal, its supporting event and claim changes atomically."""
+
+    async def append_event(self, event: MemoryEvent) -> None: ...
+
+    async def events_exist(self, scope: MemoryScope, event_ids: Sequence[str]) -> bool: ...
+
+    async def find_proposal_result(self, proposal_id: str) -> ProposalResult | None: ...
+
+    async def save_proposal(self, proposal: MemoryProposal, result: ProposalResult) -> None: ...
+
+    async def save_state_delta(self, delta: StateDelta) -> None: ...
+
+
+class MemoryUnitOfWork(ProposalTransaction, Protocol):
     async def __aenter__(self) -> MemoryUnitOfWork: ...
 
     async def __aexit__(
@@ -52,10 +78,6 @@ class MemoryUnitOfWork(Protocol):
     ) -> MemoryEvent | None: ...
 
     async def claim_ids_for_event(self, event_id: str) -> Sequence[str]: ...
-
-    async def events_exist(self, scope: MemoryScope, event_ids: Sequence[str]) -> bool: ...
-
-    async def find_proposal_result(self, proposal_id: str) -> ProposalResult | None: ...
 
     async def find_feedback_record(
         self, record_id: str, record_type: str
@@ -72,18 +94,6 @@ class MemoryUnitOfWork(Protocol):
     async def supersede_feedback(self, scope: MemoryScope, record_id: str) -> None: ...
 
     async def pending_feedback_count(self, scope: MemoryScope) -> int: ...
-
-    async def append_event(self, event: MemoryEvent) -> None: ...
-
-    async def find_current_claim(self, scope: MemoryScope, key: str) -> Claim | None: ...
-
-    async def save_claim(self, claim: Claim) -> None: ...
-
-    async def replace_current_claim(self, previous: Claim, current: Claim) -> None: ...
-
-    async def add_claim_source(self, claim_id: str, event_id: str) -> None: ...
-
-    async def save_state_delta(self, delta: StateDelta) -> None: ...
 
     async def save_episode(self, episode: Episode) -> None: ...
 
@@ -104,8 +114,6 @@ class MemoryUnitOfWork(Protocol):
     async def save_reward(self, reward: RewardSignal) -> None: ...
 
     async def save_retrieval_trace(self, trace: RetrievalTrace) -> None: ...
-
-    async def save_proposal(self, proposal: MemoryProposal, result: ProposalResult) -> None: ...
 
 
 class ProposalReplayUnitOfWork(MemoryUnitOfWork, Protocol):
@@ -148,6 +156,46 @@ class MemoryRepository(Protocol):
         limit: int,
         after_id: str | None = None,
     ) -> Sequence[Mapping[str, object]]: ...
+
+
+class RetrievalDeliveryRepository(Protocol):
+    """Authorize selected evidence in a fresh snapshot at the last I/O boundary."""
+
+    async def guard_retrieval_delivery(
+        self, query: MemoryQuery, bundle: MemoryBundle, *, pipeline: bool = False,
+    ) -> MemoryBundle: ...
+
+
+class SourceContextRepository(Protocol):
+    async def expand_source_context(
+        self, query: MemoryQuery, ranked: Sequence[MemoryItem], limit: int,
+    ) -> Sequence[MemoryItem]: ...
+
+
+class PipelineDeliveryProvider(Protocol):
+    async def guard_pipeline_delivery(
+        self, query: MemoryQuery, bundle: MemoryBundle,
+    ) -> MemoryBundle: ...
+
+
+def implements_port_method(value: object, port: type, name: str) -> bool:
+    """Protocol subclasses can inherit callable stubs without implementing them."""
+    method = getattr(value, name, None)
+    return callable(method) and getattr(method, "__func__", method) is not getattr(port, name)
+
+
+def supports_delivery_guard(repository: object) -> TypeGuard[RetrievalDeliveryRepository]:
+    return implements_port_method(
+        repository, RetrievalDeliveryRepository, "guard_retrieval_delivery",
+    )
+
+
+def supports_source_context(repository: object) -> TypeGuard[SourceContextRepository]:
+    return implements_port_method(repository, SourceContextRepository, "expand_source_context")
+
+
+def supports_pipeline_guard(provider: object) -> TypeGuard[PipelineDeliveryProvider]:
+    return implements_port_method(provider, PipelineDeliveryProvider, "guard_pipeline_delivery")
 
 
 class AdmissionUnitOfWork(MemoryUnitOfWork, Protocol):
@@ -555,6 +603,10 @@ class BitemporalMemoryRepository(Protocol):
     async def claims_at(
         self, scope: MemoryScope, *, valid_at: datetime, known_at: datetime
     ) -> Sequence[Claim]: ...
+
+
+def supports_claim_history(repository: object) -> TypeGuard[BitemporalMemoryRepository]:
+    return implements_port_method(repository, BitemporalMemoryRepository, "claims_at")
 
 
 class BitemporalMemoryProvider(Protocol):

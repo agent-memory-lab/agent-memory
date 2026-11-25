@@ -12,12 +12,12 @@ import psycopg
 from psycopg import sql
 from psycopg.rows import dict_row
 
-from agent_memory.ontology.store import SQLiteOntologyStore
+from agent_memory.ontology.sql_store import SQLOntologyStore
 
 
 class _Connection:
-    def __init__(self, raw, namespace):
-        self.raw, self.namespace = raw, namespace
+    def __init__(self, raw):
+        self.raw = raw
 
     def __enter__(self):
         return self
@@ -29,25 +29,8 @@ class _Connection:
             self.raw.rollback()
 
     def execute(self, statement, parameters=()):
-        # _connect already holds the namespace transaction advisory lock.
-        if statement.strip() == "BEGIN IMMEDIATE":
-            statement = "SELECT 1"
-        if statement.strip().startswith("PRAGMA table_info("):
-            return self.raw.execute(
-                "SELECT column_name AS name FROM information_schema.columns "
-                "WHERE table_schema=%s AND table_name='ontology_assertions'", (self.namespace,),
-            )
-        translated = statement.replace("?", "%s")
-        translated = re.sub(r"\bREAL\b", "DOUBLE PRECISION", translated)
-        ignore = "INSERT OR IGNORE" in translated
-        translated = translated.replace("INSERT OR IGNORE", "INSERT")
-        translated = translated.replace(
-            "MAX(ontology_assertions.confidence, excluded.confidence)",
-            "GREATEST(ontology_assertions.confidence, excluded.confidence)",
-        )
-        if ignore:
-            translated = translated.rstrip().rstrip(";") + " ON CONFLICT DO NOTHING"
-        return self.raw.execute(translated, parameters)
+        # Shared operations use qmark parameters; only DB-API binding differs.
+        return self.raw.execute(statement.replace("?", "%s"), parameters)
 
     def executescript(self, script):
         for statement in script.split(";"):
@@ -58,13 +41,13 @@ class _Connection:
         self.raw.close()
 
 
-class PostgresOntologyStore(SQLiteOntologyStore):
+class PostgresOntologyStore(SQLOntologyStore):
     """Optional PostgreSQL projection, evidence, graph and conflict adapter.
 
-    The inherited implementation consists of shared SQL operations; _connect
-    replaces SQLite completely. A dedicated namespace isolates installations.
+    The shared implementation contains portable SQL operations. A dedicated
+    namespace isolates installations.
     The caller owns DSN secrets; exceptions must not be exposed to untrusted
-    transports. Locks serialize mutations and searches within one namespace.
+    transports. Readers share a namespace lock; mutations hold it exclusively.
     """
 
     def __init__(self, dsn: str, *, namespace="agent_memory_ontology", timeout_ms=5000):
@@ -77,14 +60,37 @@ class PostgresOntologyStore(SQLiteOntologyStore):
         self._dsn, self._namespace, self._timeout_ms = dsn, namespace, timeout_ms
 
     def _connect(self):
+        return self._connection(write=False)
+
+    def _connect_write(self):
+        return self._connection(write=True)
+
+    def _connect_initialize(self):
+        return self._connection(write=True, initialize=True)
+
+    def _begin_write(self, connection):
+        # The write connection owns its exclusive transaction lock before any read.
+        pass
+
+    def _assertion_columns(self, connection):
+        return {row["name"] for row in connection.raw.execute(
+            "SELECT column_name AS name FROM information_schema.columns "
+            "WHERE table_schema=%s AND table_name='ontology_assertions'", (self._namespace,),
+        ).fetchall()}
+
+    def _connection(self, *, write, initialize=False):
         raw = psycopg.connect(self._dsn, row_factory=dict_row, connect_timeout=5, client_encoding="utf8")
         try:
             raw.execute("SELECT set_config('statement_timeout', %s, true)", (str(self._timeout_ms),))
             raw.execute("SELECT set_config('lock_timeout', %s, true)", (str(self._timeout_ms),))
-            raw.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (self._namespace,))
-            raw.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(self._namespace)))
+            lock = "pg_advisory_xact_lock" if write else "pg_advisory_xact_lock_shared"
+            raw.execute(sql.SQL("SELECT {}(hashtext(%s))").format(sql.Identifier(lock)),
+                        (self._namespace,))
+            if initialize:
+                raw.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(
+                    sql.Identifier(self._namespace)))
             raw.execute(sql.SQL("SET LOCAL search_path TO {}").format(sql.Identifier(self._namespace)))
-            return _Connection(raw, self._namespace)
+            return _Connection(raw)
         except BaseException:
             raw.close()
             raise

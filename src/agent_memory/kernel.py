@@ -70,15 +70,23 @@ from .operations.consolidation_outbox import (
     drain_consolidation_outbox,
 )
 from .ports import (
+    BitemporalMemoryRepository,
     ClaimExtractor,
+    ClaimWriter,
     ConsolidationScheduler,
     MemoryPolicy,
     MemoryRepository,
     MemoryUnitOfWork,
+    ProposalTransaction,
     Reranker,
+    supports_claim_history,
+    supports_delivery_guard,
+    supports_source_context,
 )
+from .retrieval.config import NativeRetrievalOptions
+from .retrieval.lossless_packing import LosslessBudget
 from .retrieval.packing import contiguous_excerpt, pack_native_evidence
-from .retrieval.packing_policy import packing_contract
+from .retrieval.packing_policy import PACKING_VERSIONS
 from .retrieval.temporal_history import temporal_candidates
 
 if TYPE_CHECKING:
@@ -118,21 +126,16 @@ class MemoryKernel:
         packing_version: str = "v2",
         passage_reranker: Reranker | None = None,
         enable_source_context: bool = True,
-        lossless_packing_budget=None,
+        lossless_packing_budget: LosslessBudget | None = None,
+        require_delivery_guard: bool = False,
     ) -> None:
-        packing_contract(packing_version)  # Fail before opening a repository or invoking a model.
-        if type(enable_source_context) is not bool:
-            raise ValueError("enable_source_context must be a bool")
-        if passage_reranker is not None and packing_version != "v5":
-            raise ValueError("passage_reranker requires explicit packing_version=v5")
-        from .retrieval.lossless_packing import LosslessBudget
-        if lossless_packing_budget is not None:
-            if not isinstance(lossless_packing_budget, LosslessBudget) or packing_version != "v2" or passage_reranker is not None:
-                raise ValueError("lossless packing requires explicit LosslessBudget and unmodified v2 upstream")
-        self._lossless_packing_budget = lossless_packing_budget
-        self._passage_reranker = passage_reranker
-        self._packing_version = packing_version
-        self._enable_source_context = enable_source_context
+        self._retrieval_options = NativeRetrievalOptions(
+            packing_version, passage_reranker, enable_source_context,
+            lossless_packing_budget, require_delivery_guard,
+        )
+        has_delivery_guard = supports_delivery_guard(repository)
+        if require_delivery_guard and not has_delivery_guard:
+            raise ValueError("repository lacks required final delivery guard")
         self._repository = repository
         self._extractor = extractor
         self._policy = policy
@@ -148,9 +151,17 @@ class MemoryKernel:
             schema_version=SCHEMA_VERSION,
             capabilities=replace(
                 capabilities or MemoryCapabilities(),
-                bitemporal_claims=callable(getattr(repository, "claims_at", None)),
+                bitemporal_claims=supports_claim_history(repository),
+                final_delivery_guard=has_delivery_guard,
+                source_context=supports_source_context(repository),
+                packing_versions=PACKING_VERSIONS,
+                lossless_packing=True,
             ),
         )
+
+    @property
+    def retrieval_options(self) -> NativeRetrievalOptions:
+        return self._retrieval_options
 
     async def initialize(self) -> None:
         await self._repository.initialize()
@@ -391,7 +402,7 @@ class MemoryKernel:
 
     async def _apply_claim(
         self,
-        uow: MemoryUnitOfWork,
+        uow: ClaimWriter,
         event: MemoryEvent,
         draft: ClaimDraft,
     ) -> tuple[Claim, StateDelta | None, str | None]:
@@ -572,47 +583,80 @@ class MemoryKernel:
                        token_estimate=sum(_token_estimate(c.text)
                                           for c in [*current, *memories, *episodes, *procedures]))
 
+    def _claim_history(self) -> BitemporalMemoryRepository:
+        if not supports_claim_history(self._repository):
+            raise NotImplementedError("provider does not support bitemporal claims")
+        return self._repository
+
     async def get_state_at(
         self, scope: MemoryScope, *, valid_at: datetime, known_at: datetime
     ) -> tuple[Claim, ...]:
-        reader = getattr(self._repository, "claims_at", None)
-        if not callable(reader):
-            raise NotImplementedError("provider does not support bitemporal claims")
+        history = self._claim_history()
         atoms, _ = await AdmissionEngine(self._repository).state(
             scope, valid_at=valid_at, known_at=known_at,
         )
-        legacy = await reader(scope, valid_at=valid_at, known_at=known_at)
+        legacy = await history.claims_at(scope, valid_at=valid_at, known_at=known_at)
         return (await self._legacy_state(scope, legacy)) + atoms
 
     async def guard_pipeline_delivery(
         self, query: MemoryQuery, bundle: MemoryBundle,
     ) -> MemoryBundle:
-        """Final local authority check while retaining configured external resolvers."""
+        """Use the same final authority and budget boundary as native retrieval."""
         from .retrieval.pipeline_delivery import normalize_pipeline_bundle
 
-        bundle = normalize_pipeline_bundle(bundle)
-        delivery_guard = getattr(self._repository, "guard_retrieval_delivery", None)
-        if callable(delivery_guard):
-            return await delivery_guard(query, bundle, pipeline=True)
-        bundle = await self.guard_admission_bundle(query.scope, bundle)
-        return replace(bundle, retrieval_metadata={
-            **bundle.retrieval_metadata,
-            "delivery_guard": {"status": "unsupported",
-                               "external_content_authority": "configured_pipeline_resolver"},
-        })
+        return await self._finalize_retrieval(
+            query, normalize_pipeline_bundle(bundle), pipeline=True,
+        )
+
+    async def _finalize_retrieval(
+        self, query: MemoryQuery, bundle: MemoryBundle, *, pipeline: bool = False,
+    ) -> MemoryBundle:
+        if supports_delivery_guard(self._repository):
+            if pipeline:
+                bundle = await self._repository.guard_retrieval_delivery(
+                    query, bundle, pipeline=True,
+                )
+            else:
+                bundle = await self._repository.guard_retrieval_delivery(query, bundle)
+        else:
+            if self.retrieval_options.require_delivery_guard:
+                raise RuntimeError("required final delivery guard is unavailable")
+            if pipeline:
+                bundle = await self.guard_admission_bundle(query.scope, bundle)
+            details = {"status": "unsupported"}
+            if pipeline:
+                details["external_content_authority"] = "configured_pipeline_resolver"
+            bundle = replace(bundle, retrieval_metadata={
+                **bundle.retrieval_metadata, "delivery_guard": details,
+            })
+        if self.retrieval_options.require_delivery_guard:
+            from .retrieval.delivery_guard import require_validated_delivery
+            require_validated_delivery(bundle)
+        # No I/O after final authorization. Count only the final immutable evidence.
+        budget = self.retrieval_options.lossless_packing_budget
+        if budget is not None:
+            from .retrieval.packing import ordered_bundle_evidence
+            final_tokens = budget.measure(
+                bundle.current_state, ordered_bundle_evidence(bundle))
+            if final_tokens > query.token_budget:
+                raise ValueError("final delivery payload exceeds token budget")
+            bundle = replace(bundle, token_estimate=final_tokens,
+                retrieval_metadata={**bundle.retrieval_metadata,
+                    "packing_final_delivery_recounted": True})
+        return bundle
 
     async def retrieve(self, query: MemoryQuery) -> MemoryBundle:
         now = utc_now()
+        historical = query.valid_at is not None or query.known_at is not None
+        history = self._claim_history() if historical else None
+        valid_at, known_at = query.valid_at or now, query.known_at or now
         atoms, atom_info = await AdmissionEngine(self._repository).state(
-            query.scope, valid_at=query.valid_at or now, known_at=query.known_at or now,
+            query.scope, valid_at=valid_at, known_at=known_at,
         )
-        if query.valid_at is not None or query.known_at is not None:
+        if history is not None:
             # Resolve both axes once so state and candidates use the same snapshot.
-            query = replace(query, valid_at=query.valid_at or now, known_at=query.known_at or now)
-            reader = getattr(self._repository, "claims_at", None)
-            if not callable(reader):
-                raise NotImplementedError("provider does not support bitemporal claims")
-            legacy = await reader(query.scope, valid_at=query.valid_at, known_at=query.known_at)
+            query = replace(query, valid_at=valid_at, known_at=known_at)
+            legacy = await history.claims_at(query.scope, valid_at=valid_at, known_at=known_at)
             historical_state = (await self._legacy_state(query.scope, legacy)) + atoms
         else:
             historical_state = None
@@ -648,7 +692,6 @@ class MemoryKernel:
 
         # Optional small-to-big context reads happen after the fixed embedding
         # batch. Added windows carry inherited relevance, never semantic scores.
-        expansion = getattr(self._repository, "expand_source_context", None)
         context = ()
         anchors = ()
         context_status = "unsupported"
@@ -656,13 +699,14 @@ class MemoryKernel:
             context_status = "disabled_historical"
         elif MemoryChannel.SEMANTIC not in query.channels:
             context_status = "disabled_channel"
-        elif not self._enable_source_context:
+        elif not self.retrieval_options.enable_source_context:
             context_status = "disabled_config"
-        elif callable(expansion):
+        elif supports_source_context(self._repository):
             anchors = context_anchors(query, ranked)
-            context = tuple(await expansion(query, ranked, MAX_CONTEXT_CANDIDATES))[
-                :MAX_CONTEXT_CANDIDATES
-            ]
+            expanded = await self._repository.expand_source_context(
+                query, ranked, MAX_CONTEXT_CANDIDATES,
+            )
+            context = tuple(expanded)[:MAX_CONTEXT_CANDIDATES]
             context_status = "applied"
         # Existing ranked atoms came from AdmissionEngine's governed temporal
         # path. Applying the legacy-source guard to them again would erase valid
@@ -670,14 +714,21 @@ class MemoryKernel:
         context = await self._guard_atom_candidates(query.scope, context) if context else ()
         packing_input = (*ranked, *context)
         passage_options = {}
-        if self._passage_reranker is not None:
+        options = self.retrieval_options
+        if options.passage_reranker is not None:
             from .retrieval.passage_reranking import rerank_passages
-            passage_options["passages"] = await rerank_passages(query, packing_input, self._passage_reranker)
-        if self._lossless_packing_budget is None:
-            packed = pack_native_evidence(query, current, packing_input, version=self._packing_version, **passage_options)
+            passage_options["passages"] = await rerank_passages(
+                query, packing_input, options.passage_reranker,
+            )
+        if options.lossless_packing_budget is None:
+            packed = pack_native_evidence(
+                query, current, packing_input, version=options.packing_version, **passage_options,
+            )
         else:
             from .retrieval.lossless_packing import pack_preserving_evidence
-            packed = pack_preserving_evidence(query, current, packing_input, budget=self._lossless_packing_budget)
+            packed = pack_preserving_evidence(
+                query, current, packing_input, budget=options.lossless_packing_budget,
+            )
         selected_state = packed.state
         selected = packed.items
         citations = packed.citations
@@ -766,27 +817,7 @@ class MemoryKernel:
         # expansion and even trace persistence can yield to a completed erase.
         # Native adapters authorize all selected evidence in one new snapshot;
         # do not perform more I/O after it or reuse the pre-guard Python objects.
-        delivery_guard = getattr(self._repository, "guard_retrieval_delivery", None)
-        if callable(delivery_guard):
-            bundle = await delivery_guard(query, bundle)
-        else:
-            bundle = replace(bundle, retrieval_metadata={
-                **bundle.retrieval_metadata,
-                "delivery_guard": {"status": "unsupported"},
-            })
-        if self._lossless_packing_budget is not None:
-            # Authoritative delivery may remove or replace evidence and resets
-            # its legacy text estimate. Recount the FINAL immutable selection
-            # synchronously, without another awaited boundary or restored items.
-            from .retrieval.packing import ordered_bundle_evidence
-            final_tokens = self._lossless_packing_budget.measure(
-                bundle.current_state, ordered_bundle_evidence(bundle))
-            if final_tokens > query.token_budget:
-                raise ValueError("final delivery payload exceeds token budget")
-            bundle = replace(bundle, token_estimate=final_tokens,
-                retrieval_metadata={**bundle.retrieval_metadata,
-                    "packing_final_delivery_recounted": True})
-        return bundle
+        return await self._finalize_retrieval(query, bundle)
 
     async def propose(self, proposal: MemoryProposal) -> ProposalResult:
         async with self._repository.unit_of_work() as uow:
@@ -794,7 +825,7 @@ class MemoryKernel:
 
     async def _propose_in_uow(
         self,
-        uow: MemoryUnitOfWork,
+        uow: ProposalTransaction,
         proposal: MemoryProposal,
     ) -> ProposalResult:
         if proposal.key.startswith(ATOM_PREFIX):

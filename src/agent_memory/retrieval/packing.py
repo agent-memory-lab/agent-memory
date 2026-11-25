@@ -8,13 +8,13 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from hashlib import sha256
-from json import dumps
 from math import isfinite, log1p
 
 from ..domain import Citation, Claim, MemoryItem, MemoryKind, MemoryQuery
 from .analyzer import lexical_terms, query_content_anchors
-from .candidate_identity import MAX_SOURCE_WINDOW_CHARS, candidate_identity
+from .candidate_identity import MAX_SOURCE_WINDOW_CHARS, candidate_identity, citation_proof
 from .coverage_plan import coverage_plan
+from .evidence import SourceEvidence, SourceSpan
 from .evidence_units import context_relations, dependency_group
 from .packing_policy import _packing_policy, packing_contract
 from .passage_reranking import passage_key, query_key
@@ -105,38 +105,13 @@ def _indexed_event_span(item: MemoryItem) -> dict | None:
     The repository remains the authority for the full-source hash. Only when
     the full source is present can its hash be independently checked here.
     """
-    span = item.metadata.get("source_span")
-    source_chars = item.metadata.get("source_chars")
-    revision = item.metadata.get("source_revision")
-    chunk_id = item.metadata.get("lexical_chunk_id")
-    if not isinstance(span, Mapping) or span.get("unit") != "characters":
+    evidence = SourceEvidence.from_item(item, require_revision=True)
+    if evidence is None or evidence.indexed_identity(item.metadata, allow_retrieved=False) is None:
         return None
-    start, end = span.get("start"), span.get("end")
-    if (
-        type(start) is not int
-        or type(end) is not int
-        or type(source_chars) is not int
-        or not 0 <= start < end <= source_chars
-        or end - start != len(item.text)
-        or len(item.text) > MAX_SOURCE_WINDOW_CHARS
-    ):
+    if (evidence.span.start == 0 and evidence.span.end == evidence.source_chars
+            and not evidence.matches_source(item.text, item.text)):
         return None
-    if (
-        not isinstance(revision, str)
-        or not re.fullmatch(r"[0-9a-f]{64}", revision)
-        or not isinstance(chunk_id, str)
-    ):
-        return None
-    expected = sha256(dumps(["events", item.id, revision, start, end]).encode("utf-8")).hexdigest()
-    if chunk_id != expected:
-        return None
-    if (
-        start == 0
-        and end == source_chars
-        and sha256(item.text.encode("utf-8")).hexdigest() != revision
-    ):
-        return None
-    return {"start": start, "end": end, "unit": "characters"}
+    return evidence.span.to_metadata()
 
 
 _MIN_UNBROKEN_PASSAGE_CHARS = 64
@@ -323,11 +298,9 @@ def _indexed_event_variants(item: MemoryItem, query: str) -> tuple[MemoryItem, .
                 "retrieved_lexical_chunk_id": chunk_id,
                 "retrieved_source_span": original_span,
                 "retrieved_chunk_text_sha256": chunk_text_hash,
-                "source_span": {
-                    "start": original_span["start"] + start,
-                    "end": original_span["start"] + end,
-                    "unit": "characters",
-                },
+                "source_span": SourceSpan(
+                    original_span["start"] + start, original_span["start"] + end,
+                ).to_metadata(),
             }
         )
         result.append(replace(item, text=text, metadata=metadata))
@@ -371,7 +344,7 @@ def fit_event(item: MemoryItem, query: str, available: int) -> MemoryItem | None
             "excerpt": True,
             "source_revision": sha256(item.text.encode("utf-8")).hexdigest(),
             "source_chars": len(item.text),
-            "source_span": {"start": start, "end": end, "unit": "characters"},
+            "source_span": SourceSpan(start, end).to_metadata(),
         },
     )
 
@@ -1125,15 +1098,9 @@ def pack_native_evidence(
             "context_expansion_tokens": entry.cost - trace["initial_tokens"],
         })
         citations.append(Citation(value.id, entry.sources))
-        proof = {"memory_id": value.id, "candidate_id": identity(value),
-                 "source_event_ids": entry.sources}
-        if isinstance(value, MemoryItem):
-            proof.update({key: value.metadata[key] for key in (
-                "source_span", "source_revision", "source_chars",
-            ) if key in value.metadata})
-            if "source_span" in value.metadata:
-                trace["source_span"] = value.metadata["source_span"]
-        citation_spans.append(proof)
+        citation_spans.append(citation_proof(value, entry.sources))
+        if isinstance(value, MemoryItem) and "source_span" in value.metadata:
+            trace["source_span"] = value.metadata["source_span"]
     used_tokens = sum(entry.cost for entry in selected_entries)
     return NativePackingResult(
         tuple(state),

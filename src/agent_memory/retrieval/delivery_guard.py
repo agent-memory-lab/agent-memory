@@ -14,11 +14,19 @@ from hashlib import sha256
 from json import dumps
 
 from ..consolidation.admission_runtime import ATOM_EVENT_TYPES, ATOM_PREFIX
-from ..domain import Claim, MemoryKind
+from ..domain import Claim, MemoryBundle, MemoryKind
 from .analyzer import lexical_terms, query_content_anchors
-from .candidate_identity import candidate_identity
+from .candidate_identity import SOURCE_PROOF_FIELDS, candidate_identity, citation_proof
+from .evidence import text_matches_source as _text_matches
 from .packing import source_ids, token_estimate
 from .temporal_history import temporal_candidates
+
+
+def require_validated_delivery(bundle: MemoryBundle) -> None:
+    """Strict hosts require every returned item to have final native authorization."""
+    guard = bundle.retrieval_metadata.get("delivery_guard")
+    if not isinstance(guard, Mapping) or guard.get("status") != "validated":
+        raise RuntimeError("required final delivery guard did not validate the bundle")
 
 
 def snapshot_delivery_bundle(bundle):
@@ -87,21 +95,6 @@ def selected_artifact_ids(bundle):
     kinds = (MemoryKind.BLOCK, MemoryKind.EPISODE, MemoryKind.PROCEDURE)
     return {value.id for value in bundle_values(bundle) if not isinstance(value, Claim)
             and value.kind in kinds} | diagnostic_ids(bundle, kinds)
-
-
-def _text_matches(item, text):
-    metadata = item.metadata
-    revision = metadata.get("source_revision")
-    if revision is not None and revision != sha256(text.encode()).hexdigest():
-        return False
-    span = metadata.get("source_span")
-    if span is None:
-        return item.text == text
-    if not isinstance(span, Mapping) or span.get("unit") != "characters":
-        return False
-    start, end = span.get("start"), span.get("end")
-    return (type(start) is int and type(end) is int and 0 <= start < end <= len(text)
-            and metadata.get("source_chars") == len(text) and text[start:end] == item.text)
 
 
 def filter_delivery(bundle, *, query, valid_at, known_at, claims, atoms, atom_info,
@@ -223,23 +216,12 @@ def filter_delivery(bundle, *, query, valid_at, known_at, claims, atoms, atom_in
     # share the retained item's ID/chunk locator. Keep only exact span proofs and
     # discard selection rows whose candidate identity became ambiguous.
     if "citation_spans" in metadata:
-        proofs = []
-        for value in values:
-            proof = {"memory_id": value.id,
-                     "candidate_id": value.id if isinstance(value, Claim)
-                     else candidate_identity(value), "source_event_ids": source_ids(value)}
-            if not isinstance(value, Claim):
-                proof.update({key: value.metadata[key] for key in (
-                    "source_span", "source_revision", "source_chars",
-                ) if key in value.metadata})
-            proofs.append(proof)
+        proofs = [citation_proof(value, source_ids(value)) for value in values]
         metadata["citation_spans"] = tuple(
             proof for row in metadata["citation_spans"] for proof in proofs
             if all((tuple(row.get(key, ())) == expected if key == "source_event_ids"
                     else row.get(key) == expected) for key, expected in proof.items())
-            and all(row.get(key) == proof.get(key) for key in (
-                "source_span", "source_revision", "source_chars",
-            ))
+            and all(row.get(key) == proof.get(key) for key in SOURCE_PROOF_FIELDS)
         )
     if "packing_selection_trace" in metadata:
         original_keys = {}

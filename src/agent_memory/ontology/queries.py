@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
 import json
 from collections.abc import Mapping
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from ..domain import MemoryScope
@@ -40,7 +40,7 @@ class SQLOntologyQueries:
     """Small SQL query mixin; adapter supplies a transactional _connect()."""
 
     def _timestamp_sql(self, expression):
-        return f"ontology_instant({expression})"
+        raise NotImplementedError("adapter must provide timestamp comparison syntax")
 
     def _validity_sql(self):
         start, end = self._timestamp_sql("a.valid_from"), self._timestamp_sql("a.valid_to")

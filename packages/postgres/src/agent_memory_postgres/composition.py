@@ -10,7 +10,8 @@ from agent_memory.providers import (
     ReciprocalRankFusionReranker,
     TrustedMemoryPolicy,
 )
-from agent_memory.retrieval.packing_policy import packing_contract
+from agent_memory.retrieval.config import NativeRetrievalOptions
+from agent_memory.retrieval.lossless_packing import LosslessBudget
 
 from .jobs import PostgresConsolidationQueue
 from .repository import PostgresMemoryRepository
@@ -28,10 +29,17 @@ def build_postgres_kernel(
     trusted_evaluator_ids: Collection[str] | None = None,
     packing_version: str = "v2",
     passage_reranker: Reranker | None = None,
+    enable_source_context: bool | None = None,
+    lossless_packing_budget: LosslessBudget | None = None,
+    require_delivery_guard: bool = False,
 ) -> MemoryKernel:
-    packing_contract(packing_version)
-    if passage_reranker is not None and packing_version != "v5":
-        raise ValueError("passage_reranker requires explicit packing_version=v5")
+    # Omitted keeps the legacy "unsupported" diagnostic. Explicit activation
+    # would require adjacent-source lookup, which this repository does not offer.
+    if enable_source_context is True:
+        raise ValueError("PostgreSQL does not support adjacent source-context expansion")
+    source_context = True if enable_source_context is None else enable_source_context
+    NativeRetrievalOptions(packing_version, passage_reranker, source_context,
+                           lossless_packing_budget, require_delivery_guard)
     base_reranker = reranker or ReciprocalRankFusionReranker()
     repository = PostgresMemoryRepository.from_dsn(
         dsn,
@@ -59,4 +67,7 @@ def build_postgres_kernel(
         trusted_evaluator_ids=trusted_evaluator_ids,
         packing_version=packing_version,
         passage_reranker=passage_reranker,
+        enable_source_context=source_context,
+        lossless_packing_budget=lossless_packing_budget,
+        require_delivery_guard=require_delivery_guard,
     )

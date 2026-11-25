@@ -18,6 +18,7 @@ from .providers import (
     ReciprocalRankFusionReranker,
     TrustedMemoryPolicy,
 )
+from .retrieval.lossless_packing import LosslessBudget
 from .sqlite import SQLiteMemoryRepository
 
 
@@ -34,7 +35,8 @@ def build_local_kernel(
     packing_version: str = "v2",
     passage_reranker: Reranker | None = None,
     enable_source_context: bool = True,
-    lossless_packing_budget=None,
+    lossless_packing_budget: LosslessBudget | None = None,
+    require_delivery_guard: bool = False,
 ) -> MemoryKernel:
     """Build the native kernel; source-context expansion is independently switchable."""
     base_reranker = reranker or ReciprocalRankFusionReranker()
@@ -54,6 +56,7 @@ def build_local_kernel(
         passage_reranker=passage_reranker,
         enable_source_context=enable_source_context,
         lossless_packing_budget=lossless_packing_budget,
+        require_delivery_guard=require_delivery_guard,
         capabilities=MemoryCapabilities(
             automatic_extraction=extractor is not None,
             memory_blocks=True,

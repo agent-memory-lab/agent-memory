@@ -722,6 +722,10 @@ class MemoryCapabilities:
     policy_joint_training: bool = False
     test_time_learning: bool = False
     bitemporal_claims: bool = False
+    final_delivery_guard: bool = False
+    source_context: bool = False
+    packing_versions: tuple[str, ...] = ()
+    lossless_packing: bool = False
 
 
 @dataclass(frozen=True, slots=True)

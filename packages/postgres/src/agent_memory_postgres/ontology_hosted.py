@@ -6,11 +6,11 @@ is PostgreSQL; no local snapshot, index, checkpoint or lock file is created.
 from __future__ import annotations
 
 import asyncio
+import json
+import re
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime
 from hashlib import sha256
-import json
-import re
 from uuid import uuid4
 
 import psycopg
@@ -19,13 +19,13 @@ from psycopg.rows import dict_row
 
 from agent_memory.ontology.acceptance import OntologyIndexAcceptance
 from agent_memory.ontology.backfill import (
-    OntologyClaimPage,
     OntologyBackfillCheckpoint,
+    OntologyClaimPage,
     backfill_ontology_memory,
 )
 from agent_memory.ontology.live import OntologySyncPending
 from agent_memory.ontology.model import project_claim_to_ontology
-from agent_memory.ontology.registry import SQLiteOntologyRegistry
+from agent_memory.ontology.registry import SQLOntologyRegistry
 from agent_memory.ontology.runtime import open_active_ontology_memory
 from agent_memory.ontology.schema import ontology_schema_digest
 
@@ -34,54 +34,24 @@ from .ontology_source import PostgresOntologySource
 from .repository import PostgresMemoryRepository
 
 
-class _Row(dict):
-    def __getitem__(self, key):
-        return tuple(self.values())[key] if isinstance(key, int) else super().__getitem__(key)
-
-
-class _Cursor:
-    def __init__(self, cursor):
-        self.cursor = cursor
-
-    def fetchone(self):
-        row = self.cursor.fetchone()
-        return None if row is None else _Row(row)
-
-    def fetchall(self):
-        return [_Row(row) for row in self.cursor.fetchall()]
-
-    def __iter__(self):
-        return (_Row(row) for row in self.cursor)
-
-
-class _CatalogConnection:
-    def __init__(self, connection):
-        self.connection = connection
-
-    def execute(self, statement, params=()):
-        # The adapter already holds a namespace transaction advisory lock.
-        if statement.strip() == "BEGIN IMMEDIATE":
-            statement = "SELECT 1"
-        return _Cursor(self.connection.execute(statement, params))
-
-    def executescript(self, script):
-        self.connection.executescript(script)
-
-
-class PostgresOntologyRegistry(SQLiteOntologyRegistry):
+class PostgresOntologyRegistry(SQLOntologyRegistry):
     """Preserve host-approved version policy and audits with PostgreSQL storage."""
 
     def __init__(self, dsn, *, namespace="agent_memory_catalog"):
         self._adapter = PostgresOntologyStore(dsn, namespace=namespace)
 
     @contextmanager
-    def _connection(self):
-        connection = self._adapter._connect()
+    def _connection(self, *, write=False, initialize=False):
+        connection = self._adapter._connection(write=write, initialize=initialize)
         try:
             with connection:
-                yield _CatalogConnection(connection)
+                yield connection
         finally:
             connection.close()
+
+    def _begin_write(self, connection):
+        # _connection(write=True) already acquired the exclusive transaction lock.
+        pass
 
 
 def _claim(payload):

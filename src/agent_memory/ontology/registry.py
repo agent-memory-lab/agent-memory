@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-import sqlite3
 from typing import Protocol
 
 from ..domain import MemoryScope
@@ -63,34 +63,24 @@ class OntologySwitchAudit:
     created_at: str
 
 
-class SQLiteOntologyRegistry:
+class SQLOntologyRegistry:
     """Explicitly enabled catalog; does not switch already loaded plugins.
 
     Hosts resolve active_schema() when building a new plugin instance. Running
     instances remain pinned to their original schema until the host reloads.
     """
 
-    def __init__(self, path: str | Path) -> None:
-        self._path = Path(path)
+    def _connection(self, *, write=False, initialize=False):
+        raise NotImplementedError
 
-    @contextmanager
-    def _connection(self):
-        connection = sqlite3.connect(self._path, timeout=5)
-        connection.row_factory = sqlite3.Row
-        try:
-            yield connection
-            connection.commit()
-        except BaseException:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
+    def _begin_write(self, connection):
+        raise NotImplementedError
 
     async def initialize(self) -> None:
         await asyncio.to_thread(self._initialize)
 
     def _initialize(self):
-        with self._connection() as db:
+        with self._connection(write=True, initialize=True) as db:
             db.executescript("""
                 CREATE TABLE IF NOT EXISTS ontology_catalog (
                     scope TEXT NOT NULL, ontology TEXT NOT NULL,
@@ -117,8 +107,8 @@ class SQLiteOntologyRegistry:
     def _register(self, scope, schema):
         document = serialize_ontology_schema(schema)
         digest = ontology_schema_digest(schema)
-        with self._connection() as db:
-            db.execute("BEGIN IMMEDIATE")
+        with self._connection(write=True) as db:
+            self._begin_write(db)
             previous = db.execute(
                 "SELECT digest FROM ontology_catalog WHERE scope=? AND ontology=? AND version=?",
                 (scope, schema.ontology_id, schema.version),
@@ -126,7 +116,7 @@ class SQLiteOntologyRegistry:
             if previous is not None and previous["digest"] != digest:
                 raise OntologyRegistryConflict("schema version already has a different document")
             db.execute(
-                "INSERT OR IGNORE INTO ontology_catalog VALUES (?, ?, ?, ?, ?)",
+                'INSERT INTO ontology_catalog VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING',
                 (scope, schema.ontology_id, schema.version, digest, document),
             )
 
@@ -152,7 +142,7 @@ class SQLiteOntologyRegistry:
 
     def _versions(self, scope, ontology, limit, after):
         with self._connection() as db:
-            return tuple(row[0] for row in db.execute(
+            return tuple(row["version"] for row in db.execute(
                 "SELECT version FROM ontology_catalog WHERE scope=? AND ontology=? "
                 "AND version>? ORDER BY version LIMIT ?", (scope, ontology, after, limit),
             ))
@@ -216,13 +206,13 @@ class SQLiteOntologyRegistry:
         scope = request.scope.partition_key()
         ontology = request.target.ontology_id
         version = request.target.version
-        with self._connection() as db:
-            db.execute("BEGIN IMMEDIATE")
+        with self._connection(write=True) as db:
+            self._begin_write(db)
             current = db.execute(
                 "SELECT generation FROM ontology_activation WHERE scope=? AND ontology=?",
                 (scope, ontology),
             ).fetchone()
-            if (current[0] if current else 0) != generation:
+            if (current["generation"] if current else 0) != generation:
                 raise OntologyRegistryConflict("activation generation changed during approval")
             if request.action == "rollback":
                 seen = db.execute(
@@ -272,3 +262,26 @@ def _activation(row):
 def _limit(value):
     if type(value) is not int or not 1 <= value <= 100:
         raise ValueError("limit must be between 1 and 100")
+
+
+class SQLiteOntologyRegistry(SQLOntologyRegistry):
+    """SQLite catalog adapter; public name and persisted class path remain stable."""
+
+    def __init__(self, path: str | Path) -> None:
+        self._path = Path(path)
+
+    @contextmanager
+    def _connection(self, *, write=False, initialize=False):
+        connection = sqlite3.connect(self._path, timeout=5)
+        connection.row_factory = sqlite3.Row
+        try:
+            yield connection
+            connection.commit()
+        except BaseException:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    def _begin_write(self, connection):
+        connection.execute("BEGIN IMMEDIATE")

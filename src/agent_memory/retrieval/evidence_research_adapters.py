@@ -95,7 +95,7 @@ class SQLiteResearchBackend:
             raise ValueError("kernel_and_sqlite_repository_must_share_authority")
         if (
             type(getattr(kernel, "_reranker", None)) is not ReciprocalRankFusionReranker
-            or getattr(kernel, "_passage_reranker", None) is not None
+            or kernel.retrieval_options.passage_reranker is not None
         ):
             raise ValueError(
                 "research_requires_model_free_native_ranking_use_bounded_semantic_route"

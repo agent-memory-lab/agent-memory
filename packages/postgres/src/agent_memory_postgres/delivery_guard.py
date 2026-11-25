@@ -4,14 +4,15 @@ from agent_memory.domain import MemoryKind
 from agent_memory.retrieval.atom_state import project_records, select_record_snapshots
 from agent_memory.retrieval.delivery_guard import (
     bundle_values,
-    diagnostic_ids,
     delivery_evidence_key,
+    diagnostic_ids,
     filter_delivery,
     requested_claim_ids,
     selected_artifact_ids,
     selected_source_ids,
     snapshot_delivery_bundle,
 )
+from agent_memory.retrieval.evidence import SourceEvidence, complete_source_metadata_matches
 from agent_memory.retrieval.pipeline_delivery import external_candidates, pipeline_reference_ids
 
 from . import admission
@@ -101,23 +102,22 @@ async def _owned_ids(connection, identities):
 
 async def _event_matches(connection, item):
     """Validate revision and selected substring server-side, returning only a flag."""
-    metadata = item.metadata
-    span = metadata.get("source_span")
-    if span is None:
+    if item.metadata.get("source_span") is None:
+        if not complete_source_metadata_matches(item):
+            return False
         cursor = await connection.execute(
             "SELECT 1 FROM agent_memory_events WHERE id=%s AND content=%s", (item.id, item.text),
         )
     else:
-        if not isinstance(span, dict) or span.get("unit") != "characters":
+        evidence = SourceEvidence.for_stored_event(item)
+        if evidence is None:
             return False
-        start, end = span.get("start"), span.get("end")
-        if type(start) is not int or type(end) is not int or not 0 <= start < end:
-            return False
+        start, end = evidence.span.start, evidence.span.end
         cursor = await connection.execute(
             "SELECT 1 FROM agent_memory_events WHERE id=%s AND "
             "substring(content FROM %s FOR %s)=%s AND char_length(content)=%s "
             "AND encode(sha256(convert_to(content,'UTF8')),'hex')=%s",
-            (item.id, start + 1, end - start, item.text, metadata.get("source_chars"),
-             metadata.get("source_revision")),
+            (item.id, start + 1, end - start, item.text, evidence.source_chars,
+             evidence.revision),
         )
     return await cursor.fetchone() is not None

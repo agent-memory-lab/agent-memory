@@ -40,8 +40,17 @@ from .domain import (
 from .extensions.loader import LoadedPlugin
 from .extensions.protocol import RetrievalCandidate
 from .extensions.registry import PluginKind, PluginRegistry
-from .ports import ClaimExtractor, EmbeddingProvider, MemoryPolicy, MemoryProvider, Reranker
+from .ports import (
+    ClaimExtractor,
+    ConsolidationScheduler,
+    EmbeddingProvider,
+    MemoryPolicy,
+    MemoryProvider,
+    Reranker,
+    supports_pipeline_guard,
+)
 from .retrieval.governed import RecallPipeline
+from .retrieval.lossless_packing import LosslessBudget
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,7 +82,8 @@ class MemoryLimits:
 class AgentMemory:
     """Zero-config bounded facade over a lazily selected MemoryProvider."""
 
-    __slots__ = ("_provider", "_recall_pipeline", "scope", "limits", "_initialized")
+    __slots__ = ("_provider", "_recall_pipeline", "scope", "limits", "_initialized",
+                 "_require_delivery_guard")
 
     def __init__(
         self,
@@ -82,7 +92,14 @@ class AgentMemory:
         *,
         limits: MemoryLimits | None = None,
         recall_pipeline: RecallPipeline | None = None,
+        require_delivery_guard: bool = False,
     ) -> None:
+        if type(require_delivery_guard) is not bool:
+            raise ValueError("require_delivery_guard must be a bool")
+        if require_delivery_guard:
+            from .extensions.provider_contract import validate_provider
+            validate_provider(provider, require_delivery_guard=True)
+        self._require_delivery_guard = require_delivery_guard
         self._provider = provider
         self._recall_pipeline = recall_pipeline
         self.scope = scope
@@ -103,6 +120,12 @@ class AgentMemory:
         trusted_evaluator_ids: Collection[str] | None = None,
         recall_pipeline: RecallPipeline | None = None,
         enable_source_context: bool = True,
+        consolidation_scheduler: ConsolidationScheduler | None = None,
+        enable_query_facets: bool = False,
+        packing_version: str = "v2",
+        passage_reranker: Reranker | None = None,
+        lossless_packing_budget: LosslessBudget | None = None,
+        require_delivery_guard: bool = False,
     ) -> AgentMemory:
         return cls(
             PluginRegistry().create_provider(
@@ -114,10 +137,17 @@ class AgentMemory:
                 embedding_provider=embedding_provider,
                 trusted_evaluator_ids=trusted_evaluator_ids,
                 enable_source_context=enable_source_context,
+                consolidation_scheduler=consolidation_scheduler,
+                enable_query_facets=enable_query_facets,
+                packing_version=packing_version,
+                passage_reranker=passage_reranker,
+                lossless_packing_budget=lossless_packing_budget,
+                require_delivery_guard=require_delivery_guard,
             ),
             scope or MemoryScope(tenant_id="local", session_id="default"),
             limits=limits,
             recall_pipeline=recall_pipeline,
+            require_delivery_guard=require_delivery_guard,
         )
 
     @classmethod
@@ -128,6 +158,7 @@ class AgentMemory:
         scope: MemoryScope,
         limits: MemoryLimits | None = None,
         recall_pipeline: RecallPipeline | None = None,
+        require_delivery_guard: bool = False,
         **config: Any,
     ) -> AgentMemory:
         return cls(
@@ -135,6 +166,7 @@ class AgentMemory:
             scope,
             limits=limits,
             recall_pipeline=recall_pipeline,
+            require_delivery_guard=require_delivery_guard,
         )
 
     @property
@@ -225,14 +257,22 @@ class AgentMemory:
             known_at=known_at,
         )
         if self._recall_pipeline is None or valid_at is not None or known_at is not None:
-            return await self._provider.retrieve(query)
-        current_state = await self.state()
-        bundle = await self._recall_pipeline.retrieve(query, current_state)
-        final_guard = getattr(self._provider, "guard_pipeline_delivery", None)
-        if callable(final_guard):
-            return await final_guard(query, bundle)
-        guard = getattr(self._provider, "guard_admission_bundle", None)
-        return await guard(self.scope, bundle) if callable(guard) else bundle
+            bundle = await self._provider.retrieve(query)
+        else:
+            current_state = await self.state()
+            bundle = await self._recall_pipeline.retrieve(query, current_state)
+            if supports_pipeline_guard(self._provider):
+                bundle = await self._provider.guard_pipeline_delivery(query, bundle)
+            elif self._require_delivery_guard:
+                raise RuntimeError("required final delivery guard is unavailable")
+            else:
+                guard = getattr(self._provider, "guard_admission_bundle", None)
+                if callable(guard):
+                    bundle = await guard(self.scope, bundle)
+        if self._require_delivery_guard:
+            from .retrieval.delivery_guard import require_validated_delivery
+            require_validated_delivery(bundle)
+        return bundle
 
     async def extract_atoms(
         self, content: str, *, pipeline: AtomExtractionPipeline,

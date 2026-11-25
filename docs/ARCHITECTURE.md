@@ -35,7 +35,8 @@
 3. 生产实现不导入 `evaluation/`。为保持现有 API，顶层包仍导出原有评测接口；
    这是兼容入口，并不代表核心流程可以依赖评测。
 4. 框架和外部数据库依赖留在独立集成包。可选 tokenizer、比较后端只在显式使用时加载。
-5. 本体 `model.py` 管数据、校验和投影规则；`store.py` 管事务与 SQL；
+5. 本体 `model.py` 负责数据、校验和投影规则，`sql_store.py` 提供共享 SQL 操作。
+   `store.py` 管理 SQLite 连接与事务，PostgreSQL 适配器负责自己的连接、锁和方言。
    `plugins.py` 管检索与归并插件生命周期。`queries.py` 管共享 SQL 查询和行解码。
    这些实现不反向依赖兼容门面 `memory.py`。
 
@@ -71,6 +72,9 @@ SQLite/PostgreSQL 适配器负责批次原子性、版本比较和删除屏障�
 
 - 同一数据、事务边界及变更原因的代码放在一起。`sqlite.py` 的本地仓储和工作单元
   维持集中，以便检查事务、权限和证据一致性；不按行数拆成多个 mixin。
+- 用例依赖窄能力协议。模型预算通过 `operations/budget_ports.py` 的四操作接口和
+  事务视图运行。Claim 更新与提案分别使用 `ClaimWriter` 和 `ProposalTransaction`。
+  这些操作复用现有工作单元的连接、提交与回滚。
 - 一个文件出现独立的存储、领域规则、生命周期职责时才拆分。本体原有约 1,556 行
   的混合实现已据此拆为模型、存储和插件三个实现文件。
 - 小文件可以代表真实边界，例如 Capture API、预算协议、来源适配器；不要仅为减少
@@ -104,8 +108,26 @@ from agent_memory.ontology.store import SQLiteOntologyStore
 monkeypatch 和历史 pickle 全局引用解析。`ontology/memory.py` 只重导出拆分前的本体符号。
 核心模块及集成包已使用新路径，现有测试继续覆盖旧路径。
 
-兼容表在公共 API 初始化完成后注册，会加载映射中的标准库实现；它不创建连接、
-启动任务或加载可选 SDK。不要向兼容表增加新功能模块。删除旧路径须另做版本迁移。
+`_exports.py` 记录每个顶层公共符号的所属模块。首次访问符号或旧模块路径时才加载对应实现。
+新旧路径指向同一模块对象，支持 reload、历史 pickle 和 monkeypatch。
+存储、运行时和评测模块均按需加载。新能力从所属模块导入，删除旧路径须另做版本迁移。
+
+## 配置、证据与交付契约
+
+- `retrieval/config.py` 统一原生打包配置校验。本地 facade、SQLite 插件和 PostgreSQL
+  工厂传递所支持的选项，未知选项报错。SQLite 支持 `enable_query_facets`。PostgreSQL
+  工厂遇到显式启用相邻原文展开的请求会报错，省略该参数沿用 `unsupported` 诊断。
+- Provider 注册检查基础协议的方法实现、manifest 和已声明的扩展能力。历史查询与段落重排
+  均要求实现相应的方法，单纯继承协议的占位方法会被识别出来。
+  `MemoryCapabilities` 显式报告最终交付守卫、来源展开、打包版本和无损打包支持。
+  `AgentMemory(..., require_delivery_guard=True)` 在装配与返回时校验严格交付要求，
+  仅接受 `validated` 回执。默认模式也允许委托外部来源校验的 `mixed_authorities` 结果。
+- `retrieval/evidence.py` 定义不可变的来源跨度与版本引用。候选去重、打包和最终文本校验
+  共用这一表示，对外继续使用原有 metadata 格式。数据库在交付前验证来源和授权。
+- 自定义 pipeline 可以独立召回、排序和打包。它与原生检索使用同一内核执行最终交付，
+  并在授权后同步重算已配置的完整载荷预算。
+- 两个本体适配器复用共享 SQL 操作。PostgreSQL 在初始化时创建命名空间，同一命名空间的
+  读取持共享事务锁，写入持排他事务锁。SQLite 在写操作首次读取前开启写事务。
 
 ## 验证
 

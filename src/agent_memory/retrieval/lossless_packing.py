@@ -4,12 +4,12 @@ The application supplies a deterministic counter for the *complete* reader
 payload (including dates/provenance/prompt overhead). Missing counters fail
 closed. Inputs must already be authorized and carry their final ranking.
 """
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass, replace
-from hashlib import sha256
 
 from ..domain import Citation, Claim, MemoryItem, MemoryKind
-from .candidate_identity import candidate_identity
+from .candidate_identity import candidate_identity, citation_proof
+from .evidence import SourceEvidence
 from .packing import NativePackingResult, _indexed_event_span, pack_native_evidence, source_ids
 
 _INDEX_LOCATORS = ("lexical_chunk_id", "retrieved_lexical_chunk_id", "retrieved_source_span")
@@ -39,29 +39,17 @@ def _complete_legacy_event(item):
 
 def _preserves_legacy_excerpt(old, full):
     """Bind a v2 legacy excerpt to complete source bytes and absolute offsets."""
-    span = old.metadata.get("source_span")
-    if not isinstance(span, Mapping) or span.get("unit") != "characters":
+    evidence = SourceEvidence.from_item(old, require_revision=True)
+    if evidence is None or not evidence.matches_source(old.text, full.text):
         return False
-    start, end = span.get("start"), span.get("end")
     size = len(full.text)
-    if (
-        type(start) is not int or type(end) is not int
-        or not 0 <= start < end <= size or end - start != len(old.text)
-        or type(old.metadata.get("source_chars")) is not int
-        or old.metadata["source_chars"] != size
-        or type(full.metadata.get("source_chars", size)) is not int
-        or full.metadata.get("source_chars", size) != size
-    ):
-        return False
-    revision = sha256(full.text.encode("utf-8")).hexdigest()
-    if (
-        old.metadata.get("source_revision") != revision
-        or full.metadata.get("source_revision", revision) != revision
-    ):
+    if (type(full.metadata.get("source_chars", size)) is not int
+            or full.metadata.get("source_chars", size) != size
+            or full.metadata.get("source_revision", evidence.revision) != evidence.revision):
         return False
     if any(key in old.metadata for key in _INDEX_LOCATORS) and candidate_identity(old) == old.id:
         return False
-    return full.text[start:end] == old.text
+    return True
 
 
 def _preserves_event(old, selected):
@@ -86,12 +74,16 @@ def _preserves_event(old, selected):
             # source occurrence. Native excerpts use retrieved_* locators, so
             # validate with candidate_identity rather than the original-chunk
             # validator, then require aligned interval containment.
-            if candidate_identity(old) == old.id or candidate_identity(new) == new.id:
+            old_evidence = SourceEvidence.from_item(old, require_revision=True)
+            new_evidence = SourceEvidence.from_item(new, require_revision=True)
+            if (old_evidence is None or old_evidence.indexed_identity(old.metadata) is None
+                    or new_evidence is None or new_evidence.indexed_identity(new.metadata) is None):
                 continue
-            lo, hi = old.metadata['source_span'], new.metadata['source_span']
-            if not hi['start'] <= lo['start'] < lo['end'] <= hi['end']:
+            old_span, new_span = old_evidence.span, new_evidence.span
+            if not new_span.contains(old_span):
                 continue
-            if new.text[lo['start']-hi['start']:lo['end']-hi['start']] != old.text:
+            start = old_span.start - new_span.start
+            if new.text[start:start + len(old.text)] != old.text:
                 continue
         return True
     return False
@@ -203,12 +195,7 @@ def pack_lossless_evidence(query, current, ranked, *, budget):
         (state if is_state else items).append(value)
         # Internal logical deduplication is namespaced; public proof identity must
         # match the native delivery guard's Claim identity contract.
-        proof = {'memory_id': value.id,
-                 'candidate_id': value.id if is_state else candidate_identity(value),
-                 'source_event_ids': source_ids(value)}
-        if not is_state:
-            proof.update({k: value.metadata[k] for k in
-                          ('source_span', 'source_revision', 'source_chars') if k in value.metadata})
+        proof = citation_proof(value, source_ids(value))
         proofs.append(proof)
         if is_state:
             state_proofs.append(proof)

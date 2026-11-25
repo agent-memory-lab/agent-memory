@@ -7,9 +7,16 @@ extraction, establish claim correctness, or guarantee answer accuracy.
 ## Activation and compatibility
 
 Pass `lossless_packing_budget=LosslessBudget(count, tokenizer)` to
-`build_local_kernel`. Import `LosslessBudget` from
+`build_local_kernel`, `build_postgres_kernel`, `AgentMemory.local`, or
+`AgentMemory.from_plugin` with either native provider. Import `LosslessBudget` from
 `agent_memory.retrieval.lossless_packing`. The option requires `packing_version="v2"`
 and no passage reranker. Omit the option to retain existing behavior.
+
+Unknown factory options raise an error. Native factories share validation through
+`NativeRetrievalOptions`. Read `kernel.retrieval_options` to inspect the selected settings.
+A custom recall pipeline owns its candidate selection and packing strategy. The
+kernel still applies its configured complete-payload counter after final delivery
+authorization, for both native and custom pipeline results.
 
 `count(state, items)` must synchronously and deterministically count the complete
 reader request rendered by the host, including prompt, dates, provenance, and

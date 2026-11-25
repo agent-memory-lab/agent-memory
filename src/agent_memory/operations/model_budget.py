@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass
 from uuid import uuid4
 
 from ..retrieval.model_contracts import ModelError, count, digest, hash_value, text
+from .budget_ports import BudgetRepository, BudgetTransaction, budget_transaction
 
 CONTRACT = "model-budget/1"
 
@@ -36,11 +37,11 @@ class BudgetAccount:
 class ModelBudget:
     """Minimal finance metadata only. Source IDs and model bodies never enter it."""
 
-    def __init__(self, repository):
+    def __init__(self, repository: BudgetRepository):
         self.repository = repository
 
     @staticmethod
-    async def lock(uow):
+    async def lock(uow: BudgetTransaction):
         if getattr(uow, "model_budget_contract", None) != CONTRACT:
             raise ModelError("model_budget_backend_unsupported")
         await uow.model_budget_lock()
@@ -55,7 +56,7 @@ class ModelBudget:
             raise ModelError("invalid_model_accounts")
         if len({a.key for a in accounts}) != len(accounts):
             raise ModelError("duplicate_model_accounts")
-        async with self.repository.unit_of_work() as uow:
+        async with budget_transaction(self.repository) as uow:
             await self.lock(uow)
             for account in accounts:
                 old = await uow.model_budget_get("account", account.key)
@@ -139,7 +140,7 @@ class ModelBudget:
                 digest(upper_bound_evidence) if upper_bound_evidence else None
             ),
         )
-        async with self.repository.unit_of_work() as uow:
+        async with budget_transaction(self.repository) as uow:
             await self.lock(uow)
             old = await uow.model_budget_get("call", key)
             if old is not None:
@@ -182,7 +183,7 @@ class ModelBudget:
             await uow.model_budget_put("call", key, row)
             return row
 
-    async def intent(self, uow, key, request_sha256):
+    async def intent(self, uow: BudgetTransaction, key, request_sha256):
         """Called in the SAME transaction as current dispatch authorization."""
         await self.lock(uow)
         row = await uow.model_budget_get("call", key)
@@ -197,7 +198,7 @@ class ModelBudget:
 
     async def pending(self, key, *, response=None):
         """No release on timeout, cancellation, unknown invoice, or a lost receipt."""
-        async with self.repository.unit_of_work() as uow:
+        async with budget_transaction(self.repository) as uow:
             await self.lock(uow)
             row = await uow.model_budget_get("call", key)
             if not row or row["state"] not in {
@@ -231,7 +232,7 @@ class ModelBudget:
         if provider_request_id is not None:
             text(provider_request_id)
         receipt_hash = digest([receipt_id, provider_request_id])
-        async with self.repository.unit_of_work() as uow:
+        async with budget_transaction(self.repository) as uow:
             await self.lock(uow)
             row = await uow.model_budget_get("call", key)
             if not row:
@@ -286,7 +287,7 @@ class ModelBudget:
             return row
 
     async def release(self, key):
-        async with self.repository.unit_of_work() as uow:
+        async with budget_transaction(self.repository) as uow:
             await self.lock(uow)
             row = await uow.model_budget_get("call", key)
             if not row or row["state"] not in {"reserved", "released"}:
@@ -305,7 +306,7 @@ class ModelBudget:
     async def outcome(self, key, value):
         if value not in {"completed", "failed", "output_rejected", "publication_rejected"}:
             raise ModelError("invalid_model_execution_outcome")
-        async with self.repository.unit_of_work() as uow:
+        async with budget_transaction(self.repository) as uow:
             await self.lock(uow)
             row = await uow.model_budget_get("call", key)
             if not row or row["state"] in {"reserved", "released"}:
@@ -314,11 +315,11 @@ class ModelBudget:
             await uow.model_budget_put("call", key, row)
 
     async def snapshot(self):
-        async with self.repository.unit_of_work() as uow:
+        async with budget_transaction(self.repository) as uow:
             await self.lock(uow)
             return tuple(await uow.model_budget_records("call"))
 
-    async def cost_status(self, uow, *, call_id, key=None):
+    async def cost_status(self, uow: BudgetTransaction, *, call_id, key=None):
         """Current settlement state, read under the delivery transaction's lock.
 
         New cache headers retain the reservation key. Legacy headers contain only
@@ -350,7 +351,7 @@ class ModelBudget:
         for costs incurred after that backup. The host must export the current
         money authority and replay it before reopening model dispatch.
         """
-        async with self.repository.unit_of_work() as uow:
+        async with budget_transaction(self.repository) as uow:
             await self.lock(uow)
             body = dict(
                 schema="model-budget-checkpoint/1",
@@ -442,7 +443,7 @@ class ModelBudget:
                     raise ValueError
         except (KeyError, TypeError, ValueError):
             raise ModelError("model_budget_checkpoint_invalid") from None
-        async with self.repository.unit_of_work() as uow:
+        async with budget_transaction(self.repository) as uow:
             await self.lock(uow)
             existing = {r["key"]: r for r in await uow.model_budget_records("account")}
             for row in accounts:

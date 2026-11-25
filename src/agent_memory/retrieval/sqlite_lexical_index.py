@@ -17,6 +17,7 @@ from math import log1p
 from ..domain import MemoryScope
 from .analyzer import LEXICAL_ANALYZER_VERSION, lexical_terms
 from .candidate_identity import MAX_SOURCE_WINDOW_CHARS
+from .evidence import SourceSpan
 
 INDEX_VERSION = "sqlite-lexical/2"
 CHUNK_CHARS = 1024
@@ -447,11 +448,12 @@ def _event_window(connection, locator):
             "window_byte_start": row["byte_start"], "window_byte_end": row["byte_end"]}
 
 
+
 def lineage(row):
     result = {
         "lexical_chunk_id": row["chunk_id"],
         "source_revision": row["source_revision"],
-        "source_span": {"start": row["span_start"], "end": row["span_end"], "unit": "characters"},
+        "source_span": SourceSpan(row["span_start"], row["span_end"]).to_metadata(),
         "source_chars": row["source_chars"],
         "lexical_analyzer": LEXICAL_ANALYZER_VERSION,
         **({"excerpt": True} if row["source_chars"] > row["span_end"] - row["span_start"] else {}),
